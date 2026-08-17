@@ -392,7 +392,7 @@ task MergeTrvVcfs {
         mem_gb: 8,
         disk_gb: 5 * ceil(size(vcfs, "GB")) + 25,
         boot_disk_gb: 10,
-        preemptible_tries: 2,
+        preemptible_tries: 1,
         max_retries: 0
     }
     RuntimeAttr runtime_attr = select_first([runtime_attr_override, default_attr])
@@ -576,7 +576,7 @@ task MergeNonTrvVcfs {
         mem_gb: 16,
         disk_gb: 5 * ceil(size(vcfs, "GB")) + 25,
         boot_disk_gb: 10,
-        preemptible_tries: 2,
+        preemptible_tries: 1,
         max_retries: 0
     }
     RuntimeAttr runtime_attr = select_first([runtime_attr_override, default_attr])
@@ -653,7 +653,7 @@ EOF
         mem_gb: 8,
         disk_gb: 3 * ceil(size(matched_vcf, "GB") + size(unmatched_small_vcf, "GB") + size(consolidated_large_vcf, "GB")) + 25,
         boot_disk_gb: 10,
-        preemptible_tries: 2,
+        preemptible_tries: 1,
         max_retries: 0
     }
     RuntimeAttr runtime_attr = select_first([runtime_attr_override, default_attr])

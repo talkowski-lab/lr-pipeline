@@ -2418,6 +2418,73 @@ task SplitBam {
     }
 }
 
+task SplitBamByContig {
+    input {
+        File bam
+        File bai
+        Array[String] contigs
+        String prefix
+        String docker
+        RuntimeAttr? runtime_attr_override
+    }
+
+    parameter_meta {
+        bam: { localization_optional: true }
+        bai: { localization_optional: true }
+    }
+
+    command <<<
+        set -euo pipefail
+
+        export GCS_OAUTH_TOKEN=$(gcloud auth application-default print-access-token)
+
+        > ~{prefix}.bams.list
+        > ~{prefix}.bais.list
+
+        for contig in ~{sep=' ' contigs}
+        do
+            samtools view \
+                -@ ~{select_first([runtime_attr.cpu_cores, default_attr.cpu_cores])} \
+                -h \
+                -b \
+                -o ~{prefix}.$contig.bam \
+                ~{bam} \
+                $contig
+
+            samtools index \
+                -@ ~{select_first([runtime_attr.cpu_cores, default_attr.cpu_cores])} \
+                ~{prefix}.$contig.bam
+
+            echo "~{prefix}.$contig.bam" >> ~{prefix}.bams.list
+            echo "~{prefix}.$contig.bam.bai" >> ~{prefix}.bais.list
+        done
+    >>>
+
+    output {
+        Array[File] contig_bams = read_lines("~{prefix}.bams.list")
+        Array[File] contig_bais = read_lines("~{prefix}.bais.list")
+    }
+
+    RuntimeAttr default_attr = object {
+        cpu_cores: 4,
+        mem_gb: 2,
+        disk_gb: ceil(size(bam, "GB")) + 10,
+        boot_disk_gb: 10,
+        preemptible_tries: 1,
+        max_retries: 0
+    }
+    RuntimeAttr runtime_attr = select_first([runtime_attr_override, default_attr])
+    runtime {
+        cpu: select_first([runtime_attr.cpu_cores, default_attr.cpu_cores])
+        memory: select_first([runtime_attr.mem_gb, default_attr.mem_gb]) + " GiB"
+        disks: "local-disk " + select_first([runtime_attr.disk_gb, default_attr.disk_gb]) + " HDD"
+        bootDiskSizeGb: select_first([runtime_attr.boot_disk_gb, default_attr.boot_disk_gb])
+        docker: docker
+        preemptible: select_first([runtime_attr.preemptible_tries, default_attr.preemptible_tries])
+        maxRetries: select_first([runtime_attr.max_retries, default_attr.max_retries])
+    }
+}
+
 task StripGenotypes {
     input {
         File vcf

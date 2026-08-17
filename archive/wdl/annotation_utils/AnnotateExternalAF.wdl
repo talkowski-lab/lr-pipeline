@@ -105,7 +105,7 @@ task SubsetVcf {
         mem_gb: 4,
         disk_gb: disk_size,
         boot_disk_gb: 10,
-        preemptible_tries: 2,
+        preemptible_tries: 1,
         max_retries: 0
     }
     RuntimeAttr runtime_attr = select_first([runtime_attr_override, default_attr])
@@ -147,7 +147,7 @@ task PreprocessMergedVcf {
         mem_gb: 4,
         disk_gb: ceil(10 + size(vcf, "GB")),
         cpu_cores: 1,
-        preemptible_tries: 2,
+        preemptible_tries: 1,
         max_retries: 0,
         boot_disk_gb: 10
     }
@@ -192,7 +192,7 @@ task AnnotateFunctionalConsequences {
         mem_gb: 4,
         disk_gb: ceil(10 + size(vcf, "GB") * 5),
         cpu_cores: 2,
-        preemptible_tries: 2,
+        preemptible_tries: 1,
         max_retries: 0,
         boot_disk_gb: 10
     }
@@ -237,7 +237,7 @@ task CollapseDoubledDups {
         mem_gb: 4,
         disk_gb: ceil(10 + size(vcf, "GB") * 2),
         cpu_cores: 1,
-        preemptible_tries: 2,
+        preemptible_tries: 1,
         max_retries: 0,
         boot_disk_gb: 10
     }
@@ -381,7 +381,7 @@ task AnnotateExternalAFs {
         mem_gb: 4,
         disk_gb: ceil(10 + 5*(size(vcf, "GB") + size(ref_beds, "GB"))),
         cpu_cores: 1,
-        preemptible_tries: 2,
+        preemptible_tries: 1,
         max_retries: 0,
         boot_disk_gb: 10
     }
@@ -439,7 +439,7 @@ task ConcatVcfs {
         mem_gb: 4,
         disk_gb: ceil(10 + size(vcfs, "GB") * 2),
         cpu_cores: 1,
-        preemptible_tries: 2,
+        preemptible_tries: 1,
         max_retries: 0,
         boot_disk_gb: 10
     }
@@ -482,7 +482,7 @@ task PostprocessVcf {
         mem_gb: 4,
         disk_gb: ceil(10 + size(vcf, "GB") * 3),
         cpu_cores: 1,
-        preemptible_tries: 2,
+        preemptible_tries: 1,
         max_retries: 0,
         boot_disk_gb: 10
     }

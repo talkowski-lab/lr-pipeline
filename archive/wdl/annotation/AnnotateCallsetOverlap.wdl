@@ -81,7 +81,7 @@ EOF
         mem_gb: 4,
         disk_gb: 2 * ceil(size(vcf_eval, "GB") + size(vcf_truth_snv, "GB") + size(vcf_truth_sv, "GB")) + 10,
         boot_disk_gb: 10,
-        preemptible_tries: 2,
+        preemptible_tries: 1,
         max_retries: 0
     }
     RuntimeAttr runtime_attr = select_first([runtime_attr_override, default_attr])
@@ -123,7 +123,7 @@ task ExtractVepHeader {
         mem_gb: 4,
         disk_gb: 2 * ceil(size(vcf, "GB")) + 5,
         boot_disk_gb: 10,
-        preemptible_tries: 2,
+        preemptible_tries: 1,
         max_retries: 0
     }
     RuntimeAttr runtime_attr = select_first([runtime_attr_override, default_attr])
@@ -165,7 +165,7 @@ task ShardedMatchedVariants {
         mem_gb: 4,
         disk_gb: 2 * ceil(size(matched_with_info_tsv, "GB")) + 5,
         boot_disk_gb: 10,
-        preemptible_tries: 2,
+        preemptible_tries: 1,
         max_retries: 0
     }
     RuntimeAttr runtime_attr = select_first([runtime_attr_override, default_attr])
@@ -216,7 +216,7 @@ task ComputeShardBenchmarks {
         mem_gb: 4,
         disk_gb: 2 * ceil(size(matched_shard_tsv, "GB")) + 5,
         boot_disk_gb: 10,
-        preemptible_tries: 2,
+        preemptible_tries: 1,
         max_retries: 0
     }
     RuntimeAttr runtime_attr = select_first([runtime_attr_override, default_attr])
@@ -262,7 +262,7 @@ task MergeShardBenchmarks {
         mem_gb: 4,
         disk_gb: 50 * ceil(size(af_pair_tsvs, "GB")) + 5,
         boot_disk_gb: 50,
-        preemptible_tries: 2,
+        preemptible_tries: 1,
         max_retries: 0
     }
     RuntimeAttr runtime_attr = select_first([runtime_attr_override, default_attr])
@@ -314,7 +314,7 @@ task ComputeSummaryForContig {
         mem_gb: 4,
         disk_gb: 50 * ceil(size(eval_vcf, "GB")) + 5,
         boot_disk_gb: 10,
-        preemptible_tries: 2,
+        preemptible_tries: 1,
         max_retries: 0
     }
     RuntimeAttr runtime_attr = select_first([runtime_attr_override, default_attr])
@@ -359,7 +359,7 @@ task MergePlotTarballs {
         mem_gb: 4,
         disk_gb: 10 * ceil(size(tarballs, "GB")) + 5,
         boot_disk_gb: 10,
-        preemptible_tries: 2,
+        preemptible_tries: 1,
         max_retries: 0
     }
     RuntimeAttr runtime_attr = select_first([runtime_attr_override, default_attr])

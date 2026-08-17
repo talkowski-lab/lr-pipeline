@@ -112,7 +112,7 @@ for line in sys.stdin:
         mem_gb: 16,
         disk_gb: ceil(size(bam1, "GB") + size(bam2, "GB")) + 20,
         boot_disk_gb: 10,
-        preemptible_tries: 2,
+        preemptible_tries: 1,
         max_retries: 0
     }
     RuntimeAttr runtime_attr = select_first([runtime_attr_override, default_attr])
