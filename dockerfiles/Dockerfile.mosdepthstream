@@ -1,0 +1,27 @@
+FROM us-central1-docker.pkg.dev/talkowski-sv-gnomad/kj-dockers/utils:latest
+
+MAINTAINER Karan Jaisingh
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Install nim (needed to build mosdepth from source)
+ARG NIM_VERSION
+RUN wget -q https://nim-lang.org/download/nim-${NIM_VERSION}-linux_x64.tar.xz \
+    && tar xf nim-${NIM_VERSION}-linux_x64.tar.xz \
+    && rm nim-${NIM_VERSION}-linux_x64.tar.xz \
+    && mv nim-${NIM_VERSION} /usr/local/nim
+ENV PATH="/usr/local/nim/bin:${PATH}"
+
+# Build mosdepth from source against the htslib already built with GCS
+# support in the utils base image, enabling streaming reads from gs:// URLs.
+# The prebuilt release binary (used by Dockerfile.mosdepth) is a static
+# build without this support. d4 output support is skipped since it needs
+# a separate Rust toolchain and is unused here.
+ARG MOSDEPTH_VERSION
+RUN nimble install -y hts docopt@0.7.1 \
+    && git clone --branch ${MOSDEPTH_VERSION} --depth 1 https://github.com/brentp/mosdepth \
+    && cd mosdepth \
+    && nim c --mm:refc -d:danger -d:release -o:/usr/local/bin/mosdepth mosdepth.nim \
+    && cd .. \
+    && rm -rf mosdepth \
+    && mosdepth -h

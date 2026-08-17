@@ -20,8 +20,10 @@ workflow PostProcess {
         Boolean run_unphase_samples
         Boolean run_transfer_genotypes
         Boolean run_normalize_ploidy
+        Boolean run_drop_filters
 
         Array[String] unphase_samples = []
+        Array[String] drop_filters = []
         File? transfer_vcf
         File? transfer_vcf_idx
         File? ped
@@ -129,6 +131,8 @@ workflow PostProcess {
                         flag_homopolymer_trvs = run_flag_homopolymer_trvs,
                         sort_records = run_sorting,
                         filter_singletons = run_filter_singletons,
+                        drop = run_drop_filters,
+                        drop_filters = drop_filters,
                         prefix = "~{prefix}.~{contig}.shard_~{i}.post_processed",
                         docker = utils_docker,
                         runtime_attr_override = runtime_attr_post_process
@@ -164,6 +168,8 @@ workflow PostProcess {
                     flag_homopolymer_trvs = run_flag_homopolymer_trvs,
                     sort_records = run_sorting,
                     filter_singletons = run_filter_singletons,
+                    drop = run_drop_filters,
+                    drop_filters = drop_filters,
                     prefix = "~{prefix}.~{contig}.post_processed",
                     docker = utils_docker,
                     runtime_attr_override = runtime_attr_post_process
@@ -209,6 +215,8 @@ task PostProcessTask {
         Boolean flag_homopolymer_trvs
         Boolean sort_records
         Boolean filter_singletons
+        Boolean drop
+        Array[String] drop_filters = []
         String prefix
         String docker
         RuntimeAttr? runtime_attr_override
@@ -229,9 +237,12 @@ prune_meis = ~{true="True" false="False" prune_meis}
 flag_homopolymer_trvs = ~{true="True" false="False" flag_homopolymer_trvs}
 sort_records = ~{true="True" false="False" sort_records}
 filter_singletons = ~{true="True" false="False" filter_singletons}
+drop = ~{true="True" false="False" drop}
 
 unphase_list = ["~{sep='\", \"' unphase_samples}"] if ~{length(unphase_samples)} > 0 else []
 unphase_samples_set = set(unphase_list)
+drop_filters_list = ["~{sep='\", \"' drop_filters}"] if ~{length(drop_filters)} > 0 else []
+drop_filters_set = set(drop_filters_list)
 
 
 def parse_ped(path):
@@ -411,6 +422,10 @@ if flag_homopolymer_trvs and "HOMOPOLYMER_TRV" not in header.info:
     header.info.add("HOMOPOLYMER_TRV", 0, "Flag", "Tandem repeat call where the shortest motif has length 1.")
 if filter_singletons and "SINGLE_READ_SUPPORT" not in header.filters:
     header.filters.add("SINGLE_READ_SUPPORT", None, None, "Variant supported by a single read in a single sample.")
+if drop:
+    for drop_filter in drop_filters_set:
+        if drop_filter in header.filters:
+            header.filters.remove_header(drop_filter)
 
 output_writer = pysam.VariantFile("~{prefix}.vcf.gz", "wz", header=header)
 base_samples = list(base_reader.header.samples)
@@ -423,6 +438,9 @@ current_chrom = None
 current_pos = None
 
 for record in base_reader:
+    if drop and drop_filters_set.intersection(record.filter.keys()):
+        continue
+
     record.translate(output_writer.header)
 
     # Transfer genotypes first, matching on the unmodified variant properties
