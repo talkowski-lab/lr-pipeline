@@ -554,7 +554,7 @@ workflows:
       tags:
         - /.*/
   - subclass: WDL
-    name: LRCNVs
+    name: LongReadCNVs
     primaryDescriptorPath: /wdl/tools/LongReadCNVs.wdl
     filters:
       branches:
