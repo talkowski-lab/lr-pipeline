@@ -2461,7 +2461,7 @@ task SplitBamByContig {
     RuntimeAttr default_attr = object {
         cpu_cores: 4,
         mem_gb: 2,
-        disk_gb: ceil(size(bam, "GB")) + 10,
+        disk_gb: 2 * ceil(size(bam, "GB")) + 10,
         boot_disk_gb: 10,
         preemptible_tries: 1,
         max_retries: 0
