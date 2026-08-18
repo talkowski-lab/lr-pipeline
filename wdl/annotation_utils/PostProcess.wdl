@@ -21,6 +21,7 @@ workflow PostProcess {
         Boolean run_transfer_genotypes
         Boolean run_normalize_ploidy
         Boolean run_drop_filters
+        Boolean run_clean_vcf_header
 
         Array[String] unphase_samples = []
         Array[String] drop_filters = []
@@ -133,6 +134,7 @@ workflow PostProcess {
                         filter_singletons = run_filter_singletons,
                         drop = run_drop_filters,
                         drop_filters = drop_filters,
+                        clean_vcf_header = run_clean_vcf_header,
                         prefix = "~{prefix}.~{contig}.shard_~{i}.post_processed",
                         docker = utils_docker,
                         runtime_attr_override = runtime_attr_post_process
@@ -170,6 +172,7 @@ workflow PostProcess {
                     filter_singletons = run_filter_singletons,
                     drop = run_drop_filters,
                     drop_filters = drop_filters,
+                    clean_vcf_header = run_clean_vcf_header,
                     prefix = "~{prefix}.~{contig}.post_processed",
                     docker = utils_docker,
                     runtime_attr_override = runtime_attr_post_process
@@ -217,6 +220,7 @@ task PostProcessTask {
         Boolean filter_singletons
         Boolean drop
         Array[String] drop_filters = []
+        Boolean clean_vcf_header
         String prefix
         String docker
         RuntimeAttr? runtime_attr_override
@@ -226,6 +230,8 @@ task PostProcessTask {
         set -euo pipefail
 
         python3 <<CODE
+import re
+
 import pysam
 
 
@@ -238,6 +244,7 @@ flag_homopolymer_trvs = ~{true="True" false="False" flag_homopolymer_trvs}
 sort_records = ~{true="True" false="False" sort_records}
 filter_singletons = ~{true="True" false="False" filter_singletons}
 drop = ~{true="True" false="False" drop}
+clean_vcf_header = ~{true="True" false="False" clean_vcf_header}
 
 unphase_list = ["~{sep='\", \"' unphase_samples}"] if ~{length(unphase_samples)} > 0 else []
 unphase_samples_set = set(unphase_list)
@@ -393,6 +400,28 @@ def has_single_read_support(record):
     return len(alt_depths) == 1 and alt_depths[0] == 1
 
 
+def regroup_header(header):
+    group_order = ["fileformat", "OTHER", "contig", "INFO", "FILTER", "FORMAT", "ALT", "SAMPLE", "PEDIGREE"]
+    groups = {g: [] for g in group_order}
+    key_re = re.compile(r'^##([A-Za-z_]+)=')
+
+    for record in header.records:
+        line = str(record).rstrip("\n")
+        if line.startswith("##bcftools_"):
+            continue
+        m = key_re.match(line)
+        key = m.group(1) if m else None
+        groups[key if key in groups else "OTHER"].append(line)
+
+    new_header = pysam.VariantHeader()
+    for group in group_order:
+        for line in groups[group]:
+            new_header.add_line(line)
+    for sample in header.samples:
+        new_header.add_sample(sample)
+    return new_header
+
+
 def flush_buffer(buf, out_vcf):
     def custom_sort_key(rec):
         al_val = get_scalar(rec.info.get("allele_length"))
@@ -426,6 +455,8 @@ if drop:
     for drop_filter in drop_filters_set:
         if drop_filter in header.filters:
             header.filters.remove_header(drop_filter)
+if clean_vcf_header:
+    header = regroup_header(header)
 
 output_writer = pysam.VariantFile("~{prefix}.vcf.gz", "wz", header=header)
 base_samples = list(base_reader.header.samples)
