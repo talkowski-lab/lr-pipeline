@@ -2431,9 +2431,6 @@ task SplitBamByContig {
     command <<<
         set -euo pipefail
 
-        > ~{prefix}.bams.list
-        > ~{prefix}.bais.list
-
         for contig in ~{sep=' ' contigs}
         do
             samtools view \
@@ -2447,15 +2444,12 @@ task SplitBamByContig {
             samtools index \
                 -@ ~{select_first([runtime_attr.cpu_cores, default_attr.cpu_cores])} \
                 ~{prefix}.$contig.bam
-
-            echo "~{prefix}.$contig.bam" >> ~{prefix}.bams.list
-            echo "~{prefix}.$contig.bam.bai" >> ~{prefix}.bais.list
         done
     >>>
 
     output {
-        Array[File] contig_bams = read_lines("~{prefix}.bams.list")
-        Array[File] contig_bais = read_lines("~{prefix}.bais.list")
+        Array[File] contig_bams = glob("*.bam")
+        Array[File] contig_bais = glob("*.bam.bai")
     }
 
     RuntimeAttr default_attr = object {

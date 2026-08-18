@@ -72,17 +72,19 @@ workflow MosDepth {
                 runtime_attr_override = runtime_attr_split_bam
         }
 
-        scatter (i in range(length(contigs))) {
+        scatter (i in range(length(SplitBamByContig.contig_bams))) {
+            String contig_from_bam = sub(sub(basename(SplitBamByContig.contig_bams[i]), "^" + prefix + "\\.", ""), "\\.bam$", "")
+
             call RunMosDepth as RunMosDepthPerContig {
                 input:
                     bam = SplitBamByContig.contig_bams[i],
                     bai = SplitBamByContig.contig_bais[i],
-                    contig = contigs[i],
+                    contig = contig_from_bam,
                     bin_size = bin_size,
                     fast_mode = fast_mode,
                     ref_fa = ref_fa,
                     ref_fai = ref_fai,
-                    prefix = "~{prefix}.~{contigs[i]}.coverage",
+                    prefix = "~{prefix}.~{contig_from_bam}.coverage",
                     docker = mosdepth_docker,
                     runtime_attr_override = runtime_attr_run_mosdepth
             }
