@@ -376,8 +376,8 @@ workflows:
         - /.*/
 
   - subclass: WDL
-    name: TransformINSToDUP
-    primaryDescriptorPath: /wdl/annotation_utils/TransformINSToDUP.wdl
+    name: TransformDuplications
+    primaryDescriptorPath: /wdl/annotation_utils/TransformDuplications.wdl
     filters:
       branches:
         - main

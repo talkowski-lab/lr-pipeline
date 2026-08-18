@@ -391,6 +391,7 @@ for _label in SIZE_LABELS_PLOTTING:
 for _label in SIZE_LABELS_PLOTTING:
     COLUMN_BUCKETS_PLOTTING.append(f"DUP {_label}")
 COLUMN_BUCKETS_PLOTTING += ["TRV", "Other"]
+COLUMN_BUCKETS_PLOTTING_MATCHED = [f"{_bucket} (Matched)" for _bucket in COLUMN_BUCKETS_PLOTTING]
 
 AF_BINS_PLOTTING = [~{sep=", " af_bins_plotting}]
 if len(AF_BINS_PLOTTING) > 1:
@@ -811,7 +812,7 @@ if CREATE_PLOTTING and TRIO_DEF_PATH:
 
 if CREATE_PLOTTING:
     plotting_sample_names = list(vcf_in.header.samples)
-    plot_site_table = defaultdict(lambda: {col: 0 for col in COLUMN_BUCKETS_PLOTTING + COLUMN_BUCKETS_PLOTTING_AF})
+    plot_site_table = defaultdict(lambda: {col: 0 for col in COLUMN_BUCKETS_PLOTTING + COLUMN_BUCKETS_PLOTTING_AF + COLUMN_BUCKETS_PLOTTING_MATCHED})
     plot_sample_table = {s: defaultdict(int) for s in plotting_sample_names}
     plot_allele_table = {s: defaultdict(int) for s in plotting_sample_names}
 
@@ -850,6 +851,7 @@ with open(VARIANT_LIST_OUTPUT, 'w', newline='') as vl_handle:
             row_weights = determine_row_weights(record, a_type, vep_field_indices)
 
             tr_status = "TR" if has_info(record, "TR_ENVELOPED") else "Not TR"
+            is_db_or_gnomad_matched = has_info(record, "dbSNP_ID") or has_info(record, "gnomAD_V4_match_ID")
             regions = [INTERNAL_TOTAL_LABEL]
             if SPLIT_BY_REGION:
                 region = get_string_info(record, "REGION")
@@ -917,6 +919,8 @@ with open(VARIANT_LIST_OUTPUT, 'w', newline='') as vl_handle:
                         else:
                             plot_site_key = (INTERNAL_TOTAL_LABEL, INTERNAL_TOTAL_LABEL, current_tr_status)
                         plot_site_table[plot_site_key][column_plotting] += 1
+                        if is_db_or_gnomad_matched:
+                            plot_site_table[plot_site_key][f'{column_plotting} (Matched)'] += 1
                         if COLUMN_BUCKETS_PLOTTING_AF:
                             af_col = determine_af_column(a_type, af, AF_BINS_PLOTTING, AF_LABELS_PLOTTING)
                             if af_col is not None:
@@ -1032,7 +1036,7 @@ write_gene_counts(GENE_SAMPLE_OUTPUT, gene_sample_counts)
 write_gene_counts(GENE_ALLELE_OUTPUT, gene_allele_counts)
 
 if CREATE_PLOTTING:
-    write_table(PLOT_SITE_OUTPUT, plot_site_table, integer_output=True, split_by_region=SPLIT_BY_REGION, column_buckets=COLUMN_BUCKETS_PLOTTING + COLUMN_BUCKETS_PLOTTING_AF)
+    write_table(PLOT_SITE_OUTPUT, plot_site_table, integer_output=True, split_by_region=SPLIT_BY_REGION, column_buckets=COLUMN_BUCKETS_PLOTTING + COLUMN_BUCKETS_PLOTTING_AF + COLUMN_BUCKETS_PLOTTING_MATCHED)
     plot_col_keys = []
     plot_col_names = []
     for col_bucket in COLUMN_BUCKETS_PLOTTING + COLUMN_BUCKETS_PLOTTING_AF:

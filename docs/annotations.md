@@ -4,14 +4,10 @@
 - `allele_length`: Length of variant - positive for insertions, negative for deletions and 0 for SNVs.
 - `allele_type`: Classification type of variant, which is one of the below.
 	- `snv`: Single nucleotide variant.
-	- `ins`: Insertion.
 	- `del`: Deletion.
+	- `ins`: Insertion.
+	- `dup`: Duplication, with subtype given by `dup_type`.
 	- `trv`: Tandem repeat.
-	- `dup`: Tandem duplication.
-	- `dup_tandem`: Tandem duplication converted from a sequence insertion. For these variants, REF is set to `N` and ALT is set to `<DUP>`. The pre-transformation values are preserved in `original_INS_ID` (original variant ID), `original_INS_allele_length` (original `allele_length`), and `original_INS_sequence` (original ALT sequence).
-	- `dup_interspersed`: Interspersed duplication.
-	- `complex_dup`: Complex duplication.
-	- `inv_dup`: Inverted duplication.
 	- `numt`: Nuclear-mitochondrial segment.
 	- `{ME_TYPE}_ins`: Mobile element insertion, where `{ME_TYPE}` is one of `ALU`, `LINE` or `SVA`.
 	- `{ME_TYPE}_del`: Mobile element deletion, where `{ME_TYPE}` is one of `ALU`, `LINE` or `SVA`.
@@ -33,16 +29,27 @@
 	- `nhomref`: Number of samples with homozygous reference genotypes (biallelic sites only).
 - `dbSNP_ID`: Variant ID from dbSNP for matched variants.
 - `dbVaR_ID`: Variant ID from dbVaR for matched variants.
+- `dup_type`: Subtype for variants with `allele_type = "dup"`, which is one of the below.
+	- `tandem`: Duplicated sequence is adjacent to its origin.
+	- `interspersed`: Duplicated sequence is not adjacent to its origin.
+	- `complex`: Complex duplication.
+	- `inv`: Inverted duplication.
 - Genotype Quality Metrics: Binned distributions of per-variant genotype quality and allele balance across carriers.
-	- `ab_hist_alt_bin_freq`: Histogram for AB in heterozygous individuals calculated on high quality genotypes; bin edges are: 0.00|0.05|0.10|0.15|0.20|0.25|0.30|0.35|0.40|0.45|0.50|0.55|0.60|0.65|0.70|0.75|0.80|0.85|0.90|0.95|1.00.
-	- `dp_hist_all_bin_freq`: Histogram for DP calculated on high quality genotypes; bin edges are: 0|5|10|15|20|25|30|35|40|45|50|55|60|65|70|75|80|85|90|95|100.
-	- `dp_hist_all_n_larger`: Count of DP values falling above the highest histogram bin edge, calculated on high quality genotypes.
-	- `dp_hist_alt_bin_freq`: Histogram for DP in heterozygous individuals calculated on high quality genotypes; bin edges are: 0|5|10|15|20|25|30|35|40|45|50|55|60|65|70|75|80|85|90|95|100.
-	- `dp_hist_alt_n_larger`: Count of DP values falling above the highest histogram bin edge in heterozygous individuals, calculated on high quality genotypes.
-	- `gq_hist_all_bin_freq`: Histogram for GQ calculated on high quality genotypes; bin edges are: 0|5|10|15|20|25|30|35|40|45|50|55|60|65|70|75|80|85|90|95|100.
-	- `gq_hist_alt_bin_freq`: Histogram for GQ in heterozygous individuals calculated on high quality genotypes; bin edges are: 0|5|10|15|20|25|30|35|40|45|50|55|60|65|70|75|80|85|90|95|100.
-	- `sd_hist_all_bin_freq`: Histogram for SD calculated on high quality genotypes; bin edges are: 0|5|10|15|20|25|30|35|40|45|50|55|60|65|70|75|80|85|90|95|100.
-	- `sd_hist_alt_bin_freq`: Histogram for SD in heterozygous individuals calculated on high quality genotypes; bin edges are: 0|5|10|15|20|25|30|35|40|45|50|55|60|65|70|75|80|85|90|95|100.
+	- `ab_hist_alt_bin_freq`: Histogram for AB in heterozygous individuals; bin edges are: 0.00|0.05|0.10|0.15|0.20|0.25|0.30|0.35|0.40|0.45|0.50|0.55|0.60|0.65|0.70|0.75|0.80|0.85|0.90|0.95|1.00.
+	- `age_hist_het_bin_freq`: Histogram for age of heterozygous individuals; bin edges are: 30.0|35.0|40.0|45.0|50.0|55.0|60.0|65.0|70.0|75.0|80.0.
+	- `age_hist_het_n_smaller`: Count of ages of heterozygous individuals falling below the lowest histogram bin edge.
+	- `age_hist_het_n_larger`: Count of ages of heterozygous individuals falling above the highest histogram bin edge.
+	- `age_hist_hom_bin_freq`: Histogram for age of homozygous individuals; bin edges are: 30.0|35.0|40.0|45.0|50.0|55.0|60.0|65.0|70.0|75.0|80.0.
+	- `age_hist_hom_n_smaller`: Count of ages of homozygous individuals falling below the lowest histogram bin edge.
+	- `age_hist_hom_n_larger`: Count of ages of homozygous individuals falling above the highest histogram bin edge.
+	- `dp_hist_all_bin_freq`: Histogram for DP; bin edges are: 0|5|10|15|20|25|30|35|40|45|50|55|60|65|70|75|80|85|90|95|100.
+	- `dp_hist_all_n_larger`: Count of DP values falling above the highest histogram bin edge.
+	- `dp_hist_alt_bin_freq`: Histogram for DP in heterozygous individuals; bin edges are: 0|5|10|15|20|25|30|35|40|45|50|55|60|65|70|75|80|85|90|95|100.
+	- `dp_hist_alt_n_larger`: Count of DP values falling above the highest histogram bin edge in heterozygous individuals.
+	- `gq_hist_all_bin_freq`: Histogram for GQ; bin edges are: 0|5|10|15|20|25|30|35|40|45|50|55|60|65|70|75|80|85|90|95|100.
+	- `gq_hist_alt_bin_freq`: Histogram for GQ in heterozygous individuals; bin edges are: 0|5|10|15|20|25|30|35|40|45|50|55|60|65|70|75|80|85|90|95|100.
+	- `sd_hist_all_bin_freq`: Histogram for SD; bin edges are: 0|5|10|15|20|25|30|35|40|45|50|55|60|65|70|75|80|85|90|95|100.
+	- `sd_hist_alt_bin_freq`: Histogram for SD in heterozygous individuals; bin edges are: 0|5|10|15|20|25|30|35|40|45|50|55|60|65|70|75|80|85|90|95|100.
 - gnomAD Overlap: Identifiers and match metadata for variants with records in gnomAD V4.
 	- `gnomAD_STR`: gnomAD STR ID overlapping this tandem repeat variant.
 	- `gnomAD_V4_match_filter`: FILTER associated with matched gnomAD V4 variant.

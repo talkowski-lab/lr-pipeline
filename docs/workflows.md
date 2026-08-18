@@ -842,8 +842,8 @@ Outputs:
 - `subset_tsv`: Column-subset TSV.
 
 
-### [TransformINSToDUP](../wdl/annotation_utils/TransformINSToDUP.wdl)
-This utility converts insertion variants with `allele_type=dup` into symbolic DUP records where the insertion's duplication source (from `INFO/ORIGIN`) passes two criteria: size similarity between the insertion length and the ORIGIN region length must meet the `dup_size_similarity` threshold, and the insertion POS must fall within the ORIGIN region or within `dup_breakpoint_window` bases of its breakpoints. Passing records have their POS set to the ORIGIN start, REF set to `N`, ALT set to `<DUP>`, and `allele_length` updated to the ORIGIN region length. Variants with multiple comma-separated `ORIGIN` values are skipped and passed through unchanged, as a single unambiguous source region is required for the transformation. Records not meeting the criteria are also passed through unchanged. Supports optional record-count sharding.
+### [TransformDuplications](../wdl/annotation_utils/TransformDuplications.wdl)
+This utility consolidates duplication-related `allele_type` values and classifies a new `dup_type` field. Variants with `allele_type` of `dup`, `dup_interspersed`, `complex_dup` or `inv_dup` all have `allele_type` set to `dup`. For variants that were already `allele_type=dup`, tandemness is validated against their duplication source (from `INFO/ORIGIN`) using two criteria: size similarity between the insertion length and the ORIGIN region length must meet the `dup_size_similarity` threshold, and the insertion POS must fall within the ORIGIN region or within `dup_breakpoint_window` bases of its breakpoints; those passing get `dup_type=tandem`, others get `dup_type=interspersed`. Former `dup_interspersed` records get `dup_type=interspersed`, former `complex_dup` records get `dup_type=complex`, and former `inv_dup` records get `dup_type=inv`. REF/ALT/POS are never modified. Records with other `allele_type` values are passed through unchanged. Supports optional record-count sharding.
 
 Inputs:
 - `File vcf`: VCF to transform.
@@ -851,10 +851,10 @@ Inputs:
 - `Int? records_per_shard`: Number of records per shard for parallel processing.
 - `Int dup_breakpoint_window`: Maximum distance (bp) between insertion POS and ORIGIN breakpoints to pass the breakpoint check (default `10`).
 - `Float dup_size_similarity`: Minimum size similarity ratio (relative to the larger of the two lengths) between insertion and ORIGIN lengths (default `0.9`).
-- `Int min_dup_size`: Minimum insertion size (bp) to consider for transformation (default `50`).
+- `Int min_dup_size`: Minimum insertion size (bp) to consider for the tandem check (default `50`).
 
 Outputs:
-- `dup_transformed_vcf`: VCF with qualifying DUP insertions converted to symbolic DUP records.
+- `dup_transformed_vcf`: VCF with revised `allele_type`/`dup_type` for duplication variants.
 - `dup_transformed_vcf_idx`: Index for `dup_transformed_vcf`.
 
 

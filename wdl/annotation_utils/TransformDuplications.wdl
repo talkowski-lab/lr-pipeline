@@ -3,7 +3,7 @@ version 1.0
 import "../utils/Helpers.wdl"
 import "../utils/Structs.wdl"
 
-workflow TransformINSToDUP {
+workflow TransformDuplications {
     input {
         File vcf
         File vcf_idx
@@ -93,6 +93,12 @@ dup_breakpoint_window = ~{dup_breakpoint_window}
 dup_size_similarity = ~{dup_size_similarity}
 min_dup_size = ~{min_dup_size}
 
+DUP_TYPE_MAP = {
+    "dup_interspersed": "interspersed",
+    "complex_dup": "complex",
+    "inv_dup": "inv",
+}
+
 
 def parse_origin(origin):
     m = re.match(r'^(.+):(\d+)-(\d+)_?[+-]$', origin)
@@ -101,22 +107,44 @@ def parse_origin(origin):
     return m.group(1), int(m.group(2)), int(m.group(3))
 
 
-def passes_criteria(pos, ins_length, origin_start, origin_end):
+def passes_criteria(pos, dup_length, origin_start, origin_end):
     origin_length = origin_end - origin_start
-    larger = max(ins_length, origin_length)
-    if larger == 0 or min(ins_length, origin_length) / larger < dup_size_similarity:
+    larger = max(dup_length, origin_length)
+    if larger == 0 or min(dup_length, origin_length) / larger < dup_size_similarity:
         return False
     if origin_start <= pos <= origin_end:
         return True
     return abs(origin_start - pos) <= dup_breakpoint_window or abs(origin_end - pos) <= dup_breakpoint_window
 
 
+def is_tandem(record):
+    allele_length = record.info.get("allele_length")
+    if isinstance(allele_length, (list, tuple)):
+        allele_length = allele_length[0]
+    if allele_length is None or abs(int(allele_length)) < min_dup_size:
+        return False
+
+    origin = record.info.get("ORIGIN")
+    if origin is None:
+        return False
+    origin = origin if isinstance(origin, str) else ",".join(origin)
+    if "," in origin:
+        return False
+
+    parsed = parse_origin(origin)
+    if parsed is None:
+        return False
+
+    origin_chrom, origin_start, origin_end = parsed
+    dup_length = abs(int(allele_length))
+
+    return passes_criteria(record.pos, dup_length, origin_start, origin_end)
+
+
 vcf_in = pysam.VariantFile("~{vcf}")
 header = vcf_in.header.copy()
-header.info.add("original_INS_ID", 1, "String", "Variant ID before INS-to-DUP transformation.")
-header.info.add("original_INS_allele_length", 1, "Integer", "allele_length value before INS-to-DUP transformation.")
-header.info.add("original_INS_sequence", 1, "String", "ALT sequence before INS-to-DUP transformation.")
-vcf_out = pysam.VariantFile("~{prefix}.unsorted.vcf.gz", "wz", header=header)
+header.info.add("dup_type", 1, "String", "Duplication subtype for variants with allele_type=dup: tandem, interspersed, complex or inv.")
+vcf_out = pysam.VariantFile("~{prefix}.vcf.gz", "wz", header=header)
 
 for record in vcf_in:
     record.translate(vcf_out.header)
@@ -125,59 +153,17 @@ for record in vcf_in:
     if isinstance(allele_type, (list, tuple)):
         allele_type = allele_type[0]
 
-    if allele_type != "dup":
-        vcf_out.write(record)
-        continue
+    if allele_type == "dup":
+        record.info["dup_type"] = "tandem" if is_tandem(record) else "interspersed"
+    elif allele_type in DUP_TYPE_MAP:
+        record.info["dup_type"] = DUP_TYPE_MAP[allele_type]
+        record.info["allele_type"] = "dup"
 
-    allele_length = record.info.get("allele_length")
-    if isinstance(allele_length, (list, tuple)):
-        allele_length = allele_length[0]
-    if allele_length is None or abs(int(allele_length)) < min_dup_size:
-        vcf_out.write(record)
-        continue
-
-    origin = record.info.get("ORIGIN")
-    if origin is None:
-        vcf_out.write(record)
-        continue
-    origin = origin if isinstance(origin, str) else ",".join(origin)
-    if "," in origin:
-        vcf_out.write(record)
-        continue
-
-    parsed = parse_origin(origin)
-    if parsed is None:
-        vcf_out.write(record)
-        continue
-
-    origin_chrom, origin_start, origin_end = parsed
-    ins_length = abs(int(allele_length))
-
-    if not passes_criteria(record.pos, ins_length, origin_start, origin_end):
-        vcf_out.write(record)
-        continue
-
-    original_id = record.id if record.id else "."
-    original_sequence = record.alts[0] if record.alts else "."
-
-    record.info["original_INS_ID"] = original_id
-    record.info["original_INS_allele_length"] = int(allele_length)
-    record.info["original_INS_sequence"] = original_sequence
-    record.id = original_id.replace("INS", "DUP") if record.id else record.id
-    record.pos = origin_start
-    record.ref = "N"
-    record.alts = ("<DUP>",)
-    record.info["allele_length"] = origin_end - origin_start
-    record.info["allele_type"] = "dup_tandem"
     vcf_out.write(record)
 
 vcf_in.close()
 vcf_out.close()
 CODE
-
-        bcftools sort \
-            -Oz -o ~{prefix}.vcf.gz \
-            ~{prefix}.unsorted.vcf.gz
 
         tabix -p vcf ~{prefix}.vcf.gz
     >>>
