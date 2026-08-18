@@ -2428,15 +2428,8 @@ task SplitBamByContig {
         RuntimeAttr? runtime_attr_override
     }
 
-    parameter_meta {
-        bam: { localization_optional: true }
-        bai: { localization_optional: true }
-    }
-
     command <<<
         set -euo pipefail
-
-        export GCS_OAUTH_TOKEN=$(gcloud auth application-default print-access-token)
 
         > ~{prefix}.bams.list
         > ~{prefix}.bais.list
