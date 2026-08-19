@@ -118,6 +118,9 @@ task RunMosDepth {
     command <<<
         set -euo pipefail
 
+        ln -s ~{bam} input.bam
+        ln -s ~{bai} input.bam.bai
+
         mosdepth \
             ~{if defined(contig) then "-c " + contig else ""} \
             ~{if defined(bin_size) then "--by " + bin_size + " --no-per-base" else ""} \
@@ -125,7 +128,7 @@ task RunMosDepth {
             ~{if fast_mode then "--fast-mode" else ""} \
             --threads ~{select_first([runtime_attr.cpu_cores, default_attr.cpu_cores])} \
             ~{prefix} \
-            ~{bam}
+            input.bam
     >>>
 
     output {
