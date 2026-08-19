@@ -17,7 +17,7 @@ workflow AnnotateInSilicoPredictors {
         String phylop_ht
         String revel_ht
         String spliceai_ht
-        String annotate_in_silico_predictors_script = "https://raw.githubusercontent.com/talkowski-lab/lr-annotation/main/scripts/miscellaneous/annotate_insilico_predictors.py"
+        String annotate_in_silico_predictors_script = "https://raw.githubusercontent.com/talkowski-lab/lr-annotation/main/scripts/annotation/annotate_insilico_predictors.py"
         String genome_build = "GRCh38"
 
         String hail_docker

@@ -259,6 +259,15 @@ workflows:
         - /.*/
 
   - subclass: WDL
+    name: CreateDepthFiles
+    primaryDescriptorPath: /wdl/annotation_utils/CreateDepthFiles.wdl
+    filters:
+      branches:
+        - main
+      tags:
+        - /.*/
+
+  - subclass: WDL
     name: CreateMetadataFile
     primaryDescriptorPath: /wdl/annotation_utils/CreateMetadataFile.wdl
     filters:
