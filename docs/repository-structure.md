@@ -14,7 +14,7 @@ scripts/
   mei/               # MEI analysis scripts
   benchmark/         # Benchmarking scripts
   miscellaneous/     # Other utility scripts
-dockerfiles/         # Dockerfile.<image-name> (lowercase) for each container, plus build_push.sh and versions.env
+dockerfiles/         # Dockerfile.<image-name> (lowercase) for each container, plus build_docker.sh and versions.env
 data/
   references/        # Reference genomes, catalogs, BED files
   base_vcfs/         # chr22-only test VCFs for local workflow development
@@ -52,14 +52,14 @@ us-central1-docker.pkg.dev/talkowski-sv-gnomad/kj-dockers/<image-name>
 
 **Building and pushing** an image is done via the helper script:
 ```bash
-dockerfiles/build_push.sh <image-name>
-# e.g. dockerfiles/build_push.sh utils
+dockerfiles/build_docker.sh <image-name>
+# e.g. dockerfiles/build_docker.sh utils
 ```
 This script:
 - Resolves any `ARG` declared in the Dockerfile (with no inline default) from [`dockerfiles/versions.env`](../dockerfiles/versions.env), keyed as `<image-name>__<ARG_NAME>` - this file is the single source of truth for pinned tool/library versions.
 - Auto-increments a `kj_V<N>` tag from the current highest version already pushed for that image, builds with `podman`, and pushes the image under both the new `kj_V<N>` tag and `:latest`.
 
-**Which tag to use:** WDL tasks never hardcode a docker image URI - the `String docker` task input is always supplied by the caller (via Terra workspace data, per [Conventions](conventions.md)). By convention, workspace data should point at the `:latest` tag for each image, since every `build_push.sh` run retags `:latest` to the newest build. The `kj_V<N>` tags exist purely as an immutable version history if you need to pin or roll back to a specific prior build.
+**Which tag to use:** WDL tasks never hardcode a docker image URI - the `String docker` task input is always supplied by the caller (via Terra workspace data, per [Conventions](conventions.md)). By convention, workspace data should point at the `:latest` tag for each image, since every `build_docker.sh` run retags `:latest` to the newest build. The `kj_V<N>` tags exist purely as an immutable version history if you need to pin or roll back to a specific prior build.
 
 
 ## Scripts
@@ -82,4 +82,4 @@ Three CI workflows currently run on push/PR to `main`, each gated on the paths t
 
 A [`pyproject.toml`](../pyproject.toml) `[tool.black]` section pins `line-length = 88` for local formatting with `black`, but this is not run in CI - only `flake8` is enforced.
 
-A Docker build/push CI pipeline (triggering on `dockerfiles/**` changes, authenticating to GCP via `google-github-actions/auth`) was also designed, but is intentionally **not active** - it would require a `GCP_SA_KEY` service-account secret to be configured in the repo, which hasn't been set up. Until then, images are built and pushed locally via `dockerfiles/build_push.sh`.
+A Docker build/push CI pipeline (triggering on `dockerfiles/**` changes, authenticating to GCP via `google-github-actions/auth`) was also designed, but is intentionally **not active** - it would require a `GCP_SA_KEY` service-account secret to be configured in the repo, which hasn't been set up. Until then, images are built and pushed locally via `dockerfiles/build_docker.sh`.

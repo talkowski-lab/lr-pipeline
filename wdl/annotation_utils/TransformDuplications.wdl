@@ -56,7 +56,7 @@ workflow TransformDuplications {
             input:
                 vcfs = TransformDups.transformed_vcf,
                 vcf_idxs = TransformDups.transformed_vcf_idx,
-                allow_overlaps = true,
+                allow_overlaps = false,
                 naive = false,
                 prefix = "~{prefix}",
                 docker = utils_docker,

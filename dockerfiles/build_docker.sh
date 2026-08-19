@@ -13,8 +13,8 @@ set -euo pipefail
 # Dockerfiles are named Dockerfile.<image-name>, so the image
 # name is the only argument needed.
 #
-# Usage: dockerfiles/build_push.sh <image-name>
-# Example: dockerfiles/build_push.sh utils
+# Usage: dockerfiles/build_docker.sh <image-name>
+# Example: dockerfiles/build_docker.sh utils
 
 REGISTRY="us-central1-docker.pkg.dev/talkowski-sv-gnomad/kj-dockers"
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
