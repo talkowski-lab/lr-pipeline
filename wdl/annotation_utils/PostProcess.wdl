@@ -23,6 +23,7 @@ workflow PostProcess {
         Boolean run_drop_filters
         Boolean run_clean_vcf_header
         Boolean run_reassign_suffixes
+        Boolean run_drop_genotypes
 
         Array[String] unphase_samples = []
         Array[String] drop_filters = []
@@ -36,6 +37,7 @@ workflow PostProcess {
         RuntimeAttr? runtime_attr_subset_transfer
         RuntimeAttr? runtime_attr_create_shards
         RuntimeAttr? runtime_attr_post_process
+        RuntimeAttr? runtime_attr_strip_genotypes
         RuntimeAttr? runtime_attr_concat_shards
         RuntimeAttr? runtime_attr_concat
     }
@@ -141,12 +143,26 @@ workflow PostProcess {
                         docker = utils_docker,
                         runtime_attr_override = runtime_attr_post_process
                 }
+
+                if (run_drop_genotypes) {
+                    call Helpers.StripGenotypes as StripShardGenotypes {
+                        input:
+                            vcf = PostProcessShard.processed_vcf,
+                            vcf_idx = PostProcessShard.processed_vcf_idx,
+                            prefix = "~{prefix}.~{contig}.shard_~{i}.dropped",
+                            docker = utils_docker,
+                            runtime_attr_override = runtime_attr_strip_genotypes
+                    }
+                }
+
+                File shard_final_vcf = select_first([StripShardGenotypes.stripped_vcf, PostProcessShard.processed_vcf])
+                File shard_final_vcf_idx = select_first([StripShardGenotypes.stripped_vcf_idx, PostProcessShard.processed_vcf_idx])
             }
 
             call Helpers.ConcatVcfs as ConcatShards {
                 input:
-                    vcfs = PostProcessShard.processed_vcf,
-                    vcf_idxs = PostProcessShard.processed_vcf_idx,
+                    vcfs = shard_final_vcf,
+                    vcf_idxs = shard_final_vcf_idx,
                     allow_overlaps = false,
                     naive = true,
                     prefix = "~{prefix}.~{contig}.post_processed",
@@ -180,28 +196,37 @@ workflow PostProcess {
                     docker = utils_docker,
                     runtime_attr_override = runtime_attr_post_process
             }
+
+            if (run_drop_genotypes) {
+                call Helpers.StripGenotypes as StripContigGenotypes {
+                    input:
+                        vcf = PostProcessTask.processed_vcf,
+                        vcf_idx = PostProcessTask.processed_vcf_idx,
+                        prefix = "~{prefix}.~{contig}.dropped",
+                        docker = utils_docker,
+                        runtime_attr_override = runtime_attr_strip_genotypes
+                }
+            }
         }
 
-        File contig_processed_vcf = select_first([ConcatShards.concat_vcf, PostProcessTask.processed_vcf])
-        File contig_processed_vcf_idx = select_first([ConcatShards.concat_vcf_idx, PostProcessTask.processed_vcf_idx])
+        File contig_processed_vcf = select_first([ConcatShards.concat_vcf, StripContigGenotypes.stripped_vcf, PostProcessTask.processed_vcf])
+        File contig_processed_vcf_idx = select_first([ConcatShards.concat_vcf_idx, StripContigGenotypes.stripped_vcf_idx, PostProcessTask.processed_vcf_idx])
     }
 
-    if (!single_contig) {
-        call Helpers.ConcatVcfs {
-            input:
-                vcfs = contig_processed_vcf,
-                vcf_idxs = contig_processed_vcf_idx,
-                allow_overlaps = false,
-                naive = true,
-                prefix = "~{prefix}.post_processed",
-                docker = utils_docker,
-                runtime_attr_override = runtime_attr_concat
-        }
+    call Helpers.ConcatVcfs {
+        input:
+            vcfs = contig_processed_vcf,
+            vcf_idxs = contig_processed_vcf_idx,
+            allow_overlaps = false,
+            naive = true,
+            prefix = "~{prefix}",
+            docker = utils_docker,
+            runtime_attr_override = runtime_attr_concat
     }
 
     output {
-        File post_processed_vcf = select_first([ConcatVcfs.concat_vcf, contig_processed_vcf[0]])
-        File post_processed_vcf_idx = select_first([ConcatVcfs.concat_vcf_idx, contig_processed_vcf_idx[0]])
+        File post_processed_vcf = ConcatVcfs.concat_vcf
+        File post_processed_vcf_idx = ConcatVcfs.concat_vcf_idx
     }
 }
 

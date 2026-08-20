@@ -8,7 +8,7 @@ workflow CreateDepthFiles {
         Array[File] mosdepth_bed_files
         String prefix
 
-        Int bin_size = 1000
+        Int bin_size = 100
         Int ploidy_bin_size = 1000000
 
         String utils_docker
@@ -80,10 +80,10 @@ workflow CreateDepthFiles {
     }
 
     output {
-        File bincov_matrix = ZPaste.bincov_matrix
-        File bincov_matrix_idx = ZPaste.bincov_matrix_idx
-        File estimated_copy_numbers = PloidyScore.estimated_copy_numbers
-        File binwise_estimated_copy_numbers = PloidyScore.binwise_estimated_copy_numbers
+        File binned_coverage = ZPaste.bincov_matrix
+        File binned_coverage_idx = ZPaste.bincov_matrix_idx
+        File estimated_cn = PloidyScore.estimated_copy_numbers
+        File binned_estimated_ecn = PloidyScore.binwise_estimated_copy_numbers
     }
 }
 
