@@ -860,8 +860,8 @@ Outputs:
 - `subset_tsv`: Column-subset TSV.
 
 
-### [TransformDuplications](../wdl/annotation_utils/TransformDuplications.wdl)
-This utility consolidates duplication-related `allele_type` values and classifies a new `dup_type` field. Variants with `allele_type` of `dup`, `dup_interspersed`, `complex_dup` or `inv_dup` all have `allele_type` set to `dup`. For variants that were already `allele_type=dup`, tandemness is validated against their duplication source (from `INFO/ORIGIN`) using two criteria: size similarity between the insertion length and the ORIGIN region length must meet the `dup_size_similarity` threshold, and the insertion POS must fall within the ORIGIN region or within `dup_breakpoint_window` bases of its breakpoints; those passing get `dup_type=tandem`, others get `dup_type=interspersed`. Former `dup_interspersed` records get `dup_type=interspersed`, former `complex_dup` records get `dup_type=complex`, and former `inv_dup` records get `dup_type=inv`. REF/ALT/POS are never modified. Records with other `allele_type` values are passed through unchanged. Supports optional record-count sharding.
+### [TransformAlleleType](../wdl/annotation_utils/TransformAlleleType.wdl)
+This utility reclassifies `allele_type` values and records the original type in a new `allele_subtype` field. Variants with `allele_type=dup` are tested for tandemness against their duplication source (from `INFO/ORIGIN`) using two criteria: size similarity between the insertion length and the ORIGIN region length must meet the `dup_size_similarity` threshold, and the insertion POS must fall within the ORIGIN region or within `dup_breakpoint_window` bases of its breakpoints. All get `allele_subtype=tandem_dup`; those passing keep `allele_type=dup`, while those failing are set to `allele_type=ins`. Variants with `allele_type` of `complex_dup`, `dup_interspersed`, `inv_dup`, `alu_ins`, `line_ins`, `sva_ins` or `numt` are set to `allele_type=ins`, and those with `alu_del`, `line_del` or `sva_del` are set to `allele_type=del`, each recording the original value in `allele_subtype`. REF/ALT/POS are never modified. Records with other `allele_type` values are passed through unchanged. Supports optional record-count sharding.
 
 Inputs:
 - `File vcf`: VCF to transform.
@@ -872,8 +872,8 @@ Inputs:
 - `Int min_dup_size`: Minimum insertion size (bp) to consider for the tandem check (default `50`).
 
 Outputs:
-- `dup_transformed_vcf`: VCF with revised `allele_type`/`dup_type` for duplication variants.
-- `dup_transformed_vcf_idx`: Index for `dup_transformed_vcf`.
+- `transformed_vcf`: VCF with revised `allele_type`/`allele_subtype`.
+- `transformed_vcf_idx`: Index for `transformed_vcf`.
 
 
 ## Tools

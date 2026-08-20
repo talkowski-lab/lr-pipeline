@@ -25,5 +25,5 @@
 	- _AnnotateVcfCleared_.
 - (HPRC/HGSVC Only) _ResolveHaplotypeOverlaps_.
 - (HPRC/HGSVC Only) _AnnotateAF_.
-- _TransformDuplications_.
+- _TransformAlleleType_.
 - (AoU Only) _DropGenotypes_.

@@ -6,11 +6,16 @@
 	- `snv`: Single nucleotide variant.
 	- `del`: Deletion.
 	- `ins`: Insertion.
-	- `dup`: Duplication, with subtype given by `dup_type`.
+	- `dup`: Tandem duplication, where the duplicated sequence is adjacent to its origin.
 	- `trv`: Tandem repeat.
+- `allele_subtype`: Original classification for reclassified variants, which is one of the below.
+	- `tandem_dup`: Tandem duplication, kept as `allele_type = "dup"` if it meets the tandem criteria, otherwise demoted to `allele_type = "ins"`.
+	- `dup_interspersed`: Interspersed duplication.
+	- `complex_dup`: Complex duplication.
+	- `inv_dup`: Inverted duplication.
 	- `numt`: Nuclear-mitochondrial segment.
-	- `{ME_TYPE}_ins`: Mobile element insertion, where `{ME_TYPE}` is one of `ALU`, `LINE` or `SVA`.
-	- `{ME_TYPE}_del`: Mobile element deletion, where `{ME_TYPE}` is one of `ALU`, `LINE` or `SVA`.
+	- `{ME_TYPE}_ins`: Mobile element insertion, where `{ME_TYPE}` is one of `alu`, `line` or `sva`.
+	- `{ME_TYPE}_del`: Mobile element deletion, where `{ME_TYPE}` is one of `alu`, `line` or `sva`.
 - Allele Frequencies: Per-variant allele frequencies and carrier counts across cohort populations.
 	- `AC`: Count of non-reference alleles.
 	- `AF`: Proportion of alleles that are non-reference.
@@ -29,11 +34,6 @@
 	- `nhomref`: Number of samples with homozygous reference genotypes (biallelic sites only).
 - `dbSNP_ID`: Variant ID from dbSNP for matched variants.
 - `dbVaR_ID`: Variant ID from dbVaR for matched variants.
-- `dup_type`: Subtype for variants with `allele_type = "dup"`, which is one of the below.
-	- `tandem`: Duplicated sequence is adjacent to its origin.
-	- `interspersed`: Duplicated sequence is not adjacent to its origin.
-	- `complex`: Complex duplication.
-	- `inv`: Inverted duplication.
 - Genotype Quality Metrics: Binned distributions of per-variant genotype quality and allele balance across carriers.
 	- `ab_hist_alt_bin_freq`: Histogram for AB in heterozygous individuals; bin edges are: 0.00|0.05|0.10|0.15|0.20|0.25|0.30|0.35|0.40|0.45|0.50|0.55|0.60|0.65|0.70|0.75|0.80|0.85|0.90|0.95|1.00.
 	- `age_hist_het_bin_freq`: Histogram for age of heterozygous individuals; bin edges are: 30.0|35.0|40.0|45.0|50.0|55.0|60.0|65.0|70.0|75.0|80.0.

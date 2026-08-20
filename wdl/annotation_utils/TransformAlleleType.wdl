@@ -3,7 +3,7 @@ version 1.0
 import "../utils/Helpers.wdl"
 import "../utils/Structs.wdl"
 
-workflow TransformDuplications {
+workflow TransformAlleleType {
     input {
         File vcf
         File vcf_idx
@@ -13,7 +13,7 @@ workflow TransformDuplications {
 
         Int dup_breakpoint_window = 10
         Float dup_size_similarity = 0.9
-        Int min_dup_size = 0
+        Int min_dup_size = 50
 
         String utils_docker
 
@@ -38,7 +38,7 @@ workflow TransformDuplications {
     Array[File] vcf_idxs_to_process = select_first([ShardVcfByRecords.shard_idxs, [vcf_idx]])
 
     scatter (i in range(length(vcfs_to_process))) {
-        call TransformDups {
+        call TransformAlleleTypes {
             input:
                 vcf = vcfs_to_process[i],
                 vcf_idx = vcf_idxs_to_process[i],
@@ -54,8 +54,8 @@ workflow TransformDuplications {
     if (defined(records_per_shard)) {
         call Helpers.ConcatVcfs as ConcatShards {
             input:
-                vcfs = TransformDups.transformed_vcf,
-                vcf_idxs = TransformDups.transformed_vcf_idx,
+                vcfs = TransformAlleleTypes.transformed_vcf,
+                vcf_idxs = TransformAlleleTypes.transformed_vcf_idx,
                 allow_overlaps = false,
                 naive = false,
                 prefix = "~{prefix}",
@@ -65,12 +65,12 @@ workflow TransformDuplications {
     }
 
     output {
-        File dup_transformed_vcf = select_first([ConcatShards.concat_vcf, TransformDups.transformed_vcf[0]])
-        File dup_transformed_vcf_idx = select_first([ConcatShards.concat_vcf_idx, TransformDups.transformed_vcf_idx[0]])
+        File transformed_vcf = select_first([ConcatShards.concat_vcf, TransformAlleleTypes.transformed_vcf[0]])
+        File transformed_vcf_idx = select_first([ConcatShards.concat_vcf_idx, TransformAlleleTypes.transformed_vcf_idx[0]])
     }
 }
 
-task TransformDups {
+task TransformAlleleTypes {
     input {
         File vcf
         File vcf_idx
@@ -93,11 +93,8 @@ dup_breakpoint_window = ~{dup_breakpoint_window}
 dup_size_similarity = ~{dup_size_similarity}
 min_dup_size = ~{min_dup_size}
 
-DUP_TYPE_MAP = {
-    "dup_interspersed": "interspersed",
-    "complex_dup": "complex",
-    "inv_dup": "inv",
-}
+INS_SUBTYPES = {"complex_dup", "dup_interspersed", "inv_dup", "alu_ins", "line_ins", "sva_ins", "numt"}
+DEL_SUBTYPES = {"alu_del", "line_del", "sva_del"}
 
 
 def parse_origin(origin):
@@ -143,7 +140,7 @@ def is_tandem(record):
 
 vcf_in = pysam.VariantFile("~{vcf}")
 header = vcf_in.header.copy()
-header.info.add("dup_type", 1, "String", "Duplication subtype for variants with allele_type=dup: tandem, interspersed, complex or inv.")
+header.info.add("allele_subtype", 1, "String", "Original allele_type subtype for reclassified variants: tandem_dup, dup_interspersed, complex_dup, inv_dup, alu_ins, line_ins, sva_ins, numt, alu_del, line_del or sva_del.")
 vcf_out = pysam.VariantFile("~{prefix}.vcf.gz", "wz", header=header)
 
 for record in vcf_in:
@@ -154,10 +151,15 @@ for record in vcf_in:
         allele_type = allele_type[0]
 
     if allele_type == "dup":
-        record.info["dup_type"] = "tandem" if is_tandem(record) else "interspersed"
-    elif allele_type in DUP_TYPE_MAP:
-        record.info["dup_type"] = DUP_TYPE_MAP[allele_type]
-        record.info["allele_type"] = "dup"
+        record.info["allele_subtype"] = "tandem_dup"
+        if not is_tandem(record):
+            record.info["allele_type"] = "ins"
+    elif allele_type in INS_SUBTYPES:
+        record.info["allele_subtype"] = allele_type
+        record.info["allele_type"] = "ins"
+    elif allele_type in DEL_SUBTYPES:
+        record.info["allele_subtype"] = allele_type
+        record.info["allele_type"] = "del"
 
     vcf_out.write(record)
 
