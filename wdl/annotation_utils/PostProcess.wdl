@@ -22,6 +22,7 @@ workflow PostProcess {
         Boolean run_normalize_ploidy
         Boolean run_drop_filters
         Boolean run_clean_vcf_header
+        Boolean run_reassign_suffixes
 
         Array[String] unphase_samples = []
         Array[String] drop_filters = []
@@ -135,6 +136,7 @@ workflow PostProcess {
                         drop = run_drop_filters,
                         drop_filters = drop_filters,
                         clean_vcf_header = run_clean_vcf_header,
+                        reassign_suffixes = run_reassign_suffixes,
                         prefix = "~{prefix}.~{contig}.shard_~{i}.post_processed",
                         docker = utils_docker,
                         runtime_attr_override = runtime_attr_post_process
@@ -173,6 +175,7 @@ workflow PostProcess {
                     drop = run_drop_filters,
                     drop_filters = drop_filters,
                     clean_vcf_header = run_clean_vcf_header,
+                    reassign_suffixes = run_reassign_suffixes,
                     prefix = "~{prefix}.~{contig}.post_processed",
                     docker = utils_docker,
                     runtime_attr_override = runtime_attr_post_process
@@ -221,6 +224,7 @@ task PostProcessTask {
         Boolean drop
         Array[String] drop_filters = []
         Boolean clean_vcf_header
+        Boolean reassign_suffixes
         String prefix
         String docker
         RuntimeAttr? runtime_attr_override
@@ -231,6 +235,7 @@ task PostProcessTask {
 
         python3 <<CODE
 import re
+from collections import defaultdict
 
 import pysam
 
@@ -245,6 +250,7 @@ sort_records = ~{true="True" false="False" sort_records}
 filter_singletons = ~{true="True" false="False" filter_singletons}
 drop = ~{true="True" false="False" drop}
 clean_vcf_header = ~{true="True" false="False" clean_vcf_header}
+reassign_suffixes = ~{true="True" false="False" reassign_suffixes}
 
 unphase_list = ["~{sep='\", \"' unphase_samples}"] if ~{length(unphase_samples)} > 0 else []
 unphase_samples_set = set(unphase_list)
@@ -422,21 +428,39 @@ def regroup_header(header):
     return new_header
 
 
-def flush_buffer(buf, out_vcf):
+def id_base_and_suffix(rec_id):
+    id_val = rec_id if rec_id else ""
+    parts = id_val.rsplit('_', 1)
+    if len(parts) == 2 and parts[1].isdigit():
+        return parts[0], int(parts[1])
+    return id_val, 0
+
+
+def reassign_id_suffixes(buf):
+    groups = defaultdict(list)
+    for rec in buf:
+        base, _ = id_base_and_suffix(rec.id)
+        groups[base].append(rec)
+
+    for base, recs in groups.items():
+        if len(recs) == 1:
+            recs[0].id = base
+            continue
+        recs.sort(key=lambda r: id_base_and_suffix(r.id)[1])
+        for i, r in enumerate(recs, start=1):
+            r.id = "{}_{}".format(base, i)
+
+
+def flush_buffer(buf, out_vcf, reassign_suffixes, sort_records):
     def custom_sort_key(rec):
         al_val = get_scalar(rec.info.get("allele_length"))
         abs_al = abs(int(al_val)) if al_val is not None else 0
+        return (abs_al, id_base_and_suffix(rec.id))
 
-        id_val = rec.id if rec.id else ""
-        parts = id_val.rsplit('_', 1)
-        if len(parts) == 2 and parts[1].isdigit():
-            id_sort = (parts[0], int(parts[1]))
-        else:
-            id_sort = (id_val, 0)
-
-        return (abs_al, id_sort)
-
-    buf.sort(key=custom_sort_key)
+    if reassign_suffixes:
+        reassign_id_suffixes(buf)
+    if sort_records:
+        buf.sort(key=custom_sort_key)
     for r in buf:
         out_vcf.write(r)
 
@@ -547,22 +571,22 @@ for record in base_reader:
     if filter_singletons and has_single_read_support(record):
         record.filter.add("SINGLE_READ_SUPPORT")
 
-    if not sort_records:
+    if not sort_records and not reassign_suffixes:
         output_writer.write(record)
         continue
 
-    # Buffer records to sort those that fall on the exact same coordinate
+    # Buffer records sharing the exact same coordinate to sort and/or reassign ID suffixes
     if record.chrom != current_chrom or record.pos != current_pos:
         if buffer:
-            flush_buffer(buffer, output_writer)
+            flush_buffer(buffer, output_writer, reassign_suffixes, sort_records)
         buffer = [record]
         current_chrom = record.chrom
         current_pos = record.pos
     else:
         buffer.append(record)
 
-if sort_records and buffer:
-    flush_buffer(buffer, output_writer)
+if (sort_records or reassign_suffixes) and buffer:
+    flush_buffer(buffer, output_writer, reassign_suffixes, sort_records)
 
 base_reader.close()
 output_writer.close()
