@@ -13,7 +13,7 @@ workflow TransformDuplications {
 
         Int dup_breakpoint_window = 10
         Float dup_size_similarity = 0.9
-        Int min_dup_size = 50
+        Int min_dup_size = 0
 
         String utils_docker
 
