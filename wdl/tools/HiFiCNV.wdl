@@ -13,6 +13,7 @@ workflow HiFiCNV {
         File ref_fa
         File ref_fai
         File exclude_bed
+        File exclude_bed_idx
         File expected_cn_male
         File expected_cn_female
 
@@ -35,6 +36,7 @@ workflow HiFiCNV {
             ref_fa = ref_fa,
             ref_fai = ref_fai,
             exclude_bed = exclude_bed,
+            exclude_bed_idx = exclude_bed_idx,
             sex_specific_cn = sex_specific_cn,
             maf = maf,
             cov_regex = cov_regex,
@@ -60,6 +62,7 @@ task RunHiFiCNV {
         File ref_fa
         File ref_fai
         File exclude_bed
+        File exclude_bed_idx
         File sex_specific_cn
         File? maf
         String? cov_regex

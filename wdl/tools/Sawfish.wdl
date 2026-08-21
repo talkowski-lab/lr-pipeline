@@ -15,7 +15,8 @@ workflow Sawfish {
         File expected_cn_male
         File expected_cn_female
 
-        File? cnv_excluded_regions
+        File exclude_bed
+        File exclude_bed_idx
 
         Int min_sv_size = 35
         Int min_sv_mapq = 5
@@ -41,7 +42,8 @@ workflow Sawfish {
                 ref_fa = ref_fa,
                 ref_fai = ref_fai,
                 expected_cn = expected_cn,
-                cnv_excluded_regions = cnv_excluded_regions,
+                exclude_bed = exclude_bed,
+                exclude_bed_idx = exclude_bed_idx,
                 min_sv_size = min_sv_size,
                 min_sv_mapq = min_sv_mapq,
                 fast_cnv_mode = fast_cnv_mode,
@@ -85,7 +87,8 @@ task Discover {
         File ref_fa
         File ref_fai
         File expected_cn
-        File? cnv_excluded_regions
+        File exclude_bed
+        File exclude_bed_idx
         Int min_sv_size
         Int min_sv_mapq
         Boolean fast_cnv_mode
@@ -103,7 +106,7 @@ task Discover {
             --ref ~{ref_fa} \
             --bam ~{bam} \
             --expected-cn ~{expected_cn} \
-            ~{if defined(cnv_excluded_regions) then "--cnv-excluded-regions " + cnv_excluded_regions else ""} \
+            ~{if defined(exclude_bed) then "--cnv-excluded-regions " + exclude_bed else ""} \
             --min-indel-size ~{min_sv_size} \
             --min-sv-mapq ~{min_sv_mapq} \
             ~{if fast_cnv_mode then "--fast-cnv-mode" else ""} \
