@@ -19,6 +19,7 @@ workflow CreateDepthFiles {
         RuntimeAttr? runtime_attr_zpaste
         RuntimeAttr? runtime_attr_build_ploidy_matrix
         RuntimeAttr? runtime_attr_ploidy_score
+        RuntimeAttr? runtime_attr_median_cov
     }
 
     scatter (i in range(length(sample_ids))) {
@@ -79,11 +80,20 @@ workflow CreateDepthFiles {
             runtime_attr_override = runtime_attr_ploidy_score
     }
 
+    call MedianCov {
+        input:
+            bincov_matrix = ZPaste.bincov_matrix,
+            prefix = prefix,
+            docker = utils_docker,
+            runtime_attr_override = runtime_attr_median_cov
+    }
+
     output {
         File binned_coverage = ZPaste.bincov_matrix
         File binned_coverage_idx = ZPaste.bincov_matrix_idx
         File estimated_cn = PloidyScore.estimated_copy_numbers
         File binned_estimated_ecn = PloidyScore.binwise_estimated_copy_numbers
+        File median_cov = MedianCov.median_cov
     }
 }
 

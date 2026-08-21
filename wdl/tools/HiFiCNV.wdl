@@ -1,7 +1,6 @@
 version 1.0
 
 import "../utils/Structs.wdl"
-import "../utils/Helpers.wdl"
 
 workflow HiFiCNV {
     input {
@@ -16,6 +15,10 @@ workflow HiFiCNV {
         File exclude_bed
         File expected_cn_male
         File expected_cn_female
+
+        File? maf
+        String? cov_regex
+        Boolean disable_vcf_filters = false
 
         String hificnv_docker
 
@@ -33,6 +36,9 @@ workflow HiFiCNV {
             ref_fai = ref_fai,
             exclude_bed = exclude_bed,
             sex_specific_cn = sex_specific_cn,
+            maf = maf,
+            cov_regex = cov_regex,
+            disable_vcf_filters = disable_vcf_filters,
             docker = hificnv_docker,
             runtime_attr_override = runtime_attr_run_hificnv
     }
@@ -55,6 +61,9 @@ task RunHiFiCNV {
         File ref_fai
         File exclude_bed
         File sex_specific_cn
+        File? maf
+        String? cov_regex
+        Boolean disable_vcf_filters
         String docker
         RuntimeAttr? runtime_attr_override
     }
@@ -67,6 +76,9 @@ task RunHiFiCNV {
             --ref ~{ref_fa} \
             --exclude ~{exclude_bed} \
             --expected-cn ~{sex_specific_cn} \
+            ~{if defined(maf) then "--maf " + maf else ""} \
+            ~{if defined(cov_regex) then "--cov-regex " + cov_regex else ""} \
+            ~{if disable_vcf_filters then "--disable-vcf-filters" else ""} \
             --threads ~{select_first([runtime_attr.cpu_cores, default_attr.cpu_cores])} \
             --output-prefix ~{prefix}
 

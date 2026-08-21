@@ -384,6 +384,15 @@ workflows:
       tags:
         - /.*/
 
+  - subclass: WDL
+    name: VcfToBed
+    primaryDescriptorPath: /wdl/annotation_utils/VcfToBed.wdl
+    filters:
+      branches:
+        - main
+      tags:
+        - /.*/
+
   # -----
   # Tools
   # -----
