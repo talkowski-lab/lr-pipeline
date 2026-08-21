@@ -532,6 +532,15 @@ workflows:
         - /.*/
 
   - subclass: WDL
+    name: Sawfish
+    primaryDescriptorPath: /wdl/tools/Sawfish.wdl
+    filters:
+      branches:
+        - main
+      tags:
+        - /.*/
+
+  - subclass: WDL
     name: TRGT
     primaryDescriptorPath: /wdl/tools/TRGT.wdl
     filters:
