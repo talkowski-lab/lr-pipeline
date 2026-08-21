@@ -91,9 +91,9 @@ workflow CreateDepthFiles {
     output {
         File binned_coverage = ZPaste.bincov_matrix
         File binned_coverage_idx = ZPaste.bincov_matrix_idx
-        File estimated_cn = PloidyScore.estimated_copy_numbers
+        File median_coverage = MedianCov.median_cov
         File binned_estimated_ecn = PloidyScore.binwise_estimated_copy_numbers
-        File median_cov = MedianCov.median_cov
+        File estimated_cn = PloidyScore.estimated_copy_numbers
     }
 }
 

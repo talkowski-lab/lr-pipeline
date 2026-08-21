@@ -12,18 +12,18 @@ workflow PostProcess {
 
         Int? shard_bin_size
         
-        Boolean run_decrement_trv_ids
-        Boolean run_prune_meis
-        Boolean run_flag_homopolymer_trvs
-        Boolean run_filter_singletons
-        Boolean run_sorting
-        Boolean run_unphase_samples
-        Boolean run_transfer_genotypes
-        Boolean run_normalize_ploidy
-        Boolean run_drop_filters
         Boolean run_clean_vcf_header
-        Boolean run_reassign_suffixes
+        Boolean run_decrement_trv_ids
+        Boolean run_drop_filters
         Boolean run_drop_genotypes
+        Boolean run_filter_singletons
+        Boolean run_flag_homopolymer_trvs
+        Boolean run_normalize_ploidy
+        Boolean run_prune_meis
+        Boolean run_reassign_suffixes
+        Boolean run_sorting
+        Boolean run_transfer_genotypes
+        Boolean run_unphase_samples
 
         Array[String] unphase_samples = []
         Array[String] drop_filters = []
@@ -130,15 +130,15 @@ workflow PostProcess {
                         transfer_genotypes = do_transfer_genotypes,
                         unphase = do_unphase_samples,
                         normalize_ploidy = do_normalize_ploidy,
+                        clean_vcf_header = run_clean_vcf_header,
                         decrement_trv_ids = run_decrement_trv_ids,
-                        prune_meis = run_prune_meis,
-                        flag_homopolymer_trvs = run_flag_homopolymer_trvs,
-                        sort_records = run_sorting,
-                        filter_singletons = run_filter_singletons,
                         drop = run_drop_filters,
                         drop_filters = drop_filters,
-                        clean_vcf_header = run_clean_vcf_header,
+                        filter_singletons = run_filter_singletons,
+                        flag_homopolymer_trvs = run_flag_homopolymer_trvs,
+                        prune_meis = run_prune_meis,
                         reassign_suffixes = run_reassign_suffixes,
+                        sort_records = run_sorting,
                         prefix = "~{prefix}.~{contig}.shard_~{i}.post_processed",
                         docker = utils_docker,
                         runtime_attr_override = runtime_attr_post_process
@@ -183,15 +183,15 @@ workflow PostProcess {
                     transfer_genotypes = do_transfer_genotypes,
                     unphase = do_unphase_samples,
                     normalize_ploidy = do_normalize_ploidy,
+                    clean_vcf_header = run_clean_vcf_header,
                     decrement_trv_ids = run_decrement_trv_ids,
-                    prune_meis = run_prune_meis,
-                    flag_homopolymer_trvs = run_flag_homopolymer_trvs,
-                    sort_records = run_sorting,
-                    filter_singletons = run_filter_singletons,
                     drop = run_drop_filters,
                     drop_filters = drop_filters,
-                    clean_vcf_header = run_clean_vcf_header,
+                    filter_singletons = run_filter_singletons,
+                    flag_homopolymer_trvs = run_flag_homopolymer_trvs,
+                    prune_meis = run_prune_meis,
                     reassign_suffixes = run_reassign_suffixes,
+                    sort_records = run_sorting,
                     prefix = "~{prefix}.~{contig}.post_processed",
                     docker = utils_docker,
                     runtime_attr_override = runtime_attr_post_process

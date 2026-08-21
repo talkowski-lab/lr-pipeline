@@ -135,6 +135,7 @@ workflow CountAnnotations {
             sample_count_files = sample_count_files,
             normalization_mode = "sites",
             split_by_region = split_by_region,
+            drop_empty_types = true,
             prefix = "~{prefix}.summary_sites",
             docker = utils_docker,
             runtime_attr_override = runtime_attr_merge
@@ -147,6 +148,7 @@ workflow CountAnnotations {
                 sample_count_files = sample_count_files,
                 normalization_mode = "samples",
                 split_by_region = split_by_region,
+                drop_empty_types = true,
                 prefix = "~{prefix}.summary_samples",
                 docker = utils_docker,
                 runtime_attr_override = runtime_attr_merge
@@ -160,6 +162,7 @@ workflow CountAnnotations {
                 sample_count_files = sample_count_files,
                 normalization_mode = "alleles",
                 split_by_region = split_by_region,
+                drop_empty_types = true,
                 prefix = "~{prefix}.summary_alleles",
                 docker = utils_docker,
                 runtime_attr_override = runtime_attr_merge
@@ -376,8 +379,6 @@ for _label in SIZE_LABELS_SUMMARY:
     COLUMN_BUCKETS_SUMMARY.append(f"DEL {_label}")
 for _label in SIZE_LABELS_SUMMARY:
     COLUMN_BUCKETS_SUMMARY.append(f"INS {_label}")
-for _label in SIZE_LABELS_SUMMARY:
-    COLUMN_BUCKETS_SUMMARY.append(f"DUP {_label}")
 COLUMN_BUCKETS_SUMMARY += ["TRV", "Other"]
 
 LENGTH_BINS_PLOTTING = [~{sep=", " length_bins_plotting}]
@@ -388,8 +389,6 @@ for _label in SIZE_LABELS_PLOTTING:
     COLUMN_BUCKETS_PLOTTING.append(f"DEL {_label}")
 for _label in SIZE_LABELS_PLOTTING:
     COLUMN_BUCKETS_PLOTTING.append(f"INS {_label}")
-for _label in SIZE_LABELS_PLOTTING:
-    COLUMN_BUCKETS_PLOTTING.append(f"DUP {_label}")
 COLUMN_BUCKETS_PLOTTING += ["TRV", "Other"]
 COLUMN_BUCKETS_PLOTTING_MATCHED = [f"{_bucket} (Matched)" for _bucket in COLUMN_BUCKETS_PLOTTING]
 
@@ -401,7 +400,7 @@ else:
     AF_LABELS_PLOTTING = []
 
 COLUMN_BUCKETS_PLOTTING_AF = []
-for _type in ["SNV", "DEL", "INS", "DUP", "TRV", "Other"]:
+for _type in ["SNV", "DEL", "INS", "TRV", "Other"]:
     for _af_label in AF_LABELS_PLOTTING:
         COLUMN_BUCKETS_PLOTTING_AF.append(f"{_type} [{_af_label}]")
 
@@ -465,9 +464,11 @@ ROW_ORDER = [
     ("ME", "LINE"),
     ("ME", "SVA"),
     ("", "Duplication"),
-    ("Duplication", "Tandem"),
+    ("Duplication", "Filtered Tandem"),
+    ("Duplication", "SVAN Tandem"),
     ("Duplication", "Interspersed"),
     ("Duplication", "Complex"),
+    ("Duplication", "Inverted"),
     ("", "TR Parsed"),
     ("", "NUMT"),
     ("", "VEP"),
@@ -596,16 +597,14 @@ def determine_svannotate_label(record):
             return label
     return None
 
-def determine_column(allele_type, allele_length, variant_id, length_bins, size_labels):
+def determine_column(allele_type, allele_length, length_bins, size_labels):
     allele_type = (allele_type or "").lower()
-    variant_id = (variant_id or "").upper()
     if allele_type == "snv": return "SNV"
     if allele_type == "trv": return "TRV"
     if allele_length is None: return "Other"
     size_label = get_size_bucket(allele_length, length_bins, size_labels)
-    if "dup" in allele_type or allele_type == "numt": return f"DUP {size_label}"
-    if allele_type == "ins" or "INS" in variant_id: return f"INS {size_label}"
-    if allele_type == "del" or "DEL" in variant_id: return f"DEL {size_label}"
+    if allele_type in ("ins", "dup"): return f"INS {size_label}"
+    if allele_type == "del": return f"DEL {size_label}"
     return "Other"
 
 def get_af_bucket(af_value, af_bins, af_labels):
@@ -632,13 +631,13 @@ def determine_af_column(allele_type, af_value, af_bins, af_labels):
         return None
     if allele_type == "snv": return f"SNV [{af_label}]"
     if allele_type == "trv": return f"TRV [{af_label}]"
-    if "dup" in allele_type or allele_type == "numt": return f"DUP [{af_label}]"
-    if "ins" in allele_type: return f"INS [{af_label}]"
-    if "del" in allele_type: return f"DEL [{af_label}]"
+    if allele_type in ("ins", "dup"): return f"INS [{af_label}]"
+    if allele_type == "del": return f"DEL [{af_label}]"
     return f"Other [{af_label}]"
 
-def determine_row_weights(record, allele_type_value, vep_field_indices):
+def determine_row_weights(record, allele_type_value, allele_subtype_value, vep_field_indices):
     allele_type = (allele_type_value or "").lower()
+    subtype = (allele_subtype_value or "").lower()
     consequences = extract_all_consequences(record, vep_field_indices)
     vep_label = determine_vep_label(consequences)
     svannotate_label = determine_svannotate_label(record)
@@ -646,25 +645,29 @@ def determine_row_weights(record, allele_type_value, vep_field_indices):
     row_weights = {row: 0 for row in ROW_ORDER}
     row_weights[("", INTERNAL_TOTAL_LABEL)] = 1
 
-    is_alu = "alu" in allele_type
-    is_line = "line" in allele_type
-    is_sva = "sva" in allele_type
+    is_alu = subtype in ("alu_ins", "alu_del")
+    is_line = subtype in ("line_ins", "line_del")
+    is_sva = subtype in ("sva_ins", "sva_del")
     if is_alu or is_line or is_sva: row_weights[("", "ME")] = 1
     if is_alu: row_weights[("ME", "ALU")] = 1
     if is_line: row_weights[("ME", "LINE")] = 1
     if is_sva: row_weights[("ME", "SVA")] = 1
 
-    is_dup_interspersed = "dup_interspersed" in allele_type
-    is_dup_complex = "complex_dup" in allele_type
-    is_dup_tandem = "dup" in allele_type and not is_dup_interspersed and not is_dup_complex
-    is_numt = "numt" in allele_type
+    is_filtered_tandem = subtype == "tandem_dup" and allele_type == "dup"
+    is_svan_tandem = subtype == "tandem_dup" and allele_type == "ins"
+    is_dup_interspersed = subtype == "dup_interspersed"
+    is_dup_complex = subtype == "complex_dup"
+    is_dup_inverted = subtype == "inv_dup"
+    is_numt = subtype == "numt"
     is_tr_parsed = has_info(record, "TR_PARSED")
 
-    if is_dup_tandem or is_dup_interspersed or is_dup_complex:
+    if is_filtered_tandem or is_svan_tandem or is_dup_interspersed or is_dup_complex or is_dup_inverted:
         row_weights[("", "Duplication")] = 1
-    if is_dup_tandem: row_weights[("Duplication", "Tandem")] = 1
+    if is_filtered_tandem: row_weights[("Duplication", "Filtered Tandem")] = 1
+    if is_svan_tandem: row_weights[("Duplication", "SVAN Tandem")] = 1
     if is_dup_interspersed: row_weights[("Duplication", "Interspersed")] = 1
     if is_dup_complex: row_weights[("Duplication", "Complex")] = 1
+    if is_dup_inverted: row_weights[("Duplication", "Inverted")] = 1
     if is_numt: row_weights[("", "NUMT")] = 1
     if is_tr_parsed: row_weights[("", "TR Parsed")] = 1
 
@@ -835,6 +838,7 @@ with open(VARIANT_LIST_OUTPUT, 'w', newline='') as vl_handle:
 
         for record in vcf_in:
             a_type = get_string_info(record, "allele_type")
+            a_sub = get_string_info(record, "allele_subtype")
             a_length = get_int_info(record, "allele_length")
 
             if MAX_LENGTH is not None and (a_length is None or a_length > MAX_LENGTH):
@@ -846,9 +850,9 @@ with open(VARIANT_LIST_OUTPUT, 'w', newline='') as vl_handle:
             if carrier_count == 0:
                 continue
 
-            column_summary = determine_column(a_type, a_length, record.id, LENGTH_BINS_SUMMARY, SIZE_LABELS_SUMMARY)
-            column_plotting = determine_column(a_type, a_length, record.id, LENGTH_BINS_PLOTTING, SIZE_LABELS_PLOTTING) if CREATE_PLOTTING else None
-            row_weights = determine_row_weights(record, a_type, vep_field_indices)
+            column_summary = determine_column(a_type, a_length, LENGTH_BINS_SUMMARY, SIZE_LABELS_SUMMARY)
+            column_plotting = determine_column(a_type, a_length, LENGTH_BINS_PLOTTING, SIZE_LABELS_PLOTTING) if CREATE_PLOTTING else None
+            row_weights = determine_row_weights(record, a_type, a_sub, vep_field_indices)
 
             tr_status = "TR" if has_info(record, "TR_ENVELOPED") else "Not TR"
             is_db_or_gnomad_matched = has_info(record, "dbSNP_ID") or has_info(record, "gnomAD_V4_match_ID")
@@ -1143,6 +1147,7 @@ task MergeAnnotationCountTables {
         Array[File] sample_count_files
         String normalization_mode
         Boolean split_by_region = false
+        Boolean drop_empty_types = false
         String prefix
         String docker
         RuntimeAttr? runtime_attr_override
@@ -1158,6 +1163,7 @@ COUNT_FILES = [path for path in "~{sep=',' count_tsvs}".split(",") if path]
 SAMPLE_COUNT_FILES = [path for path in "~{sep=',' sample_count_files}".split(",") if path]
 MODE = "~{normalization_mode}"
 SPLIT_BY_REGION = "~{split_by_region}".lower() == "true"
+DROP_EMPTY_TYPES = "~{drop_empty_types}".lower() == "true"
 OUTPUT = "~{prefix}.tsv"
 
 INTERNAL_TOTAL_LABEL = "Total"
@@ -1175,9 +1181,11 @@ ROW_ORDER = [
     ("ME", "LINE"),
     ("ME", "SVA"),
     ("", "Duplication"),
-    ("Duplication", "Tandem"),
+    ("Duplication", "Filtered Tandem"),
+    ("Duplication", "SVAN Tandem"),
     ("Duplication", "Interspersed"),
     ("Duplication", "Complex"),
+    ("Duplication", "Inverted"),
     ("", "TR Parsed"),
     ("", "NUMT"),
     ("", "VEP"),
@@ -1241,39 +1249,47 @@ if MODE != "sites":
 
     denominator = float(sample_count)
 
-value_count = len(header) - group_column_count
+value_columns = header[group_column_count:]
+value_count = len(value_columns)
+
+def col_type(col):
+    if col.startswith("DEL "): return "DEL"
+    if col.startswith("INS "): return "INS"
+    return col
+
+if DROP_EMPTY_TYPES:
+    type_totals = {}
+    for row_values in counts.values():
+        for col, v in zip(value_columns, row_values):
+            type_totals[col_type(col)] = type_totals.get(col_type(col), 0.0) + v
+    keep_idx = [i for i, col in enumerate(value_columns) if type_totals.get(col_type(col), 0.0) > 0]
+else:
+    keep_idx = list(range(value_count))
+
+header_out = header[:group_column_count] + [value_columns[i] for i in keep_idx]
 
 with open(OUTPUT, "w", newline="") as handle:
     writer = csv.writer(handle, delimiter="\t")
-    writer.writerow(header)
+    writer.writerow(header_out)
 
-    def get_row_prefix(c, a, t, region, suffix=""):
+    def get_row_prefix(c, a, t, region):
         display_category = DISPLAY_ALL_LABEL if c == INTERNAL_TOTAL_LABEL else c
         display_sub_category = DISPLAY_ALL_LABEL if a == INTERNAL_TOTAL_LABEL else a
         display_tr_status = DISPLAY_ALL_LABEL if t == INTERNAL_TOTAL_LABEL else t
-        row_prefix = [display_category, f"{display_sub_category}{suffix}", display_tr_status]
+        row_prefix = [display_category, display_sub_category, display_tr_status]
         if SPLIT_BY_REGION:
             display_region = DISPLAY_ALL_LABEL if region == INTERNAL_TOTAL_LABEL else region
             row_prefix.append(display_region)
         return row_prefix
 
     def write_count_row(c, a, t, region, values):
+        kept = [values[i] for i in keep_idx]
         if MODE == "sites":
-            formatted = [str(int(round(v))) for v in values]
+            formatted = [str(int(round(v))) for v in kept]
         else:
-            formatted = [f"{v / denominator:.2f}" for v in values]
+            formatted = [f"{v / denominator:.2f}" for v in kept]
 
         writer.writerow(get_row_prefix(c, a, t, region) + formatted)
-
-    def write_percentage_row(c, a, t, region, values, denominator_values):
-        formatted = []
-        for value, denominator_value in zip(values, denominator_values):
-            if denominator_value == 0:
-                formatted.append("0.0000")
-            else:
-                formatted.append(f"{value / denominator_value:.4f}")
-
-        writer.writerow(get_row_prefix(c, a, t, region, suffix=" (prop)") + formatted)
 
     for row_key in ROW_ORDER:
         cat, ann = get_cat_ann(row_key)
@@ -1281,14 +1297,10 @@ with open(OUTPUT, "w", newline="") as handle:
             if SPLIT_BY_REGION:
                 for region in REGION_ORDER:
                     values = counts.get((cat, ann, tr, region), [0.0] * value_count)
-                    denominator_values = counts.get((INTERNAL_TOTAL_LABEL, INTERNAL_TOTAL_LABEL, tr, region), [0.0] * value_count)
                     write_count_row(cat, ann, tr, region, values)
-                    write_percentage_row(cat, ann, tr, region, values, denominator_values)
             else:
                 values = counts.get((cat, ann, tr), [0.0] * value_count)
-                denominator_values = counts.get((INTERNAL_TOTAL_LABEL, INTERNAL_TOTAL_LABEL, tr), [0.0] * value_count)
                 write_count_row(cat, ann, tr, INTERNAL_TOTAL_LABEL, values)
-                write_percentage_row(cat, ann, tr, INTERNAL_TOTAL_LABEL, values, denominator_values)
 PYCODE
     >>>
 
