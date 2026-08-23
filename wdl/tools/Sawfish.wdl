@@ -100,7 +100,6 @@ task Discover {
     command <<<
         set -euo pipefail
 
-        # Discover SV candidates and build the depth/CNV segmentation for the sample
         sawfish discover \
             --threads ~{select_first([runtime_attr.cpu_cores, default_attr.cpu_cores])} \
             --ref ~{ref_fa} \
@@ -121,11 +120,11 @@ task Discover {
     }
 
     RuntimeAttr default_attr = object {
-        cpu_cores: 16,
-        mem_gb: 64,
+        cpu_cores: 4,
+        mem_gb: 4,
         disk_gb: ceil(size(bam, "GB") + size(ref_fa, "GB")) + 30,
         boot_disk_gb: 10,
-        preemptible_tries: 1,
+        preemptible_tries: 0,
         max_retries: 0
     }
     RuntimeAttr runtime_attr = select_first([runtime_attr_override, default_attr])
@@ -204,11 +203,11 @@ task JointCall {
     }
 
     RuntimeAttr default_attr = object {
-        cpu_cores: 16,
-        mem_gb: 32,
+        cpu_cores: 4,
+        mem_gb: 4,
         disk_gb: ceil(size(bams, "GB") + size(discover_tars, "GB") + size(ref_fa, "GB")) + 30,
         boot_disk_gb: 10,
-        preemptible_tries: 1,
+        preemptible_tries: 0,
         max_retries: 0
     }
     RuntimeAttr runtime_attr = select_first([runtime_attr_override, default_attr])
