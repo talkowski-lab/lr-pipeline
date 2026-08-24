@@ -163,7 +163,6 @@ task JointCall {
         bais=(~{sep=" " bais})
         ids=(~{sep=" " sample_ids})
 
-        # Unpack each sample's discover output and map its discover dir to its bam
         mkdir -p aligned
         : > samples.csv
         for i in "${!tars[@]}"; do
@@ -172,8 +171,7 @@ task JointCall {
             ln -s "${bais[$i]}" "aligned/${ids[$i]}.bam.bai"
             echo "${ids[$i]}_discover, ${PWD}/aligned/${ids[$i]}.bam" >> samples.csv
         done
-
-        # Merge and genotype SVs/CNVs jointly across all samples
+        
         sawfish joint-call \
             --threads ~{select_first([runtime_attr.cpu_cores, default_attr.cpu_cores])} \
             --ref ~{ref_fa} \

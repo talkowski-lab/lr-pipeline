@@ -413,6 +413,7 @@ task MedianCov {
     input {
         File bincov_matrix
         String prefix
+        Int max_bins = 1000000
         String docker
         RuntimeAttr? runtime_attr_override
     }
@@ -420,8 +421,22 @@ task MedianCov {
     command <<<
         set -euo pipefail
 
-        zcat ~{bincov_matrix} > ~{prefix}_fixed.bed
+        # Reservoir-sample bins down to max_bins before loading into R so peak
+        # memory stays bounded regardless of matrix size. Per-sample median
+        # coverage is unchanged because medianCoverage.R already downsamples to
+        # this many bins internally after reading the full matrix.
+        zcat ~{bincov_matrix} \
+            | awk -v N=~{max_bins} '
+                BEGIN { srand() }
+                NR==1 { print; next }
+                { n++
+                  if (n <= N) { res[n] = $0 }
+                  else { r = int(rand() * n) + 1; if (r <= N) res[r] = $0 } }
+                END { m = (n < N ? n : N); for (i = 1; i <= m; i++) print res[i] }' \
+            > ~{prefix}_fixed.bed
+
         Rscript /opt/scripts/helper/medianCoverage.R ~{prefix}_fixed.bed -H ~{prefix}_medianCov.bed
+        
         Rscript -e "x <- read.table(\"~{prefix}_medianCov.bed\",check.names=FALSE); xtransposed <- t(x[,c(1,2)]); write.table(xtransposed,file=\"~{prefix}_medianCov.transposed.bed\",sep=\"\\t\",row.names=F,col.names=F,quote=F)"
     >>>
 
@@ -431,7 +446,7 @@ task MedianCov {
 
     RuntimeAttr default_attr = object {
         cpu_cores: 1,
-        mem_gb: 8,
+        mem_gb: 16,
         disk_gb: 3 * ceil(size(bincov_matrix, "GB")) + 10,
         boot_disk_gb: 10,
         preemptible_tries: 1,

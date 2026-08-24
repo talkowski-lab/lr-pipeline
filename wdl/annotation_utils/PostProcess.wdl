@@ -15,7 +15,6 @@ workflow PostProcess {
         Boolean run_clean_vcf_header
         Boolean run_decrement_trv_ids
         Boolean run_drop_filters
-        Boolean run_drop_genotypes
         Boolean run_filter_singletons
         Boolean run_flag_homopolymer_trvs
         Boolean run_normalize_ploidy
@@ -37,7 +36,6 @@ workflow PostProcess {
         RuntimeAttr? runtime_attr_subset_transfer
         RuntimeAttr? runtime_attr_create_shards
         RuntimeAttr? runtime_attr_post_process
-        RuntimeAttr? runtime_attr_strip_genotypes
         RuntimeAttr? runtime_attr_concat_shards
         RuntimeAttr? runtime_attr_concat
     }
@@ -144,19 +142,8 @@ workflow PostProcess {
                         runtime_attr_override = runtime_attr_post_process
                 }
 
-                if (run_drop_genotypes) {
-                    call Helpers.StripGenotypes as StripShardGenotypes {
-                        input:
-                            vcf = PostProcessShard.processed_vcf,
-                            vcf_idx = PostProcessShard.processed_vcf_idx,
-                            prefix = "~{prefix}.~{contig}.shard_~{i}.dropped",
-                            docker = utils_docker,
-                            runtime_attr_override = runtime_attr_strip_genotypes
-                    }
-                }
-
-                File shard_final_vcf = select_first([StripShardGenotypes.stripped_vcf, PostProcessShard.processed_vcf])
-                File shard_final_vcf_idx = select_first([StripShardGenotypes.stripped_vcf_idx, PostProcessShard.processed_vcf_idx])
+                File shard_final_vcf = PostProcessShard.processed_vcf
+                File shard_final_vcf_idx = PostProcessShard.processed_vcf_idx
             }
 
             call Helpers.ConcatVcfs as ConcatShards {
@@ -196,21 +183,10 @@ workflow PostProcess {
                     docker = utils_docker,
                     runtime_attr_override = runtime_attr_post_process
             }
-
-            if (run_drop_genotypes) {
-                call Helpers.StripGenotypes as StripContigGenotypes {
-                    input:
-                        vcf = PostProcessTask.processed_vcf,
-                        vcf_idx = PostProcessTask.processed_vcf_idx,
-                        prefix = "~{prefix}.~{contig}.dropped",
-                        docker = utils_docker,
-                        runtime_attr_override = runtime_attr_strip_genotypes
-                }
-            }
         }
 
-        File contig_processed_vcf = select_first([ConcatShards.concat_vcf, StripContigGenotypes.stripped_vcf, PostProcessTask.processed_vcf])
-        File contig_processed_vcf_idx = select_first([ConcatShards.concat_vcf_idx, StripContigGenotypes.stripped_vcf_idx, PostProcessTask.processed_vcf_idx])
+        File contig_processed_vcf = select_first([ConcatShards.concat_vcf, PostProcessTask.processed_vcf])
+        File contig_processed_vcf_idx = select_first([ConcatShards.concat_vcf_idx, PostProcessTask.processed_vcf_idx])
     }
 
     call Helpers.ConcatVcfs {
