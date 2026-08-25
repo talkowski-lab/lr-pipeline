@@ -593,6 +593,18 @@ Outputs:
 - `binned_coverage_tsv`: Binned coverage matrix across the cohort.
 
 
+### [CreateIntervalsFile](../wdl/annotation_utils/CreateIntervalsFile.wdl)
+This utility creates an interval file matching the fixed-width bins emitted by [CreateReadCountsFile](#createreadcountsfile). It writes 1-based, inclusive `contig:start-end` intervals in the requested contig order and omits each contig's trailing partial bin.
+
+Inputs:
+- `File ref_fai`: From [references](references.md).
+- `Array[String] contigs`: Contigs for which to create intervals, in output order.
+- `Int bin_size`: Size, in bp, of each interval. Use the same value supplied to `CreateReadCountsFile`.
+
+Outputs:
+- `intervals`: Fixed-width interval file.
+
+
 ### [CreateDepthFiles](../wdl/annotation_utils/CreateDepthFiles.wdl)
 This utility ports GATK-SV's [MakeBincovMatrix](https://github.com/broadinstitute/gatk-sv/blob/main/wdl/MakeBincovMatrix.wdl) and [PloidyEstimation](https://github.com/broadinstitute/gatk-sv/blob/main/wdl/PloidyEstimation.wdl) workflows to build a cohort binned-coverage matrix and per-sample ploidy estimate from per-sample [MosDepth](#mosdepth) per-base coverage BEDs. Since mosdepth's per-base output is run-length-encoded at irregular interval widths rather than GATK-SV's fixed-width `CollectReadCounts` bins, each sample's per-base BED is first binned at `bin_size` by taking the median depth per bin (dropping any trailing partial bin), matching the binning convention used by [CreateReadCountsFile](#createreadcountsfile); because every sample is binned identically, the format-detection/shift logic in upstream `MakeBincovMatrix` (which has to distinguish raw bincov BEDs from GATK `CollectReadCounts` output) is dropped as dead code. The binned files are then run through GATK-SV's `SetBins`/`MakeBincovMatrixColumns`/`ZPaste` logic to build the bincov matrix, and through `BuildPloidyMatrix` (re-binning the bincov matrix to `ploidy_bin_size`, summing depths) and GATK-SV's `estimatePloidy.R` to estimate ploidy. `estimatePloidy.R` is vendored unmodified at [`scripts/helper/estimatePloidy.R`](../scripts/helper/estimatePloidy.R) (built into the `utils` docker image, so this workflow has no dependency on GATK-SV's own docker images) — everything here runs off a single `utils_docker` input. Only `estimatePloidy.R`'s two matrix outputs are kept; its QC plots/PNGs and GATK-SV's `estimated_CN_denoising.py` plotting step are not run, since only the ploidy matrices themselves are needed. Unlike upstream `MakeBincovMatrix`, this does not support merging into a pre-existing batch's bincov matrix, since only a single one-shot cohort matrix was needed.
 
@@ -635,6 +647,19 @@ Inputs:
 
 Outputs:
 - `binned_read_counts`: Binned read-counts file for the sample.
+
+
+### [DiagnoseSingletons](../wdl/annotation_utils/DiagnoseSingletons.wdl)
+This utility counts each sample's called genotypes across variant type, allele-length range, genomic region, evidence source, and sample-level alternate-allele count. It classifies calls supported only by `hapdiff` and/or `dipcall` as assemblies, calls with any other `EV` value as alignments, and calls without either kind of evidence as other. Output columns use the format `variant_type - size_range - region - count_type - singleton_type`.
+
+Inputs:
+- `Array[File] vcfs`: VCFs whose sample calls are counted.
+- `Array[File] vcf_idxs`: Indexes for `vcfs`.
+- `Int min_length`: Minimum absolute `INFO/allele_length` to count (default `50`).
+- `Int? records_per_shard`: Number of variants to keep within a single shard.
+
+Outputs:
+- `singleton_counts_tsv`: Wide per-sample count table.
 
 
 ### [DropGenotypes](../wdl/annotation_utils/DropGenotypes.wdl)

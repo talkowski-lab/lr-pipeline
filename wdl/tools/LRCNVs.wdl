@@ -34,10 +34,6 @@ import "../utils/Helpers.wdl"
 import "../utils/Structs.wdl"
 
 workflow LRCNVs {
-    meta {
-        description: "Workflow for creating a GATK GermlineCNVCaller denoising model and generating calls given a list of samples with long-read sequencing reads."
-    }
-
     parameter_meta {
         intervals: "GATK-style intervals used to collect depth profiles."
         sample_ids: "Identifier for each sample."

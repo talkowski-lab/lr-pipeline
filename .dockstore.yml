@@ -259,6 +259,15 @@ workflows:
         - /.*/
 
   - subclass: WDL
+    name: CreateIntervalsFile
+    primaryDescriptorPath: /wdl/annotation_utils/CreateIntervalsFile.wdl
+    filters:
+      branches:
+        - main
+      tags:
+        - /.*/
+
+  - subclass: WDL
     name: CreateDepthFiles
     primaryDescriptorPath: /wdl/annotation_utils/CreateDepthFiles.wdl
     filters:
@@ -279,6 +288,15 @@ workflows:
   - subclass: WDL
     name: CreateReadCountsFile
     primaryDescriptorPath: /wdl/annotation_utils/CreateReadCountsFile.wdl
+    filters:
+      branches:
+        - main
+      tags:
+        - /.*/
+
+  - subclass: WDL
+    name: DiagnoseSingletons
+    primaryDescriptorPath: /wdl/annotation_utils/DiagnoseSingletons.wdl
     filters:
       branches:
         - main
@@ -402,16 +420,6 @@ workflows:
       tags:
         - /.*/
 
-  - subclass: WDL
-    name: MakeDepthMetrics
-    primaryDescriptorPath: /wdl/annotation_utils/MakeDepthMetrics.wdl
-    filters:
-      branches:
-        - main
-        - gcnv
-      tags:
-        - /.*/
-
   # -----
   # Tools
   # -----
@@ -470,8 +478,8 @@ workflows:
         - /.*/
 
   - subclass: WDL
-    name: LRCNVs
-    primaryDescriptorPath: /wdl/tools/LRCNVs.wdl
+    name: LongReadCNVs
+    primaryDescriptorPath: /wdl/tools/LongReadCNVs.wdl
     filters:
       branches:
         - main
@@ -612,40 +620,3 @@ workflows:
         - main
       tags:
         - /.*/
-
-  - subclass: WDL
-    name: DepthPreprocessing
-    primaryDescriptorPath: /wdl/tools/DepthPreprocessing.wdl
-    filters:
-      branches:
-        - main
-        - gcnv
-      tags:
-        - /.*/
-
-  - subclass: WDL
-    name: DepthClustering
-    primaryDescriptorPath: /wdl/tools/DepthClustering.wdl
-    filters:
-      branches:
-        - main
-        - gcnv
-      tags:
-        - /.*/
-
-  - subclass: WDL
-    name: GenotypeDepth
-    primaryDescriptorPath: /wdl/tools/GenotypeDepth.wdl
-    filters:
-      branches:
-        - main
-        - gcnv
-      tags:
-        - /.*/
-  - subclass: WDL
-    name: LongReadCNVs
-    primaryDescriptorPath: /wdl/tools/LongReadCNVs.wdl
-    filters:
-      branches:
-        - main
-        - gcnv
