@@ -15,12 +15,10 @@ workflow CreateIntervalsFile {
         RuntimeAttr? runtime_attr_create_intervals
     }
 
-    File contigs_file = write_lines(contigs)
-
     call CreateIntervals {
         input:
             ref_fai = ref_fai,
-            contigs_file = contigs_file,
+            contigs = contigs,
             prefix = prefix,
             bin_size = bin_size,
             docker = utils_docker,
@@ -35,7 +33,7 @@ workflow CreateIntervalsFile {
 task CreateIntervals {
     input {
         File ref_fai
-        File contigs_file
+        Array[String] contigs
         String prefix
         Int bin_size
         String docker
@@ -46,13 +44,11 @@ task CreateIntervals {
         set -euo pipefail
 
         python3 <<CODE
-from pathlib import Path
-
 bin_size = ~{bin_size}
 if bin_size <= 0:
     raise ValueError("bin_size must be greater than zero")
 
-contigs = Path("~{contigs_file}").read_text().splitlines()
+contigs = "~{sep=',' contigs}".split(",")
 lengths = {}
 with open("~{ref_fai}") as fai:
     for line in fai:
