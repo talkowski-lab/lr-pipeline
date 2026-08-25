@@ -24,6 +24,7 @@ workflow LongReadCNVs {
 
         File pedigree
         File primary_contigs_list
+        File? contig_subset_list
         File training_intervals
         File median_coverage
         Int gcnv_qs_cutoff = 30
@@ -76,6 +77,7 @@ workflow LongReadCNVs {
             variant_prefix = variant_prefix,
             pedigree = pedigree,
             contig_list = primary_contigs_list,
+            contig_subset_list = contig_subset_list,
             ref_fa = ref_fa,
             ref_fai = ref_fai,
             ref_dict = ref_dict,
@@ -96,6 +98,7 @@ workflow LongReadCNVs {
            ref_dict = ref_dict,
            ploidy_table = DepthClustering.ploidy_table,
            contig_list = primary_contigs_list,
+           contig_subset_list = contig_subset_list,
            chr_x = chr_x,
            chr_y = chr_y,
            gatk_docker = gatk_docker,

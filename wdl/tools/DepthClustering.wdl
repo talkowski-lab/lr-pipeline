@@ -8,7 +8,6 @@ workflow DepthClustering {
         File pedigree
 
         File contig_list
-
         File? contig_subset_list
 
         File ref_fa
@@ -57,7 +56,7 @@ workflow DepthClustering {
             sv_pipeline_docker = sv_pipeline_docker
     }
 
-    Array[String] contigs = transpose(read_tsv(select_first([contig_subset_list, contig_list])))[0]
+    Array[String] contigs = read_lines(select_first([contig_subset_list, contig_list]))
     scatter (contig in contigs) {
         call SVCluster {
             input:

@@ -12,6 +12,7 @@ workflow GenotypeDepth {
         File ploidy_table
 
         File contig_list
+        File? contig_subset_list
 
         String chr_x = "chrX"
         String chr_y = "chrY"
@@ -36,7 +37,8 @@ workflow GenotypeDepth {
             gatk_docker = gatk_docker
     }
 
-    scatter (contig in read_lines(contig_list)) {
+    Array[String] contigs = read_lines(select_first([contig_subset_list, contig_list]))
+    scatter (contig in contigs) {
         call GenotypeSVs {
             input:
                 vcf = vcf,
