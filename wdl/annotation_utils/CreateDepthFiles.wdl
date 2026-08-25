@@ -10,6 +10,7 @@ workflow CreateDepthFiles {
 
         Int bin_size = 100
         Int ploidy_bin_size = 1000000
+        Int random_seed = 42
 
         String utils_docker
 
@@ -84,6 +85,7 @@ workflow CreateDepthFiles {
         input:
             bincov_matrix = ZPaste.bincov_matrix,
             prefix = prefix,
+            random_seed = random_seed,
             docker = utils_docker,
             runtime_attr_override = runtime_attr_median_cov
     }
@@ -414,6 +416,7 @@ task MedianCov {
         File bincov_matrix
         String prefix
         Int max_bins = 1000000
+        Int random_seed = 42
         String docker
         RuntimeAttr? runtime_attr_override
     }
@@ -426,8 +429,8 @@ task MedianCov {
         # coverage is unchanged because medianCoverage.R already downsamples to
         # this many bins internally after reading the full matrix.
         zcat ~{bincov_matrix} \
-            | awk -v N=~{max_bins} '
-                BEGIN { srand() }
+            | awk -v N=~{max_bins} -v SEED=~{random_seed} '
+                BEGIN { srand(SEED) }
                 NR==1 { print; next }
                 { n++
                   if (n <= N) { res[n] = $0 }
