@@ -30,8 +30,8 @@ version 1.0
 # OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-import "../utils/Helpers.wdl"
-import "../utils/Structs.wdl"
+import "Helpers.wdl"
+import "Structs.wdl"
 
 workflow LRCNVs {
     parameter_meta {

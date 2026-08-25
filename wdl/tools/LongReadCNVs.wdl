@@ -1,9 +1,9 @@
 version 1.0
 
-import "LRCNVs.wdl"
-import "DepthPreprocessing.wdl"
-import "DepthClustering.wdl"
-import "GenotypeDepth.wdl"
+import "../utils/LRCNVs.wdl"
+import "../utils/DepthPreprocessing.wdl"
+import "../utils/DepthClustering.wdl"
+import "../utils/GenotypeDepth.wdl"
 
 workflow LongReadCNVs {
     meta {

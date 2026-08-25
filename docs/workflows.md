@@ -1032,7 +1032,7 @@ Outputs:
 - `sv_kanpig_raw_vcf_idx`: Index for the raw VCF.
 
 
-### [LRCNVs](../wdl/tools/LRCNVs.wdl)
+### [LRCNVs](../wdl/utils/LRCNVs.wdl)
 This tool calls copy-number variants across a cohort using the GATK germline CNV (gCNV) pipeline in cohort mode. From per-sample depth profiles over a shared interval list it annotates and filters intervals, determines contig ploidy, fits the gCNV model across scattered interval shards, post-processes the per-sample calls into genotyped interval and segment VCFs, and collects sample- and model-level QC. It outputs the gCNV model, per-sample CNV VCFs, denoised copy ratios and QC status.
 
 Inputs:
