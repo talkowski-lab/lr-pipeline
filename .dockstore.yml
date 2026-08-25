@@ -402,6 +402,16 @@ workflows:
       tags:
         - /.*/
 
+  - subclass: WDL
+    name: MakeDepthMetrics
+    primaryDescriptorPath: /wdl/annotation_utils/MakeDepthMetrics.wdl
+    filters:
+      branches:
+        - main
+        - gcnv
+      tags:
+        - /.*/
+
   # -----
   # Tools
   # -----
@@ -602,3 +612,40 @@ workflows:
         - main
       tags:
         - /.*/
+
+  - subclass: WDL
+    name: DepthPreprocessing
+    primaryDescriptorPath: /wdl/tools/DepthPreprocessing.wdl
+    filters:
+      branches:
+        - main
+        - gcnv
+      tags:
+        - /.*/
+
+  - subclass: WDL
+    name: DepthClustering
+    primaryDescriptorPath: /wdl/tools/DepthClustering.wdl
+    filters:
+      branches:
+        - main
+        - gcnv
+      tags:
+        - /.*/
+
+  - subclass: WDL
+    name: GenotypeDepth
+    primaryDescriptorPath: /wdl/tools/GenotypeDepth.wdl
+    filters:
+      branches:
+        - main
+        - gcnv
+      tags:
+        - /.*/
+  - subclass: WDL
+    name: LongReadCNVs
+    primaryDescriptorPath: /wdl/tools/LongReadCNVs.wdl
+    filters:
+      branches:
+        - main
+        - gcnv

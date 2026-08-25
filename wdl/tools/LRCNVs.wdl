@@ -35,29 +35,35 @@ import "../utils/Structs.wdl"
 
 workflow LRCNVs {
     meta {
-        description: "Workflow for creating a GATK GermlineCNVCaller denoising model and generating calls given a list of normal samples with HiFi long-read sequencing reads."
-        notes: "The genome must be binned into 100b intervals and the median depth at each interval, rounded to an integer, must be computed for each sample. It is ok to exclude some genomic intervals, but all samples must have the same set of intervals."
+        description: "Workflow for creating a GATK GermlineCNVCaller denoising model and generating calls given a list of samples with long-read sequencing reads."
     }
+
     parameter_meta {
         intervals: "GATK-style intervals used to collect depth profiles."
+        sample_ids: "Identifier for each sample."
         depth_profiles: "Median depth at each interval, rounded to an integer. One file per sample. See the TSV format here https://gatk.broadinstitute.org/hc/en-us/articles/35967568802843-CollectReadCounts."
-        cohort_entity_id: "Identifier for the cohort used for denoising model generation."
-        contig_ploidy_priors: "File containing contig ploidy priors."
+        cohort_id: "Identifier for the cohort used for denoising model generation."
+        contig_ploidy_priors: "File containing contig ploidy priors. See input comment."
+        num_intervals_per_scatter: "Number of intervals to process in each scatter."
         ref_fa: "Reference sequences FASTA file."
         ref_fai: "Reference sequences FASTA file index."
         ref_dict: "Reference sequences dictionary."
-        num_intervals_per_scatter: "Number of intervals to process in each scatter.  Default is 10000."
-        gatk_docker: "Docker image for the GATK tool.  Default is broadinstitute/gatk:broadinstitute/gatk:4.6.2.0."
+        gatk_docker: "Docker image for the GATK tool."
     }
 
     input {
-        ##################################
-        #### required basic arguments ####
-        ##################################
         File intervals
-        Array[String]+ entity_ids
+        Array[String]+ sample_ids
         Array[String]+ depth_profiles
-        String cohort_entity_id
+        String cohort_id
+        # A TSV with the prior probability of each ploidy state of each contig.
+        # e.g.
+        # CONTIG_NAME PLOIDY_PRIOR_0 PLOIDY_PRIOR_1 PLOIDY_PRIOR_2 PLOIDY_PRIOR_3
+        #        chr1            0.0           0.01           0.98           0.01
+        #        chr2            0.0           0.01           0.98           0.01
+        # ...
+        #        chrX           0.01           0.49           0.49           0.01
+        #        chrY          0.495          0.495           0.01            0.0
         File contig_ploidy_priors
         Int num_intervals_per_scatter = 10000
         File ref_fa
@@ -65,15 +71,10 @@ workflow LRCNVs {
         File ref_dict
         String gatk_docker = "broadinstitute/gatk:4.6.2.0"
 
-        #################################
-        #### optional basic arguments ###
-        #################################
         File? gatk4_jar_override 
         Int? preemptible_attempts
 
-        ##################################################
-        #### optional arguments for AnnotateIntervals ####
-        ##################################################
+        # AnnotateIntervals
         File? mappability_track_bed
         File? mappability_track_bed_idx
         File? segmental_duplication_track_bed
@@ -81,9 +82,7 @@ workflow LRCNVs {
         Int? feature_query_lookahead
         Int? mem_gb_for_annotate_intervals
 
-        #################################################
-        #### optional arguments for FilterIntervals ####
-        ################################################
+        # FilterIntervals
         File? blacklist_intervals
         Int? low_count_filter_count_threshold
         Float? low_count_filter_percentage_of_samples
@@ -92,9 +91,7 @@ workflow LRCNVs {
         Float? extreme_count_filter_percentage_of_samples
         Int? mem_gb_for_filter_intervals
 
-        ########################################################################
-        #### optional arguments for DetermineGermlineContigPloidyCohortMode ####
-        ########################################################################
+        # DeterminGermlineContigPloidyCohortMode
         Float? ploidy_mean_bias_standard_deviation
         Float? ploidy_mapping_error_rate
         Float? ploidy_global_psi_scale
@@ -102,9 +99,7 @@ workflow LRCNVs {
         Int? mem_gb_for_determine_germline_contig_ploidy
         Int? cpu_for_determine_germline_contig_ploidy
 
-        ############################################################
-        #### optional arguments for GermlineCNVCallerCohortMode ####
-        ############################################################
+        # GermlineCNVCallerCohortMode
         Float? gcnv_p_alt
         Float? gcnv_p_active
         Float? gcnv_cnv_coherence_length
@@ -113,7 +108,7 @@ workflow LRCNVs {
         Int? mem_gb_for_germline_cnv_caller
         Int? cpu_for_germline_cnv_caller
 
-        # optional arguments for germline CNV denoising model
+        # GermlineCNVCallerCohortMode - germline CNV denoising model
         Int? gcnv_max_bias_factors
         Float? gcnv_mapping_error_rate
         Float? gcnv_interval_psi_scale
@@ -127,7 +122,7 @@ workflow LRCNVs {
         Boolean? gcnv_enable_bias_factors
         Int? gcnv_active_class_padding_hybrid_mode
 
-        # optional arguments for Hybrid ADVI
+        # GermlineCNVCallerCohortMode - Hybrid ADVI
         Float? gcnv_learning_rate
         Float? gcnv_adamax_beta_1
         Float? gcnv_adamax_beta_2
@@ -149,15 +144,11 @@ workflow LRCNVs {
         Float? gcnv_caller_external_admixing_rate
         Boolean? gcnv_disable_annealing
 
-        ###################################################
-        #### arguments for PostprocessGermlineCNVCalls ####
-        ###################################################
+        # PostprocessGermlineCNVCalls
         Int ref_copy_number_autosomal_contigs = 2
         Array[String]? allosomal_contigs
 
-        ##########################
-        #### arguments for QC ####
-        ##########################
+        # CollectSampleQualityMetrics
         Int maximum_number_events_per_sample = 1000
     }
 
@@ -197,7 +188,7 @@ workflow LRCNVs {
 
     call DetermineGermlineContigPloidyCohortMode {
         input:
-            cohort_entity_id = cohort_entity_id,
+            cohort_id = cohort_id,
             intervals = FilterIntervals.filtered_intervals,
             read_count_files = depth_profiles,
             contig_ploidy_priors = contig_ploidy_priors,
@@ -224,7 +215,7 @@ workflow LRCNVs {
         call GermlineCNVCallerCohortMode {
             input:
                 scatter_index = scatter_index,
-                cohort_entity_id = cohort_entity_id,
+                cohort_id = cohort_id,
                 read_count_files = depth_profiles,
                 contig_ploidy_calls_tar = DetermineGermlineContigPloidyCohortMode.contig_ploidy_calls_tar,
                 intervals = ScatterIntervals.scattered_interval_lists[scatter_index],
@@ -276,10 +267,10 @@ workflow LRCNVs {
 
     Array[Array[File]] call_tars_sample_by_shard = transpose(GermlineCNVCallerCohortMode.gcnv_call_tars)
 
-    scatter (sample_index in range(length(entity_ids))) {
+    scatter (sample_index in range(length(sample_ids))) {
         call PostprocessGermlineCNVCalls {
             input:
-                entity_id = entity_ids[sample_index],
+                sample_id = sample_ids[sample_index],
                 gcnv_calls_tars = call_tars_sample_by_shard[sample_index],
                 gcnv_model_tars = GermlineCNVCallerCohortMode.gcnv_model_tar,
                 calling_configs = GermlineCNVCallerCohortMode.calling_config_json,
@@ -298,7 +289,7 @@ workflow LRCNVs {
         call CollectSampleQualityMetrics {
             input:
                 genotyped_segments_vcf = PostprocessGermlineCNVCalls.genotyped_segments_vcf,
-                entity_id = entity_ids[sample_index],
+                sample_id = sample_ids[sample_index],
                 maximum_number_events = maximum_number_events_per_sample,
                 gatk_docker = gatk_docker,
                 preemptible_attempts = preemptible_attempts
@@ -521,7 +512,7 @@ task ScatterIntervals {
 
 task PostprocessGermlineCNVCalls {
     input {
-      String entity_id
+      String sample_id
       Array[File] gcnv_calls_tars
       Array[File] gcnv_model_tars
       Array[File] calling_configs
@@ -546,9 +537,9 @@ task PostprocessGermlineCNVCalls {
     Int machine_mem_mb = select_first([mem_gb, 7]) * 1000
     Int command_mem_mb = ceil(machine_mem_mb * 0.8)
 
-    String genotyped_intervals_vcf_filename = "genotyped-intervals-~{entity_id}.vcf.gz"
-    String genotyped_segments_vcf_filename = "genotyped-segments-~{entity_id}.vcf.gz"
-    String denoised_copy_ratios_filename = "denoised_copy_ratios-~{entity_id}.tsv"
+    String genotyped_intervals_vcf_filename = "genotyped-intervals-~{sample_id}.vcf.gz"
+    String genotyped_segments_vcf_filename = "genotyped-segments-~{sample_id}.vcf.gz"
+    String denoised_copy_ratios_filename = "denoised_copy_ratios-~{sample_id}.tsv"
 
     Array[String] allosomal_contigs_args = if defined(allosomal_contigs) then prefix("--allosomal-contig ", select_first([allosomal_contigs])) else []
 
@@ -625,7 +616,7 @@ task PostprocessGermlineCNVCalls {
 task CollectSampleQualityMetrics {
     input {
       File genotyped_segments_vcf
-      String entity_id
+      String sample_id
       Int maximum_number_events
 
       # Runtime parameters
@@ -644,9 +635,9 @@ task CollectSampleQualityMetrics {
 
         NUM_SEGMENTS=$(gunzip -c ~{genotyped_segments_vcf} | grep -v '#' | wc -l)
         if [ $NUM_SEGMENTS -lt ~{maximum_number_events} ]; then
-            echo "PASS" >> ~{entity_id}.qcStatus.txt
+            echo "PASS" >> ~{sample_id}.qcStatus.txt
         else 
-            echo "EXCESSIVE_NUMBER_OF_EVENTS" >> ~{entity_id}.qcStatus.txt
+            echo "EXCESSIVE_NUMBER_OF_EVENTS" >> ~{sample_id}.qcStatus.txt
         fi
     >>>
 
@@ -659,8 +650,8 @@ task CollectSampleQualityMetrics {
     }
 
     output {
-        File qc_status_file = "~{entity_id}.qcStatus.txt"
-        String qc_status_string = read_string("~{entity_id}.qcStatus.txt")
+        File qc_status_file = "~{sample_id}.qcStatus.txt"
+        String qc_status_string = read_string("~{sample_id}.qcStatus.txt")
     }
 }
 
@@ -716,7 +707,7 @@ task CollectModelQualityMetrics {
 
 task DetermineGermlineContigPloidyCohortMode {
     input {
-      String cohort_entity_id
+      String cohort_id
       File? intervals
       Array[File] read_count_files
       File contig_ploidy_priors
@@ -759,15 +750,15 @@ task DetermineGermlineContigPloidyCohortMode {
             --contig-ploidy-priors ~{contig_ploidy_priors} \
             --interval-merging-rule OVERLAPPING_ONLY \
             --output ~{output_dir_} \
-            --output-prefix ~{cohort_entity_id} \
+            --output-prefix ~{cohort_id} \
             --verbosity DEBUG \
             --mean-bias-standard-deviation ~{default="0.01" mean_bias_standard_deviation} \
             --mapping-error-rate ~{default="0.01" mapping_error_rate} \
             --global-psi-scale ~{default="0.001" global_psi_scale} \
             --sample-psi-scale ~{default="0.0001" sample_psi_scale}
 
-        tar czf ~{cohort_entity_id}-contig-ploidy-model.tar.gz -C ~{output_dir_}/~{cohort_entity_id}-model .
-        tar czf ~{cohort_entity_id}-contig-ploidy-calls.tar.gz -C ~{output_dir_}/~{cohort_entity_id}-calls .
+        tar czf ~{cohort_id}-contig-ploidy-model.tar.gz -C ~{output_dir_}/~{cohort_id}-model .
+        tar czf ~{cohort_id}-contig-ploidy-calls.tar.gz -C ~{output_dir_}/~{cohort_id}-calls .
     >>>
 
     runtime {
@@ -779,15 +770,15 @@ task DetermineGermlineContigPloidyCohortMode {
     }
 
     output {
-        File contig_ploidy_model_tar = "~{cohort_entity_id}-contig-ploidy-model.tar.gz"
-        File contig_ploidy_calls_tar = "~{cohort_entity_id}-contig-ploidy-calls.tar.gz"
+        File contig_ploidy_model_tar = "~{cohort_id}-contig-ploidy-model.tar.gz"
+        File contig_ploidy_calls_tar = "~{cohort_id}-contig-ploidy-calls.tar.gz"
     }
 }
 
 task GermlineCNVCallerCohortMode {
     input {
       Int scatter_index
-      String cohort_entity_id
+      String cohort_id
       Array[File] read_count_files
       File contig_ploidy_calls_tar
       File intervals
@@ -874,7 +865,7 @@ task GermlineCNVCallerCohortMode {
             ~{"--annotated-intervals " + annotated_intervals} \
             --interval-merging-rule OVERLAPPING_ONLY \
             --output ~{output_dir_} \
-            --output-prefix ~{cohort_entity_id} \
+            --output-prefix ~{cohort_id} \
             --verbosity DEBUG \
             --p-alt ~{default="1e-6" p_alt} \
             --p-active ~{default="1e-2" p_active} \
@@ -914,15 +905,15 @@ task GermlineCNVCallerCohortMode {
             --caller-external-admixing-rate ~{default="1.00" caller_external_admixing_rate} \
             --disable-annealing ~{default="false" disable_annealing}
 
-        tar czf ~{cohort_entity_id}-gcnv-model-shard-~{scatter_index}.tar.gz -C ~{output_dir_}/~{cohort_entity_id}-model .
-        tar czf ~{cohort_entity_id}-gcnv-tracking-shard-~{scatter_index}.tar.gz -C ~{output_dir_}/~{cohort_entity_id}-tracking .
+        tar czf ~{cohort_id}-gcnv-model-shard-~{scatter_index}.tar.gz -C ~{output_dir_}/~{cohort_id}-model .
+        tar czf ~{cohort_id}-gcnv-tracking-shard-~{scatter_index}.tar.gz -C ~{output_dir_}/~{cohort_id}-tracking .
 
         CURRENT_SAMPLE=0
         NUM_SAMPLES=~{num_samples}
         NUM_DIGITS=${#NUM_SAMPLES}
         while [ $CURRENT_SAMPLE -lt $NUM_SAMPLES ]; do
             CURRENT_SAMPLE_WITH_LEADING_ZEROS=$(printf "%0${NUM_DIGITS}d" $CURRENT_SAMPLE)
-            tar czf ~{cohort_entity_id}-gcnv-calls-shard-~{scatter_index}-sample-$CURRENT_SAMPLE_WITH_LEADING_ZEROS.tar.gz -C ~{output_dir_}/~{cohort_entity_id}-calls/SAMPLE_$CURRENT_SAMPLE .
+            tar czf ~{cohort_id}-gcnv-calls-shard-~{scatter_index}-sample-$CURRENT_SAMPLE_WITH_LEADING_ZEROS.tar.gz -C ~{output_dir_}/~{cohort_id}-calls/SAMPLE_$CURRENT_SAMPLE .
             CURRENT_SAMPLE=$((CURRENT_SAMPLE+1))
         done
 
@@ -938,12 +929,12 @@ task GermlineCNVCallerCohortMode {
     }
 
     output {
-        File gcnv_model_tar = "~{cohort_entity_id}-gcnv-model-shard-~{scatter_index}.tar.gz"
-        Array[File] gcnv_call_tars = glob("~{cohort_entity_id}-gcnv-calls-shard-~{scatter_index}-sample-*.tar.gz")
-        File gcnv_tracking_tar = "~{cohort_entity_id}-gcnv-tracking-shard-~{scatter_index}.tar.gz"
-        File calling_config_json = "~{output_dir_}/~{cohort_entity_id}-calls/calling_config.json"
-        File denoising_config_json = "~{output_dir_}/~{cohort_entity_id}-calls/denoising_config.json"
-        File gcnvkernel_version_json = "~{output_dir_}/~{cohort_entity_id}-calls/gcnvkernel_version.json"
-        File sharded_interval_list = "~{output_dir_}/~{cohort_entity_id}-calls/interval_list.tsv"
+        File gcnv_model_tar = "~{cohort_id}-gcnv-model-shard-~{scatter_index}.tar.gz"
+        Array[File] gcnv_call_tars = glob("~{cohort_id}-gcnv-calls-shard-~{scatter_index}-sample-*.tar.gz")
+        File gcnv_tracking_tar = "~{cohort_id}-gcnv-tracking-shard-~{scatter_index}.tar.gz"
+        File calling_config_json = "~{output_dir_}/~{cohort_id}-calls/calling_config.json"
+        File denoising_config_json = "~{output_dir_}/~{cohort_id}-calls/denoising_config.json"
+        File gcnvkernel_version_json = "~{output_dir_}/~{cohort_id}-calls/gcnvkernel_version.json"
+        File sharded_interval_list = "~{output_dir_}/~{cohort_id}-calls/interval_list.tsv"
     }
 }
