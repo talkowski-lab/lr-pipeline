@@ -1,5 +1,7 @@
 # Instructions
 
+<!-- Canonical project instructions for Claude Code, Codex, and GitHub Copilot. Edit this file only. -->
+
 - Repo annotates long-read variant callsets (SVs, MEIs, TRs, other complex variants) for HPRC/HGSVC/AoU — cohort/pipeline details in [docs/cohort.md](docs/cohort.md) and [docs/pipeline.md](docs/pipeline.md).
 - Stack: WDL 1.0 on Cromwell/Terra, Python 3.8+, Bash, Hail. GCP (`gs://` URIs). Reference genome GRCh38.
 - Repo layout, Dockerfile/image conventions, and CI wiring: [docs/repository-structure.md](docs/repository-structure.md).

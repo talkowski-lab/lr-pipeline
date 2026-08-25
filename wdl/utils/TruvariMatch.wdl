@@ -20,19 +20,43 @@ workflow TruvariMatch {
         RuntimeAttr? runtime_attr_run_truvari_09
         RuntimeAttr? runtime_attr_run_truvari_07
         RuntimeAttr? runtime_attr_run_truvari_05
+        RuntimeAttr? runtime_attr_subset_vcf
         RuntimeAttr? runtime_attr_concat_matched
         RuntimeAttr? runtime_attr_concat_matched_truth
+        RuntimeAttr? runtime_attr_concat_unmatched
     }
 
-    call RunTruvari as RunTruvari_09 {
+    call Helpers.SubsetVcfByArgs as SubsetDel {
         input:
             vcf = vcf,
             vcf_idx = vcf_idx,
+            include_args = 'INFO/allele_type~"del"',
+            prefix = "~{prefix}.del",
+            docker = utils_docker,
+            runtime_attr_override = runtime_attr_subset_vcf
+    }
+
+    call Helpers.SubsetVcfByArgs as SubsetNonDel {
+        input:
+            vcf = vcf,
+            vcf_idx = vcf_idx,
+            exclude_args = 'INFO/allele_type~"del"',
+            prefix = "~{prefix}.non_del",
+            docker = utils_docker,
+            runtime_attr_override = runtime_attr_subset_vcf
+    }
+
+    call RunTruvari as RunTruvariDel_09 {
+        input:
+            vcf = SubsetDel.subset_vcf,
+            vcf_idx = SubsetDel.subset_vcf_idx,
             truth_snv_indel_vcf = truth_snv_indel_vcf,
             truth_snv_indel_vcf_idx = truth_snv_indel_vcf_idx,
             ref_fa = ref_fa,
             ref_fai = ref_fai,
             pctseq = 0.9,
+            pctsize = 0.9,
+            pctovl = 0.9,
             sizemin = 0,
             sizefilt = 0,
             tag_value = "TRUVARI_0.9",
@@ -42,15 +66,37 @@ workflow TruvariMatch {
             runtime_attr_override = runtime_attr_run_truvari_09
     }
 
-    call RunTruvari as RunTruvari_07 {
+    call RunTruvari as RunTruvariNonDel_09 {
         input:
-            vcf = RunTruvari_09.unmatched_vcf,
-            vcf_idx = RunTruvari_09.unmatched_vcf_idx,
+            vcf = SubsetNonDel.subset_vcf,
+            vcf_idx = SubsetNonDel.subset_vcf_idx,
+            truth_snv_indel_vcf = truth_snv_indel_vcf,
+            truth_snv_indel_vcf_idx = truth_snv_indel_vcf_idx,
+            ref_fa = ref_fa,
+            ref_fai = ref_fai,
+            pctseq = 0.9,
+            pctsize = 0.9,
+            pctovl = 0.0,
+            sizemin = 0,
+            sizefilt = 0,
+            tag_value = "TRUVARI_0.9",
+            source_tag = source_tag,
+            prefix = "~{prefix}.non_del.0.9",
+            docker = utils_docker,
+            runtime_attr_override = runtime_attr_run_truvari_09
+    }
+
+    call RunTruvari as RunTruvariDel_07 {
+        input:
+            vcf = RunTruvariDel_09.unmatched_vcf,
+            vcf_idx = RunTruvariDel_09.unmatched_vcf_idx,
             truth_snv_indel_vcf = truth_snv_indel_vcf,
             truth_snv_indel_vcf_idx = truth_snv_indel_vcf_idx,
             ref_fa = ref_fa,
             ref_fai = ref_fai,
             pctseq = 0.7,
+            pctsize = 0.7,
+            pctovl = 0.7,
             sizemin = 0,
             sizefilt = 0,
             tag_value = "TRUVARI_0.7",
@@ -60,15 +106,37 @@ workflow TruvariMatch {
             runtime_attr_override = runtime_attr_run_truvari_07
     }
 
-    call RunTruvari as RunTruvari_05 {
+    call RunTruvari as RunTruvariNonDel_07 {
         input:
-            vcf = RunTruvari_07.unmatched_vcf,
-            vcf_idx = RunTruvari_07.unmatched_vcf_idx,
+            vcf = RunTruvariNonDel_09.unmatched_vcf,
+            vcf_idx = RunTruvariNonDel_09.unmatched_vcf_idx,
+            truth_snv_indel_vcf = truth_snv_indel_vcf,
+            truth_snv_indel_vcf_idx = truth_snv_indel_vcf_idx,
+            ref_fa = ref_fa,
+            ref_fai = ref_fai,
+            pctseq = 0.7,
+            pctsize = 0.7,
+            pctovl = 0.0,
+            sizemin = 0,
+            sizefilt = 0,
+            tag_value = "TRUVARI_0.7",
+            source_tag = source_tag,
+            prefix = "~{prefix}.non_del.0.7",
+            docker = utils_docker,
+            runtime_attr_override = runtime_attr_run_truvari_07
+    }
+
+    call RunTruvari as RunTruvariDel_05 {
+        input:
+            vcf = RunTruvariDel_07.unmatched_vcf,
+            vcf_idx = RunTruvariDel_07.unmatched_vcf_idx,
             truth_snv_indel_vcf = truth_snv_indel_vcf,
             truth_snv_indel_vcf_idx = truth_snv_indel_vcf_idx,
             ref_fa = ref_fa,
             ref_fai = ref_fai,
             pctseq = 0.5,
+            pctsize = 0.5,
+            pctovl = 0.5,
             sizemin = 0,
             sizefilt = 0,
             tag_value = "TRUVARI_0.5",
@@ -78,9 +146,36 @@ workflow TruvariMatch {
             runtime_attr_override = runtime_attr_run_truvari_05
     }
 
+    call RunTruvari as RunTruvariNonDel_05 {
+        input:
+            vcf = RunTruvariNonDel_07.unmatched_vcf,
+            vcf_idx = RunTruvariNonDel_07.unmatched_vcf_idx,
+            truth_snv_indel_vcf = truth_snv_indel_vcf,
+            truth_snv_indel_vcf_idx = truth_snv_indel_vcf_idx,
+            ref_fa = ref_fa,
+            ref_fai = ref_fai,
+            pctseq = 0.5,
+            pctsize = 0.5,
+            pctovl = 0.0,
+            sizemin = 0,
+            sizefilt = 0,
+            tag_value = "TRUVARI_0.5",
+            source_tag = source_tag,
+            prefix = "~{prefix}.non_del.0.5",
+            docker = utils_docker,
+            runtime_attr_override = runtime_attr_run_truvari_05
+    }
+
     call Helpers.ConcatTsvs as ConcatAnnotationTsvs {
         input:
-            tsvs = [RunTruvari_09.annotation_tsv, RunTruvari_07.annotation_tsv, RunTruvari_05.annotation_tsv],
+            tsvs = [
+                RunTruvariDel_09.annotation_tsv,
+                RunTruvariNonDel_09.annotation_tsv,
+                RunTruvariDel_07.annotation_tsv,
+                RunTruvariNonDel_07.annotation_tsv,
+                RunTruvariDel_05.annotation_tsv,
+                RunTruvariNonDel_05.annotation_tsv
+            ],
             sort_output = true,
             prefix = "~{prefix}.truvari_combined",
             docker = utils_docker,
@@ -89,21 +184,48 @@ workflow TruvariMatch {
 
     call Helpers.ConcatVcfs as ConcatMatchedTruth {
         input:
-            vcfs = [RunTruvari_09.matched_truth_vcf, RunTruvari_07.matched_truth_vcf, RunTruvari_05.matched_truth_vcf],
-            vcf_idxs = [RunTruvari_09.matched_truth_vcf_idx, RunTruvari_07.matched_truth_vcf_idx, RunTruvari_05.matched_truth_vcf_idx],
+            vcfs = [
+                RunTruvariDel_09.matched_truth_vcf,
+                RunTruvariNonDel_09.matched_truth_vcf,
+                RunTruvariDel_07.matched_truth_vcf,
+                RunTruvariNonDel_07.matched_truth_vcf,
+                RunTruvariDel_05.matched_truth_vcf,
+                RunTruvariNonDel_05.matched_truth_vcf
+            ],
+            vcf_idxs = [
+                RunTruvariDel_09.matched_truth_vcf_idx,
+                RunTruvariNonDel_09.matched_truth_vcf_idx,
+                RunTruvariDel_07.matched_truth_vcf_idx,
+                RunTruvariNonDel_07.matched_truth_vcf_idx,
+                RunTruvariDel_05.matched_truth_vcf_idx,
+                RunTruvariNonDel_05.matched_truth_vcf_idx
+            ],
             allow_overlaps = true,
             naive = false,
+            sort_output = true,
             prefix = "~{prefix}.matched_truth",
             docker = utils_docker,
             runtime_attr_override = runtime_attr_concat_matched_truth
+    }
+
+    call Helpers.ConcatVcfs as ConcatUnmatched {
+        input:
+            vcfs = [RunTruvariDel_05.unmatched_vcf, RunTruvariNonDel_05.unmatched_vcf],
+            vcf_idxs = [RunTruvariDel_05.unmatched_vcf_idx, RunTruvariNonDel_05.unmatched_vcf_idx],
+            allow_overlaps = true,
+            naive = false,
+            sort_output = true,
+            prefix = "~{prefix}.unmatched",
+            docker = utils_docker,
+            runtime_attr_override = runtime_attr_concat_unmatched
     }
 
     output {
         File annotation_tsv = ConcatAnnotationTsvs.concatenated_tsv
         File matched_truth_vcf = ConcatMatchedTruth.concat_vcf
         File matched_truth_vcf_idx = ConcatMatchedTruth.concat_vcf_idx
-        File unmatched_vcf = RunTruvari_05.unmatched_vcf
-        File unmatched_vcf_idx = RunTruvari_05.unmatched_vcf_idx
+        File unmatched_vcf = ConcatUnmatched.concat_vcf
+        File unmatched_vcf_idx = ConcatUnmatched.concat_vcf_idx
     }
 }
 
@@ -116,6 +238,8 @@ task RunTruvari {
         File ref_fa
         File ref_fai
         Float pctseq
+        Float pctsize
+        Float pctovl
         Int sizemin
         Int sizefilt
         String tag_value
@@ -138,6 +262,8 @@ task RunTruvari {
             -o "~{prefix}_truvari" \
             --reference ~{ref_fa} \
             --pctseq ~{pctseq} \
+            --pctsize ~{pctsize} \
+            --pctovl ~{pctovl} \
             --sizemin ~{sizemin} \
             --sizefilt ~{sizefilt}
 

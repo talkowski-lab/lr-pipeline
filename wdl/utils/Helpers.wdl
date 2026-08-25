@@ -549,6 +549,7 @@ task ConcatVcfs {
         Array[File] vcf_idxs
         Boolean allow_overlaps
         Boolean naive
+        Boolean sort_output = false
         String prefix
         String docker
         RuntimeAttr? runtime_attr_override
@@ -559,11 +560,19 @@ task ConcatVcfs {
         
         VCFS_FILE="~{write_lines(vcfs)}"
 
-        bcftools concat \
-            ~{if allow_overlaps then "--allow-overlaps" else ""} \
-            ~{if naive then "--naive" else ""} \
-            --file-list ${VCFS_FILE} \
-            -Oz -o "~{prefix}.vcf.gz"
+        if [[ "~{sort_output}" == "true" ]]; then
+            bcftools concat \
+                ~{if allow_overlaps then "--allow-overlaps" else ""} \
+                --file-list ${VCFS_FILE} \
+                -Ou \
+                | bcftools sort -T ./bcftools-sort.XXXXXX -Oz -o "~{prefix}.vcf.gz"
+        else
+            bcftools concat \
+                ~{if allow_overlaps then "--allow-overlaps" else ""} \
+                ~{if naive then "--naive" else ""} \
+                --file-list ${VCFS_FILE} \
+                -Oz -o "~{prefix}.vcf.gz"
+        fi
         
         tabix -p vcf -f "~{prefix}.vcf.gz"
     >>>
