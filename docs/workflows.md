@@ -692,6 +692,26 @@ Outputs:
 - `sv_vcf_idxs`: Indexes for the SV VCFs.
 
 
+### [FlagLowCoverageRegions](../wdl/annotation_utils/FlagLowCoverageRegions.wdl)
+This utility finds recurrent low-coverage regions from cohort mosdepth per-base BED files. It streams each sample independently, divides each chromosome into fixed bins anchored at position 0, and calculates each bin's base-weighted median coverage. A sample's low-coverage cutoff is the empirical lower-tail quantile of its binned medians; bins at or below the cutoff are flagged. Ties at the cutoff are included, so the flagged fraction can exceed `lower_tail_fraction`, especially when many bins have zero coverage.
+
+The cutoff is a distribution-free lower-tail rule, not a formal per-bin hypothesis test. `lower_tail_fraction = 0.05` implements the requested one-sided 5% tail without assuming normally distributed coverage. The workflow scatters once across samples, then aggregates flagged bins in one cohort task to avoid a nested scatter.
+
+Inputs:
+- `Array[File] mosdepth_bed_files`: One sorted, contiguous mosdepth per-base BED or BED.GZ per sample. Files must use four columns (`chrom`, `start`, `end`, `coverage`), cover each included chromosome from position 0, and have the same chromosome coordinate system.
+- `Array[String] sample_ids`: Sample IDs corresponding by array index to `mosdepth_bed_files`.
+- `Int bin_size`: Fixed genomic bin size in bp.
+- `Float lower_tail_fraction`: Fraction defining each sample's lower-tail cutoff (default `0.05`).
+
+Outputs:
+- `binned_coverage_tsvs`: Per-sample gzipped TSVs containing chromosome, start, end, and median coverage for every bin.
+- `low_coverage_beds`: Per-sample gzipped BED files containing flagged bins, their median coverage, and sample ID.
+- `sample_cutoff_tsvs`: Per-sample cutoff and flagged-bin summaries.
+- `sample_histograms_tar`: Tarball of per-sample coverage histograms; bars at or below the cutoff are shaded orange.
+- `chromosome_low_coverage_tar`: Tarball of per-chromosome plots showing number of samples flagged in each genomic bin.
+- `cohort_low_coverage_counts`: Gzipped TSV underlying the chromosome plots.
+
+
 ### [FillPhasedGenotypes](../wdl/annotation_utils/FillPhasedGenotypes.wdl)
 This utility transfers phasing information from a phased VCF onto the genotypes of an unphased VCF over matching sites, optionally sharding each contig by region. It outputs the phased VCF.
 

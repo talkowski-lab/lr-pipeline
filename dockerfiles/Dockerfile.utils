@@ -58,7 +58,8 @@ RUN python3 -m pip install --upgrade pip && \
         pysam \
         scipy \
         pandas \
-        pyarrow
+        pyarrow \
+        matplotlib
 
 # Install R packages
 RUN Rscript -e 'install.packages("optparse", repos="https://cloud.r-project.org")'

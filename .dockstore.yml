@@ -322,6 +322,15 @@ workflows:
         - /.*/
 
   - subclass: WDL
+    name: FlagLowCoverageRegions
+    primaryDescriptorPath: /wdl/annotation_utils/FlagLowCoverageRegions.wdl
+    filters:
+      branches:
+        - main
+      tags:
+        - /.*/
+
+  - subclass: WDL
     name: FillPhasedGenotypes
     primaryDescriptorPath: /wdl/annotation_utils/FillPhasedGenotypes.wdl
     filters:
