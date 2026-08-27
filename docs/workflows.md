@@ -819,6 +819,7 @@ Inputs:
 - `Boolean run_flag_homopolymer_trvs`: Whether to flag tandem repeats with a length-1 shortest motif as `HOMOPOLYMER_TRV`.
 - `Boolean run_sorting`: Whether to sort records sharing a coordinate by absolute allele length and variant ID.
 - `Boolean run_filter_singletons`: Whether to apply the `SINGLE_READ_SUPPORT` filter to singleton calls.
+- `Boolean filter_assembly_only_singletons`: Whether to apply the `ASSEMBLY_ONLY_SINGLETON` filter and emit a matching TSV (default `false`).
 - `File? transfer_vcf`: VCF whose genotypes are transferred when `run_transfer_genotypes` is set.
 - `File? transfer_vcf_idx`: Index for `transfer_vcf`.
 - `Array[String] unphase_samples`: Samples to unphase when `run_unphase_samples` is set (defaults to empty).
@@ -827,6 +828,7 @@ Inputs:
 Outputs:
 - `post_processed_vcf`: Post-processed VCF.
 - `post_processed_vcf_idx`: Index for the post-processed VCF.
+- `assembly_only_singletons_tsv`: Optional TSV containing one row per assembly-only singleton ALT allele; present only when `filter_assembly_only_singletons` is true.
 
 
 ### [QcAnnotations](https://github.com/broadinstitute/gatk-sv/blob/kj_project_gnomad_lr/wdl/QcAnnotations.wdl)
