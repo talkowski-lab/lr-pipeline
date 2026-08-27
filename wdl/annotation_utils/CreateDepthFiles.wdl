@@ -96,6 +96,7 @@ workflow CreateDepthFiles {
         File median_coverage = MedianCov.median_cov
         File binned_estimated_ecn = PloidyScore.binwise_estimated_copy_numbers
         File estimated_cn = PloidyScore.estimated_copy_numbers
+        File ploidy_plots = PloidyScore.ploidy_plots
     }
 }
 
@@ -382,13 +383,24 @@ task PloidyScore {
         mkdir ploidy_est
         Rscript /opt/scripts/helper/estimatePloidy.R -z -O ./ploidy_est ~{ploidy_matrix}
 
+        mkdir ploidy_plots
+        find ploidy_est -maxdepth 1 -type f -name '*.png' -exec cp {} ploidy_plots/ \;
+
+        python3 /opt/scripts/helper/estimated_CN_denoising.py \
+            --binwise-copy-number ploidy_est/binwise_estimated_copy_numbers.bed.gz \
+            --estimated-copy-number ploidy_est/estimated_copy_numbers.txt.gz \
+            --output-stats cn_denoising_stats.tsv \
+            --output-pdf ploidy_plots/cn_denoising_plots.pdf
+
         mv ploidy_est/estimated_copy_numbers.txt.gz ~{prefix}.estimated_copy_numbers.txt.gz
         mv ploidy_est/binwise_estimated_copy_numbers.bed.gz ~{prefix}.binwise_estimated_copy_numbers.bed.gz
+        tar -C ploidy_plots -zcf ~{prefix}.ploidy_plots.tar.gz .
     >>>
 
     output {
         File estimated_copy_numbers = "~{prefix}.estimated_copy_numbers.txt.gz"
         File binwise_estimated_copy_numbers = "~{prefix}.binwise_estimated_copy_numbers.bed.gz"
+        File ploidy_plots = "~{prefix}.ploidy_plots.tar.gz"
     }
 
     RuntimeAttr default_attr = object {

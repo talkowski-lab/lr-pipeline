@@ -62,7 +62,7 @@ RUN python3 -m pip install --upgrade pip && \
         matplotlib
 
 # Install R packages
-RUN Rscript -e 'install.packages("optparse", repos="https://cloud.r-project.org")'
+RUN Rscript -e 'install.packages(c("beeswarm", "optparse"), repos="https://cloud.r-project.org")'
 
 # Copy repository scripts so every image built from this one has them
 COPY ./scripts /opt/scripts
