@@ -15,8 +15,8 @@ workflow PostProcess {
         Boolean run_clean_vcf_header
         Boolean run_decrement_trv_ids
         Boolean run_drop_filters
-        Boolean run_filter_singletons
-        Boolean filter_assembly_only_singletons = false
+        Boolean run_filter_assembly_only_singletons
+        Boolean run_filter_single_read_singletons
         Boolean run_flag_homopolymer_trvs
         Boolean run_normalize_ploidy
         Boolean run_prune_meis
@@ -133,7 +133,8 @@ workflow PostProcess {
                         decrement_trv_ids = run_decrement_trv_ids,
                         drop = run_drop_filters,
                         drop_filters = drop_filters,
-                        filter_singletons = run_filter_singletons,
+                        filter_assembly_only_singletons = run_filter_assembly_only_singletons,
+                        filter_singletons = run_filter_single_read_singletons,
                         flag_homopolymer_trvs = run_flag_homopolymer_trvs,
                         prune_meis = run_prune_meis,
                         reassign_suffixes = run_reassign_suffixes,
@@ -157,6 +158,18 @@ workflow PostProcess {
                     docker = utils_docker,
                     runtime_attr_override = runtime_attr_concat_shards
             }
+
+            if (run_filter_assembly_only_singletons) {
+                call Helpers.ConcatTsvs as ConcatShardAssemblyOnlySingletonTsvs {
+                    input:
+                        tsvs = PostProcessShard.assembly_only_singletons_tsv,
+                        sort_output = false,
+                        preserve_header = true,
+                        prefix = "~{prefix}.~{contig}.assembly_only_singletons",
+                        docker = utils_docker,
+                        runtime_attr_override = runtime_attr_concat_shards
+                }
+            }
         }
 
         if (!defined(shard_bin_size)) {
@@ -175,7 +188,8 @@ workflow PostProcess {
                     decrement_trv_ids = run_decrement_trv_ids,
                     drop = run_drop_filters,
                     drop_filters = drop_filters,
-                    filter_singletons = run_filter_singletons,
+                    filter_assembly_only_singletons = run_filter_assembly_only_singletons,
+                    filter_singletons = run_filter_single_read_singletons,
                     flag_homopolymer_trvs = run_flag_homopolymer_trvs,
                     prune_meis = run_prune_meis,
                     reassign_suffixes = run_reassign_suffixes,
@@ -188,6 +202,7 @@ workflow PostProcess {
 
         File contig_processed_vcf = select_first([ConcatShards.concat_vcf, PostProcessTask.processed_vcf])
         File contig_processed_vcf_idx = select_first([ConcatShards.concat_vcf_idx, PostProcessTask.processed_vcf_idx])
+        File? contig_assembly_only_singletons_tsv = if run_filter_assembly_only_singletons then select_first([ConcatShardAssemblyOnlySingletonTsvs.concatenated_tsv, PostProcessTask.assembly_only_singletons_tsv]) else PostProcessTask.assembly_only_singletons_tsv
     }
 
     call Helpers.ConcatVcfs {
@@ -201,164 +216,22 @@ workflow PostProcess {
             runtime_attr_override = runtime_attr_concat
     }
 
-    if (filter_assembly_only_singletons) {
-        call FilterAssemblyOnlySingletons {
+    if (run_filter_assembly_only_singletons) {
+        call Helpers.ConcatTsvs as ConcatAssemblyOnlySingletonTsvs {
             input:
-                vcf = ConcatVcfs.concat_vcf,
-                prefix = prefix,
+                tsvs = select_all(contig_assembly_only_singletons_tsv),
+                sort_output = false,
+                preserve_header = true,
+                prefix = "~{prefix}.assembly_only_singletons",
                 docker = utils_docker,
-                runtime_attr_override = runtime_attr_post_process
+                runtime_attr_override = runtime_attr_concat
         }
     }
 
     output {
-        File post_processed_vcf = select_first([FilterAssemblyOnlySingletons.filtered_vcf, ConcatVcfs.concat_vcf])
-        File post_processed_vcf_idx = select_first([FilterAssemblyOnlySingletons.filtered_vcf_idx, ConcatVcfs.concat_vcf_idx])
-        File? assembly_only_singletons_tsv = FilterAssemblyOnlySingletons.assembly_only_singletons_tsv
-    }
-}
-
-task FilterAssemblyOnlySingletons {
-    input {
-        File vcf
-        String prefix
-        String docker
-        RuntimeAttr? runtime_attr_override
-    }
-
-    command <<<
-        set -euo pipefail
-
-        python3 <<CODE
-import re
-
-import pysam
-
-
-ASSEMBLY_CALLERS = {"dipcall", "hapdiff"}
-CALLER_RE = re.compile(r"^([A-Za-z0-9]+)")
-
-
-def parse_callers(ev_value):
-    if ev_value is None:
-        return None
-
-    values = ev_value if isinstance(ev_value, (list, tuple)) else [ev_value]
-    parts = []
-    for value in values:
-        if value is not None:
-            parts.extend(str(value).split(","))
-
-    callers = set()
-    for part in parts:
-        match = CALLER_RE.match(part.strip())
-        if match:
-            callers.add(match.group(1).lower())
-    return callers or None
-
-
-def info_string(value):
-    if value is None:
-        return "."
-    if isinstance(value, (list, tuple)):
-        values = [str(item) for item in value if item is not None]
-        return ",".join(values) if values else "."
-    return str(value)
-
-
-def assembly_only_singleton_alt_indices(record):
-    allele_counts = record.info.get("AC")
-    if allele_counts is None:
-        return []
-    if not isinstance(allele_counts, (list, tuple)):
-        allele_counts = (allele_counts,)
-
-    matches = []
-    for alt_index, allele_count in enumerate(allele_counts):
-        if allele_count != 1:
-            continue
-
-        allele_number = alt_index + 1
-        carrier = None
-        for sample in record.samples.values():
-            genotype = sample.get("GT")
-            if genotype is not None and allele_number in genotype:
-                carrier = sample
-                break
-
-        if carrier is None:
-            continue
-        callers = parse_callers(carrier.get("EV"))
-        if callers and callers.issubset(ASSEMBLY_CALLERS):
-            matches.append(alt_index)
-    return matches
-
-
-reader = pysam.VariantFile("~{vcf}")
-header = reader.header.copy()
-if "ASSEMBLY_ONLY_SINGLETON" not in header.filters:
-    header.filters.add(
-        "ASSEMBLY_ONLY_SINGLETON",
-        None,
-        None,
-        "Singleton variant whose carrier is supported only by assembly-based callers.",
-    )
-
-writer = pysam.VariantFile("~{prefix}.vcf.gz", "wz", header=header)
-with open("~{prefix}.assembly_only_singletons.tsv", "w") as tsv:
-    tsv.write("ID\tallele_type\tallele_length\tdbSNP_ID\tgnomAD_V4_match_ID\tFILTER\n")
-    for record in reader:
-        matching_alt_indices = assembly_only_singleton_alt_indices(record)
-        record.translate(writer.header)
-        if matching_alt_indices:
-            record.filter.add("ASSEMBLY_ONLY_SINGLETON")
-            filters = ",".join(record.filter.keys()) if record.filter.keys() else "."
-            for alt_index in matching_alt_indices:
-                variant_id = record.id or "{}-{}-{}-{}".format(
-                    record.chrom, record.pos, record.ref, record.alts[alt_index]
-                )
-                tsv.write(
-                    "{}\t{}\t{}\t{}\t{}\t{}\n".format(
-                        variant_id,
-                        info_string(record.info.get("allele_type")),
-                        info_string(record.info.get("allele_length")),
-                        info_string(record.info.get("dbSNP_ID")),
-                        info_string(record.info.get("gnomAD_V4_match_ID")),
-                        filters,
-                    )
-                )
-        writer.write(record)
-
-reader.close()
-writer.close()
-CODE
-
-        tabix -p vcf -f ~{prefix}.vcf.gz
-    >>>
-
-    output {
-        File filtered_vcf = "~{prefix}.vcf.gz"
-        File filtered_vcf_idx = "~{prefix}.vcf.gz.tbi"
-        File assembly_only_singletons_tsv = "~{prefix}.assembly_only_singletons.tsv"
-    }
-
-    RuntimeAttr default_attr = object {
-        cpu_cores: 1,
-        mem_gb: ceil(size(vcf, "GB")) + 5,
-        disk_gb: 5 * ceil(size(vcf, "GB")) + 25,
-        boot_disk_gb: 10,
-        preemptible_tries: 1,
-        max_retries: 0
-    }
-    RuntimeAttr runtime_attr = select_first([runtime_attr_override, default_attr])
-    runtime {
-        cpu: select_first([runtime_attr.cpu_cores, default_attr.cpu_cores])
-        memory: select_first([runtime_attr.mem_gb, default_attr.mem_gb]) + " GiB"
-        disks: "local-disk " + select_first([runtime_attr.disk_gb, default_attr.disk_gb]) + " HDD"
-        bootDiskSizeGb: select_first([runtime_attr.boot_disk_gb, default_attr.boot_disk_gb])
-        docker: docker
-        preemptible: select_first([runtime_attr.preemptible_tries, default_attr.preemptible_tries])
-        maxRetries: select_first([runtime_attr.max_retries, default_attr.max_retries])
+        File post_processed_vcf = ConcatVcfs.concat_vcf
+        File post_processed_vcf_idx = ConcatVcfs.concat_vcf_idx
+        File? assembly_only_singletons_tsv = ConcatAssemblyOnlySingletonTsvs.concatenated_tsv
     }
 }
 
@@ -377,6 +250,7 @@ task PostProcessTask {
         Boolean prune_meis
         Boolean flag_homopolymer_trvs
         Boolean sort_records
+        Boolean filter_assembly_only_singletons
         Boolean filter_singletons
         Boolean drop
         Array[String] drop_filters = []
@@ -404,6 +278,7 @@ decrement_trv_ids = ~{true="True" false="False" decrement_trv_ids}
 prune_meis = ~{true="True" false="False" prune_meis}
 flag_homopolymer_trvs = ~{true="True" false="False" flag_homopolymer_trvs}
 sort_records = ~{true="True" false="False" sort_records}
+filter_assembly_only_singletons = ~{true="True" false="False" filter_assembly_only_singletons}
 filter_singletons = ~{true="True" false="False" filter_singletons}
 drop = ~{true="True" false="False" drop}
 clean_vcf_header = ~{true="True" false="False" clean_vcf_header}
@@ -413,6 +288,9 @@ unphase_list = ["~{sep='\", \"' unphase_samples}"] if ~{length(unphase_samples)}
 unphase_samples_set = set(unphase_list)
 drop_filters_list = ["~{sep='\", \"' drop_filters}"] if ~{length(drop_filters)} > 0 else []
 drop_filters_set = set(drop_filters_list)
+
+ASSEMBLY_CALLERS = {"dipcall", "hapdiff"}
+CALLER_RE = re.compile(r"^([A-Za-z0-9]+)")
 
 
 def parse_ped(path):
@@ -563,6 +441,81 @@ def has_single_read_support(record):
     return len(alt_depths) == 1 and alt_depths[0] == 1
 
 
+def parse_callers(ev_value):
+    if ev_value is None:
+        return None
+
+    values = ev_value if isinstance(ev_value, (list, tuple)) else [ev_value]
+    parts = []
+    for value in values:
+        if value is not None:
+            parts.extend(str(value).split(","))
+
+    callers = set()
+    for part in parts:
+        match = CALLER_RE.match(part.strip())
+        if match:
+            callers.add(match.group(1).lower())
+    return callers or None
+
+
+def assembly_only_singleton_alt_indices(record):
+    allele_counts = record.info.get("AC")
+    if allele_counts is None:
+        return []
+    if not isinstance(allele_counts, (list, tuple)):
+        allele_counts = (allele_counts,)
+
+    matches = []
+    for alt_index, allele_count in enumerate(allele_counts):
+        if allele_count != 1:
+            continue
+
+        allele_number = alt_index + 1
+        carrier = None
+        for sample in record.samples.values():
+            genotype = sample.get("GT")
+            if genotype is not None and allele_number in genotype:
+                carrier = sample
+                break
+
+        if carrier is None:
+            continue
+        callers = parse_callers(carrier.get("EV"))
+        if callers and callers.issubset(ASSEMBLY_CALLERS):
+            matches.append(alt_index)
+    return matches
+
+
+def info_string(value):
+    if value is None:
+        return "."
+    if isinstance(value, (list, tuple)):
+        values = [str(item) for item in value if item is not None]
+        return ",".join(values) if values else "."
+    return str(value)
+
+
+def write_assembly_only_singleton_rows(record, alt_indices, tsv_writer):
+    if not alt_indices:
+        return
+    filters = ",".join(record.filter.keys()) if record.filter.keys() else "."
+    for alt_index in alt_indices:
+        variant_id = record.id or "{}-{}-{}-{}".format(
+            record.chrom, record.pos, record.ref, record.alts[alt_index]
+        )
+        tsv_writer.write(
+            "{}\t{}\t{}\t{}\t{}\t{}\n".format(
+                variant_id,
+                info_string(record.info.get("allele_type")),
+                info_string(record.info.get("allele_length")),
+                info_string(record.info.get("dbSNP_ID")),
+                info_string(record.info.get("gnomAD_V4_match_ID")),
+                filters,
+            )
+        )
+
+
 def regroup_header(header):
     group_order = ["fileformat", "OTHER", "contig", "INFO", "FILTER", "FORMAT", "ALT", "SAMPLE", "PEDIGREE"]
     groups = {g: [] for g in group_order}
@@ -608,7 +561,7 @@ def reassign_id_suffixes(buf):
             r.id = "{}_{}".format(base, i)
 
 
-def flush_buffer(buf, out_vcf, reassign_suffixes, sort_records):
+def flush_buffer(buf, out_vcf, tsv_writer, assembly_alt_indices, reassign_suffixes, sort_records):
     def custom_sort_key(rec):
         al_val = get_scalar(rec.info.get("allele_length"))
         abs_al = abs(int(al_val)) if al_val is not None else 0
@@ -620,6 +573,7 @@ def flush_buffer(buf, out_vcf, reassign_suffixes, sort_records):
         buf.sort(key=custom_sort_key)
     for r in buf:
         out_vcf.write(r)
+        write_assembly_only_singleton_rows(r, assembly_alt_indices.pop(id(r), []), tsv_writer)
 
 
 sex_by_sample = parse_ped("~{default="NONE" ped}") if normalize_ploidy else {}
@@ -636,16 +590,26 @@ if drop:
     for drop_filter in drop_filters_set:
         if drop_filter in header.filters:
             header.filters.remove_header(drop_filter)
+if filter_assembly_only_singletons and "ASSEMBLY_ONLY_SINGLETON" not in header.filters:
+    header.filters.add(
+        "ASSEMBLY_ONLY_SINGLETON",
+        None,
+        None,
+        "Singleton variant whose carrier is supported only by assembly-based callers.",
+    )
 if clean_vcf_header:
     header = regroup_header(header)
 
 output_writer = pysam.VariantFile("~{prefix}.vcf.gz", "wz", header=header)
+tsv_writer = open("~{prefix}.assembly_only_singletons.tsv", "w")
+tsv_writer.write("ID\tallele_type\tallele_length\tdbSNP_ID\tgnomAD_V4_match_ID\tFILTER\n")
 base_samples = list(base_reader.header.samples)
 shared_samples = set(base_samples)
 if transfer_genotypes:
     shared_samples &= set(transfer_reader.header.samples)
 
 buffer = []
+assembly_alt_indices = {}
 current_chrom = None
 current_pos = None
 
@@ -728,14 +692,24 @@ for record in base_reader:
     if filter_singletons and has_single_read_support(record):
         record.filter.add("SINGLE_READ_SUPPORT")
 
+    # Flag singleton ALT alleles supported only by assembly-based callers
+    matching_assembly_alt_indices = []
+    if filter_assembly_only_singletons:
+        matching_assembly_alt_indices = assembly_only_singleton_alt_indices(record)
+        if matching_assembly_alt_indices:
+            record.filter.add("ASSEMBLY_ONLY_SINGLETON")
+
     if not sort_records and not reassign_suffixes:
         output_writer.write(record)
+        write_assembly_only_singleton_rows(record, matching_assembly_alt_indices, tsv_writer)
         continue
+
+    assembly_alt_indices[id(record)] = matching_assembly_alt_indices
 
     # Buffer records sharing the exact same coordinate to sort and/or reassign ID suffixes
     if record.chrom != current_chrom or record.pos != current_pos:
         if buffer:
-            flush_buffer(buffer, output_writer, reassign_suffixes, sort_records)
+            flush_buffer(buffer, output_writer, tsv_writer, assembly_alt_indices, reassign_suffixes, sort_records)
         buffer = [record]
         current_chrom = record.chrom
         current_pos = record.pos
@@ -743,10 +717,11 @@ for record in base_reader:
         buffer.append(record)
 
 if (sort_records or reassign_suffixes) and buffer:
-    flush_buffer(buffer, output_writer, reassign_suffixes, sort_records)
+    flush_buffer(buffer, output_writer, tsv_writer, assembly_alt_indices, reassign_suffixes, sort_records)
 
 base_reader.close()
 output_writer.close()
+tsv_writer.close()
 if transfer_reader is not None:
     transfer_reader.close()
 CODE
@@ -757,6 +732,7 @@ CODE
     output {
         File processed_vcf = "~{prefix}.vcf.gz"
         File processed_vcf_idx = "~{prefix}.vcf.gz.tbi"
+        File assembly_only_singletons_tsv = "~{prefix}.assembly_only_singletons.tsv"
     }
 
     RuntimeAttr default_attr = object {
