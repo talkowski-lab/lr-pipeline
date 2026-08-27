@@ -9,7 +9,7 @@ workflow FlagLowCoverageRegions {
         String prefix
 
         Int bin_size
-        Float lower_tail_fraction = 0.05
+        Float p_value_threshold = 0.05
 
         String utils_docker
 
@@ -26,7 +26,7 @@ workflow FlagLowCoverageRegions {
                 sample_id = sample_input.right,
                 prefix = "~{prefix}.~{sample_input.right}",
                 bin_size = bin_size,
-                lower_tail_fraction = lower_tail_fraction,
+                p_value_threshold = p_value_threshold,
                 docker = utils_docker,
                 runtime_attr_override = runtime_attr_bin_coverage
         }
@@ -60,7 +60,7 @@ task BinSampleCoverage {
         String sample_id
         String prefix
         Int bin_size
-        Float lower_tail_fraction
+        Float p_value_threshold
         String docker
         RuntimeAttr? runtime_attr_override
     }
@@ -74,14 +74,16 @@ import gzip
 import math
 import re
 from collections import Counter
+from statistics import NormalDist
 
 import matplotlib.pyplot as plt
+import numpy as np
 
 
 INPUT = "~{mosdepth_bed}"
 SAMPLE_ID = "~{sample_id}"
 BIN_SIZE = ~{bin_size}
-LOWER_TAIL_FRACTION = ~{lower_tail_fraction}
+P_VALUE_THRESHOLD = ~{p_value_threshold}
 PREFIX = "~{prefix}"
 
 plt.switch_backend("Agg")
@@ -183,9 +185,9 @@ def write_binned_coverage(input_path, output_path):
     return histogram
 
 
-def lower_quantile(histogram):
+def weighted_quantile(histogram, fraction):
     bin_count = sum(histogram.values())
-    target_rank = max(1, math.ceil(LOWER_TAIL_FRACTION * bin_count))
+    target_rank = max(1, math.ceil(fraction * bin_count))
     cumulative = 0
     for depth in sorted(histogram):
         cumulative += histogram[depth]
@@ -194,7 +196,7 @@ def lower_quantile(histogram):
     raise ValueError("Cannot calculate cutoff from empty histogram")
 
 
-def write_low_coverage_bins(binned_path, output_path, cutoff):
+def write_low_coverage_bins(binned_path, output_path, cutoff, normal_distribution):
     low_bin_count = 0
     with gzip.open(binned_path, "rt") as source, gzip.open(
         output_path, "wt", newline=""
@@ -202,27 +204,87 @@ def write_low_coverage_bins(binned_path, output_path, cutoff):
         writer = csv.writer(output, delimiter="\t", lineterminator="\n")
         for line in source:
             chrom, start, end, depth_text = line.rstrip("\n").split("\t")
-            if float(depth_text) <= cutoff:
-                writer.writerow([chrom, start, end, depth_text, SAMPLE_ID])
+            depth = float(depth_text)
+            if depth <= cutoff:
+                p_value = normal_distribution.cdf(depth)
+                writer.writerow(
+                    [chrom, start, end, depth_text, SAMPLE_ID, f"{p_value:.6g}"]
+                )
                 low_bin_count += 1
     return low_bin_count
 
 
 def plot_histogram(histogram, cutoff, output_path):
-    depths = sorted(histogram)
-    counts = [histogram[depth] for depth in depths]
-    colors = ["#d95f02" if depth <= cutoff else "#4c78a8" for depth in depths]
+    q1, bin_count = weighted_quantile(histogram, 0.25)
+    q3, _ = weighted_quantile(histogram, 0.75)
+    q95, _ = weighted_quantile(histogram, 0.95)
+    interquartile_range = q3 - q1
+    upper_fence = q3 + 3 * interquartile_range
+    maximum_depth = max(histogram)
+    display_maximum = min(maximum_depth, max(q95, upper_fence))
+    if display_maximum == 0:
+        display_maximum = 1
+
+    plotted_depths = [depth for depth in sorted(histogram) if depth <= display_maximum]
+    plotted_counts = [histogram[depth] for depth in plotted_depths]
+    omitted_count = sum(
+        count for depth, count in histogram.items() if depth > display_maximum
+    )
+    if interquartile_range > 0:
+        bin_width = 2 * interquartile_range / bin_count ** (1 / 3)
+        desired_bin_count = math.ceil(display_maximum / bin_width)
+    else:
+        desired_bin_count = math.ceil(math.log2(bin_count) + 1)
+    histogram_bin_count = min(
+        len(plotted_depths), max(10, min(100, desired_bin_count))
+    )
+    counts, edges = np.histogram(
+        plotted_depths,
+        bins=histogram_bin_count,
+        range=(0, display_maximum),
+        weights=plotted_counts,
+    )
+    low_depths = [depth for depth in plotted_depths if depth <= cutoff]
+    low_counts, _ = np.histogram(
+        low_depths,
+        bins=edges,
+        weights=[histogram[depth] for depth in low_depths],
+    )
     figure, axis = plt.subplots(figsize=(10, 6))
-    axis.axvspan(min(depths) - 0.5, cutoff + 0.5, color="#fdd0a2", alpha=0.35)
-    axis.bar(depths, counts, width=0.8, color=colors, edgecolor="none")
+    axis.axvspan(0, cutoff, color="#fdd0a2", alpha=0.35)
+    axis.bar(
+        edges[:-1],
+        counts,
+        width=np.diff(edges),
+        align="edge",
+        color="#4c78a8",
+        edgecolor="none",
+    )
+    axis.bar(
+        edges[:-1],
+        low_counts,
+        width=np.diff(edges),
+        align="edge",
+        color="#d95f02",
+        edgecolor="none",
+    )
     axis.axvline(cutoff, color="#8c2d04", linestyle="--", linewidth=1.5)
-    axis.set_xlabel("Median coverage per bin")
-    axis.set_ylabel("Number of genomic bins")
-    axis.set_title(f"{SAMPLE_ID}: binned coverage distribution")
+    axis.set_xlim(0, display_maximum)
+    axis.set_xlabel("Median Coverage")
+    axis.set_ylabel("Bin Count")
+    axis.set_title(SAMPLE_ID)
+    annotation = (
+        f"Lower-tail cutoff: {cutoff:.2f}× "
+        f"(p ≤ {P_VALUE_THRESHOLD:g})"
+    )
+    if omitted_count:
+        annotation += (
+            f"\n{omitted_count:,} bins above {format_depth(display_maximum)}× not shown"
+        )
     axis.text(
         0.98,
         0.95,
-        f"Lower-tail cutoff: {format_depth(cutoff)}×",
+        annotation,
         horizontalalignment="right",
         verticalalignment="top",
         transform=axis.transAxes,
@@ -234,8 +296,8 @@ def plot_histogram(histogram, cutoff, output_path):
 
 if BIN_SIZE <= 0:
     raise ValueError("bin_size must be greater than 0")
-if not 0 < LOWER_TAIL_FRACTION < 1:
-    raise ValueError("lower_tail_fraction must be between 0 and 1")
+if not 0 < P_VALUE_THRESHOLD < 0.5:
+    raise ValueError("p_value_threshold must be between 0 and 0.5")
 if not re.fullmatch(r"[A-Za-z0-9._-]+", SAMPLE_ID):
     raise ValueError("sample_id may contain only letters, numbers, '.', '_', and '-'")
 
@@ -245,15 +307,44 @@ cutoff_path = f"{PREFIX}.low_coverage_cutoff.tsv"
 plot_path = f"{PREFIX}.coverage_histogram.png"
 
 histogram = write_binned_coverage(INPUT, binned_path)
-cutoff, bin_count = lower_quantile(histogram)
-low_bin_count = write_low_coverage_bins(binned_path, low_path, cutoff)
+median, bin_count = weighted_quantile(histogram, 0.5)
+absolute_deviations = Counter()
+for depth, count in histogram.items():
+    absolute_deviations[abs(depth - median)] += count
+mad, _ = weighted_quantile(absolute_deviations, 0.5)
+if mad == 0:
+    raise ValueError("Median absolute deviation is zero; cannot estimate null spread")
+robust_sigma = 1.4826 * mad
+normal_distribution = NormalDist(mu=median, sigma=robust_sigma)
+cutoff = normal_distribution.inv_cdf(P_VALUE_THRESHOLD)
+low_bin_count = write_low_coverage_bins(
+    binned_path, low_path, cutoff, normal_distribution
+)
 with open(cutoff_path, "w", newline="") as output:
     writer = csv.writer(output, delimiter="\t", lineterminator="\n")
     writer.writerow(
-        ["sample_id", "lower_tail_fraction", "cutoff", "bin_count", "low_bin_count"]
+        [
+            "sample_id",
+            "p_value_threshold",
+            "median",
+            "mad",
+            "robust_sigma",
+            "cutoff",
+            "bin_count",
+            "low_bin_count",
+        ]
     )
     writer.writerow(
-        [SAMPLE_ID, LOWER_TAIL_FRACTION, format_depth(cutoff), bin_count, low_bin_count]
+        [
+            SAMPLE_ID,
+            P_VALUE_THRESHOLD,
+            format_depth(median),
+            format_depth(mad),
+            robust_sigma,
+            cutoff,
+            bin_count,
+            low_bin_count,
+        ]
     )
 plot_histogram(histogram, cutoff, plot_path)
 PYCODE
@@ -346,10 +437,10 @@ def plot_chromosome(chrom, chrom_end, flagged_bins):
         linewidth=0.6,
         drawstyle="steps-mid",
     )
-    axis.set_xlabel(f"Position on {chrom} (Mb)")
-    axis.set_ylabel("Samples with low coverage")
+    axis.set_xlabel("Position")
+    axis.set_ylabel("Low Coverage Sample Count")
     axis.set_ylim(0, SAMPLE_COUNT)
-    axis.set_title(f"{chrom}: cohort low-coverage bins ({BIN_SIZE:,} bp bins)")
+    axis.set_title(chrom)
     figure.tight_layout()
     figure.savefig(OUTPUT_DIR / f"{safe_filename(chrom)}.low_coverage.png", dpi=150)
     plt.close(figure)

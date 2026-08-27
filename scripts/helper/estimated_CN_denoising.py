@@ -23,7 +23,11 @@ def calculate_median_mad(group):
 def main():
     parser = argparse.ArgumentParser(description="Generate MAD/median stats and plots from copy number data.")
     parser.add_argument('--binwise-copy-number', required=True, help="TSV file with binwise copy number (wide format)")
-    parser.add_argument('--estimated-copy-number', required=True, help="TSV file with estimated copy number per sample (wide format)")
+    parser.add_argument(
+        '--estimated-copy-number',
+        required=True,
+        help="TSV file with estimated copy number per sample (wide format)"
+    )
     parser.add_argument('--output-stats', required=True, help="Output TSV file with median and MAD per sample and chromosome")
     parser.add_argument('--output-pdf', required=True, help="Output PDF file with error bar plots")
 
