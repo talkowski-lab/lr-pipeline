@@ -31,7 +31,7 @@ workflow GenotypeDepth {
         input:
             vcf = vcf,
             vcf_index = vcf + ".tbi",
-            output_prefix = batch_id,
+            prefix = batch_id,
             training_intervals = training_intervals,
             median_coverage = median_coverage,
             chr_x = chr_x,
@@ -50,7 +50,7 @@ workflow GenotypeDepth {
             input:
                 vcf = vcf,
                 vcf_index = vcf + ".tbi",
-                output_prefix = "~{batch_id}.genotype_batch.~{contig}",
+                prefix = "~{batch_id}.genotype_batch.~{contig}",
                 contig = contig,
                 median_coverage = median_coverage,
                 rd_file = rd_file,
@@ -67,7 +67,7 @@ workflow GenotypeDepth {
         input:
             vcfs = GenotypeSVs.out,
             vcf_idxs = GenotypeSVs.out_index,
-            output_prefix = batch_id + ".genotype_batch",
+            prefix = batch_id + ".genotype_batch",
             docker = sv_base_mini_docker,
             runtime_attr_override = runtime_attr_concat_vcfs
     }
@@ -91,7 +91,7 @@ task TrainSVGenotyping {
         String chr_y
         File ref_dict
         File ploidy_table
-        String output_prefix
+        String prefix
         String docker
         RuntimeAttr? runtime_attr_override
     }
@@ -110,17 +110,17 @@ task TrainSVGenotyping {
             -XL '~{chr_y}' \
             -V '~{vcf}' \
             --training-intervals '~{training_intervals}' \
-            -O '~{output_prefix}.vcf.gz' \
+            -O '~{prefix}.vcf.gz' \
             --median-coverage '~{median_coverage}' \
             --rd-file '~{rd_file}' \
             --sequence-dictionary '~{ref_dict}' \
             --ploidy-table '~{ploidy_table}' \
             --output-dir ./ \
-            --output-name ~{output_prefix}
+            --output-name ~{prefix}
     >>>
 
     output {
-        File rd_table = "~{output_prefix}.rd_geno_params.tsv"
+        File rd_table = "~{prefix}.rd_geno_params.tsv"
     }
 
     RuntimeAttr default_attr = object {
@@ -147,7 +147,7 @@ task GenotypeSVs {
     input {
         File vcf
         File vcf_index
-        String output_prefix
+        String prefix
         File median_coverage
         File rd_file
         File rd_file_index
@@ -180,7 +180,7 @@ task GenotypeSVs {
 
         gatk --java-options '-Xmx~{java_mem_mib}M' GenotypeSVs \
             -V '~{vcf}' \
-            -O '~{output_prefix}.vcf.gz' \
+            -O '~{prefix}.vcf.gz' \
             ~{"-L " + contig} \
             --median-coverage '~{median_coverage}' \
             --rd-file local.rd.txt.gz \
@@ -192,8 +192,8 @@ task GenotypeSVs {
     >>>
 
     output {
-        File out = "~{output_prefix}.vcf.gz"
-        File out_index = "~{output_prefix}.vcf.gz.tbi"
+        File out = "~{prefix}.vcf.gz"
+        File out_index = "~{prefix}.vcf.gz.tbi"
     }
 
     RuntimeAttr default_attr = object {
@@ -220,7 +220,7 @@ task ConcatVCFs {
     input {
         Array[File] vcfs
         Array[File] vcf_idxs
-        String output_prefix
+        String prefix
         String docker
         RuntimeAttr? runtime_attr_override
     }
@@ -228,14 +228,14 @@ task ConcatVCFs {
     command <<<
         set -euo pipefail
 
-        bcftools concat --no-version --allow-overlaps --output-type z --output '~{output_prefix}.vcf.gz' \
+        bcftools concat --no-version --allow-overlaps --output-type z --output '~{prefix}.vcf.gz' \
             --file-list '~{write_lines(vcfs)}'
-        tabix '~{output_prefix}.vcf.gz'
+        tabix '~{prefix}.vcf.gz'
     >>>
 
     output {
-        File concat_vcf = "~{output_prefix}.vcf.gz"
-        File concat_vcf_index = "~{output_prefix}.vcf.gz.tbi"
+        File concat_vcf = "~{prefix}.vcf.gz"
+        File concat_vcf_index = "~{prefix}.vcf.gz.tbi"
     }
 
     RuntimeAttr default_attr = object {

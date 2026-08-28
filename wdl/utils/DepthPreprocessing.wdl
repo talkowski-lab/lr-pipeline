@@ -90,7 +90,7 @@ workflow DepthPreprocessing {
             contigs_list = primary_contigs_list,
             chr_x = chr_x,
             chr_y = chr_y,
-            output_prefix = "~{batch_id}-ploidy",
+            prefix = "~{batch_id}-ploidy",
             docker = sv_pipeline_docker,
             runtime_attr_override = runtime_attr_make_ploidy_table
     }
@@ -103,7 +103,7 @@ workflow DepthPreprocessing {
             ploidy_table = MakePloidyTable.ploidy_table,
             ref_fai = ref_fai,
             vid_prefix = "~{batch_id}_DEL",
-            output_prefix = "merged_del",
+            prefix = "merged_del",
             docker = sv_pipeline_docker,
             runtime_attr_override = runtime_attr_cnv_bed_to_vcf
     }
@@ -116,7 +116,7 @@ workflow DepthPreprocessing {
             ploidy_table = MakePloidyTable.ploidy_table,
             ref_fai = ref_fai,
             vid_prefix = "~{batch_id}_DUP",
-            output_prefix = "merged_dup",
+            prefix = "merged_dup",
             docker = sv_pipeline_docker,
             runtime_attr_override = runtime_attr_cnv_bed_to_vcf
     }
@@ -125,7 +125,7 @@ workflow DepthPreprocessing {
         input:
             vcfs = [make_del_vcf.vcf, make_dup_vcf.vcf],
             vcf_idxs = [make_del_vcf.vcf_index, make_dup_vcf.vcf_index],
-            output_prefix = "~{batch_id}_raw_depth_CNVs",
+            prefix = "~{batch_id}_raw_depth_CNVs",
             docker = sv_base_mini_docker,
             runtime_attr_override = runtime_attr_concat_vcfs
     }
@@ -304,7 +304,7 @@ task MakePloidyTable {
         File contigs_list
         String? chr_x
         String? chr_y
-        String output_prefix
+        String prefix
         String docker
         RuntimeAttr? runtime_attr_override
     }
@@ -314,14 +314,14 @@ task MakePloidyTable {
 
         python /opt/sv-pipeline/scripts/ploidy_table_from_ped.py \
             --ped '~{pedigree}' \
-            --out '~{output_prefix}.tsv' \
+            --out '~{prefix}.tsv' \
             --contigs '~{contigs_list}' \
             ~{"--chr-x " + chr_x} \
             ~{"--chr-y " + chr_y}
     >>>
 
     output {
-        File ploidy_table = "~{output_prefix}.tsv"
+        File ploidy_table = "~{prefix}.tsv"
     }
 
     RuntimeAttr default_attr = object {
@@ -353,7 +353,7 @@ task CNVBEDToVCF {
         File ploidy_table
         File ref_fai
         String vid_prefix
-        String output_prefix
+        String prefix
         String docker
         RuntimeAttr? runtime_attr_override
     }
@@ -363,19 +363,19 @@ task CNVBEDToVCF {
 
         python /opt/sv-pipeline/scripts/convert_bed_to_gatk_vcf.py \
             --bed '~{bed}' \
-            --out '~{output_prefix}.vcf.gz' \
+            --out '~{prefix}.vcf.gz' \
             --sample '~{sample_list}' \
             --contigs '~{contig_list}' \
             --vid-prefix '~{vid_prefix}' \
             --ploidy-table '~{ploidy_table}' \
             --fai '~{ref_fai}'
 
-        tabix '~{output_prefix}.vcf.gz'
+        tabix '~{prefix}.vcf.gz'
     >>>
 
     output {
-        File vcf = "~{output_prefix}.vcf.gz"
-        File vcf_index = "~{output_prefix}.vcf.gz.tbi"
+        File vcf = "~{prefix}.vcf.gz"
+        File vcf_index = "~{prefix}.vcf.gz.tbi"
     }
 
     RuntimeAttr default_attr = object {
@@ -403,7 +403,7 @@ task ConcatVCFs {
     input {
         Array[File] vcfs
         Array[File] vcf_idxs
-        String output_prefix
+        String prefix
         String docker
         RuntimeAttr? runtime_attr_override
     }
@@ -416,13 +416,13 @@ task ConcatVCFs {
         bcftools concat --no-version --allow-overlaps --output-type u \
             --file-list '~{write_lines(vcfs)}' \
             | bcftools sort --max-mem '~{sort_mem_mb}' --output-type z \
-                --output '~{output_prefix}.vcf.gz'
-        tabix '~{output_prefix}.vcf.gz'
+                --output '~{prefix}.vcf.gz'
+        tabix '~{prefix}.vcf.gz'
     >>>
 
     output {
-        File concat_vcf = "~{output_prefix}.vcf.gz"
-        File concat_vcf_index = "~{output_prefix}.vcf.gz.tbi"
+        File concat_vcf = "~{prefix}.vcf.gz"
+        File concat_vcf_index = "~{prefix}.vcf.gz.tbi"
     }
 
     RuntimeAttr default_attr = object {

@@ -30,7 +30,7 @@ workflow LongReadCNVs {
         File median_coverage
         Int gcnv_qs_cutoff = 30
 
-        String output_prefix
+        String prefix
         String variant_prefix
 
         String? chr_x
@@ -111,7 +111,7 @@ workflow LongReadCNVs {
     call DepthClustering.DepthClustering {
         input:
             depth_vcf = DepthPreprocessing.merged_vcf,
-            output_prefix = output_prefix,
+            prefix = prefix,
             variant_prefix = variant_prefix,
             pedigree = pedigree,
             contig_list = primary_contigs_list,

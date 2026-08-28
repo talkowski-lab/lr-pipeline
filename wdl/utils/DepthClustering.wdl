@@ -5,7 +5,7 @@ import "Structs.wdl"
 workflow DepthClustering {
     input {
         File depth_vcf
-        String output_prefix
+        String prefix
         String variant_prefix
         File pedigree
 
@@ -60,7 +60,7 @@ workflow DepthClustering {
             contig_list = contig_list,
             chr_x = chr_x,
             chr_y = chr_y,
-            output_prefix = "~{output_prefix}",
+            prefix = "~{prefix}",
             docker = sv_pipeline_docker,
             runtime_attr_override = runtime_attr_create_ploidy_table
     }
@@ -70,7 +70,7 @@ workflow DepthClustering {
         call SVCluster {
             input:
                 vcf = depth_vcf,
-                output_prefix = "~{contig}-depth_clustered",
+                prefix = "~{contig}-depth_clustered",
                 contig = contig,
                 ploidy_table = CreatePloidyTableFromPed.ploidy_table,
                 ref_fa = ref_fa,
@@ -99,7 +99,7 @@ workflow DepthClustering {
                     vcf = SVCluster.clustered_vcf,
                     overlap_fraction = exclude_overlap_fraction,
                     ref_fai = ref_fai,
-                    output_prefix = "~{contig}-depth-intervals_excluded",
+                    prefix = "~{contig}-depth-intervals_excluded",
                     intervals = select_first([exclude_intervals]),
                     intervals_index = select_first([exclude_intervals]) + ".tbi",
                     docker = sv_base_mini_docker,
@@ -110,7 +110,7 @@ workflow DepthClustering {
         call GatkToSvtkVcf {
             input:
                 vcf = select_first([ExcludeIntervalsByIntervalOverlap.filtered_vcf, SVCluster.clustered_vcf]),
-                output_prefix = "~{contig}-depth-svtk_formatted",
+                prefix = "~{contig}-depth-svtk_formatted",
                 script = gatk_to_svtk_script,
                 contig_list = contig_list,
                 set_pass = svtk_set_pass,
@@ -123,7 +123,7 @@ workflow DepthClustering {
         input:
             vcfs = GatkToSvtkVcf.svtk_vcf,
             vcf_idxs = GatkToSvtkVcf.svtk_vcf_index,
-            output_prefix = "~{output_prefix}-depth",
+            prefix = "~{prefix}-depth",
             docker = sv_base_mini_docker,
             runtime_attr_override = runtime_attr_concat_vcfs
     }
@@ -141,7 +141,7 @@ task CreatePloidyTableFromPed {
         File contig_list
         String chr_x
         String chr_y
-        String output_prefix
+        String prefix
         String docker
         RuntimeAttr? runtime_attr_override
     }
@@ -151,14 +151,14 @@ task CreatePloidyTableFromPed {
 
         python '/opt/sv-pipeline/scripts/ploidy_table_from_ped.py' \
             --ped ~{ped} \
-            --out '~{output_prefix}.tsv' \
+            --out '~{prefix}.tsv' \
             --contigs '~{contig_list}' \
             --chr-x '~{chr_x}' \
             --chr-y '~{chr_y}'
     >>>
 
     output {
-        File ploidy_table = "~{output_prefix}.tsv"
+        File ploidy_table = "~{prefix}.tsv"
     }
 
     RuntimeAttr default_attr = object {
@@ -184,7 +184,7 @@ task CreatePloidyTableFromPed {
 task SVCluster {
     input {
         File vcf
-        String output_prefix
+        String prefix
         String contig
         File ploidy_table
         File ref_fa
@@ -218,7 +218,7 @@ task SVCluster {
 
         gatk --java-options '-Xmx~{command_mem_mb}m' SVCluster \
             --variant '~{vcf}' \
-            --output '~{output_prefix}.vcf.gz' \
+            --output '~{prefix}.vcf.gz' \
             --reference '~{ref_fa}' \
             --ploidy-table '~{ploidy_table}' \
             --intervals '~{contig}' \
@@ -238,8 +238,8 @@ task SVCluster {
     >>>
 
     output {
-        File clustered_vcf = "~{output_prefix}.vcf.gz"
-        File clustered_vcf_index = "~{output_prefix}.vcf.gz.tbi"
+        File clustered_vcf = "~{prefix}.vcf.gz"
+        File clustered_vcf_index = "~{prefix}.vcf.gz.tbi"
     }
 
     RuntimeAttr default_attr = object {
@@ -269,7 +269,7 @@ task ExcludeIntervalsByIntervalOverlap {
         File intervals
         File intervals_index
         File ref_fai
-        String output_prefix
+        String prefix
         String docker
         RuntimeAttr? runtime_attr_override
     }
@@ -284,13 +284,13 @@ task ExcludeIntervalsByIntervalOverlap {
             | awk -F"\t" '$6>0' \
             | cut -f4 > excluded_vids.list
         bcftools view --include '%ID!=@excluded_vids.list' --output-type z \
-            --output '~{output_prefix}.vcf.gz' '~{vcf}'
-        tabix '~{output_prefix}.vcf.gz'
+            --output '~{prefix}.vcf.gz' '~{vcf}'
+        tabix '~{prefix}.vcf.gz'
     >>>
 
     output {
-        File filtered_vcf = "~{output_prefix}.vcf.gz"
-        File filtered_vcf_index = "~{output_prefix}.vcf.gz.tbi"
+        File filtered_vcf = "~{prefix}.vcf.gz"
+        File filtered_vcf_index = "~{prefix}.vcf.gz.tbi"
     }
 
     RuntimeAttr default_attr = object {
@@ -320,7 +320,7 @@ task GatkToSvtkVcf {
         File? script
         File contig_list
         Boolean set_pass
-        String output_prefix
+        String prefix
         String docker
         RuntimeAttr? runtime_attr_override
     }
@@ -330,17 +330,17 @@ task GatkToSvtkVcf {
 
         python '~{default="/opt/sv-pipeline/scripts/format_gatk_vcf_for_svtk.py" script}' \
             --vcf '~{vcf}' \
-            --out '~{output_prefix}.vcf.gz' \
+            --out '~{prefix}.vcf.gz' \
             --source depth \
             --contigs '~{contig_list}' \
             --remove-formats CN \
             ~{if set_pass then "--set-pass" else ""}
-        tabix '~{output_prefix}.vcf.gz'
+        tabix '~{prefix}.vcf.gz'
     >>>
 
     output {
-        File svtk_vcf = "~{output_prefix}.vcf.gz"
-        File svtk_vcf_index = "~{output_prefix}.vcf.gz.tbi"
+        File svtk_vcf = "~{prefix}.vcf.gz"
+        File svtk_vcf_index = "~{prefix}.vcf.gz.tbi"
     }
 
     RuntimeAttr default_attr = object {
@@ -368,7 +368,7 @@ task ConcatVCFs {
     input {
         Array[File] vcfs
         Array[File] vcf_idxs
-        String output_prefix
+        String prefix
         String docker
         RuntimeAttr? runtime_attr_override
     }
@@ -377,13 +377,13 @@ task ConcatVCFs {
         set -euo pipefail
 
         bcftools concat --no-version --naive --output-type z --file-list '~{write_lines(vcfs)}' \
-            --output '~{output_prefix}.vcf.gz'
-        tabix '~{output_prefix}.vcf.gz'
+            --output '~{prefix}.vcf.gz'
+        tabix '~{prefix}.vcf.gz'
     >>>
 
     output {
-        File concat_vcf = "~{output_prefix}.vcf.gz"
-        File concat_vcf_index = "~{output_prefix}.vcf.gz.tbi"
+        File concat_vcf = "~{prefix}.vcf.gz"
+        File concat_vcf_index = "~{prefix}.vcf.gz.tbi"
     }
 
     RuntimeAttr default_attr = object {
