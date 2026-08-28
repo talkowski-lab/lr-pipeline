@@ -30,7 +30,6 @@ version 1.0
 # OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-import "Helpers.wdl"
 import "Structs.wdl"
 
 workflow LRCNVs {
@@ -67,7 +66,7 @@ workflow LRCNVs {
         File ref_dict
         String gatk_docker = "broadinstitute/gatk:4.6.2.0"
 
-        File? gatk4_jar_override 
+        File? gatk4_jar_override
         Int? preemptible_attempts
 
         # AnnotateIntervals
@@ -146,6 +145,15 @@ workflow LRCNVs {
 
         # CollectSampleQualityMetrics
         Int maximum_number_events_per_sample = 1000
+
+        RuntimeAttr? runtime_attr_annotate_intervals
+        RuntimeAttr? runtime_attr_filter_intervals
+        RuntimeAttr? runtime_attr_scatter_intervals
+        RuntimeAttr? runtime_attr_determine_contig_ploidy
+        RuntimeAttr? runtime_attr_germline_cnv_caller
+        RuntimeAttr? runtime_attr_postprocess_germline_cnv_calls
+        RuntimeAttr? runtime_attr_collect_sample_quality_metrics
+        RuntimeAttr? runtime_attr_collect_model_quality_metrics
     }
 
     call AnnotateIntervals {
@@ -160,9 +168,10 @@ workflow LRCNVs {
             segmental_duplication_track_bed_idx = segmental_duplication_track_bed_idx,
             feature_query_lookahead = feature_query_lookahead,
             gatk4_jar_override = gatk4_jar_override,
-            gatk_docker = gatk_docker,
+            docker = gatk_docker,
             mem_gb = mem_gb_for_annotate_intervals,
-            preemptible_attempts = preemptible_attempts
+            preemptible_attempts = preemptible_attempts,
+            runtime_attr_override = runtime_attr_annotate_intervals
     }
 
     call FilterIntervals {
@@ -177,9 +186,10 @@ workflow LRCNVs {
             extreme_count_filter_maximum_percentile = extreme_count_filter_maximum_percentile,
             extreme_count_filter_percentage_of_samples = extreme_count_filter_percentage_of_samples,
             gatk4_jar_override = gatk4_jar_override,
-            gatk_docker = gatk_docker,
+            docker = gatk_docker,
             mem_gb = mem_gb_for_filter_intervals,
-            preemptible_attempts = preemptible_attempts
+            preemptible_attempts = preemptible_attempts,
+            runtime_attr_override = runtime_attr_filter_intervals
     }
 
     call DetermineGermlineContigPloidyCohortMode {
@@ -189,22 +199,24 @@ workflow LRCNVs {
             read_count_files = depth_profiles,
             contig_ploidy_priors = contig_ploidy_priors,
             gatk4_jar_override = gatk4_jar_override,
-            gatk_docker = gatk_docker,
+            docker = gatk_docker,
             mem_gb = mem_gb_for_determine_germline_contig_ploidy,
             cpu = cpu_for_determine_germline_contig_ploidy,
             mean_bias_standard_deviation = ploidy_mean_bias_standard_deviation,
             mapping_error_rate = ploidy_mapping_error_rate,
             global_psi_scale = ploidy_global_psi_scale,
             sample_psi_scale = ploidy_sample_psi_scale,
-            preemptible_attempts = preemptible_attempts
+            preemptible_attempts = preemptible_attempts,
+            runtime_attr_override = runtime_attr_determine_contig_ploidy
     }
 
     call ScatterIntervals {
         input:
             interval_list = FilterIntervals.filtered_intervals,
             num_intervals_per_scatter = num_intervals_per_scatter,
-            gatk_docker = gatk_docker,
-            preemptible_attempts = preemptible_attempts
+            docker = gatk_docker,
+            preemptible_attempts = preemptible_attempts,
+            runtime_attr_override = runtime_attr_scatter_intervals
     }
 
     scatter (scatter_index in range(length(ScatterIntervals.scattered_interval_lists))) {
@@ -217,7 +229,7 @@ workflow LRCNVs {
                 intervals = ScatterIntervals.scattered_interval_lists[scatter_index],
                 annotated_intervals = AnnotateIntervals.annotated_intervals,
                 gatk4_jar_override = gatk4_jar_override,
-                gatk_docker = gatk_docker,
+                docker = gatk_docker,
                 mem_gb = mem_gb_for_germline_cnv_caller,
                 cpu = cpu_for_germline_cnv_caller,
                 p_alt = gcnv_p_alt,
@@ -257,7 +269,8 @@ workflow LRCNVs {
                 caller_internal_admixing_rate = gcnv_caller_internal_admixing_rate,
                 caller_external_admixing_rate = gcnv_caller_external_admixing_rate,
                 disable_annealing = gcnv_disable_annealing,
-                preemptible_attempts = preemptible_attempts
+                preemptible_attempts = preemptible_attempts,
+                runtime_attr_override = runtime_attr_germline_cnv_caller
         }
     }
 
@@ -278,8 +291,9 @@ workflow LRCNVs {
                 ref_copy_number_autosomal_contigs = ref_copy_number_autosomal_contigs,
                 sample_index = sample_index,
                 gatk4_jar_override = gatk4_jar_override,
-                gatk_docker = gatk_docker,
-                preemptible_attempts = preemptible_attempts
+                docker = gatk_docker,
+                preemptible_attempts = preemptible_attempts,
+                runtime_attr_override = runtime_attr_postprocess_germline_cnv_calls
         }
 
         call CollectSampleQualityMetrics {
@@ -287,16 +301,18 @@ workflow LRCNVs {
                 genotyped_segments_vcf = PostprocessGermlineCNVCalls.genotyped_segments_vcf,
                 sample_id = sample_ids[sample_index],
                 maximum_number_events = maximum_number_events_per_sample,
-                gatk_docker = gatk_docker,
-                preemptible_attempts = preemptible_attempts
+                docker = gatk_docker,
+                preemptible_attempts = preemptible_attempts,
+                runtime_attr_override = runtime_attr_collect_sample_quality_metrics
         }
     }
 
     call CollectModelQualityMetrics {
         input:
             gcnv_model_tars = GermlineCNVCallerCohortMode.gcnv_model_tar,
-            gatk_docker = gatk_docker,
-            preemptible_attempts = preemptible_attempts
+            docker = gatk_docker,
+            preemptible_attempts = preemptible_attempts,
+            runtime_attr_override = runtime_attr_collect_model_quality_metrics
     }
 
     output {
@@ -329,19 +345,18 @@ task AnnotateIntervals {
         File? segmental_duplication_track_bed_idx
         Int? feature_query_lookahead
         File? gatk4_jar_override
-
-        # Runtime parameters
-        String gatk_docker
+        String docker
         Int? mem_gb
         Int? disk_space_gb
         Boolean use_ssd = false
         Int? cpu
         Int? preemptible_attempts
+        RuntimeAttr? runtime_attr_override
     }
 
-    Int machine_mem_mb = select_first([mem_gb, 2]) * 1000
+    Int machine_mem_mb = ceil(select_first([runtime_attr.mem_gb, default_attr.mem_gb]) * 1000)
     Int command_mem_mb = ceil(machine_mem_mb * 0.8)
-    
+
     # Determine output filename
     String base_filename = basename(intervals, ".interval_list")
 
@@ -361,44 +376,54 @@ task AnnotateIntervals {
             --output ~{base_filename}.annotated.tsv
     >>>
 
-    runtime {
-        docker: gatk_docker
-        memory: machine_mem_mb + " MB"
-        disks: "local-disk " + select_first([disk_space_gb, ceil(size(ref_fa, "GB")) + 50]) + if use_ssd then " SSD" else " HDD"
-        cpu: select_first([cpu, 1])
-        preemptible: select_first([preemptible_attempts, 5])
-    }
-
     output {
         File annotated_intervals = "~{base_filename}.annotated.tsv"
+    }
+
+    RuntimeAttr default_attr = object {
+        cpu_cores: select_first([cpu, 1]),
+        mem_gb: select_first([mem_gb, 2]),
+        disk_gb: select_first([disk_space_gb, ceil(size(ref_fa, "GB")) + 50]),
+        boot_disk_gb: 10,
+        preemptible_tries: select_first([preemptible_attempts, 5]),
+        max_retries: 0
+    }
+    RuntimeAttr runtime_attr = select_first([runtime_attr_override, default_attr])
+    runtime {
+        cpu: select_first([runtime_attr.cpu_cores, default_attr.cpu_cores])
+        memory: machine_mem_mb + " MB"
+        disks: "local-disk " + select_first([runtime_attr.disk_gb, default_attr.disk_gb]) + if use_ssd then " SSD" else " HDD"
+        bootDiskSizeGb: select_first([runtime_attr.boot_disk_gb, default_attr.boot_disk_gb])
+        docker: docker
+        preemptible: select_first([runtime_attr.preemptible_tries, default_attr.preemptible_tries])
+        maxRetries: select_first([runtime_attr.max_retries, default_attr.max_retries])
     }
 }
 
 task FilterIntervals {
     input {
-      File intervals
-      File annotated_intervals
-      File? blacklist_intervals
-      Array[File]? read_count_files
-      Int? low_count_filter_count_threshold
-      Float? low_count_filter_percentage_of_samples
-      Float? extreme_count_filter_minimum_percentile
-      Float? extreme_count_filter_maximum_percentile
-      Float? extreme_count_filter_percentage_of_samples
-      File? gatk4_jar_override
-
-      # Runtime parameters
-      String gatk_docker
-      Int? mem_gb
-      Int? disk_space_gb
-      Boolean use_ssd = false
-      Int? cpu
-      Int? preemptible_attempts
+        File intervals
+        File annotated_intervals
+        File? blacklist_intervals
+        Array[File]? read_count_files
+        Int? low_count_filter_count_threshold
+        Float? low_count_filter_percentage_of_samples
+        Float? extreme_count_filter_minimum_percentile
+        Float? extreme_count_filter_maximum_percentile
+        Float? extreme_count_filter_percentage_of_samples
+        File? gatk4_jar_override
+        String docker
+        Int? mem_gb
+        Int? disk_space_gb
+        Boolean use_ssd = false
+        Int? cpu
+        Int? preemptible_attempts
+        RuntimeAttr? runtime_attr_override
     }
 
-    Int machine_mem_mb = select_first([mem_gb, 7]) * 1000
+    Int machine_mem_mb = ceil(select_first([runtime_attr.mem_gb, default_attr.mem_gb]) * 1000)
     Int command_mem_mb = ceil(machine_mem_mb * 0.8)
-    
+
     # Determine output filename
     String base_filename = basename(intervals, ".intervals")
 
@@ -421,36 +446,46 @@ task FilterIntervals {
             --output ~{base_filename}.filtered.interval_list
     >>>
 
-    runtime {
-        docker: gatk_docker
-        memory: machine_mem_mb + " MB"
-        disks: "local-disk " + select_first([disk_space_gb, 50]) + if use_ssd then " SSD" else " HDD"
-        cpu: select_first([cpu, 1])
-        preemptible: select_first([preemptible_attempts, 5])
-    }
-
     output {
         File filtered_intervals = "~{base_filename}.filtered.interval_list"
+    }
+
+    RuntimeAttr default_attr = object {
+        cpu_cores: select_first([cpu, 1]),
+        mem_gb: select_first([mem_gb, 7]),
+        disk_gb: select_first([disk_space_gb, 50]),
+        boot_disk_gb: 10,
+        preemptible_tries: select_first([preemptible_attempts, 5]),
+        max_retries: 0
+    }
+    RuntimeAttr runtime_attr = select_first([runtime_attr_override, default_attr])
+    runtime {
+        cpu: select_first([runtime_attr.cpu_cores, default_attr.cpu_cores])
+        memory: machine_mem_mb + " MB"
+        disks: "local-disk " + select_first([runtime_attr.disk_gb, default_attr.disk_gb]) + if use_ssd then " SSD" else " HDD"
+        bootDiskSizeGb: select_first([runtime_attr.boot_disk_gb, default_attr.boot_disk_gb])
+        docker: docker
+        preemptible: select_first([runtime_attr.preemptible_tries, default_attr.preemptible_tries])
+        maxRetries: select_first([runtime_attr.max_retries, default_attr.max_retries])
     }
 }
 
 task ScatterIntervals {
     input {
-      File interval_list
-      Int num_intervals_per_scatter
-      String? output_dir
-      File? gatk4_jar_override
-
-      # Runtime parameters
-      String gatk_docker
-      Int? mem_gb
-      Int? disk_space_gb
-      Boolean use_ssd = false
-      Int? cpu
-      Int? preemptible_attempts
+        File interval_list
+        Int num_intervals_per_scatter
+        String? output_dir
+        File? gatk4_jar_override
+        String docker
+        Int? mem_gb
+        Int? disk_space_gb
+        Boolean use_ssd = false
+        Int? cpu
+        Int? preemptible_attempts
+        RuntimeAttr? runtime_attr_override
     }
 
-    Int machine_mem_mb = select_first([mem_gb, 2]) * 1000
+    Int machine_mem_mb = ceil(select_first([runtime_attr.mem_gb, default_attr.mem_gb]) * 1000)
     Int command_mem_mb = ceil(machine_mem_mb * 0.8)
 
     # If optional output_dir not specified, use "out";
@@ -493,44 +528,54 @@ task ScatterIntervals {
         fi
     >>>
 
-    runtime {
-        docker: gatk_docker
-        memory: machine_mem_mb + " MB"
-        disks: "local-disk " + select_first([disk_space_gb, 40]) + if use_ssd then " SSD" else " HDD"
-        cpu: select_first([cpu, 1])
-        preemptible: select_first([preemptible_attempts, 5])
-    }
-
     output {
         Array[File] scattered_interval_lists = glob("~{output_dir_}/~{base_filename}.scattered.*.interval_list")
+    }
+
+    RuntimeAttr default_attr = object {
+        cpu_cores: select_first([cpu, 1]),
+        mem_gb: select_first([mem_gb, 2]),
+        disk_gb: select_first([disk_space_gb, 40]),
+        boot_disk_gb: 10,
+        preemptible_tries: select_first([preemptible_attempts, 5]),
+        max_retries: 0
+    }
+    RuntimeAttr runtime_attr = select_first([runtime_attr_override, default_attr])
+    runtime {
+        cpu: select_first([runtime_attr.cpu_cores, default_attr.cpu_cores])
+        memory: machine_mem_mb + " MB"
+        disks: "local-disk " + select_first([runtime_attr.disk_gb, default_attr.disk_gb]) + if use_ssd then " SSD" else " HDD"
+        bootDiskSizeGb: select_first([runtime_attr.boot_disk_gb, default_attr.boot_disk_gb])
+        docker: docker
+        preemptible: select_first([runtime_attr.preemptible_tries, default_attr.preemptible_tries])
+        maxRetries: select_first([runtime_attr.max_retries, default_attr.max_retries])
     }
 }
 
 task PostprocessGermlineCNVCalls {
     input {
-      String sample_id
-      Array[File] gcnv_calls_tars
-      Array[File] gcnv_model_tars
-      Array[File] calling_configs
-      Array[File] denoising_configs
-      Array[File] gcnvkernel_version
-      Array[File] sharded_interval_lists
-      File contig_ploidy_calls_tar
-      Array[String]? allosomal_contigs
-      Int ref_copy_number_autosomal_contigs
-      Int sample_index
-      File? gatk4_jar_override
-
-      # Runtime parameters
-      String gatk_docker
-      Int? mem_gb
-      Int? disk_space_gb
-      Boolean use_ssd = false
-      Int? cpu
-      Int? preemptible_attempts
+        String sample_id
+        Array[File] gcnv_calls_tars
+        Array[File] gcnv_model_tars
+        Array[File] calling_configs
+        Array[File] denoising_configs
+        Array[File] gcnvkernel_version
+        Array[File] sharded_interval_lists
+        File contig_ploidy_calls_tar
+        Array[String]? allosomal_contigs
+        Int ref_copy_number_autosomal_contigs
+        Int sample_index
+        File? gatk4_jar_override
+        String docker
+        Int? mem_gb
+        Int? disk_space_gb
+        Boolean use_ssd = false
+        Int? cpu
+        Int? preemptible_attempts
+        RuntimeAttr? runtime_attr_override
     }
 
-    Int machine_mem_mb = select_first([mem_gb, 7]) * 1000
+    Int machine_mem_mb = ceil(select_first([runtime_attr.mem_gb, default_attr.mem_gb]) * 1000)
     Int command_mem_mb = ceil(machine_mem_mb * 0.8)
 
     String genotyped_intervals_vcf_filename = "genotyped-intervals-~{sample_id}.vcf.gz"
@@ -594,37 +639,47 @@ task PostprocessGermlineCNVCalls {
         rm -rf contig-ploidy-calls
     >>>
 
-    runtime {
-        docker: gatk_docker
-        memory: machine_mem_mb + " MB"
-        disks: "local-disk " + select_first([disk_space_gb, 40]) + if use_ssd then " SSD" else " HDD"
-        cpu: select_first([cpu, 1])
-        preemptible: select_first([preemptible_attempts, 5])
-    }
-
     output {
         File genotyped_intervals_vcf = genotyped_intervals_vcf_filename
         File genotyped_segments_vcf = genotyped_segments_vcf_filename
         File denoised_copy_ratios = denoised_copy_ratios_filename
     }
+
+    RuntimeAttr default_attr = object {
+        cpu_cores: select_first([cpu, 1]),
+        mem_gb: select_first([mem_gb, 7]),
+        disk_gb: select_first([disk_space_gb, 40]),
+        boot_disk_gb: 10,
+        preemptible_tries: select_first([preemptible_attempts, 5]),
+        max_retries: 0
+    }
+    RuntimeAttr runtime_attr = select_first([runtime_attr_override, default_attr])
+    runtime {
+        cpu: select_first([runtime_attr.cpu_cores, default_attr.cpu_cores])
+        memory: machine_mem_mb + " MB"
+        disks: "local-disk " + select_first([runtime_attr.disk_gb, default_attr.disk_gb]) + if use_ssd then " SSD" else " HDD"
+        bootDiskSizeGb: select_first([runtime_attr.boot_disk_gb, default_attr.boot_disk_gb])
+        docker: docker
+        preemptible: select_first([runtime_attr.preemptible_tries, default_attr.preemptible_tries])
+        maxRetries: select_first([runtime_attr.max_retries, default_attr.max_retries])
+    }
 }
 
 task CollectSampleQualityMetrics {
     input {
-      File genotyped_segments_vcf
-      String sample_id
-      Int maximum_number_events
-
-      # Runtime parameters
-      String gatk_docker
-      Int? mem_gb
-      Int? disk_space_gb
-      Boolean use_ssd = false
-      Int? cpu
-      Int? preemptible_attempts
+        File genotyped_segments_vcf
+        String sample_id
+        Int maximum_number_events
+        String docker
+        Int? mem_gb
+        Int? disk_space_gb
+        Boolean use_ssd = false
+        Int? cpu
+        Int? preemptible_attempts
+        RuntimeAttr? runtime_attr_override
     }
 
-    Int machine_mem_mb = select_first([mem_gb, 1]) * 1000
+    Int machine_mem_mb = ceil(select_first([runtime_attr.mem_gb, default_attr.mem_gb]) * 1000)
 
     command <<<
         set -euo pipefail
@@ -632,42 +687,52 @@ task CollectSampleQualityMetrics {
         NUM_SEGMENTS=$(gunzip -c ~{genotyped_segments_vcf} | grep -v '#' | wc -l)
         if [ $NUM_SEGMENTS -lt ~{maximum_number_events} ]; then
             echo "PASS" >> ~{sample_id}.qcStatus.txt
-        else 
+        else
             echo "EXCESSIVE_NUMBER_OF_EVENTS" >> ~{sample_id}.qcStatus.txt
         fi
     >>>
-
-    runtime {
-        docker: gatk_docker
-        memory: machine_mem_mb + " MB"
-        disks: "local-disk " + select_first([disk_space_gb, 20]) + if use_ssd then " SSD" else " HDD"
-        cpu: select_first([cpu, 1])
-        preemptible: select_first([preemptible_attempts, 5])
-    }
 
     output {
         File qc_status_file = "~{sample_id}.qcStatus.txt"
         String qc_status_string = read_string("~{sample_id}.qcStatus.txt")
     }
+
+    RuntimeAttr default_attr = object {
+        cpu_cores: select_first([cpu, 1]),
+        mem_gb: select_first([mem_gb, 1]),
+        disk_gb: select_first([disk_space_gb, 20]),
+        boot_disk_gb: 10,
+        preemptible_tries: select_first([preemptible_attempts, 5]),
+        max_retries: 0
+    }
+    RuntimeAttr runtime_attr = select_first([runtime_attr_override, default_attr])
+    runtime {
+        cpu: select_first([runtime_attr.cpu_cores, default_attr.cpu_cores])
+        memory: machine_mem_mb + " MB"
+        disks: "local-disk " + select_first([runtime_attr.disk_gb, default_attr.disk_gb]) + if use_ssd then " SSD" else " HDD"
+        bootDiskSizeGb: select_first([runtime_attr.boot_disk_gb, default_attr.boot_disk_gb])
+        docker: docker
+        preemptible: select_first([runtime_attr.preemptible_tries, default_attr.preemptible_tries])
+        maxRetries: select_first([runtime_attr.max_retries, default_attr.max_retries])
+    }
 }
 
 task CollectModelQualityMetrics {
     input {
-      Array[File] gcnv_model_tars
-
-     # Runtime parameters
-      String gatk_docker
-      Int? mem_gb
-      Int? disk_space_gb
-      Boolean use_ssd = false
-      Int? cpu
-      Int? preemptible_attempts
+        Array[File] gcnv_model_tars
+        String docker
+        Int? mem_gb
+        Int? disk_space_gb
+        Boolean use_ssd = false
+        Int? cpu
+        Int? preemptible_attempts
+        RuntimeAttr? runtime_attr_override
     }
 
-    Int machine_mem_mb = select_first([mem_gb, 1]) * 1000
+    Int machine_mem_mb = ceil(select_first([runtime_attr.mem_gb, default_attr.mem_gb]) * 1000)
 
     command <<<
-        sed -e 
+        sed -e
         qc_status="PASS"
 
         gcnv_model_tar_array=(~{sep=" " gcnv_model_tars})
@@ -687,47 +752,55 @@ task CollectModelQualityMetrics {
         echo $qc_status >> qcStatus.txt
     >>>
 
-    runtime {
-        docker: gatk_docker
-        memory: machine_mem_mb + " MB"
-        disks: "local-disk " + select_first([disk_space_gb, 40]) + if use_ssd then " SSD" else " HDD"
-        cpu: select_first([cpu, 1])
-        preemptible: select_first([preemptible_attempts, 5])
-    }
-
     output {
         File qc_status_file = "qcStatus.txt"
         String qc_status_string = read_string("qcStatus.txt")
+    }
+
+    RuntimeAttr default_attr = object {
+        cpu_cores: select_first([cpu, 1]),
+        mem_gb: select_first([mem_gb, 1]),
+        disk_gb: select_first([disk_space_gb, 40]),
+        boot_disk_gb: 10,
+        preemptible_tries: select_first([preemptible_attempts, 5]),
+        max_retries: 0
+    }
+    RuntimeAttr runtime_attr = select_first([runtime_attr_override, default_attr])
+    runtime {
+        cpu: select_first([runtime_attr.cpu_cores, default_attr.cpu_cores])
+        memory: machine_mem_mb + " MB"
+        disks: "local-disk " + select_first([runtime_attr.disk_gb, default_attr.disk_gb]) + if use_ssd then " SSD" else " HDD"
+        bootDiskSizeGb: select_first([runtime_attr.boot_disk_gb, default_attr.boot_disk_gb])
+        docker: docker
+        preemptible: select_first([runtime_attr.preemptible_tries, default_attr.preemptible_tries])
+        maxRetries: select_first([runtime_attr.max_retries, default_attr.max_retries])
     }
 }
 
 task DetermineGermlineContigPloidyCohortMode {
     input {
-      String cohort_id
-      File? intervals
-      Array[File] read_count_files
-      File contig_ploidy_priors
-      String? output_dir
-      File? gatk4_jar_override
-
-      # Runtime parameters
-      String gatk_docker
-      Int? mem_gb
-      Int? disk_space_gb
-      Boolean use_ssd = false
-      Int? cpu
-      Int? preemptible_attempts
-
-      # Model parameters
-      Float? mean_bias_standard_deviation
-      Float? mapping_error_rate
-      Float? global_psi_scale
-      Float? sample_psi_scale
+        String cohort_id
+        File? intervals
+        Array[File] read_count_files
+        File contig_ploidy_priors
+        String? output_dir
+        File? gatk4_jar_override
+        Float? mean_bias_standard_deviation
+        Float? mapping_error_rate
+        Float? global_psi_scale
+        Float? sample_psi_scale
+        String docker
+        Int? mem_gb
+        Int? disk_space_gb
+        Boolean use_ssd = false
+        Int? cpu
+        Int? preemptible_attempts
+        RuntimeAttr? runtime_attr_override
     }
 
     # We do not expose Hybrid ADVI parameters -- the default values are decent
 
-    Int machine_mem_mb = select_first([mem_gb, 7]) * 1000
+    Int machine_mem_mb = ceil(select_first([runtime_attr.mem_gb, default_attr.mem_gb]) * 1000)
     Int command_mem_mb = ceil(machine_mem_mb * 0.8)
 
     # If optional output_dir not specified, use "out"
@@ -737,8 +810,8 @@ task DetermineGermlineContigPloidyCohortMode {
         set -xeuo pipefail
 
         export GATK_LOCAL_JAR=~{default="/root/gatk.jar" gatk4_jar_override}
-        export MKL_NUM_THREADS=~{default=8 cpu}
-        export OMP_NUM_THREADS=~{default=8 cpu}
+        export MKL_NUM_THREADS=~{select_first([runtime_attr.cpu_cores, default_attr.cpu_cores])}
+        export OMP_NUM_THREADS=~{select_first([runtime_attr.cpu_cores, default_attr.cpu_cores])}
 
         gatk --java-options "-Xmx~{command_mem_mb}m"  DetermineGermlineContigPloidy \
             ~{"-L " + intervals} \
@@ -757,98 +830,100 @@ task DetermineGermlineContigPloidyCohortMode {
         tar czf ~{cohort_id}-contig-ploidy-calls.tar.gz -C ~{output_dir_}/~{cohort_id}-calls .
     >>>
 
-    runtime {
-        docker: gatk_docker
-        memory: machine_mem_mb + " MB"
-        disks: "local-disk " + select_first([disk_space_gb, 150]) + if use_ssd then " SSD" else " HDD"
-        cpu: select_first([cpu, 8])
-        preemptible: select_first([preemptible_attempts, 2])
-    }
-
     output {
         File contig_ploidy_model_tar = "~{cohort_id}-contig-ploidy-model.tar.gz"
         File contig_ploidy_calls_tar = "~{cohort_id}-contig-ploidy-calls.tar.gz"
+    }
+
+    RuntimeAttr default_attr = object {
+        cpu_cores: select_first([cpu, 8]),
+        mem_gb: select_first([mem_gb, 7]),
+        disk_gb: select_first([disk_space_gb, 150]),
+        boot_disk_gb: 10,
+        preemptible_tries: select_first([preemptible_attempts, 2]),
+        max_retries: 0
+    }
+    RuntimeAttr runtime_attr = select_first([runtime_attr_override, default_attr])
+    runtime {
+        cpu: select_first([runtime_attr.cpu_cores, default_attr.cpu_cores])
+        memory: machine_mem_mb + " MB"
+        disks: "local-disk " + select_first([runtime_attr.disk_gb, default_attr.disk_gb]) + if use_ssd then " SSD" else " HDD"
+        bootDiskSizeGb: select_first([runtime_attr.boot_disk_gb, default_attr.boot_disk_gb])
+        docker: docker
+        preemptible: select_first([runtime_attr.preemptible_tries, default_attr.preemptible_tries])
+        maxRetries: select_first([runtime_attr.max_retries, default_attr.max_retries])
     }
 }
 
 task GermlineCNVCallerCohortMode {
     input {
-      Int scatter_index
-      String cohort_id
-      Array[File] read_count_files
-      File contig_ploidy_calls_tar
-      File intervals
-      File? annotated_intervals
-      String? output_dir
-      File? gatk4_jar_override
-
-      # Runtime parameters
-      String gatk_docker
-      Int? mem_gb
-      Int? disk_space_gb
-      Boolean use_ssd = false
-      Int? cpu
-      Int? preemptible_attempts
-
-      # Caller parameters
-      Float? p_alt
-      Float? p_active
-      Float? cnv_coherence_length
-      Float? class_coherence_length
-      Int? max_copy_number
-
-      # Denoising model parameters
-      Int? max_bias_factors
-      Float? mapping_error_rate
-      Float? interval_psi_scale
-      Float? sample_psi_scale
-      Float? depth_correction_tau
-      Float? log_mean_bias_standard_deviation
-      Float? init_ard_rel_unexplained_variance
-      Int? num_gc_bins
-      Float? gc_curve_standard_deviation
-      String? copy_number_posterior_expectation_mode
-      Boolean? enable_bias_factors
-      Int? active_class_padding_hybrid_mode
-
-      # Hybrid ADVI parameters
-      Float? learning_rate
-      Float? adamax_beta_1
-      Float? adamax_beta_2
-      Int? log_emission_samples_per_round
-      Float? log_emission_sampling_median_rel_error
-      Int? log_emission_sampling_rounds
-      Int? max_advi_iter_first_epoch
-      Int? max_advi_iter_subsequent_epochs
-      Int? min_training_epochs
-      Int? max_training_epochs
-      Float? initial_temperature
-      Int? num_thermal_advi_iters
-      Int? convergence_snr_averaging_window
-      Float? convergence_snr_trigger_threshold
-      Int? convergence_snr_countdown_window
-      Int? max_calling_iters
-      Float? caller_update_convergence_threshold
-      Float? caller_internal_admixing_rate
-      Float? caller_external_admixing_rate
-      Boolean? disable_annealing
+        Int scatter_index
+        String cohort_id
+        Array[File] read_count_files
+        File contig_ploidy_calls_tar
+        File intervals
+        File? annotated_intervals
+        String? output_dir
+        File? gatk4_jar_override
+        Float? p_alt
+        Float? p_active
+        Float? cnv_coherence_length
+        Float? class_coherence_length
+        Int? max_copy_number
+        Int? max_bias_factors
+        Float? mapping_error_rate
+        Float? interval_psi_scale
+        Float? sample_psi_scale
+        Float? depth_correction_tau
+        Float? log_mean_bias_standard_deviation
+        Float? init_ard_rel_unexplained_variance
+        Int? num_gc_bins
+        Float? gc_curve_standard_deviation
+        String? copy_number_posterior_expectation_mode
+        Boolean? enable_bias_factors
+        Int? active_class_padding_hybrid_mode
+        Float? learning_rate
+        Float? adamax_beta_1
+        Float? adamax_beta_2
+        Int? log_emission_samples_per_round
+        Float? log_emission_sampling_median_rel_error
+        Int? log_emission_sampling_rounds
+        Int? max_advi_iter_first_epoch
+        Int? max_advi_iter_subsequent_epochs
+        Int? min_training_epochs
+        Int? max_training_epochs
+        Float? initial_temperature
+        Int? num_thermal_advi_iters
+        Int? convergence_snr_averaging_window
+        Float? convergence_snr_trigger_threshold
+        Int? convergence_snr_countdown_window
+        Int? max_calling_iters
+        Float? caller_update_convergence_threshold
+        Float? caller_internal_admixing_rate
+        Float? caller_external_admixing_rate
+        Boolean? disable_annealing
+        String docker
+        Int? mem_gb
+        Int? disk_space_gb
+        Boolean use_ssd = false
+        Int? cpu
+        Int? preemptible_attempts
+        RuntimeAttr? runtime_attr_override
     }
 
-    Int machine_mem_mb = select_first([mem_gb, 7]) * 1000
+    Int machine_mem_mb = ceil(select_first([runtime_attr.mem_gb, default_attr.mem_gb]) * 1000)
     Int command_mem_mb = ceil(machine_mem_mb * 0.8)
 
     # If optional output_dir not specified, use "out"
     String output_dir_ = select_first([output_dir, "out"])
     Int num_samples = length(read_count_files)
 
-    String dollar = "$" #WDL workaround, see https://github.com/broadinstitute/cromwell/issues/1819
-
     command <<<
         set -euo pipefail
 
         export GATK_LOCAL_JAR=~{default="/root/gatk.jar" gatk4_jar_override}
-        export MKL_NUM_THREADS=~{default=8 cpu}
-        export OMP_NUM_THREADS=~{default=8 cpu}
+        export MKL_NUM_THREADS=~{select_first([runtime_attr.cpu_cores, default_attr.cpu_cores])}
+        export OMP_NUM_THREADS=~{select_first([runtime_attr.cpu_cores, default_attr.cpu_cores])}
 
         mkdir contig-ploidy-calls
         tar xzf ~{contig_ploidy_calls_tar} -C contig-ploidy-calls
@@ -916,14 +991,6 @@ task GermlineCNVCallerCohortMode {
         rm -rf contig-ploidy-calls
     >>>
 
-    runtime {
-        docker: gatk_docker
-        memory: machine_mem_mb + " MB"
-        disks: "local-disk " + select_first([disk_space_gb, 150]) + if use_ssd then " SSD" else " HDD"
-        cpu: select_first([cpu, 8])
-        preemptible: select_first([preemptible_attempts, 2])
-    }
-
     output {
         File gcnv_model_tar = "~{cohort_id}-gcnv-model-shard-~{scatter_index}.tar.gz"
         Array[File] gcnv_call_tars = glob("~{cohort_id}-gcnv-calls-shard-~{scatter_index}-sample-*.tar.gz")
@@ -932,5 +999,24 @@ task GermlineCNVCallerCohortMode {
         File denoising_config_json = "~{output_dir_}/~{cohort_id}-calls/denoising_config.json"
         File gcnvkernel_version_json = "~{output_dir_}/~{cohort_id}-calls/gcnvkernel_version.json"
         File sharded_interval_list = "~{output_dir_}/~{cohort_id}-calls/interval_list.tsv"
+    }
+
+    RuntimeAttr default_attr = object {
+        cpu_cores: select_first([cpu, 8]),
+        mem_gb: select_first([mem_gb, 7]),
+        disk_gb: select_first([disk_space_gb, 150]),
+        boot_disk_gb: 10,
+        preemptible_tries: select_first([preemptible_attempts, 2]),
+        max_retries: 0
+    }
+    RuntimeAttr runtime_attr = select_first([runtime_attr_override, default_attr])
+    runtime {
+        cpu: select_first([runtime_attr.cpu_cores, default_attr.cpu_cores])
+        memory: machine_mem_mb + " MB"
+        disks: "local-disk " + select_first([runtime_attr.disk_gb, default_attr.disk_gb]) + if use_ssd then " SSD" else " HDD"
+        bootDiskSizeGb: select_first([runtime_attr.boot_disk_gb, default_attr.boot_disk_gb])
+        docker: docker
+        preemptible: select_first([runtime_attr.preemptible_tries, default_attr.preemptible_tries])
+        maxRetries: select_first([runtime_attr.max_retries, default_attr.max_retries])
     }
 }

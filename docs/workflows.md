@@ -695,21 +695,22 @@ Outputs:
 
 
 ### [FlagLowCoverageRegions](../wdl/annotation_utils/FlagLowCoverageRegions.wdl)
-This utility finds recurrent low-coverage regions from cohort mosdepth per-base BED files. It streams each sample independently, divides each chromosome into fixed bins anchored at position 0, and calculates each bin's base-weighted median coverage. It models a sample's normal-coverage component using the genome-wide median and a robust standard deviation of `1.4826 * MAD`, where MAD is the median absolute deviation from the median. Each bin receives a lower-tail probability from that fitted normal distribution and is flagged when its p-value is at or below `p_value_threshold`.
+This utility finds recurrent low-coverage regions from cohort mosdepth per-base BED files. It streams each sample independently, divides each chromosome into fixed bins anchored at position 0, and calculates each bin's base-weighted median coverage. Each sample's regular low-coverage cutoff is its median binned coverage multiplied by `median_coverage_lower_threshold`; bins at or below the cutoff are flagged.
 
-The equivalent coverage cutoff is calculated as `median + NormalCDFInverse(p_value_threshold) * 1.4826 * MAD`; at the default `p_value_threshold = 0.05`, this is approximately `median - 1.645 * 1.4826 * MAD`. This is a one-sided robust normal-model significance test. A sample fails with an explicit error when its MAD is zero because the null distribution's spread cannot be estimated. The workflow scatters once across samples, then aggregates flagged bins in one cohort task to avoid a nested scatter.
+Sample sex is read from a six-column PED (`1` for male and `2` for female). Male chrX and chrY use half the regular cutoff. Female chrY is excluded from binning, the sample median, sample histograms, and low-coverage calls. Samples missing from the PED or carrying unsupported sex codes fail explicitly. The workflow scatters once across samples, then aggregates flagged bins in one cohort task to avoid a nested scatter.
 
 Inputs:
 - `Array[File] mosdepth_bed_files`: One sorted, contiguous mosdepth per-base BED or BED.GZ per sample. Files must use four columns (`chrom`, `start`, `end`, `coverage`), cover each included chromosome from position 0, and have the same chromosome coordinate system.
 - `Array[String] sample_ids`: Sample IDs corresponding by array index to `mosdepth_bed_files`.
+- `File ped`: Six-column PED containing every input sample and its sex.
 - `Int bin_size`: Fixed genomic bin size in bp.
-- `Float p_value_threshold`: Lower-tail p-value threshold used to flag bins (default `0.05`; must be between `0` and `0.5`).
+- `Float median_coverage_lower_threshold`: Fraction of sample median coverage defining the inclusive regular low-coverage cutoff (default `0.2`; must be greater than `0` and at most `1`).
 
 Outputs:
 - `binned_coverage_tsvs`: Per-sample gzipped TSVs containing chromosome, start, end, and median coverage for every bin.
-- `low_coverage_beds`: Per-sample gzipped BED files containing flagged bins, their median coverage, sample ID, and lower-tail p-value.
-- `sample_cutoff_tsvs`: Per-sample p-value threshold, median, MAD, robust standard deviation, derived coverage cutoff, and flagged-bin summary.
-- `sample_histograms_tar`: Tarball of per-sample coverage histograms with weighted, data-driven bins. The displayed range extends through at least the 95th percentile and the `Q3 + 3 * IQR` upper fence; omitted extreme bins are counted on the plot, and the lower-tail cutoff is shaded orange.
+- `low_coverage_beds`: Per-sample gzipped BED files containing flagged bins, their median coverage, and sample ID.
+- `sample_cutoff_tsvs`: Per-sample sex, median, threshold fraction, regular/chrX/chrY cutoffs, and flagged-bin summary.
+- `sample_histograms_tar`: Tarball of per-sample coverage histograms with weighted, data-driven bins. The displayed range extends through at least the 95th percentile and the `Q3 + 3 * IQR` upper fence; omitted extreme bins are counted, actual low-coverage bins are orange, and the sample median plus regular/sex-chromosome cutoffs are annotated.
 - `chromosome_low_coverage_tar`: Tarball of per-chromosome plots showing number of samples flagged in each genomic bin.
 - `cohort_low_coverage_counts`: Gzipped TSV underlying the chromosome plots.
 

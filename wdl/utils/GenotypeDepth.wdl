@@ -1,5 +1,7 @@
 version 1.0
 
+import "Structs.wdl"
+
 workflow GenotypeDepth {
     input {
         String batch_id
@@ -19,6 +21,10 @@ workflow GenotypeDepth {
 
         String gatk_docker
         String sv_base_mini_docker
+
+        RuntimeAttr? runtime_attr_train_sv_genotyping
+        RuntimeAttr? runtime_attr_genotype_svs
+        RuntimeAttr? runtime_attr_concat_vcfs
     }
 
     call TrainSVGenotyping {
@@ -34,7 +40,8 @@ workflow GenotypeDepth {
             rd_file_index = rd_file + ".tbi",
             ref_dict = ref_dict,
             ploidy_table = ploidy_table,
-            gatk_docker = gatk_docker
+            docker = gatk_docker,
+            runtime_attr_override = runtime_attr_train_sv_genotyping
     }
 
     Array[String] contigs = read_lines(select_first([contig_subset_list, contig_list]))
@@ -51,7 +58,8 @@ workflow GenotypeDepth {
                 ref_dict = ref_dict,
                 ploidy_table = ploidy_table,
                 rd_table = TrainSVGenotyping.rd_table,
-                gatk_docker = gatk_docker
+                docker = gatk_docker,
+                runtime_attr_override = runtime_attr_genotype_svs
         }
     }
 
@@ -60,7 +68,8 @@ workflow GenotypeDepth {
             vcfs = GenotypeSVs.out,
             vcf_idxs = GenotypeSVs.out_index,
             output_prefix = batch_id + ".genotype_batch",
-            sv_base_mini_docker = sv_base_mini_docker
+            docker = sv_base_mini_docker,
+            runtime_attr_override = runtime_attr_concat_vcfs
     }
 
     output {
@@ -83,51 +92,54 @@ task TrainSVGenotyping {
         File ref_dict
         File ploidy_table
         String output_prefix
-
-        String gatk_docker
-        Float? mem_gib
-        Int? disk_gb
-        Int? cpu
-        Int? boot_disk_gb
-        Int? preemptible_tries
-        Int? max_retries
+        String docker
+        RuntimeAttr? runtime_attr_override
     }
 
     parameter_meta {
         rd_file: { localization_optional: true }
     }
 
-    Int default_disk_gb = ceil(size([vcf, rd_file], "GB") + 50)
-    Int java_mem_mib = ceil(select_first([mem_gib, 16]) * 0.8 * 1024)
-
-    runtime {
-        cpu: select_first([cpu, 1])
-        memory: select_first([mem_gib, 16]) + " GiB"
-        disks: "local-disk " + select_first([disk_gb, default_disk_gb]) + " HDD"
-        bootDiskSizeGb: select_first([boot_disk_gb, 10])
-        docker: gatk_docker
-        preemptible: select_first([preemptible_tries, 3])
-        maxRetries: select_first([max_retries, 1])
-    }
+    Int java_mem_mib = ceil(select_first([runtime_attr.mem_gb, default_attr.mem_gb]) * 0.8 * 1024)
 
     command <<<
         set -euo pipefail
 
         gatk --java-options "-Xmx~{java_mem_mib}M" TrainSVGenotyping \
-        -XL '~{chr_x}' -XL '~{chr_y}' \
-        -V '~{vcf}' \
-        --training-intervals '~{training_intervals}' \
-        -O '~{output_prefix}.vcf.gz' \
-        --median-coverage '~{median_coverage}' \
-        --rd-file '~{rd_file}' \
-        --sequence-dictionary '~{ref_dict}' \
-        --ploidy-table '~{ploidy_table}' \
-        --output-dir ./ \
-        --output-name ~{output_prefix}
+            -XL '~{chr_x}' \
+            -XL '~{chr_y}' \
+            -V '~{vcf}' \
+            --training-intervals '~{training_intervals}' \
+            -O '~{output_prefix}.vcf.gz' \
+            --median-coverage '~{median_coverage}' \
+            --rd-file '~{rd_file}' \
+            --sequence-dictionary '~{ref_dict}' \
+            --ploidy-table '~{ploidy_table}' \
+            --output-dir ./ \
+            --output-name ~{output_prefix}
     >>>
 
     output {
         File rd_table = "~{output_prefix}.rd_geno_params.tsv"
+    }
+
+    RuntimeAttr default_attr = object {
+        cpu_cores: 1,
+        mem_gb: 16,
+        disk_gb: ceil(size([vcf, rd_file], "GB") + 50),
+        boot_disk_gb: 10,
+        preemptible_tries: 3,
+        max_retries: 1
+    }
+    RuntimeAttr runtime_attr = select_first([runtime_attr_override, default_attr])
+    runtime {
+        cpu: select_first([runtime_attr.cpu_cores, default_attr.cpu_cores])
+        memory: select_first([runtime_attr.mem_gb, default_attr.mem_gb]) + " GiB"
+        disks: "local-disk " + select_first([runtime_attr.disk_gb, default_attr.disk_gb]) + " HDD"
+        bootDiskSizeGb: select_first([runtime_attr.boot_disk_gb, default_attr.boot_disk_gb])
+        docker: docker
+        preemptible: select_first([runtime_attr.preemptible_tries, default_attr.preemptible_tries])
+        maxRetries: select_first([runtime_attr.max_retries, default_attr.max_retries])
     }
 }
 
@@ -143,32 +155,15 @@ task GenotypeSVs {
         File ploidy_table
         File rd_table
         String? contig
-
-        String gatk_docker
-        Float? mem_gib
-        Int? disk_gb
-        Int? cpu
-        Int? boot_disk_gb
-        Int? preemptible_tries
-        Int? max_retries
+        String docker
+        RuntimeAttr? runtime_attr_override
     }
 
     parameter_meta {
         rd_file: { localization_optional: true }
     }
 
-    Int default_disk_gb = ceil(size([vcf, rd_file], "GB") + 50)
-    Int java_mem_mib = ceil(select_first([mem_gib, 8]) * 0.8 * 1024)
-
-    runtime {
-        cpu: select_first([cpu, 1])
-        memory: select_first([mem_gib, 8]) + " GiB"
-        disks: "local-disk " + select_first([disk_gb, default_disk_gb]) + " HDD"
-        bootDiskSizeGb: select_first([boot_disk_gb, 10])
-        docker: gatk_docker
-        preemptible: select_first([preemptible_tries, 3])
-        maxRetries: select_first([max_retries, 1])
-    }
+    Int java_mem_mib = ceil(select_first([runtime_attr.mem_gb, default_attr.mem_gb]) * 0.8 * 1024)
 
     command <<<
         set -euo pipefail
@@ -178,27 +173,46 @@ task GenotypeSVs {
         printf '0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\t0\n' >> sr_table.tsv
 
         gatk --java-options '-Xmx~{java_mem_mib}M' PrintSVEvidence \
-        --sequence-dictionary ~{ref_dict} \
-        --evidence-file ~{rd_file} \
-        ~{"-L " + contig} \
-        -O local.rd.txt.gz
+            --sequence-dictionary ~{ref_dict} \
+            --evidence-file ~{rd_file} \
+            ~{"-L " + contig} \
+            -O local.rd.txt.gz
 
         gatk --java-options '-Xmx~{java_mem_mib}M' GenotypeSVs \
-        -V '~{vcf}' \
-        -O '~{output_prefix}.vcf.gz' \
-        ~{"-L " + contig} \
-        --median-coverage '~{median_coverage}' \
-        --rd-file local.rd.txt.gz \
-        --sequence-dictionary '~{ref_dict}' \
-        --ploidy-table '~{ploidy_table}' \
-        --rd-table '~{rd_table}' \
-        --pe-table pe_table.tsv \
-        --sr-table sr_table.tsv
+            -V '~{vcf}' \
+            -O '~{output_prefix}.vcf.gz' \
+            ~{"-L " + contig} \
+            --median-coverage '~{median_coverage}' \
+            --rd-file local.rd.txt.gz \
+            --sequence-dictionary '~{ref_dict}' \
+            --ploidy-table '~{ploidy_table}' \
+            --rd-table '~{rd_table}' \
+            --pe-table pe_table.tsv \
+            --sr-table sr_table.tsv
     >>>
 
     output {
         File out = "~{output_prefix}.vcf.gz"
         File out_index = "~{output_prefix}.vcf.gz.tbi"
+    }
+
+    RuntimeAttr default_attr = object {
+        cpu_cores: 1,
+        mem_gb: 8,
+        disk_gb: ceil(size([vcf, rd_file], "GB") + 50),
+        boot_disk_gb: 10,
+        preemptible_tries: 3,
+        max_retries: 1
+    }
+    RuntimeAttr runtime_attr = select_first([runtime_attr_override, default_attr])
+    runtime {
+        cpu: select_first([runtime_attr.cpu_cores, default_attr.cpu_cores])
+        memory: select_first([runtime_attr.mem_gb, default_attr.mem_gb]) + " GiB"
+        disks: "local-disk " + select_first([runtime_attr.disk_gb, default_attr.disk_gb]) + " HDD"
+        bootDiskSizeGb: select_first([runtime_attr.boot_disk_gb, default_attr.boot_disk_gb])
+        docker: docker
+        preemptible: select_first([runtime_attr.preemptible_tries, default_attr.preemptible_tries])
+        maxRetries: select_first([runtime_attr.max_retries, default_attr.max_retries])
     }
 }
 
@@ -207,39 +221,40 @@ task ConcatVCFs {
         Array[File] vcfs
         Array[File] vcf_idxs
         String output_prefix
-
-        String sv_base_mini_docker
-        Float? mem_gib
-        Int? disk_gb
-        Int? cpu
-        Int? boot_disk_gb
-        Int? preemptible_tries
-        Int? max_retries
-    }
-
-    Int default_disk_gb = ceil(size(vcfs, "GB") * 3) + 50
-
-    runtime {
-        cpu: select_first([cpu, 1])
-        memory: select_first([mem_gib, 4]) + " GiB"
-        disks: "local-disk " + select_first([disk_gb, default_disk_gb]) + " HDD"
-        bootDiskSizeGb: select_first([boot_disk_gb, 10])
-        docker: sv_base_mini_docker
-        preemptible: select_first([preemptible_tries, 3])
-        maxRetries: select_first([max_retries, 1])
-        noAddress: true
+        String docker
+        RuntimeAttr? runtime_attr_override
     }
 
     command <<<
         set -euo pipefail
 
         bcftools concat --no-version --allow-overlaps --output-type z --output '~{output_prefix}.vcf.gz' \
-        --file-list '~{write_lines(vcfs)}'
+            --file-list '~{write_lines(vcfs)}'
         tabix '~{output_prefix}.vcf.gz'
     >>>
 
     output {
         File concat_vcf = "~{output_prefix}.vcf.gz"
         File concat_vcf_index = "~{output_prefix}.vcf.gz.tbi"
+    }
+
+    RuntimeAttr default_attr = object {
+        cpu_cores: 1,
+        mem_gb: 4,
+        disk_gb: ceil(size(vcfs, "GB") * 3) + 50,
+        boot_disk_gb: 10,
+        preemptible_tries: 3,
+        max_retries: 1
+    }
+    RuntimeAttr runtime_attr = select_first([runtime_attr_override, default_attr])
+    runtime {
+        cpu: select_first([runtime_attr.cpu_cores, default_attr.cpu_cores])
+        memory: select_first([runtime_attr.mem_gb, default_attr.mem_gb]) + " GiB"
+        disks: "local-disk " + select_first([runtime_attr.disk_gb, default_attr.disk_gb]) + " HDD"
+        bootDiskSizeGb: select_first([runtime_attr.boot_disk_gb, default_attr.boot_disk_gb])
+        docker: docker
+        preemptible: select_first([runtime_attr.preemptible_tries, default_attr.preemptible_tries])
+        maxRetries: select_first([runtime_attr.max_retries, default_attr.max_retries])
+        noAddress: true
     }
 }

@@ -4,6 +4,7 @@ import "../utils/LRCNVs.wdl"
 import "../utils/DepthPreprocessing.wdl"
 import "../utils/DepthClustering.wdl"
 import "../utils/GenotypeDepth.wdl"
+import "../utils/Structs.wdl"
 
 workflow LongReadCNVs {
     meta {
@@ -38,6 +39,29 @@ workflow LongReadCNVs {
         String gatk_docker
         String sv_base_mini_docker
         String sv_pipeline_docker
+
+        RuntimeAttr? runtime_attr_annotate_intervals
+        RuntimeAttr? runtime_attr_filter_intervals
+        RuntimeAttr? runtime_attr_scatter_intervals
+        RuntimeAttr? runtime_attr_determine_contig_ploidy
+        RuntimeAttr? runtime_attr_germline_cnv_caller
+        RuntimeAttr? runtime_attr_postprocess_germline_cnv_calls
+        RuntimeAttr? runtime_attr_collect_sample_quality_metrics
+        RuntimeAttr? runtime_attr_collect_model_quality_metrics
+        RuntimeAttr? runtime_attr_gcnv_vcf_to_bed
+        RuntimeAttr? runtime_attr_merge_sample
+        RuntimeAttr? runtime_attr_merge_set
+        RuntimeAttr? runtime_attr_make_ploidy_table
+        RuntimeAttr? runtime_attr_cnv_bed_to_vcf
+        RuntimeAttr? runtime_attr_concat_preprocessed_vcfs
+        RuntimeAttr? runtime_attr_create_ploidy_table
+        RuntimeAttr? runtime_attr_sv_cluster
+        RuntimeAttr? runtime_attr_exclude_intervals
+        RuntimeAttr? runtime_attr_gatk_to_svtk_vcf
+        RuntimeAttr? runtime_attr_concat_clustered_vcfs
+        RuntimeAttr? runtime_attr_train_sv_genotyping
+        RuntimeAttr? runtime_attr_genotype_svs
+        RuntimeAttr? runtime_attr_concat_genotyped_vcfs
     }
 
     call LRCNVs.LRCNVs {
@@ -51,7 +75,15 @@ workflow LongReadCNVs {
             ref_fa = ref_fa,
             ref_fai = ref_fai,
             ref_dict = ref_dict,
-            gatk_docker = gatk_docker
+            gatk_docker = gatk_docker,
+            runtime_attr_annotate_intervals = runtime_attr_annotate_intervals,
+            runtime_attr_filter_intervals = runtime_attr_filter_intervals,
+            runtime_attr_scatter_intervals = runtime_attr_scatter_intervals,
+            runtime_attr_determine_contig_ploidy = runtime_attr_determine_contig_ploidy,
+            runtime_attr_germline_cnv_caller = runtime_attr_germline_cnv_caller,
+            runtime_attr_postprocess_germline_cnv_calls = runtime_attr_postprocess_germline_cnv_calls,
+            runtime_attr_collect_sample_quality_metrics = runtime_attr_collect_sample_quality_metrics,
+            runtime_attr_collect_model_quality_metrics = runtime_attr_collect_model_quality_metrics
     }
 
     call DepthPreprocessing.DepthPreprocessing {
@@ -67,7 +99,13 @@ workflow LongReadCNVs {
             chr_y = chr_y,
             gcnv_qs_cutoff = gcnv_qs_cutoff,
             sv_base_mini_docker = sv_base_mini_docker,
-            sv_pipeline_docker = sv_pipeline_docker
+            sv_pipeline_docker = sv_pipeline_docker,
+            runtime_attr_gcnv_vcf_to_bed = runtime_attr_gcnv_vcf_to_bed,
+            runtime_attr_merge_sample = runtime_attr_merge_sample,
+            runtime_attr_merge_set = runtime_attr_merge_set,
+            runtime_attr_make_ploidy_table = runtime_attr_make_ploidy_table,
+            runtime_attr_cnv_bed_to_vcf = runtime_attr_cnv_bed_to_vcf,
+            runtime_attr_concat_vcfs = runtime_attr_concat_preprocessed_vcfs
     }
 
     call DepthClustering.DepthClustering {
@@ -85,24 +123,32 @@ workflow LongReadCNVs {
             chr_y = chr_y,
             gatk_docker = gatk_docker,
             sv_base_mini_docker = sv_base_mini_docker,
-            sv_pipeline_docker = sv_pipeline_docker
+            sv_pipeline_docker = sv_pipeline_docker,
+            runtime_attr_create_ploidy_table = runtime_attr_create_ploidy_table,
+            runtime_attr_sv_cluster = runtime_attr_sv_cluster,
+            runtime_attr_exclude_intervals = runtime_attr_exclude_intervals,
+            runtime_attr_gatk_to_svtk_vcf = runtime_attr_gatk_to_svtk_vcf,
+            runtime_attr_concat_vcfs = runtime_attr_concat_clustered_vcfs
     }
 
     call GenotypeDepth.GenotypeDepth {
         input:
-           batch_id = batch_id,
-           vcf = DepthClustering.clustered_vcf,
-           training_intervals = training_intervals,
-           median_coverage = median_coverage,
-           rd_file = merged_bincov,
-           ref_dict = ref_dict,
-           ploidy_table = DepthClustering.ploidy_table,
-           contig_list = primary_contigs_list,
-           contig_subset_list = contig_subset_list,
-           chr_x = chr_x,
-           chr_y = chr_y,
-           gatk_docker = gatk_docker,
-           sv_base_mini_docker = sv_base_mini_docker
+            batch_id = batch_id,
+            vcf = DepthClustering.clustered_vcf,
+            training_intervals = training_intervals,
+            median_coverage = median_coverage,
+            rd_file = merged_bincov,
+            ref_dict = ref_dict,
+            ploidy_table = DepthClustering.ploidy_table,
+            contig_list = primary_contigs_list,
+            contig_subset_list = contig_subset_list,
+            chr_x = chr_x,
+            chr_y = chr_y,
+            gatk_docker = gatk_docker,
+            sv_base_mini_docker = sv_base_mini_docker,
+            runtime_attr_train_sv_genotyping = runtime_attr_train_sv_genotyping,
+            runtime_attr_genotype_svs = runtime_attr_genotype_svs,
+            runtime_attr_concat_vcfs = runtime_attr_concat_genotyped_vcfs
     }
 
     output {
