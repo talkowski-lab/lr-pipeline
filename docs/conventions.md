@@ -54,10 +54,9 @@
 - All mentions of `fasta_index`, `fasta_fai` or `fa_fai` should instead use `fai` - e.g. `ref_fai` instead of `ref_fasta_index`, `ref_fasta_fai` or `ref_fa_fai`.
 - All mentions of `vcf_index` or `vcf_tbi` should instead use `vcf_idx`.
 - All VCFs should have suffix `_vcf`, and be coupled with a VCF index file that has a suffix `_vcf_idx`.
-- Reusable tasks should be imported rather than duplicated across workflows:
-	- General-purpose tasks should live in `Helpers.wdl`.
-	- Tool-specific or domain-specific shared tasks should live in a focused importable module under `wdl/utils/`, such as `PALMERTasks.wdl`.
+- Reusable tasks should live in `Helpers.wdl` and be imported rather than duplicated across workflows.
 - Before adding a reusable task, check existing helper modules for equivalent behavior. Generalize an existing task only when current callers' interfaces, commands, runtime behavior and outputs can be preserved or explicitly migrated.
+- Do not extract inline WDL command logic into a repository script without explicit approval. Such extraction changes Docker image dependencies and deployment requirements and must be disclosed before implementation.
 - Workflow file names must always match the workflow defined within them.
 - Annotation workflows should always output a TSV file rather than a VCF, unless its annotations are done for every single variant in the input VCF or if the underlying workflow is designed to annotate variants in a VCF.
 

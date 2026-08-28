@@ -1,7 +1,6 @@
 version 1.0
 
 import "../utils/Helpers.wdl"
-import "../utils/PALMERTasks.wdl"
 import "../utils/Structs.wdl"
 
 workflow PALMERDiploid {
@@ -45,7 +44,7 @@ workflow PALMERDiploid {
             }
 
             scatter (i in range(length(SplitBam.bams))) {
-                call PALMERTasks.RunPALMERShard {
+                call Helpers.RunPALMERShard {
                     input:
                         bam = SplitBam.bams[i],
                         bai = SplitBam.bais[i],
@@ -58,7 +57,7 @@ workflow PALMERDiploid {
                 }
             }
 
-            call PALMERTasks.MergePALMEROutputs {
+            call Helpers.MergePALMEROutputs {
                 input:
                     calls_shards = RunPALMERShard.calls_shard,
                     tsd_reads_shards = RunPALMERShard.tsd_reads_shard,
@@ -94,7 +93,7 @@ workflow PALMERDiploid {
         File calls_file = if defined (override_palmer_calls) then select_first([AddMeiTypeToCallsOverride.output_file]) else select_first([MergePALMEROutputs.calls])
         File tsd_file = if defined (override_palmer_tsd_files) then select_first([AddMeiTypeToTsdOverride.output_file]) else select_first([MergePALMEROutputs.tsd_reads])
 
-        call PALMERTasks.ConvertPALMERToVcf {
+        call Helpers.ConvertPALMERToVcf {
             input:
                 palmer_calls = calls_file,
                 palmer_tsd_reads = tsd_file,

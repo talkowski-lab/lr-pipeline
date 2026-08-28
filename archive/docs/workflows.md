@@ -2,6 +2,23 @@
 
 ## Annotation Utilities
 
+> Archived workflows are retained as historical reference only. They are not active pipeline entry points and are excluded from active WDL validation and Dockstore registration.
+
+### [FilterLowCoverageGenotypes](../wdl/annotation_utils/FilterLowCoverageGenotypes.wdl)
+This archived utility filters non-reference genotypes whose `FMT/DP` is present and at or below that sample's low-coverage cutoff. It replaces each filtered genotype and its other FORMAT fields with missing values, shards contigs by record count when requested, and outputs the filtered VCF plus a report of affected variants. Calls without `FMT/DP` are unchanged.
+
+Inputs:
+- `File vcf`: Cohort VCF to filter.
+- `File vcf_idx`: Index for the cohort VCF.
+- `Array[String] contigs`: Contigs to process within the cohort VCF.
+- `File sample_cutoffs_tsv`: TSV from `IdentifyLowCoverageRegions` containing `sample_id` and `cutoff` columns for every VCF sample.
+- `Int? records_per_shard`: Number of variants to keep within a shard. When set, each contig is sharded by record count and processed in parallel.
+
+Outputs:
+- `filtered_vcf`: VCF with low-coverage non-reference genotypes set to missing.
+- `filtered_vcf_idx`: Index for `filtered_vcf`.
+- `filtered_genotypes_tsv`: TSV with one row per affected variant: `CHROM`, `POS`, `REF`, `ALT`, `ID`, pre- and post-filter allele counts, number of filtered samples, and comma-separated filtered sample IDs.
+
 ### [CombineVcfsAcrossContigs](../wdl/annotation_utils/CombineVcfsAcrossContigs.wdl)
 This utility concatenates a set of per-contig VCFs into a single VCF, optionally dropping genotypes in the process. It outputs the combined VCF.
 

@@ -9,6 +9,6 @@
 - Validate WDL before committing: `find wdl -type f -name "*.wdl" -exec java -jar womtool.jar validate {} \;` (local jar at `/Users/kjaising/Desktop/Work/Miscellaneous/Software/womtool-87.jar`).
 - Lint Python before committing: `flake8 scripts/` (config in `.flake8`, max-line-length 130).
 - New directly-run workflows need a `.dockstore.yml` entry — match the format of existing entries.
-- New annotation/tool checklist: implement in `wdl/` (add to `scripts/` only if inline Python in the workflow isn't enough) → add/update Dockerfile if new deps → register in `.dockstore.yml` → document in `docs/`.
-- Don't modify `archive/` or `data/` (gitignored, out of scope) unless explicitly asked.
+- New annotation/tool checklist: implement in `wdl/`, adding to `scripts/` only if inline Python in the workflow isn't enough → add/update Dockerfile if new deps needed → register in `.dockstore.yml` → document in `docs/`.
+- `archive/` contains retired workflows, scripts, Dockerfiles, and reference documentation. It is not active pipeline code and is excluded from active validation and Dockstore registration; do not use it for new work. 
 - Don't hardcode Docker image URIs in WDL — always pass as a `String` input.

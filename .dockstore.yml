@@ -331,15 +331,6 @@ workflows:
         - /.*/
 
   - subclass: WDL
-    name: FilterLowCoverageGenotypes
-    primaryDescriptorPath: /wdl/annotation_utils/FilterLowCoverageGenotypes.wdl
-    filters:
-      branches:
-        - main
-      tags:
-        - /.*/
-
-  - subclass: WDL
     name: FillPhasedGenotypes
     primaryDescriptorPath: /wdl/annotation_utils/FillPhasedGenotypes.wdl
     filters:

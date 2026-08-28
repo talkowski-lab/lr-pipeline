@@ -63,14 +63,46 @@ task BinMosDepthCounts {
     command <<<
         set -euo pipefail
 
-        python3 /opt/scripts/helper/bin_mosdepth.py \
-            --input ~{mosdepth_bed} \
-            --output ~{prefix}.tsv \
-            --bin-size ~{bin_size} \
-            --coordinate-system one-based \
-            --contig ~{contig} \
-            --output-contig ~{contig} \
-            --truncate-depth
+        python3 <<CODE
+import gzip
+import sys
+from statistics import median
+
+bed_file = "~{mosdepth_bed}"
+contig = "~{contig}"
+bin_size = ~{bin_size}
+output_file = "~{prefix}.tsv"
+
+bins = {}
+
+with gzip.open(bed_file, 'rt') as f:
+    for line in f:
+        parts = line.strip().split('\t')
+        chrom = parts[0]
+        start = int(parts[1])
+        end = int(parts[2])
+        coverage = int(float(parts[3]))
+        
+        start_bin = (start // bin_size) * bin_size
+        end_bin = ((end - 1) // bin_size) * bin_size
+        
+        for bin_start in range(start_bin, end_bin + 1, bin_size):
+            bin_end = bin_start + bin_size
+            overlap_start = max(start, bin_start)
+            overlap_end = min(end, bin_end)
+            overlap_length = overlap_end - overlap_start
+            
+            if bin_start not in bins:
+                bins[bin_start] = []
+            bins[bin_start].extend([coverage] * overlap_length)
+
+with open(output_file, 'w') as out:
+    for bin_start in sorted(bins.keys()):
+        if len(bins[bin_start]) == bin_size:
+            bin_end = bin_start + bin_size
+            median_coverage = int(median(bins[bin_start]))
+            out.write(f"{contig}\t{bin_start + 1}\t{bin_end}\t{median_coverage}\n")
+CODE
 
         bgzip ~{prefix}.tsv
         tabix -s 1 -b 2 -e 3 ~{prefix}.tsv.gz

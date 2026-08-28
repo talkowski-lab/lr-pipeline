@@ -1,7 +1,6 @@
 version 1.0
 
 import "../utils/Helpers.wdl"
-import "../utils/PALMERTasks.wdl"
 import "../utils/Structs.wdl"
 
 workflow PALMERAssembly {
@@ -53,7 +52,7 @@ workflow PALMERAssembly {
             }
 
             scatter (i in range(length(SplitBamPat.bams))) {
-                call PALMERTasks.RunPALMERShard as RunPALMERShardPat {
+                call Helpers.RunPALMERShard as RunPALMERShardPat {
                     input:
                         bam = SplitBamPat.bams[i],
                         bai = SplitBamPat.bais[i],
@@ -66,7 +65,7 @@ workflow PALMERAssembly {
                 }
             }
 
-            call PALMERTasks.MergePALMEROutputs as MergePALMEROutputsPat {
+            call Helpers.MergePALMEROutputs as MergePALMEROutputsPat {
                 input:
                     calls_shards = RunPALMERShardPat.calls_shard,
                     tsd_reads_shards = RunPALMERShardPat.tsd_reads_shard,
@@ -80,7 +79,7 @@ workflow PALMERAssembly {
         File calls_file_pat = if defined (override_palmer_calls_pat) then select_first([override_palmer_calls_pat])[idx] else select_first([MergePALMEROutputsPat.calls])
         File tsd_file_pat = if defined (override_palmer_tsd_files_pat) then select_first([override_palmer_tsd_files_pat])[idx] else select_first([MergePALMEROutputsPat.tsd_reads])
 
-        call PALMERTasks.ConvertPALMERToVcf as ConvertPALMERToVcfPat {
+        call Helpers.ConvertPALMERToVcf as ConvertPALMERToVcfPat {
             input:
                 palmer_calls = calls_file_pat,
                 palmer_tsd_reads = tsd_file_pat,
@@ -107,7 +106,7 @@ workflow PALMERAssembly {
             }
 
             scatter (i in range(length(SplitBamMat.bams))) {
-                call PALMERTasks.RunPALMERShard as RunPALMERShardMat {
+                call Helpers.RunPALMERShard as RunPALMERShardMat {
                     input:
                         bam = SplitBamMat.bams[i],
                         bai = SplitBamMat.bais[i],
@@ -120,7 +119,7 @@ workflow PALMERAssembly {
                 }
             }
 
-            call PALMERTasks.MergePALMEROutputs as MergePALMEROutputsMat {
+            call Helpers.MergePALMEROutputs as MergePALMEROutputsMat {
                 input:
                     calls_shards = RunPALMERShardMat.calls_shard,
                     tsd_reads_shards = RunPALMERShardMat.tsd_reads_shard,
@@ -134,7 +133,7 @@ workflow PALMERAssembly {
         File calls_file_mat = if defined (override_palmer_calls_mat) then select_first([override_palmer_calls_mat])[idx] else select_first([MergePALMEROutputsMat.calls])
         File tsd_file_mat = if defined (override_palmer_tsd_files_mat) then select_first([override_palmer_tsd_files_mat])[idx] else select_first([MergePALMEROutputsMat.tsd_reads])
 
-        call PALMERTasks.ConvertPALMERToVcf as ConvertPALMERToVcfMat {
+        call Helpers.ConvertPALMERToVcf as ConvertPALMERToVcfMat {
             input:
                 palmer_calls = calls_file_mat,
                 palmer_tsd_reads = tsd_file_mat,

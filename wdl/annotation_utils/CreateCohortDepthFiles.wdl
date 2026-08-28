@@ -112,11 +112,41 @@ task BinMosdepth {
     command <<<
         set -euo pipefail
 
-        python3 /opt/scripts/helper/bin_mosdepth.py \
-            --input ~{mosdepth_bed_file} \
-            --output ~{prefix}.bed \
-            --bin-size ~{bin_size} \
-            --truncate-depth
+        python3 <<CODE
+import gzip
+from statistics import median
+
+bin_size = ~{bin_size}
+
+def flush(contig, bins, out):
+    for bin_start in sorted(bins.keys()):
+        if len(bins[bin_start]) == bin_size:
+            out.write(f"{contig}\t{bin_start}\t{bin_start + bin_size}\t{int(median(bins[bin_start]))}\n")
+
+current_contig = None
+bins = {}
+with gzip.open("~{mosdepth_bed_file}", 'rt') as f, open("~{prefix}.bed", 'w') as out:
+    for line in f:
+        chrom, start, end, coverage = line.strip().split('\t')
+        start = int(start)
+        end = int(end)
+        coverage = int(float(coverage))
+
+        if chrom != current_contig:
+            if current_contig is not None:
+                flush(current_contig, bins, out)
+            current_contig = chrom
+            bins = {}
+
+        start_bin = (start // bin_size) * bin_size
+        end_bin = ((end - 1) // bin_size) * bin_size
+        for bs in range(start_bin, end_bin + 1, bin_size):
+            be = bs + bin_size
+            overlap = min(end, be) - max(start, bs)
+            bins.setdefault(bs, []).extend([coverage] * overlap)
+
+    flush(current_contig, bins, out)
+CODE
 
         bgzip ~{prefix}.bed
     >>>

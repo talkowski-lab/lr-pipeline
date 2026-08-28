@@ -10,25 +10,16 @@ wdl/
   utils/             # Shared structs (Structs.wdl) and helper tasks (Helpers.wdl)
 scripts/
   annotation/        # Standalone annotation scripts (e.g. genomic context)
-  vep/               # VEP and Hail-based annotation scripts
+  helper/            # Shared standalone utility scripts, including Hail helpers
   mei/               # MEI analysis scripts
   benchmark/         # Benchmarking scripts
-  miscellaneous/     # Other utility scripts
 dockerfiles/         # Dockerfile.<image-name> (lowercase) for each container, plus build_docker.sh and versions.env
-data/
-  references/        # Reference genomes, catalogs, BED files
-  base_vcfs/         # chr22-only test VCFs for local workflow development
-  metadata/          # Sample metadata, pedigrees, ancestry
-  platinum_pedigree/ # CEPH/Utah Pedigree 1463 assemblies + variant calls, used for benchmarking
-  count_annotations/ # Count-annotation outputs (AoU, HPRC/HGSVC)
-  callset_plotting/  # Callset QC plotting inputs/outputs
-  archive/           # Deprecated data, scripts and one-off analyses (do not modify)
 notebooks/           # Ad hoc Jupyter notebooks (e.g. Terra cost analysis)
 docs/                # Extended documentation (this file included)
 .github/
   workflows/         # Active GitHub Actions CI
   scripts/           # Helper scripts invoked by CI
-archive/             # Deprecated workflows, scripts and dockerfiles (do not modify)
+archive/             # Historical workflows, scripts, Dockerfiles, and their reference docs
 ```
 
 
@@ -64,11 +55,10 @@ This script:
 
 ## Scripts
 `scripts/` holds standalone Python/R scripts that run inside a Docker container as CLI tools (not imported as a library across containers - each script is self-contained within the container that runs it):
-- **`vep/`** - VEP and Hail-based functional annotation scripts (used by `AnnotateVEPHail`).
+- **`helper/`** - shared standalone utility scripts, including Hail helpers.
 - **`mei/`** - PALMER call post-processing (raw-call-to-VCF conversion, annotation transfer).
 - **`benchmark/`** - `bedtools closest` benchmarking scripts.
 - **`annotation/`** - standalone annotation scripts not tied to a Hail/VEP or MEI-specific workflow (e.g. genomic context annotation).
-- **`miscellaneous/`** - other one-off utility scripts (e.g. in-silico predictor annotation).
 
 
 ## GitHub Actions / CI-CD
