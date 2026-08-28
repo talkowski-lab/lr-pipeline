@@ -250,9 +250,12 @@ def plot_histogram(
     axis.set_xlabel("Median Coverage")
     axis.set_ylabel("Bin Count")
     axis.set_title(SAMPLE_ID)
-    annotation = f"Median: {median:.2f}×\nCoverage cutoff: {regular_cutoff:.2f}×"
+    annotation = (
+        f"Median: {format_depth(median)}×\n"
+        f"Coverage cutoff: {format_depth(regular_cutoff)}×"
+    )
     if SEX == "male":
-        annotation += f"\nchrX/chrY cutoff: {sex_cutoff:.2f}×"
+        annotation += f"\nchrX/chrY cutoff: {format_depth(sex_cutoff)}×"
     else:
         annotation += "\nchrY excluded"
     if omitted_count:

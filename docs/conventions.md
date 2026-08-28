@@ -35,13 +35,29 @@
 - The default `preemptible_tries` for a task should always be 1.
 - The default `max_retries` for a task should always be 0.
 - The names of workflows and tasks should never include a `_` character within them - rather, they should always be in Pascal case.
+- Top-level workflow names should describe their primary operation using consistent action verbs:
+	- `Annotate` adds fields or tags to existing records.
+	- `Create` derives a new artifact, such as a matrix, metadata table, interval file, plot set or summary.
+	- `Convert` changes the representation or file format of existing data.
+	- `Extract` emits selected records separately, while `Subset` retains the same representation with fewer records or columns.
+	- `Concatenate` joins ordered, non-overlapping shards or contigs.
+	- `Merge` reconciles files, records or sample sets of the same kind.
+	- `Combine` applies domain-specific logic across caller-specific or type-specific inputs.
+	- `Integrate` combines different variant classes into a unified callset.
+	- `Normalize`, `Resolve`, `Filter`, `Summarize` and `Evaluate` should be used when they accurately describe the primary operation.
+- Do not use `Create` merely because a workflow produces an output; choose the verb that describes its primary operation.
+- Thin tool wrappers should use the underlying tool name. Add a purpose suffix when multiple wrappers or orchestration variants exist, such as `PALMERAssembly` and `PALMERDiploid`.
+- Avoid vague verbs such as `Generate`, `Process` and `Plot` when a more specific operation or output can be named.
 - The names of inputs, variables and outputs should include a `_` to separate words, and be entirely lowercase unless they refer to a noun that is capitalized (e.g. PALMER or L1MEAID) - i.e. they should always be in snake case.
 - There should never be any additional indentation in order to better align parts of the code to the length or horizontal/vertical spacing of other components in its section - indentation should only be applied at the start of a line.
 - All mentions of `fasta` should instead use `fa` - e.g. `ref_fa` instead of `ref_fasta`.
 - All mentions of `fasta_index`, `fasta_fai` or `fa_fai` should instead use `fai` - e.g. `ref_fai` instead of `ref_fasta_index`, `ref_fasta_fai` or `ref_fa_fai`.
 - All mentions of `vcf_index` or `vcf_tbi` should instead use `vcf_idx`.
 - All VCFs should have suffix `_vcf`, and be coupled with a VCF index file that has a suffix `_vcf_idx`.
-- Tasks that can be generalized and used across workflows should live in `Helpers.wdl` and be imported by consumer workflows, rather than explicitly defined in a standalone workflow itself.
+- Reusable tasks should be imported rather than duplicated across workflows:
+	- General-purpose tasks should live in `Helpers.wdl`.
+	- Tool-specific or domain-specific shared tasks should live in a focused importable module under `wdl/utils/`, such as `PALMERTasks.wdl`.
+- Before adding a reusable task, check existing helper modules for equivalent behavior. Generalize an existing task only when current callers' interfaces, commands, runtime behavior and outputs can be preserved or explicitly migrated.
 - Workflow file names must always match the workflow defined within them.
 - Annotation workflows should always output a TSV file rather than a VCF, unless its annotations are done for every single variant in the input VCF or if the underlying workflow is designed to annotate variants in a VCF.
 
