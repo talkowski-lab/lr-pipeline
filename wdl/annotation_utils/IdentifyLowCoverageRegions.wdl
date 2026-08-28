@@ -79,14 +79,10 @@ import csv
 import gzip
 import math
 import re
-import sys
 from collections import Counter
 
 import matplotlib.pyplot as plt
 import numpy as np
-
-sys.path.insert(0, "/opt/scripts/helper")
-from bin_mosdepth import bin_mosdepth
 
 
 INPUT = "~{mosdepth_bed}"
@@ -99,6 +95,28 @@ CHR_X = "chrX"
 CHR_Y = "chrY"
 
 plt.switch_backend("Agg")
+
+
+def open_text(path):
+    if path.endswith(".gz"):
+        return gzip.open(path, "rt")
+    return open(path, "r")
+
+
+def weighted_median(depth_counts, base_count):
+    lower_rank = (base_count + 1) // 2
+    upper_rank = (base_count + 2) // 2
+    cumulative = 0
+    lower_value = None
+    upper_value = None
+    for depth in sorted(depth_counts):
+        cumulative += depth_counts[depth]
+        if lower_value is None and cumulative >= lower_rank:
+            lower_value = depth
+        if cumulative >= upper_rank:
+            upper_value = depth
+            break
+    return (lower_value + upper_value) / 2
 
 
 def format_depth(depth):
@@ -135,15 +153,75 @@ def read_sample_sex(path, sample_id):
 
 
 def write_binned_coverage(input_path, output_path):
-    return bin_mosdepth(
-        input_path,
-        output_path,
-        BIN_SIZE,
-        allow_partial=True,
-        require_contiguous=True,
-        skip_comments=True,
-        exclude_contigs={CHR_Y} if SEX == "female" else (),
-    )
+    coverage_counts = Counter()
+    histogram = Counter()
+    current_chrom = None
+    current_start = 0
+    current_end = BIN_SIZE
+    covered_bases = 0
+    previous_end = None
+
+    def finish_bin(writer, end):
+        nonlocal coverage_counts, covered_bases
+        if covered_bases == 0:
+            return
+        median = weighted_median(coverage_counts, covered_bases)
+        writer.writerow([current_chrom, current_start, end, format_depth(median)])
+        histogram[median] += 1
+        coverage_counts = Counter()
+        covered_bases = 0
+
+    with open_text(input_path) as source, gzip.open(
+        output_path, "wt", newline=""
+    ) as output:
+        writer = csv.writer(output, delimiter="\t", lineterminator="\n")
+        for line_number, line in enumerate(source, 1):
+            if not line.strip() or line.startswith("#"):
+                continue
+            fields = line.rstrip("\n").split("\t")
+            if len(fields) < 4:
+                raise ValueError(f"Expected at least 4 columns at line {line_number}")
+            chrom, start_text, end_text, depth_text = fields[:4]
+            if SEX == "female" and chrom == CHR_Y:
+                continue
+            start = int(start_text)
+            end = int(end_text)
+            depth = float(depth_text)
+            if start < 0 or end <= start or depth < 0:
+                raise ValueError(f"Invalid interval at line {line_number}: {line.rstrip()}")
+
+            if chrom != current_chrom:
+                if current_chrom is not None:
+                    finish_bin(writer, previous_end)
+                if start != 0:
+                    raise ValueError(f"Chromosome {chrom} starts at {start}, not 0")
+                current_chrom = chrom
+                current_start = 0
+                current_end = BIN_SIZE
+                previous_end = 0
+            elif start != previous_end:
+                raise ValueError(
+                    f"Coverage intervals are not contiguous at line {line_number}: "
+                    f"expected {chrom}:{previous_end}, found {chrom}:{start}"
+                )
+
+            position = start
+            while position < end:
+                overlap_end = min(end, current_end)
+                overlap = overlap_end - position
+                coverage_counts[depth] += overlap
+                covered_bases += overlap
+                position = overlap_end
+                if position == current_end:
+                    finish_bin(writer, current_end)
+                    current_start = current_end
+                    current_end += BIN_SIZE
+            previous_end = end
+
+        if current_chrom is None:
+            raise ValueError("Coverage input contains no records")
+        finish_bin(writer, previous_end)
+    return histogram
 
 
 def weighted_quantile(histogram, fraction):
