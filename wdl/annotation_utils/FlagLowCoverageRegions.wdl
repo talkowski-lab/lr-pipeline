@@ -6,10 +6,11 @@ workflow FlagLowCoverageRegions {
     input {
         Array[File] mosdepth_bed_files
         Array[String] sample_ids
+        File ped
         String prefix
 
         Int bin_size
-        Float p_value_threshold = 0.05
+        Float median_coverage_lower_threshold = 0.2
 
         String utils_docker
 
@@ -23,10 +24,11 @@ workflow FlagLowCoverageRegions {
         call BinSampleCoverage {
             input:
                 mosdepth_bed = sample_input.left,
+                ped = ped,
                 sample_id = sample_input.right,
                 prefix = "~{prefix}.~{sample_input.right}",
                 bin_size = bin_size,
-                p_value_threshold = p_value_threshold,
+                median_coverage_lower_threshold = median_coverage_lower_threshold,
                 docker = utils_docker,
                 runtime_attr_override = runtime_attr_bin_coverage
         }
@@ -35,7 +37,7 @@ workflow FlagLowCoverageRegions {
     call AggregateLowCoverage {
         input:
             low_coverage_beds = BinSampleCoverage.low_coverage_bed,
-            chromosome_bins = BinSampleCoverage.binned_coverage_tsv[0],
+            chromosome_coverage = mosdepth_bed_files[0],
             sample_histograms = BinSampleCoverage.coverage_histogram,
             prefix = "~{prefix}.cohort",
             bin_size = bin_size,
@@ -57,10 +59,11 @@ workflow FlagLowCoverageRegions {
 task BinSampleCoverage {
     input {
         File mosdepth_bed
+        File ped
         String sample_id
         String prefix
         Int bin_size
-        Float p_value_threshold
+        Float median_coverage_lower_threshold
         String docker
         RuntimeAttr? runtime_attr_override
     }
@@ -74,17 +77,19 @@ import gzip
 import math
 import re
 from collections import Counter
-from statistics import NormalDist
 
 import matplotlib.pyplot as plt
 import numpy as np
 
 
 INPUT = "~{mosdepth_bed}"
+PED = "~{ped}"
 SAMPLE_ID = "~{sample_id}"
 BIN_SIZE = ~{bin_size}
-P_VALUE_THRESHOLD = ~{p_value_threshold}
+MEDIAN_COVERAGE_LOWER_THRESHOLD = ~{median_coverage_lower_threshold}
 PREFIX = "~{prefix}"
+CHR_X = "chrX"
+CHR_Y = "chrY"
 
 plt.switch_backend("Agg")
 
@@ -114,7 +119,34 @@ def weighted_median(depth_counts, base_count):
 def format_depth(depth):
     if depth.is_integer():
         return str(int(depth))
-    return str(depth)
+    return f"{depth:.10g}"
+
+
+def read_sample_sex(path, sample_id):
+    sex = None
+    with open(path, "r") as handle:
+        for line_number, line in enumerate(handle, 1):
+            if not line.strip() or line.startswith("#"):
+                continue
+            fields = line.split()
+            if len(fields) < 5:
+                raise ValueError(f"PED line {line_number} has fewer than 5 columns")
+            if fields[1] != sample_id:
+                continue
+            if fields[4] == "1":
+                parsed_sex = "male"
+            elif fields[4] == "2":
+                parsed_sex = "female"
+            else:
+                raise ValueError(
+                    f"Sample {sample_id} has unsupported PED sex code {fields[4]}"
+                )
+            if sex is not None and sex != parsed_sex:
+                raise ValueError(f"Sample {sample_id} has conflicting PED sex entries")
+            sex = parsed_sex
+    if sex is None:
+        raise ValueError(f"Sample {sample_id} is missing from PED")
+    return sex
 
 
 def write_binned_coverage(input_path, output_path):
@@ -145,6 +177,8 @@ def write_binned_coverage(input_path, output_path):
             if len(fields) < 4:
                 raise ValueError(f"Expected at least 4 columns at line {line_number}")
             chrom, start_text, end_text, depth_text = fields[:4]
+            if SEX == "female" and chrom == CHR_Y:
+                continue
             start = int(start_text)
             end = int(end_text)
             depth = float(depth_text)
@@ -196,8 +230,9 @@ def weighted_quantile(histogram, fraction):
     raise ValueError("Cannot calculate cutoff from empty histogram")
 
 
-def write_low_coverage_bins(binned_path, output_path, cutoff, normal_distribution):
+def write_low_coverage_bins(binned_path, output_path, regular_cutoff, sex_cutoff):
     low_bin_count = 0
+    low_histogram = Counter()
     with gzip.open(binned_path, "rt") as source, gzip.open(
         output_path, "wt", newline=""
     ) as output:
@@ -205,16 +240,26 @@ def write_low_coverage_bins(binned_path, output_path, cutoff, normal_distributio
         for line in source:
             chrom, start, end, depth_text = line.rstrip("\n").split("\t")
             depth = float(depth_text)
+            cutoff = (
+                sex_cutoff
+                if SEX == "male" and chrom in {CHR_X, CHR_Y}
+                else regular_cutoff
+            )
             if depth <= cutoff:
-                p_value = normal_distribution.cdf(depth)
-                writer.writerow(
-                    [chrom, start, end, depth_text, SAMPLE_ID, f"{p_value:.6g}"]
-                )
+                writer.writerow([chrom, start, end, depth_text, SAMPLE_ID])
                 low_bin_count += 1
-    return low_bin_count
+                low_histogram[depth] += 1
+    return low_bin_count, low_histogram
 
 
-def plot_histogram(histogram, cutoff, output_path):
+def plot_histogram(
+    histogram,
+    low_histogram,
+    median,
+    regular_cutoff,
+    sex_cutoff,
+    output_path,
+):
     q1, bin_count = weighted_quantile(histogram, 0.25)
     q3, _ = weighted_quantile(histogram, 0.75)
     q95, _ = weighted_quantile(histogram, 0.95)
@@ -244,14 +289,16 @@ def plot_histogram(histogram, cutoff, output_path):
         range=(0, display_maximum),
         weights=plotted_counts,
     )
-    low_depths = [depth for depth in plotted_depths if depth <= cutoff]
+    low_depths = [depth for depth in plotted_depths if depth in low_histogram]
     low_counts, _ = np.histogram(
         low_depths,
         bins=edges,
-        weights=[histogram[depth] for depth in low_depths],
+        weights=[low_histogram[depth] for depth in low_depths],
     )
     figure, axis = plt.subplots(figsize=(10, 6))
-    axis.axvspan(0, cutoff, color="#fdd0a2", alpha=0.35)
+    axis.axvspan(0, regular_cutoff, color="#fdd0a2", alpha=0.25)
+    if SEX == "male":
+        axis.axvspan(0, sex_cutoff, color="#f16913", alpha=0.15)
     axis.bar(
         edges[:-1],
         counts,
@@ -268,15 +315,19 @@ def plot_histogram(histogram, cutoff, output_path):
         color="#d95f02",
         edgecolor="none",
     )
-    axis.axvline(cutoff, color="#8c2d04", linestyle="--", linewidth=1.5)
+    axis.axvline(regular_cutoff, color="#8c2d04", linestyle="--", linewidth=1.5)
+    if SEX == "male":
+        axis.axvline(sex_cutoff, color="#d94801", linestyle=":", linewidth=1.5)
+    axis.axvline(median, color="#525252", linestyle="-.", linewidth=1.2)
     axis.set_xlim(0, display_maximum)
     axis.set_xlabel("Median Coverage")
     axis.set_ylabel("Bin Count")
     axis.set_title(SAMPLE_ID)
-    annotation = (
-        f"Lower-tail cutoff: {cutoff:.2f}× "
-        f"(p ≤ {P_VALUE_THRESHOLD:g})"
-    )
+    annotation = f"Median: {median:.2f}×\nCoverage cutoff: {regular_cutoff:.2f}×"
+    if SEX == "male":
+        annotation += f"\nchrX/chrY cutoff: {sex_cutoff:.2f}×"
+    else:
+        annotation += "\nchrY excluded"
     if omitted_count:
         annotation += (
             f"\n{omitted_count:,} bins above {format_depth(display_maximum)}× not shown"
@@ -288,6 +339,7 @@ def plot_histogram(histogram, cutoff, output_path):
         horizontalalignment="right",
         verticalalignment="top",
         transform=axis.transAxes,
+        bbox={"boxstyle": "round", "facecolor": "white", "alpha": 0.85, "edgecolor": "none"},
     )
     figure.tight_layout()
     figure.savefig(output_path, dpi=150)
@@ -296,11 +348,12 @@ def plot_histogram(histogram, cutoff, output_path):
 
 if BIN_SIZE <= 0:
     raise ValueError("bin_size must be greater than 0")
-if not 0 < P_VALUE_THRESHOLD < 0.5:
-    raise ValueError("p_value_threshold must be between 0 and 0.5")
+if not 0 < MEDIAN_COVERAGE_LOWER_THRESHOLD <= 1:
+    raise ValueError("median_coverage_lower_threshold must be greater than 0 and at most 1")
 if not re.fullmatch(r"[A-Za-z0-9._-]+", SAMPLE_ID):
     raise ValueError("sample_id may contain only letters, numbers, '.', '_', and '-'")
 
+SEX = read_sample_sex(PED, SAMPLE_ID)
 binned_path = f"{PREFIX}.binned_coverage.tsv.gz"
 low_path = f"{PREFIX}.low_coverage.bed.gz"
 cutoff_path = f"{PREFIX}.low_coverage_cutoff.tsv"
@@ -308,28 +361,22 @@ plot_path = f"{PREFIX}.coverage_histogram.png"
 
 histogram = write_binned_coverage(INPUT, binned_path)
 median, bin_count = weighted_quantile(histogram, 0.5)
-absolute_deviations = Counter()
-for depth, count in histogram.items():
-    absolute_deviations[abs(depth - median)] += count
-mad, _ = weighted_quantile(absolute_deviations, 0.5)
-if mad == 0:
-    raise ValueError("Median absolute deviation is zero; cannot estimate null spread")
-robust_sigma = 1.4826 * mad
-normal_distribution = NormalDist(mu=median, sigma=robust_sigma)
-cutoff = normal_distribution.inv_cdf(P_VALUE_THRESHOLD)
-low_bin_count = write_low_coverage_bins(
-    binned_path, low_path, cutoff, normal_distribution
+regular_cutoff = median * MEDIAN_COVERAGE_LOWER_THRESHOLD
+sex_cutoff = regular_cutoff / 2
+low_bin_count, low_histogram = write_low_coverage_bins(
+    binned_path, low_path, regular_cutoff, sex_cutoff
 )
 with open(cutoff_path, "w", newline="") as output:
     writer = csv.writer(output, delimiter="\t", lineterminator="\n")
     writer.writerow(
         [
             "sample_id",
-            "p_value_threshold",
+            "sex",
             "median",
-            "mad",
-            "robust_sigma",
-            "cutoff",
+            "median_coverage_lower_threshold",
+            "regular_cutoff",
+            "chrX_cutoff",
+            "chrY_cutoff",
             "bin_count",
             "low_bin_count",
         ]
@@ -337,16 +384,24 @@ with open(cutoff_path, "w", newline="") as output:
     writer.writerow(
         [
             SAMPLE_ID,
-            P_VALUE_THRESHOLD,
+            SEX,
             format_depth(median),
-            format_depth(mad),
-            robust_sigma,
-            cutoff,
+            MEDIAN_COVERAGE_LOWER_THRESHOLD,
+            format_depth(regular_cutoff),
+            format_depth(sex_cutoff) if SEX == "male" else format_depth(regular_cutoff),
+            format_depth(sex_cutoff) if SEX == "male" else "excluded",
             bin_count,
             low_bin_count,
         ]
     )
-plot_histogram(histogram, cutoff, plot_path)
+plot_histogram(
+    histogram,
+    low_histogram,
+    median,
+    regular_cutoff,
+    sex_cutoff,
+    plot_path,
+)
 PYCODE
     >>>
 
@@ -380,7 +435,7 @@ PYCODE
 task AggregateLowCoverage {
     input {
         Array[File] low_coverage_beds
-        File chromosome_bins
+        File chromosome_coverage
         Array[File] sample_histograms
         String prefix
         Int bin_size
@@ -410,12 +465,18 @@ import matplotlib.pyplot as plt
 
 
 COUNTS = "~{prefix}.low_coverage_counts.tsv.gz"
-CHROMOSOME_BINS = "~{chromosome_bins}"
+CHROMOSOME_COVERAGE = "~{chromosome_coverage}"
 BIN_SIZE = ~{bin_size}
 SAMPLE_COUNT = ~{sample_count}
 OUTPUT_DIR = Path("chromosome_plots")
 
 plt.switch_backend("Agg")
+
+
+def open_text(path):
+    if path.endswith(".gz"):
+        return gzip.open(path, "rt")
+    return open(path, "r")
 
 
 def safe_filename(value):
@@ -450,9 +511,11 @@ if SAMPLE_COUNT <= 0:
     raise ValueError("sample_count must be greater than 0")
 
 chromosome_ends = {}
-with gzip.open(CHROMOSOME_BINS, "rt") as source:
+with open_text(CHROMOSOME_COVERAGE) as source:
     for line in source:
-        chrom, _, end_text, _ = line.rstrip("\n").split("\t")
+        if not line.strip() or line.startswith("#"):
+            continue
+        chrom, _, end_text, _ = line.rstrip("\n").split("\t")[:4]
         chromosome_ends[chrom] = int(end_text)
 
 flagged_bins = {}
@@ -488,7 +551,7 @@ PYCODE
     RuntimeAttr default_attr = object {
         cpu_cores: 4,
         mem_gb: 16,
-        disk_gb: 4 * ceil(size(low_coverage_beds, "GB")) + ceil(size(chromosome_bins, "GB")) + 10,
+        disk_gb: 4 * ceil(size(low_coverage_beds, "GB")) + ceil(size(chromosome_coverage, "GB")) + 10,
         boot_disk_gb: 10,
         preemptible_tries: 1,
         max_retries: 0
