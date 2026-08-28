@@ -9,6 +9,8 @@ workflow DepthPreprocessing {
     input {
         Array[String]+ sample_ids
         Array[File]+ genotyped_segments_vcfs
+        Array[File]+ genotyped_segments_vcf_idxs
+        String prefix
         File contig_ploidy_calls_tar
         File primary_contigs_list
         File ref_fai
@@ -36,8 +38,10 @@ workflow DepthPreprocessing {
         call GcnvVcfToBed {
             input:
                 sample_id = sample_ids[i],
+                prefix = prefix + "." + sample_ids[i],
                 sample_index = i,
                 vcf = genotyped_segments_vcfs[i],
+                vcf_idx = genotyped_segments_vcf_idxs[i],
                 contig_ploidy_calls_tar = contig_ploidy_calls_tar,
                 qs_cutoff = gcnv_qs_cutoff,
                 docker = sv_pipeline_docker,
@@ -48,8 +52,8 @@ workflow DepthPreprocessing {
     scatter (i in range(length(sample_ids))) {
         call MergeSample as merge_sample_del {
             input:
-                sample_id = sample_ids[i],
                 gcnv = GcnvVcfToBed.del_bed[i],
+                prefix = prefix + "." + sample_ids[i] + ".del",
                 max_dist = defragment_max_dist,
                 docker = sv_pipeline_docker,
                 runtime_attr_override = runtime_attr_merge_sample
@@ -59,8 +63,8 @@ workflow DepthPreprocessing {
     scatter (i in range(length(sample_ids))) {
         call MergeSample as merge_sample_dup {
             input:
-                sample_id = sample_ids[i],
                 gcnv = GcnvVcfToBed.dup_bed[i],
+                prefix = prefix + "." + sample_ids[i] + ".dup",
                 max_dist = defragment_max_dist,
                 docker = sv_pipeline_docker,
                 runtime_attr_override = runtime_attr_merge_sample
@@ -72,6 +76,7 @@ workflow DepthPreprocessing {
             beds = merge_sample_del.sample_bed,
             svtype = "DEL",
             batch_id = batch_id,
+            prefix = prefix + ".del",
             docker = sv_base_mini_docker,
             runtime_attr_override = runtime_attr_merge_set
     }
@@ -81,6 +86,7 @@ workflow DepthPreprocessing {
             beds = merge_sample_dup.sample_bed,
             svtype = "DUP",
             batch_id = batch_id,
+            prefix = prefix + ".dup",
             docker = sv_base_mini_docker,
             runtime_attr_override = runtime_attr_merge_set
     }
@@ -91,7 +97,7 @@ workflow DepthPreprocessing {
             contigs_list = primary_contigs_list,
             chr_x = chr_x,
             chr_y = chr_y,
-            prefix = "~{batch_id}-ploidy",
+            prefix = prefix + ".ploidy",
             docker = sv_pipeline_docker,
             runtime_attr_override = runtime_attr_make_ploidy_table
     }
@@ -104,7 +110,7 @@ workflow DepthPreprocessing {
             ploidy_table = MakePloidyTable.ploidy_table,
             ref_fai = ref_fai,
             vid_prefix = "~{batch_id}_DEL",
-            prefix = "merged_del",
+            prefix = prefix + ".del",
             docker = sv_pipeline_docker,
             runtime_attr_override = runtime_attr_cnv_bed_to_vcf
     }
@@ -117,7 +123,7 @@ workflow DepthPreprocessing {
             ploidy_table = MakePloidyTable.ploidy_table,
             ref_fai = ref_fai,
             vid_prefix = "~{batch_id}_DUP",
-            prefix = "merged_dup",
+            prefix = prefix + ".dup",
             docker = sv_pipeline_docker,
             runtime_attr_override = runtime_attr_cnv_bed_to_vcf
     }
@@ -128,8 +134,8 @@ workflow DepthPreprocessing {
         mem_gb: 8,
         disk_gb: ceil(size(concat_vcfs, "GB") * 3) + 50,
         boot_disk_gb: 10,
-        preemptible_tries: 3,
-        max_retries: 1
+        preemptible_tries: 1,
+        max_retries: 0
     }
     RuntimeAttr concat_attr = select_first([runtime_attr_concat_vcfs, default_attr_concat_vcfs])
     Int concat_sort_mem_mb = ceil(select_first([concat_attr.mem_gb, default_attr_concat_vcfs.mem_gb]) * 0.8 * 1024 * 1.04)
@@ -137,25 +143,25 @@ workflow DepthPreprocessing {
     call Helpers.ConcatVcfs as ConcatVCFs {
         input:
             vcfs = concat_vcfs,
-            vcf_idxs = [make_del_vcf.vcf_index, make_dup_vcf.vcf_index],
+            vcf_idxs = [make_del_vcf.vcf_idx, make_dup_vcf.vcf_idx],
             allow_overlaps = true,
             naive = false,
             sort_output = true,
             no_version = true,
             no_address = true,
             sort_mem_mb = concat_sort_mem_mb,
-            prefix = "~{batch_id}_raw_depth_CNVs",
+            prefix = prefix + ".raw_depth_cnvs",
             docker = sv_base_mini_docker,
             runtime_attr_override = concat_attr
     }
 
     output {
         File del_bed = merge_set_del.out
-        File del_bed_index = merge_set_del.out_idx
+        File del_bed_idx = merge_set_del.out_idx
         File dup_bed = merge_set_dup.out
-        File dup_bed_index = merge_set_dup.out_idx
+        File dup_bed_idx = merge_set_dup.out_idx
         File merged_vcf = ConcatVCFs.concat_vcf
-        File merged_vcf_index = ConcatVCFs.concat_vcf_idx
+        File merged_vcf_idx = ConcatVCFs.concat_vcf_idx
         File ploidy_table = MakePloidyTable.ploidy_table
     }
 }
@@ -163,9 +169,11 @@ workflow DepthPreprocessing {
 task GcnvVcfToBed {
     input {
         File vcf
+        File vcf_idx
         File contig_ploidy_calls_tar
         Int sample_index
         String sample_id
+        String prefix
         Int qs_cutoff
         String docker
         RuntimeAttr? runtime_attr_override
@@ -190,26 +198,28 @@ task GcnvVcfToBed {
         fi
         cp "${calls_dir}/contig_ploidy.tsv" contig_ploidy.tsv
 
-        tabix ~{vcf}
         python /opt/WGD/bin/convert_gcnv.py \
             --cutoff ~{qs_cutoff} \
             contig_ploidy.tsv \
             ~{vcf} \
             ~{sample_id}
+
+        mv ~{sample_id}.del.bed ~{prefix}.del.bed
+        mv ~{sample_id}.dup.bed ~{prefix}.dup.bed
     >>>
 
     output {
-        File del_bed = "~{sample_id}.del.bed"
-        File dup_bed = "~{sample_id}.dup.bed"
+        File del_bed = "~{prefix}.del.bed"
+        File dup_bed = "~{prefix}.dup.bed"
     }
 
     RuntimeAttr default_attr = object {
         cpu_cores: 1,
         mem_gb: 4,
-        disk_gb: ceil(size([vcf, contig_ploidy_calls_tar], "GB") * 2) + 50,
+        disk_gb: ceil(size([vcf, vcf_idx, contig_ploidy_calls_tar], "GB") * 2) + 50,
         boot_disk_gb: 10,
-        preemptible_tries: 3,
-        max_retries: 1
+        preemptible_tries: 1,
+        max_retries: 0
     }
     RuntimeAttr runtime_attr = select_first([runtime_attr_override, default_attr])
     runtime {
@@ -227,7 +237,7 @@ task GcnvVcfToBed {
 task MergeSample {
     input {
         File gcnv
-        String sample_id
+        String prefix
         Float? max_dist
         String docker
         RuntimeAttr? runtime_attr_override
@@ -236,17 +246,17 @@ task MergeSample {
     command <<<
         set -euo pipefail
 
-        sort ~{gcnv} -k1,1V -k2,2n > ~{sample_id}.bed
-        bedtools merge -i ~{sample_id}.bed -d 0 -c 4,5,6,7 -o distinct > ~{sample_id}.merged.bed
+        sort ~{gcnv} -k1,1V -k2,2n > ~{prefix}.bed
+        bedtools merge -i ~{prefix}.bed -d 0 -c 4,5,6,7 -o distinct > ~{prefix}.merged.bed
         /opt/sv-pipeline/00_preprocessing/scripts/defragment_cnvs.py \
             --max-dist ~{if defined(max_dist) then max_dist else "0.25"} \
-            ~{sample_id}.merged.bed \
-            ~{sample_id}.merged.defrag.bed
-        sort -k1,1V -k2,2n ~{sample_id}.merged.defrag.bed > ~{sample_id}.merged.defrag.sorted.bed
+            ~{prefix}.merged.bed \
+            ~{prefix}.merged.defrag.bed
+        sort -k1,1V -k2,2n ~{prefix}.merged.defrag.bed > ~{prefix}.merged.defrag.sorted.bed
     >>>
 
     output {
-        File sample_bed = "~{sample_id}.merged.defrag.sorted.bed"
+        File sample_bed = "~{prefix}.merged.defrag.sorted.bed"
     }
 
     RuntimeAttr default_attr = object {
@@ -254,8 +264,8 @@ task MergeSample {
         mem_gb: 4,
         disk_gb: ceil(size(gcnv, "GB") * 2) + 50,
         boot_disk_gb: 10,
-        preemptible_tries: 3,
-        max_retries: 1
+        preemptible_tries: 1,
+        max_retries: 0
     }
     RuntimeAttr runtime_attr = select_first([runtime_attr_override, default_attr])
     runtime {
@@ -275,6 +285,7 @@ task MergeSet {
         Array[File] beds
         String svtype
         String batch_id
+        String prefix
         String docker
         RuntimeAttr? runtime_attr_override
     }
@@ -287,13 +298,13 @@ task MergeSet {
             | sort -k1,1V -k2,2n \
             | awk -v OFS="\t" -v svtype=~{svtype} -v batch=~{batch_id} '{$4=batch"_"svtype"_"NR; print}' \
             | cat <(echo -e "#chr\\tstart\\tend\\tname\\tsample\\tsvtype\\tsources") - \
-            | bgzip -c > ~{batch_id}.~{svtype}.bed.gz;
-        tabix -p bed ~{batch_id}.~{svtype}.bed.gz
+            | bgzip -c > ~{prefix}.bed.gz
+        tabix -p bed ~{prefix}.bed.gz
     >>>
 
     output {
-        File out = "~{batch_id}.~{svtype}.bed.gz"
-        File out_idx = "~{batch_id}.~{svtype}.bed.gz.tbi"
+        File out = "~{prefix}.bed.gz"
+        File out_idx = "~{prefix}.bed.gz.tbi"
     }
 
     RuntimeAttr default_attr = object {
@@ -301,8 +312,8 @@ task MergeSet {
         mem_gb: 4,
         disk_gb: ceil(size(beds, "GB") * 2) + 50,
         boot_disk_gb: 10,
-        preemptible_tries: 3,
-        max_retries: 1
+        preemptible_tries: 1,
+        max_retries: 0
     }
     RuntimeAttr runtime_attr = select_first([runtime_attr_override, default_attr])
     runtime {
@@ -348,8 +359,8 @@ task MakePloidyTable {
         mem_gb: 4,
         disk_gb: ceil(size(pedigree, "GB") * 3) + 50,
         boot_disk_gb: 10,
-        preemptible_tries: 3,
-        max_retries: 1
+        preemptible_tries: 1,
+        max_retries: 0
     }
     RuntimeAttr runtime_attr = select_first([runtime_attr_override, default_attr])
     runtime {
@@ -394,7 +405,7 @@ task CNVBEDToVCF {
 
     output {
         File vcf = "~{prefix}.vcf.gz"
-        File vcf_index = "~{prefix}.vcf.gz.tbi"
+        File vcf_idx = "~{prefix}.vcf.gz.tbi"
     }
 
     RuntimeAttr default_attr = object {
@@ -402,8 +413,8 @@ task CNVBEDToVCF {
         mem_gb: 4,
         disk_gb: ceil(size([bed, sample_list, contig_list, ploidy_table, ref_fai], "GB") * 2) + 50,
         boot_disk_gb: 10,
-        preemptible_tries: 3,
-        max_retries: 1
+        preemptible_tries: 1,
+        max_retries: 0
     }
     RuntimeAttr runtime_attr = select_first([runtime_attr_override, default_attr])
     runtime {

@@ -1115,14 +1115,39 @@ Outputs:
 - `sv_kanpig_raw_vcf_idx`: Index for the raw VCF.
 
 
+### [LongReadCNVs](../wdl/tools/LongReadCNVs.wdl)
+This workflow calls cohort CNVs from long-read depth profiles with GATK gCNV, then converts, clusters and genotypes the depth calls. It outputs merged CNV calls, ploidy, and genotyped depth VCFs.
+
+Inputs:
+- `File intervals`, `Array[String]+ sample_ids`, `Array[File]+ depth_profiles`, and `String batch_id`: Cohort gCNV inputs and identifier.
+- `File contig_ploidy_priors`, `File ref_fa`, `File ref_fai`, and `File ref_dict`: gCNV and reference inputs; `Int num_intervals_per_scatter` defaults to `10000`.
+- `File merged_bincov` and `File merged_bincov_idx`: Merged read-depth evidence and its tabix index for depth genotyping.
+- `File pedigree`, `File primary_contigs_list`, `File training_intervals`, and `File median_coverage`: Cohort genotyping inputs. `File? contig_subset_list` restricts clustering and genotyping to selected contigs.
+- `String prefix` and `String variant_prefix`: Output and variant-ID prefixes. `String chr_x` and `String chr_y` default to `chrX` and `chrY`.
+- `String gatk_docker`, `String sv_base_mini_docker`, and `String sv_pipeline_docker`: Required container images.
+- Optional gCNV interval-filtering, contig-ploidy, and model controls retain their `mappability_*`, `segmental_duplication_*`, `blacklist_intervals`, `ploidy_*`, and `gcnv_*` names from `LRCNVs`.
+- Optional depth-processing control: `Float? defragment_max_dist`.
+- Optional clustering controls: `fast_mode`, `clustering_algorithm`, `enable_cnv`, `default_no_call`, `omit_members`, `breakpoint_summary_strategy`, `defrag_padding_fraction`, `defrag_sample_overlap`, `depth_sample_overlap`, `depth_interval_overlap`, `depth_size_similarity`, `depth_breakend_window`, `exclude_intervals`, `exclude_overlap_fraction`, `gatk_to_svtk_script`, and `svtk_set_pass`.
+- `RuntimeAttr? runtime_attr_*`: Optional per-task CPU, memory, disk, boot-disk, preemptible-attempt, and retry overrides.
+
+Outputs:
+- `merged_cnvs_vcf`: Cohort CNV VCF after depth preprocessing.
+- `merged_cnvs_vcf_idx`: Index for `merged_cnvs_vcf`.
+- `ploidy_table`: Per-sample ploidy table.
+- `genotyped_depth_vcf`: Clustered CNV VCF genotyped from read depth.
+- `genotyped_depth_vcf_idx`: Index for `genotyped_depth_vcf`.
+- `genotyping_rd_table`: Read-depth evidence used for genotyping.
+
+
 ### [LRCNVs](../wdl/utils/LRCNVs.wdl)
-This tool calls copy-number variants across a cohort using the GATK germline CNV (gCNV) pipeline in cohort mode. From per-sample depth profiles over a shared interval list it annotates and filters intervals, determines contig ploidy, fits the gCNV model across scattered interval shards, post-processes the per-sample calls into genotyped interval and segment VCFs, and collects sample- and model-level QC. It outputs the gCNV model, per-sample CNV VCFs, denoised copy ratios and QC status.
+This component calls copy-number variants across a cohort using GATK germline CNV (gCNV) cohort mode. From per-sample depth profiles over a shared interval list it annotates and filters intervals, determines contig ploidy, fits gCNV across scattered interval shards, post-processes per-sample calls into genotyped interval and segment VCFs, and collects sample- and model-level QC.
 
 Inputs:
 - `File intervals`: Interval list over which CNVs are called.
-- `Array[String]+ entity_ids`: Sample IDs in the cohort.
-- `Array[String]+ depth_profiles`: Per-sample read-depth profiles, aligned to `entity_ids`.
-- `String cohort_entity_id`: Identifier for the cohort.
+- `Array[String]+ sample_ids`: Sample IDs in the cohort.
+- `Array[File]+ depth_profiles`: Per-sample read-depth profiles, aligned to `sample_ids`.
+- `String prefix`: Prefix for all generated outputs.
+- `String cohort_id`: Identifier for the cohort.
 - `File contig_ploidy_priors`: Contig ploidy priors used to determine per-sample contig ploidy.
 - `Int num_intervals_per_scatter`: Number of intervals processed per scatter shard (default `10000`).
 - `File? gatk4_jar_override`: Override GATK4 jar.
@@ -1141,6 +1166,8 @@ Inputs:
 - `Array[String]? allosomal_contigs`: Contigs treated as allosomal.
 - `Int maximum_number_events_per_sample`: Maximum number of events permitted per sample (default `1000`).
 - The workflow additionally exposes numerous optional gCNV model and contig-ploidy hyperparameters, prefixed `gcnv_` and `ploidy_`, that tune the underlying GATK tasks.
+- `String gatk_docker`: GATK container image.
+- `RuntimeAttr? runtime_attr_*`: Optional per-task CPU, memory, disk, boot-disk, preemptible-attempt and retry overrides. Defaults use one preemptible attempt and no retries.
 - `File ref_fa`: From [references](references.md).
 - `File ref_fai`: From [references](references.md).
 - `File ref_dict`: From [references](references.md).
@@ -1154,7 +1181,9 @@ Outputs:
 - `gcnv_calls_tars`: Per-shard per-sample gCNV calls.
 - `gcnv_tracking_tars`: Per-shard model-fitting tracking files.
 - `genotyped_intervals_vcfs`: Per-sample genotyped interval VCFs.
+- `genotyped_intervals_vcf_idxs`: Indexes for `genotyped_intervals_vcfs`.
 - `genotyped_segments_vcfs`: Per-sample genotyped segment VCFs.
+- `genotyped_segments_vcf_idxs`: Indexes for `genotyped_segments_vcfs`.
 - `sample_qc_status_files`: Per-sample QC status files.
 - `sample_qc_status_strings`: Per-sample QC status strings.
 - `model_qc_status_file`: Model-level QC status file.

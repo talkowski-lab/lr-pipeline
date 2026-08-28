@@ -5,12 +5,14 @@ import "Helpers.wdl"
 
 workflow GenotypeDepth {
     input {
-        String batch_id
+        String prefix
         File vcf
+        File vcf_idx
 
         File training_intervals
         File median_coverage
         File rd_file
+        File rd_file_idx
         File ref_dict
         File ploidy_table
 
@@ -31,14 +33,14 @@ workflow GenotypeDepth {
     call TrainSVGenotyping {
         input:
             vcf = vcf,
-            vcf_index = vcf + ".tbi",
-            prefix = batch_id,
+            vcf_idx = vcf_idx,
+            prefix = prefix + ".train_sv_genotyping",
             training_intervals = training_intervals,
             median_coverage = median_coverage,
             chr_x = chr_x,
             chr_y = chr_y,
             rd_file = rd_file,
-            rd_file_index = rd_file + ".tbi",
+            rd_file_idx = rd_file_idx,
             ref_dict = ref_dict,
             ploidy_table = ploidy_table,
             docker = gatk_docker,
@@ -50,12 +52,12 @@ workflow GenotypeDepth {
         call GenotypeSVs {
             input:
                 vcf = vcf,
-                vcf_index = vcf + ".tbi",
-                prefix = "~{batch_id}.genotype_batch.~{contig}",
+                vcf_idx = vcf_idx,
+                prefix = "~{prefix}.genotype_batch.~{contig}",
                 contig = contig,
                 median_coverage = median_coverage,
                 rd_file = rd_file,
-                rd_file_index = rd_file + ".tbi",
+                rd_file_idx = rd_file_idx,
                 ref_dict = ref_dict,
                 ploidy_table = ploidy_table,
                 rd_table = TrainSVGenotyping.rd_table,
@@ -69,27 +71,27 @@ workflow GenotypeDepth {
         mem_gb: 4,
         disk_gb: ceil(size(GenotypeSVs.out, "GB") * 3) + 50,
         boot_disk_gb: 10,
-        preemptible_tries: 3,
-        max_retries: 1
+        preemptible_tries: 1,
+        max_retries: 0
     }
     RuntimeAttr concat_attr = select_first([runtime_attr_concat_vcfs, default_attr_concat_vcfs])
 
     call Helpers.ConcatVcfs as ConcatVCFs {
         input:
             vcfs = GenotypeSVs.out,
-            vcf_idxs = GenotypeSVs.out_index,
+            vcf_idxs = GenotypeSVs.out_idx,
             allow_overlaps = true,
             naive = false,
             no_version = true,
             no_address = true,
-            prefix = batch_id + ".genotype_batch",
+            prefix = prefix + ".genotype_batch",
             docker = sv_base_mini_docker,
             runtime_attr_override = concat_attr
     }
 
     output {
         File genotyped_depth_vcf = ConcatVCFs.concat_vcf
-        File genotyped_depth_vcf_index = ConcatVCFs.concat_vcf_idx
+        File genotyped_depth_vcf_idx = ConcatVCFs.concat_vcf_idx
         File genotyping_rd_table = TrainSVGenotyping.rd_table
     }
 }
@@ -97,11 +99,11 @@ workflow GenotypeDepth {
 task TrainSVGenotyping {
     input {
         File vcf
-        File vcf_index
+        File vcf_idx
         File training_intervals
         File median_coverage
         File rd_file
-        File rd_file_index
+        File rd_file_idx
         String chr_x
         String chr_y
         File ref_dict
@@ -143,8 +145,8 @@ task TrainSVGenotyping {
         mem_gb: 16,
         disk_gb: ceil(size([vcf, rd_file], "GB") + 50),
         boot_disk_gb: 10,
-        preemptible_tries: 3,
-        max_retries: 1
+        preemptible_tries: 1,
+        max_retries: 0
     }
     RuntimeAttr runtime_attr = select_first([runtime_attr_override, default_attr])
     runtime {
@@ -161,11 +163,11 @@ task TrainSVGenotyping {
 task GenotypeSVs {
     input {
         File vcf
-        File vcf_index
+        File vcf_idx
         String prefix
         File median_coverage
         File rd_file
-        File rd_file_index
+        File rd_file_idx
         File ref_dict
         File ploidy_table
         File rd_table
@@ -208,7 +210,7 @@ task GenotypeSVs {
 
     output {
         File out = "~{prefix}.vcf.gz"
-        File out_index = "~{prefix}.vcf.gz.tbi"
+        File out_idx = "~{prefix}.vcf.gz.tbi"
     }
 
     RuntimeAttr default_attr = object {
@@ -216,8 +218,8 @@ task GenotypeSVs {
         mem_gb: 8,
         disk_gb: ceil(size([vcf, rd_file], "GB") + 50),
         boot_disk_gb: 10,
-        preemptible_tries: 3,
-        max_retries: 1
+        preemptible_tries: 1,
+        max_retries: 0
     }
     RuntimeAttr runtime_attr = select_first([runtime_attr_override, default_attr])
     runtime {
