@@ -53,7 +53,7 @@ workflow FlagLowCoverageRegions {
     output {
         File sample_histograms_tar = AggregateLowCoverage.sample_histograms_tar
         File chromosome_low_coverage_tar = AggregateLowCoverage.chromosome_low_coverage_tar
-        File cohort_low_coverage_tsv = AggregateLowCoverage.cohort_low_coverage_tsv
+        File cohort_coverage_counts_tsv = AggregateLowCoverage.cohort_coverage_counts_tsv
         File failed_bins_bed = AggregateLowCoverage.failed_bins_bed
         File sample_cutoffs_tsv = AggregateLowCoverage.sample_cutoffs_tsv
     }
@@ -364,7 +364,8 @@ plot_path = f"{PREFIX}.coverage_histogram.png"
 
 histogram = write_binned_coverage(INPUT, binned_path)
 median, bin_count = weighted_quantile(histogram, 0.5)
-regular_cutoff = median * MEDIAN_COVERAGE_CUTOFF
+median = float(math.floor(median))
+regular_cutoff = float(math.floor(median * MEDIAN_COVERAGE_CUTOFF))
 sex_cutoff = regular_cutoff / 2
 low_bin_count, low_histogram = write_low_coverage_bins(
     binned_path, low_path, regular_cutoff, sex_cutoff
@@ -471,8 +472,8 @@ import matplotlib.pyplot as plt
 
 
 RAW_COUNTS = "~{prefix}.low_coverage_raw.tsv.gz"
-COUNTS = "~{prefix}.low_coverage.tsv.gz"
-FAILED_BINS = "~{prefix}.failed_bins.bed.gz"
+COUNTS = "~{prefix}.coverage_counts.tsv"
+FAILED_BINS = "~{prefix}.failed_bins.bed"
 SAMPLE_CUTOFFS = "~{prefix}.sample_cutoffs.tsv"
 CHROMOSOME_COVERAGE = "~{chromosome_coverage}"
 PED = "~{ped}"
@@ -493,6 +494,14 @@ def open_text(path):
 
 def safe_filename(value):
     return re.sub(r"[^A-Za-z0-9._-]", "_", value)
+
+
+def chromosome_sort_key(chrom):
+    name = chrom[3:] if chrom.startswith("chr") else chrom
+    if name.isdigit():
+        return (0, int(name))
+    order = {"X": 0, "Y": 1, "M": 2, "MT": 2}
+    return (1, order.get(name, 3), name)
 
 
 def read_sample_sexes(path, sample_ids):
@@ -593,24 +602,11 @@ with open_text(CHROMOSOME_COVERAGE) as source:
         chromosome_ends[chrom] = int(end_text)
 
 flagged_bins = {}
-with gzip.open(RAW_COUNTS, "rt") as source, gzip.open(
-    COUNTS, "wt", newline=""
-) as cohort_output, gzip.open(FAILED_BINS, "wt", newline="") as failed_output:
+with gzip.open(RAW_COUNTS, "rt") as source:
     reader = csv.reader(source, delimiter="\t")
     header = next(reader, None)
     if header != ["chrom", "start", "end", "sample_count"]:
         raise ValueError("Unexpected cohort counts header")
-    cohort_writer = csv.writer(cohort_output, delimiter="\t", lineterminator="\n")
-    failed_writer = csv.writer(failed_output, delimiter="\t", lineterminator="\n")
-    cohort_writer.writerow(
-        [
-            "chrom",
-            "start",
-            "end",
-            "low_coverage_sample_count",
-            "eligible_sample_count",
-        ]
-    )
     for chrom, start_text, end_text, count_text in reader:
         if chrom not in chromosome_ends:
             raise ValueError(f"Low-coverage bin uses unknown chromosome {chrom}")
@@ -624,21 +620,53 @@ with gzip.open(RAW_COUNTS, "rt") as source, gzip.open(
         )
         if eligible_sample_count == 0:
             raise ValueError("chrY low-coverage bin exists but cohort has no male samples")
-        cohort_writer.writerow(
-            [
-                chrom,
-                start,
-                expected_end,
-                low_coverage_sample_count,
-                eligible_sample_count,
-            ]
-        )
-        if low_coverage_sample_count / eligible_sample_count >= SAMPLE_PROPORTION_CUTOFF:
-            failed_writer.writerow([chrom, start, expected_end])
         flagged_bins.setdefault(chrom, {})[start] = low_coverage_sample_count
 
-for chrom, chrom_end in chromosome_ends.items():
+with open(COUNTS, "w", newline="") as cohort_output, open(
+    FAILED_BINS, "w", newline=""
+) as failed_output:
+    cohort_writer = csv.writer(cohort_output, delimiter="\t", lineterminator="\n")
+    failed_writer = csv.writer(failed_output, delimiter="\t", lineterminator="\n")
+    cohort_writer.writerow(
+        [
+            "chrom",
+            "start",
+            "end",
+            "low_coverage_sample_count",
+            "eligible_sample_count",
+        ]
+    )
+    for chrom in sorted(chromosome_ends, key=chromosome_sort_key):
+        chrom_end = chromosome_ends[chrom]
+        eligible_sample_count = (
+            male_sample_count if chrom == "chrY" else len(SAMPLE_IDS)
+        )
+        if eligible_sample_count == 0:
+            continue
+        chrom_flagged_bins = flagged_bins.get(chrom, {})
+        for start in range(0, chrom_end, BIN_SIZE):
+            end = min(start + BIN_SIZE, chrom_end)
+            low_coverage_sample_count = chrom_flagged_bins.get(start, 0)
+            cohort_writer.writerow(
+                [
+                    chrom,
+                    start,
+                    end,
+                    low_coverage_sample_count,
+                    eligible_sample_count,
+                ]
+            )
+            if (
+                low_coverage_sample_count / eligible_sample_count
+                >= SAMPLE_PROPORTION_CUTOFF
+            ):
+                failed_writer.writerow([chrom, start, end])
+
+for chrom in sorted(chromosome_ends, key=chromosome_sort_key):
+    chrom_end = chromosome_ends[chrom]
     eligible_sample_count = male_sample_count if chrom == "chrY" else len(SAMPLE_IDS)
+    if eligible_sample_count == 0:
+        continue
     plot_chromosome(
         chrom,
         chrom_end,
@@ -655,8 +683,8 @@ PYCODE
     output {
         File sample_histograms_tar = "~{prefix}.sample_histograms.tar.gz"
         File chromosome_low_coverage_tar = "~{prefix}.chromosome_low_coverage_plots.tar.gz"
-        File cohort_low_coverage_tsv = "~{prefix}.low_coverage.tsv.gz"
-        File failed_bins_bed = "~{prefix}.failed_bins.bed.gz"
+        File cohort_coverage_counts_tsv = "~{prefix}.coverage_counts.tsv"
+        File failed_bins_bed = "~{prefix}.failed_bins.bed"
         File sample_cutoffs_tsv = "~{prefix}.sample_cutoffs.tsv"
     }
 
