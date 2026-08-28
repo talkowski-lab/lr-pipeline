@@ -78,7 +78,7 @@ def main():
     hl.init()
     ht = hl.read_table(local_root)
     ht = ht.filter(ht.locus.contig == args.chrom)
-    ht = ht.annotate(bin_start=(hl.int64(ht.locus.position) - 1) // args.bin_size * args.bin_size)
+    ht = ht.annotate(bin_start=(ht.locus.position - 1) // args.bin_size * args.bin_size)
     grouped = ht.group_by(contig=ht.locus.contig, bin_start=ht.bin_start).aggregate(
         mean_cov=hl.agg.mean(ht.mean)
     )
@@ -92,6 +92,7 @@ def main():
         end=grouped.bin_start + args.bin_size,
         mean_cov=grouped.mean_cov,
     )
+    grouped = grouped.key_by().drop("locus")
     grouped.export(args.out_bed, header=False)
 
 
