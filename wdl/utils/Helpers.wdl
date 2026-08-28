@@ -550,6 +550,9 @@ task ConcatVcfs {
         Boolean allow_overlaps
         Boolean naive
         Boolean sort_output = false
+        Boolean no_version = false
+        Boolean no_address = false
+        Int? sort_mem_mb
         String prefix
         String docker
         RuntimeAttr? runtime_attr_override
@@ -562,12 +565,17 @@ task ConcatVcfs {
 
         if [[ "~{sort_output}" == "true" ]]; then
             bcftools concat \
+                ~{if no_version then "--no-version" else ""} \
                 ~{if allow_overlaps then "--allow-overlaps" else ""} \
                 --file-list ${VCFS_FILE} \
                 -Ou \
-                | bcftools sort -T ./bcftools-sort.XXXXXX -Oz -o "~{prefix}.vcf.gz"
+                | bcftools sort \
+                    ~{if defined(sort_mem_mb) then "--max-mem " + select_first([sort_mem_mb]) else ""} \
+                    -T ./bcftools-sort.XXXXXX \
+                    -Oz -o "~{prefix}.vcf.gz"
         else
             bcftools concat \
+                ~{if no_version then "--no-version" else ""} \
                 ~{if allow_overlaps then "--allow-overlaps" else ""} \
                 ~{if naive then "--naive" else ""} \
                 --file-list ${VCFS_FILE} \
@@ -599,6 +607,7 @@ task ConcatVcfs {
         docker: docker
         preemptible: select_first([runtime_attr.preemptible_tries, default_attr.preemptible_tries])
         maxRetries: select_first([runtime_attr.max_retries, default_attr.max_retries])
+        noAddress: no_address
     }
 }
 

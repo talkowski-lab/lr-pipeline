@@ -1,6 +1,7 @@
 version 1.0
 
 import "Structs.wdl"
+import "Helpers.wdl"
 
 # Defragment GATK-gCNV CNVs per sample and merge
 
@@ -121,13 +122,31 @@ workflow DepthPreprocessing {
             runtime_attr_override = runtime_attr_cnv_bed_to_vcf
     }
 
-    call ConcatVCFs {
+    Array[File] concat_vcfs = [make_del_vcf.vcf, make_dup_vcf.vcf]
+    RuntimeAttr default_attr_concat_vcfs = object {
+        cpu_cores: 2,
+        mem_gb: 8,
+        disk_gb: ceil(size(concat_vcfs, "GB") * 3) + 50,
+        boot_disk_gb: 10,
+        preemptible_tries: 3,
+        max_retries: 1
+    }
+    RuntimeAttr concat_attr = select_first([runtime_attr_concat_vcfs, default_attr_concat_vcfs])
+    Int concat_sort_mem_mb = ceil(select_first([concat_attr.mem_gb, default_attr_concat_vcfs.mem_gb]) * 0.8 * 1024 * 1.04)
+
+    call Helpers.ConcatVcfs as ConcatVCFs {
         input:
-            vcfs = [make_del_vcf.vcf, make_dup_vcf.vcf],
+            vcfs = concat_vcfs,
             vcf_idxs = [make_del_vcf.vcf_index, make_dup_vcf.vcf_index],
+            allow_overlaps = true,
+            naive = false,
+            sort_output = true,
+            no_version = true,
+            no_address = true,
+            sort_mem_mb = concat_sort_mem_mb,
             prefix = "~{batch_id}_raw_depth_CNVs",
             docker = sv_base_mini_docker,
-            runtime_attr_override = runtime_attr_concat_vcfs
+            runtime_attr_override = concat_attr
     }
 
     output {
@@ -136,7 +155,7 @@ workflow DepthPreprocessing {
         File dup_bed = merge_set_dup.out
         File dup_bed_index = merge_set_dup.out_idx
         File merged_vcf = ConcatVCFs.concat_vcf
-        File merged_vcf_index = ConcatVCFs.concat_vcf_index
+        File merged_vcf_index = ConcatVCFs.concat_vcf_idx
         File ploidy_table = MakePloidyTable.ploidy_table
     }
 }
@@ -382,53 +401,6 @@ task CNVBEDToVCF {
         cpu_cores: 1,
         mem_gb: 4,
         disk_gb: ceil(size([bed, sample_list, contig_list, ploidy_table, ref_fai], "GB") * 2) + 50,
-        boot_disk_gb: 10,
-        preemptible_tries: 3,
-        max_retries: 1
-    }
-    RuntimeAttr runtime_attr = select_first([runtime_attr_override, default_attr])
-    runtime {
-        cpu: select_first([runtime_attr.cpu_cores, default_attr.cpu_cores])
-        memory: select_first([runtime_attr.mem_gb, default_attr.mem_gb]) + " GiB"
-        disks: "local-disk " + select_first([runtime_attr.disk_gb, default_attr.disk_gb]) + " HDD"
-        bootDiskSizeGb: select_first([runtime_attr.boot_disk_gb, default_attr.boot_disk_gb])
-        docker: docker
-        preemptible: select_first([runtime_attr.preemptible_tries, default_attr.preemptible_tries])
-        maxRetries: select_first([runtime_attr.max_retries, default_attr.max_retries])
-        noAddress: true
-    }
-}
-
-task ConcatVCFs {
-    input {
-        Array[File] vcfs
-        Array[File] vcf_idxs
-        String prefix
-        String docker
-        RuntimeAttr? runtime_attr_override
-    }
-
-    Int sort_mem_mb = ceil(select_first([runtime_attr.mem_gb, default_attr.mem_gb]) * 0.8 * 1024 * 1.04)
-
-    command <<<
-        set -euo pipefail
-
-        bcftools concat --no-version --allow-overlaps --output-type u \
-            --file-list '~{write_lines(vcfs)}' \
-            | bcftools sort --max-mem '~{sort_mem_mb}' --output-type z \
-                --output '~{prefix}.vcf.gz'
-        tabix '~{prefix}.vcf.gz'
-    >>>
-
-    output {
-        File concat_vcf = "~{prefix}.vcf.gz"
-        File concat_vcf_index = "~{prefix}.vcf.gz.tbi"
-    }
-
-    RuntimeAttr default_attr = object {
-        cpu_cores: 2,
-        mem_gb: 8,
-        disk_gb: ceil(size(vcfs, "GB") * 3) + 50,
         boot_disk_gb: 10,
         preemptible_tries: 3,
         max_retries: 1

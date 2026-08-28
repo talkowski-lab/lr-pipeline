@@ -122,7 +122,7 @@
 
 
 ## FILTER Values
-- `ASSEMBLY_ONLY_SINGLETON`: Variant containing an ALT allele with `INFO/AC = 1` whose sole carrier has `FORMAT/EV` support exclusively from assembly-based callers (`dipcall` and/or `hapdiff`). Added when `PostProcess.run_filter_assembly_only_singletons` is true. The workflow also emits an optional `assembly_only_singletons_tsv` with one row per qualifying ALT allele and columns `ID`, `allele_type`, `allele_length`, `dbSNP_ID`, `gnomAD_V4_match_ID`, and `FILTER`.
+- `ASSEMBLY_ONLY_SINGLETON`: Variant containing an ALT allele with `INFO/AC = 1` whose sole carrier has `FORMAT/EV` support exclusively from assembly-based callers (`dipcall` and/or `hapdiff`). Added when `PostprocessCallset.run_filter_assembly_only_singletons` is true. The workflow also emits an optional `assembly_only_singletons_tsv` with one row per qualifying ALT allele and columns `ID`, `allele_type`, `allele_length`, `dbSNP_ID`, `gnomAD_V4_match_ID`, and `FILTER`.
 - `LARGE_SNV_INDEL`: Variant with `SOURCE = "DeepVariant"` that has `INFO/allele_length ≥ 50`.
 - `MONOALLELIC`: Site represents one ALT allele in a region with multiple variants that could not be unified into non-overlapping multi-allelic sites.
 - `SINGLE_READ_SUPPORT`: Variant supported by a single read in a single sample.

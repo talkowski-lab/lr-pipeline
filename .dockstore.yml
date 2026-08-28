@@ -178,8 +178,8 @@ workflows:
   # Annotation Utilities
   # --------------------
   - subclass: WDL
-    name: AddEndTRs
-    primaryDescriptorPath: /wdl/annotation_utils/AddEndTRs.wdl
+    name: AnnotateTREndTags
+    primaryDescriptorPath: /wdl/annotation_utils/AnnotateTREndTags.wdl
     filters:
       branches:
         - main
@@ -232,8 +232,8 @@ workflows:
         - /.*/
 
   - subclass: WDL
-    name: CountAnnotations
-    primaryDescriptorPath: /wdl/annotation_utils/CountAnnotations.wdl
+    name: SummarizeAnnotations
+    primaryDescriptorPath: /wdl/annotation_utils/SummarizeAnnotations.wdl
     filters:
       branches:
         - main
@@ -250,8 +250,8 @@ workflows:
         - /.*/
 
   - subclass: WDL
-    name: CreateCoverageFile
-    primaryDescriptorPath: /wdl/annotation_utils/CreateCoverageFile.wdl
+    name: CreateCohortCoverageSummary
+    primaryDescriptorPath: /wdl/annotation_utils/CreateCohortCoverageSummary.wdl
     filters:
       branches:
         - main
@@ -259,8 +259,8 @@ workflows:
         - /.*/
 
   - subclass: WDL
-    name: CreateIntervalsFile
-    primaryDescriptorPath: /wdl/annotation_utils/CreateIntervalsFile.wdl
+    name: CreateDepthIntervals
+    primaryDescriptorPath: /wdl/annotation_utils/CreateDepthIntervals.wdl
     filters:
       branches:
         - main
@@ -268,8 +268,8 @@ workflows:
         - /.*/
 
   - subclass: WDL
-    name: CreateDepthFiles
-    primaryDescriptorPath: /wdl/annotation_utils/CreateDepthFiles.wdl
+    name: CreateCohortDepthFiles
+    primaryDescriptorPath: /wdl/annotation_utils/CreateCohortDepthFiles.wdl
     filters:
       branches:
         - main
@@ -277,8 +277,8 @@ workflows:
         - /.*/
 
   - subclass: WDL
-    name: CreateMetadataFile
-    primaryDescriptorPath: /wdl/annotation_utils/CreateMetadataFile.wdl
+    name: CreateCohortMetadata
+    primaryDescriptorPath: /wdl/annotation_utils/CreateCohortMetadata.wdl
     filters:
       branches:
         - main
@@ -286,8 +286,8 @@ workflows:
         - /.*/
 
   - subclass: WDL
-    name: CreateReadCountsFile
-    primaryDescriptorPath: /wdl/annotation_utils/CreateReadCountsFile.wdl
+    name: CreateSampleReadCounts
+    primaryDescriptorPath: /wdl/annotation_utils/CreateSampleReadCounts.wdl
     filters:
       branches:
         - main
@@ -295,8 +295,8 @@ workflows:
         - /.*/
 
   - subclass: WDL
-    name: DiagnoseSingletons
-    primaryDescriptorPath: /wdl/annotation_utils/DiagnoseSingletons.wdl
+    name: SummarizeSingletonCalls
+    primaryDescriptorPath: /wdl/annotation_utils/SummarizeSingletonCalls.wdl
     filters:
       branches:
         - main
@@ -304,8 +304,8 @@ workflows:
         - /.*/
 
   - subclass: WDL
-    name: DropGenotypes
-    primaryDescriptorPath: /wdl/annotation_utils/DropGenotypes.wdl
+    name: StripGenotypes
+    primaryDescriptorPath: /wdl/annotation_utils/StripGenotypes.wdl
     filters:
       branches:
         - main
@@ -322,8 +322,8 @@ workflows:
         - /.*/
 
   - subclass: WDL
-    name: FlagLowCoverageRegions
-    primaryDescriptorPath: /wdl/annotation_utils/FlagLowCoverageRegions.wdl
+    name: IdentifyLowCoverageRegions
+    primaryDescriptorPath: /wdl/annotation_utils/IdentifyLowCoverageRegions.wdl
     filters:
       branches:
         - main
@@ -340,8 +340,8 @@ workflows:
         - /.*/
 
   - subclass: WDL
-    name: GenerateTRGTJson
-    primaryDescriptorPath: /wdl/annotation_utils/GenerateTRGTJson.wdl
+    name: CreateTRGTHistograms
+    primaryDescriptorPath: /wdl/annotation_utils/CreateTRGTHistograms.wdl
     filters:
       branches:
         - main
@@ -367,8 +367,8 @@ workflows:
         - /.*/
 
   - subclass: WDL
-    name: MergeBackbonePhased
-    primaryDescriptorPath: /wdl/annotation_utils/MergeBackbonePhased.wdl
+    name: FillBackbonePhasedGenotypes
+    primaryDescriptorPath: /wdl/annotation_utils/FillBackbonePhasedGenotypes.wdl
     filters:
       branches:
         - main
@@ -376,8 +376,8 @@ workflows:
         - /.*/
 
   - subclass: WDL
-    name: PlotPhasingResults
-    primaryDescriptorPath: /wdl/annotation_utils/PlotPhasingResults.wdl
+    name: EvaluateBackbonePhasing
+    primaryDescriptorPath: /wdl/annotation_utils/EvaluateBackbonePhasing.wdl
     filters:
       branches:
         - main
@@ -385,8 +385,17 @@ workflows:
         - /.*/
 
   - subclass: WDL
-    name: PostProcess
-    primaryDescriptorPath: /wdl/annotation_utils/PostProcess.wdl
+    name: PostprocessCallset
+    primaryDescriptorPath: /wdl/annotation_utils/PostprocessCallset.wdl
+    filters:
+      branches:
+        - main
+      tags:
+        - /.*/
+
+  - subclass: WDL
+    name: PreprocessGregorVcf
+    primaryDescriptorPath: /wdl/annotation_utils/PreprocessGregorVcf.wdl
     filters:
       branches:
         - main
@@ -412,8 +421,8 @@ workflows:
         - /.*/
 
   - subclass: WDL
-    name: TransformAlleleType
-    primaryDescriptorPath: /wdl/annotation_utils/TransformAlleleType.wdl
+    name: NormalizeAlleleTypes
+    primaryDescriptorPath: /wdl/annotation_utils/NormalizeAlleleTypes.wdl
     filters:
       branches:
         - main
@@ -421,8 +430,8 @@ workflows:
         - /.*/
 
   - subclass: WDL
-    name: VcfToBed
-    primaryDescriptorPath: /wdl/annotation_utils/VcfToBed.wdl
+    name: ConvertVcfToBed
+    primaryDescriptorPath: /wdl/annotation_utils/ConvertVcfToBed.wdl
     filters:
       branches:
         - main
@@ -469,8 +478,8 @@ workflows:
         - /.*/
 
   - subclass: WDL
-    name: HiPhaseMerge
-    primaryDescriptorPath: /wdl/tools/HiPhaseMerge.wdl
+    name: MergeHiPhaseCallsets
+    primaryDescriptorPath: /wdl/tools/MergeHiPhaseCallsets.wdl
     filters:
       branches:
         - main
@@ -523,8 +532,8 @@ workflows:
         - /.*/
 
   - subclass: WDL
-    name: PALMER
-    primaryDescriptorPath: /wdl/tools/PALMER.wdl
+    name: PALMERAssembly
+    primaryDescriptorPath: /wdl/tools/PALMERAssembly.wdl
     filters:
       branches:
         - main
@@ -541,8 +550,8 @@ workflows:
         - /.*/
 
   - subclass: WDL
-    name: PALMERMerge
-    primaryDescriptorPath: /wdl/tools/PALMERMerge.wdl
+    name: MergePALMERCallsets
+    primaryDescriptorPath: /wdl/tools/MergePALMERCallsets.wdl
     filters:
       branches:
         - main

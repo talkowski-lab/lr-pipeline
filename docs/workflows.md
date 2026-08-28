@@ -411,7 +411,7 @@ Outputs:
 
 ## Annotation Utilities
 
-### [AddEndTRs](../wdl/annotation_utils/AddEndTRs.wdl)
+### [AnnotateTREndTags](../wdl/annotation_utils/AnnotateTREndTags.wdl)
 This utility adds an `END` INFO tag to the tandem-repeat records of a VCF, computed per contig, so that downstream tools correctly interpret the span of each TR call. It outputs the updated VCF.
 
 Inputs:
@@ -496,18 +496,18 @@ Outputs:
 
 
 ### [CombineTRs](../wdl/annotation_utils/CombineTRs.wdl)
-This utility combines tandem-repeat VCFs from multiple callers for a single sample into one VCF. It checks sample consistency, sets missing filters to pass, tags each caller's calls, assigns TR identifiers, deduplicates overlapping variants and priority-merges the callers per contig. It outputs the combined TR VCF.
+This utility combines tandem-repeat VCFs from multiple callers for one sample or a cohort into one VCF. It checks sample consistency, sets missing filters to pass, tags each caller's calls, assigns TR identifiers, deduplicates overlapping variants and priority-merges the callers per contig. It outputs the combined TR VCF.
 
 Inputs:
 - `Array[File] tr_vcfs`: Tandem-repeat VCFs to combine, one per caller.
 - `Array[File] tr_vcf_idxs`: Indexes for `tr_vcfs`.
 - `Array[String] tr_callers`: Caller name for each VCF in `tr_vcfs`, used for tagging and merge priority.
 - `Array[String] contigs`: Contigs to process.
-- `String sample_id`: Sample ID expected across all input VCFs.
+- `Array[String] sample_ids`: Sample IDs expected across all input VCFs.
 
 Outputs:
-- `trgt_combined_vcf`: Combined single-sample tandem-repeat VCF.
-- `trgt_combined_vcf_idx`: Index for the combined VCF.
+- `combined_tr_vcf`: Combined tandem-repeat VCF.
+- `combined_tr_vcf_idx`: Index for the combined VCF.
 
 
 ### [ConcatenateMosDepth](../wdl/annotation_utils/ConcatenateMosDepth.wdl)
@@ -521,7 +521,7 @@ Outputs:
 - `mosdepth_per_base_combined_idx`: Index for the combined BED.
 
 
-### [CountAnnotations](../wdl/annotation_utils/CountAnnotations.wdl)
+### [SummarizeAnnotations](../wdl/annotation_utils/SummarizeAnnotations.wdl)
 This utility tallies annotation values across one or more VCFs to produce summary count tables, size-binned by allele class (SNV/DEL/INS/DUP/TRV). It always counts at the site level and can optionally count per sample, per allele, per functional gene consequence (from VEP/SVAnnotate `PREDICTED_*` fields), as raw per-variant value lists, and — when `create_plotting` is enabled — produce a separate set of AF-binned, region-aware Parquet tables for plotting (including a de novo transmission breakdown when a PED file is supplied and trios are found).
 
 Inputs:
@@ -577,7 +577,7 @@ Outputs:
 - `haplotype_methylation_beds`: Per-contig site-by-haplotype modification-score matrix BEDs.
 
 
-### [CreateCoverageFile](../wdl/annotation_utils/CreateCoverageFile.wdl)
+### [CreateCohortCoverageSummary](../wdl/annotation_utils/CreateCohortCoverageSummary.wdl)
 This utility builds a binned coverage matrix across a cohort from per-sample mosdepth BED outputs. It tiles the genome into windows, computes the mean coverage and threshold-crossing counts within each bin for every sample, and concatenates the results into a single coverage TSV.
 
 Inputs:
@@ -593,20 +593,20 @@ Outputs:
 - `binned_coverage_tsv`: Binned coverage matrix across the cohort.
 
 
-### [CreateIntervalsFile](../wdl/annotation_utils/CreateIntervalsFile.wdl)
-This utility creates an interval file matching the fixed-width bins emitted by [CreateReadCountsFile](#createreadcountsfile). It writes 1-based, inclusive `contig:start-end` intervals in the requested contig order and omits each contig's trailing partial bin.
+### [CreateDepthIntervals](../wdl/annotation_utils/CreateDepthIntervals.wdl)
+This utility creates an interval file matching the fixed-width bins emitted by [CreateSampleReadCounts](#createsamplereadcounts). It writes 1-based, inclusive `contig:start-end` intervals in the requested contig order and omits each contig's trailing partial bin.
 
 Inputs:
 - `File ref_fai`: From [references](references.md).
 - `Array[String] contigs`: Contigs for which to create intervals, in output order.
-- `Int bin_size`: Size, in bp, of each interval. Use the same value supplied to `CreateReadCountsFile`.
+- `Int bin_size`: Size, in bp, of each interval. Use the same value supplied to `CreateSampleReadCounts`.
 
 Outputs:
 - `intervals`: Fixed-width interval file.
 
 
-### [CreateDepthFiles](../wdl/annotation_utils/CreateDepthFiles.wdl)
-This utility ports GATK-SV's [MakeBincovMatrix](https://github.com/broadinstitute/gatk-sv/blob/main/wdl/MakeBincovMatrix.wdl) and [PloidyEstimation](https://github.com/broadinstitute/gatk-sv/blob/main/wdl/PloidyEstimation.wdl) workflows to build a cohort binned-coverage matrix and per-sample ploidy estimate from per-sample [MosDepth](#mosdepth) per-base coverage BEDs. Since mosdepth's per-base output is run-length-encoded at irregular interval widths rather than GATK-SV's fixed-width `CollectReadCounts` bins, each sample's per-base BED is first binned at `bin_size` by taking the median depth per bin (dropping any trailing partial bin), matching the binning convention used by [CreateReadCountsFile](#createreadcountsfile); because every sample is binned identically, the format-detection/shift logic in upstream `MakeBincovMatrix` (which has to distinguish raw bincov BEDs from GATK `CollectReadCounts` output) is dropped as dead code. The binned files are then run through GATK-SV's `SetBins`/`MakeBincovMatrixColumns`/`ZPaste` logic to build the bincov matrix, and through `BuildPloidyMatrix` (re-binning the bincov matrix to `ploidy_bin_size`, summing depths) and GATK-SV's `estimatePloidy.R` to estimate ploidy. GATK-SV's `estimatePloidy.R` and `estimated_CN_denoising.py` are vendored under [`scripts/helper/`](../scripts/helper/) and built into the `utils` image, so workflow has no dependency on GATK-SV docker images. Matrix outputs remain separate; `ploidy_plots` tarball contains only PNG figures from `estimatePloidy.R` and `cn_denoising_plots.pdf`. Unlike upstream `MakeBincovMatrix`, this does not support merging into a pre-existing batch's bincov matrix, since only a single one-shot cohort matrix was needed.
+### [CreateCohortDepthFiles](../wdl/annotation_utils/CreateCohortDepthFiles.wdl)
+This utility ports GATK-SV's [MakeBincovMatrix](https://github.com/broadinstitute/gatk-sv/blob/main/wdl/MakeBincovMatrix.wdl) and [PloidyEstimation](https://github.com/broadinstitute/gatk-sv/blob/main/wdl/PloidyEstimation.wdl) workflows to build a cohort binned-coverage matrix and per-sample ploidy estimate from per-sample [MosDepth](#mosdepth) per-base coverage BEDs. Since mosdepth's per-base output is run-length-encoded at irregular interval widths rather than GATK-SV's fixed-width `CollectReadCounts` bins, each sample's per-base BED is first binned at `bin_size` by taking the median depth per bin (dropping any trailing partial bin), matching the binning convention used by [CreateSampleReadCounts](#createsamplereadcounts); because every sample is binned identically, the format-detection/shift logic in upstream `MakeBincovMatrix` (which has to distinguish raw bincov BEDs from GATK `CollectReadCounts` output) is dropped as dead code. The binned files are then run through GATK-SV's `SetBins`/`MakeBincovMatrixColumns`/`ZPaste` logic to build the bincov matrix, and through `BuildPloidyMatrix` (re-binning the bincov matrix to `ploidy_bin_size`, summing depths) and GATK-SV's `estimatePloidy.R` to estimate ploidy. GATK-SV's `estimatePloidy.R` and `estimated_CN_denoising.py` are vendored under [`scripts/helper/`](../scripts/helper/) and built into the `utils` image, so workflow has no dependency on GATK-SV docker images. Matrix outputs remain separate; `ploidy_plots` tarball contains only PNG figures from `estimatePloidy.R` and `cn_denoising_plots.pdf`. Unlike upstream `MakeBincovMatrix`, this does not support merging into a pre-existing batch's bincov matrix, since only a single one-shot cohort matrix was needed.
 
 `estimatePloidy.R` hardcodes a 24-contig human karyotype (`chr1`..`chr22`, `chrX`, `chrY`, in that exact order) for sex assignment and per-contig ploidy expectations via positional indexing, and its "X"/"Y" exclusion checks compare against bare `X`/`Y` rather than `chr`-prefixed names (a no-op against GRCh38-style contig names, with limited practical effect here since sample-batching/PCA (`-k`) is never invoked). `mosdepth_bed_files` must therefore be restricted to exactly those 24 contigs, in that order, or ploidy estimates will be silently wrong.
 
@@ -625,7 +625,7 @@ Outputs:
 - `ploidy_plots`: Tarball containing only ploidy PNG and PDF figures.
 
 
-### [CreateMetadataFile](../wdl/annotation_utils/CreateMetadataFile.wdl)
+### [CreateCohortMetadata](../wdl/annotation_utils/CreateCohortMetadata.wdl)
 This utility builds a cohort metadata file by combining a pedigree file with an ancestry-assignment file. It outputs the merged metadata file.
 
 Inputs:
@@ -636,7 +636,7 @@ Outputs:
 - `metadata`: Merged cohort metadata file.
 
 
-### [CreateReadCountsFile](../wdl/annotation_utils/CreateReadCountsFile.wdl)
+### [CreateSampleReadCounts](../wdl/annotation_utils/CreateSampleReadCounts.wdl)
 This utility produces a binned read-counts file for a single sample from its per-contig mosdepth BED outputs, binning counts at a fixed resolution and merging across contigs. It outputs the binned read-counts file.
 
 Inputs:
@@ -651,7 +651,7 @@ Outputs:
 - `binned_read_counts`: Binned read-counts file for the sample.
 
 
-### [DiagnoseSingletons](../wdl/annotation_utils/DiagnoseSingletons.wdl)
+### [SummarizeSingletonCalls](../wdl/annotation_utils/SummarizeSingletonCalls.wdl)
 This utility counts each sample's called genotypes across variant type, allele-length range, genomic region, evidence source, and sample-level alternate-allele count. It classifies calls supported only by `hapdiff` and/or `dipcall` as assemblies, calls with any other `EV` value as alignments, and calls without either kind of evidence as other. Output columns use the format `variant_type - size_range - region - count_type - singleton_type`.
 
 Inputs:
@@ -664,7 +664,7 @@ Outputs:
 - `singleton_counts_tsv`: Wide per-sample count table.
 
 
-### [DropGenotypes](../wdl/annotation_utils/DropGenotypes.wdl)
+### [StripGenotypes](../wdl/annotation_utils/StripGenotypes.wdl)
 This utility strips all genotype (sample) columns from a VCF, optionally sharding by record count for speed. It outputs the resulting sites-only VCF.
 
 Inputs:
@@ -694,25 +694,25 @@ Outputs:
 - `sv_vcf_idxs`: Indexes for the SV VCFs.
 
 
-### [FlagLowCoverageRegions](../wdl/annotation_utils/FlagLowCoverageRegions.wdl)
-This utility finds recurrent low-coverage regions from cohort mosdepth per-base BED files. It streams each sample independently, divides each chromosome into fixed bins anchored at position 0, and calculates each bin's base-weighted median coverage. Each sample's regular low-coverage cutoff is its median binned coverage multiplied by `median_coverage_cutoff`; bins at or below the cutoff are flagged. A cohort bin fails when its low-coverage sample proportion is at or above `sample_proportion_cutoff`.
+### [IdentifyLowCoverageRegions](../wdl/annotation_utils/IdentifyLowCoverageRegions.wdl)
+This utility finds recurrent low-coverage regions from cohort mosdepth per-base BED files. It streams each sample independently, divides each chromosome into fixed bins anchored at position 0, and calculates each bin's base-weighted median coverage. Each sample's median binned coverage is rounded down before its regular low-coverage cutoff is calculated as `floor(median_coverage * median_coverage_cutoff)`; bins at or below this inclusive cutoff are flagged. A cohort bin fails when its low-coverage sample proportion is at or above the inclusive `sample_proportion_cutoff`.
 
-Sample sex is read from a six-column PED (`1` for male and `2` for female). Male chrX and chrY use half the regular cutoff. Female chrY is excluded from binning, the sample median, sample histograms, and low-coverage calls. Samples missing from the PED or carrying unsupported sex codes fail explicitly. The workflow scatters once across samples, then aggregates flagged bins in one cohort task to avoid a nested scatter.
+Sample sex is read from a six-column PED (`1` for male and `2` for female). Male chrX and chrY use half the floored regular cutoff. Female chrY is excluded from binning, the sample median, sample histograms, and low-coverage calls. Samples missing from the PED or carrying unsupported sex codes fail explicitly. The workflow scatters once across samples, then aggregates flagged bins in one cohort task to avoid a nested scatter.
 
 Inputs:
 - `Array[File] mosdepth_bed_files`: One sorted, contiguous mosdepth per-base BED or BED.GZ per sample. Files must use four columns (`chrom`, `start`, `end`, `coverage`), cover each included chromosome from position 0, and have the same chromosome coordinate system.
 - `Array[String] sample_ids`: Sample IDs corresponding by array index to `mosdepth_bed_files`.
 - `File ped`: Six-column PED containing every input sample and its sex.
 - `Int bin_size`: Fixed genomic bin size in bp.
-- `Float median_coverage_cutoff`: Fraction of sample median coverage defining the inclusive regular low-coverage cutoff (default `0.2`; must be greater than `0` and at most `1`). For example, `0.2` gives a `12x` cutoff for a sample with median coverage `60x`.
+- `Float median_coverage_cutoff`: Fraction of the floored sample median coverage defining the inclusive regular low-coverage cutoff (default `0.2`; must be greater than `0` and at most `1`). The operational cutoff is also rounded down: `floor(floor(median_coverage) * median_coverage_cutoff)`. For example, `0.2` gives a `12x` cutoff for a sample with median coverage `60x`.
 - `Float sample_proportion_cutoff`: Inclusive minimum proportion of eligible samples with low coverage required to fail a cohort bin (default `0.5`; must be greater than `0` and at most `1`).
 
 Outputs:
 - `sample_histograms_tar`: Tarball of per-sample coverage histograms with weighted, data-driven bins. The displayed range extends through at least the 95th percentile and the `Q3 + 3 * IQR` upper fence; omitted extreme bins are counted, actual low-coverage bins are orange, and the sample median plus regular/sex-chromosome cutoffs are annotated.
 - `chromosome_low_coverage_tar`: Tarball of per-chromosome plots showing number of samples flagged in each genomic bin.
-- `cohort_low_coverage_tsv`: Gzipped TSV underlying the chromosome plots, with low-coverage and eligible-sample counts for each bin flagged by at least one sample. chrY eligibility includes male samples only.
-- `failed_bins_bed`: Gzipped, naturally chromosome-sorted BED of cohort bins whose low-coverage sample proportion is greater than or equal to `sample_proportion_cutoff`.
-- `sample_cutoffs_tsv`: TSV with `sample_id`, regular `cutoff`, and `median_coverage` for every input sample.
+- `cohort_coverage_counts_tsv`: Raw, uncompressed TSV underlying the chromosome plots, with low-coverage and eligible-sample counts for every eligible genomic bin, including bins with zero low-coverage samples. chrY includes only male samples in its eligibility denominator and is omitted when no male samples are present.
+- `failed_bins_bed`: Raw, uncompressed, naturally chromosome-sorted BED of cohort bins whose low-coverage sample proportion is greater than or equal to `sample_proportion_cutoff`.
+- `sample_cutoffs_tsv`: TSV with `sample_id`, floored regular `cutoff`, and floored `median_coverage` for every input sample. Both values match those used for low-coverage calls and plots.
 
 
 ### [FillPhasedGenotypes](../wdl/annotation_utils/FillPhasedGenotypes.wdl)
@@ -731,7 +731,7 @@ Outputs:
 - `hiphase_phased_vcf_idx`: Index for the phased VCF.
 
 
-### [GenerateTRGTJson](../wdl/annotation_utils/GenerateTRGTJson.wdl)
+### [CreateTRGTHistograms](../wdl/annotation_utils/CreateTRGTHistograms.wdl)
 This utility generates per-locus tandem repeat allele-frequency histograms, stratified by population and sex, from a multisample LPS (longest polymer sequence) table for use in the TR browser. It outputs a single combined histograms TSV.
 
 Inputs:
@@ -789,7 +789,7 @@ Outputs:
 - `integrated_vcf_idx`: Index for the integrated VCF.
 
 
-### [MergeBackbonePhased](../wdl/annotation_utils/MergeBackbonePhased.wdl)
+### [FillBackbonePhasedGenotypes](../wdl/annotation_utils/FillBackbonePhasedGenotypes.wdl)
 This utility merges a backbone-phased VCF with its no-TRGT counterpart (the same backbone-phasing run without TRGT calls included): for each still-unphased heterozygous genotype in `backbone_phased_vcf`, if a matching variant exists in `backbone_phased_notrgt_vcf` with a phased genotype, that phased `GT` (and `PS`) is pulled into the output. Region sharding is optional. It outputs the merged VCF and a per-sample TSV of heterozygous/unphased/pulled genotype counts.
 
 Inputs:
@@ -806,7 +806,7 @@ Outputs:
 - `backbone_merged_tsv`: Per-sample TSV of heterozygous, unphased, and post-pull unphased genotype counts.
 
 
-### [PlotPhasingResults](../wdl/annotation_utils/PlotPhasingResults.wdl)
+### [EvaluateBackbonePhasing](../wdl/annotation_utils/EvaluateBackbonePhasing.wdl)
 This utility evaluates backbone-phasing accuracy by comparing backbone-phased VCFs against base (truth) VCFs. It assigns samples to their base VCFs, compares phased genotypes per contig and aggregates the results into tables broken down by variants outside tandem repeats, TR-enveloped variants and TR variants. It outputs these summary tables plus per-VCF status tables.
 
 Inputs:
@@ -826,7 +826,7 @@ Outputs:
 - `vcf_tables`: Per-VCF variant-status tables.
 
 
-### [PostProcess](../wdl/annotation_utils/PostProcess.wdl)
+### [PostprocessCallset](../wdl/annotation_utils/PostprocessCallset.wdl)
 This utility bundles every genotype-update and post-processing step applied to a near-final callset into one workflow, with a required `run_` Boolean guarding each step so that the input VCF is left untouched when all are set to `false`. The per-record steps are applied in a single pass over the VCF: each variant is first matched against `transfer_vcf` and has its genotypes transferred (when `run_transfer_genotypes` is set) using its unmodified properties, after which the remaining steps - unphasing, ploidy normalization, TR-ID decrementing, MEI pruning, homopolymer flagging, singleton filtering and same-coordinate sorting - run in order. Some steps require an accompanying field - `run_transfer_genotypes` needs `transfer_vcf`, `run_unphase_samples` needs `unphase_samples`, and `run_normalize_ploidy` needs `ped`. The per-record pass can optionally be region-sharded via `shard_bin_size`.
 
 Inputs:
@@ -852,6 +852,24 @@ Outputs:
 - `post_processed_vcf`: Post-processed VCF.
 - `post_processed_vcf_idx`: Index for the post-processed VCF.
 - `assembly_only_singletons_tsv`: Optional TSV containing one row per assembly-only singleton ALT allele; present only when `run_filter_assembly_only_singletons` is true.
+
+
+### [PreprocessGregorVcf](../wdl/annotation_utils/PreprocessGregorVcf.wdl)
+This utility prepares a VCF for GREGOR by normalizing variants, annotating canonical variant attributes, assigning standardized variant IDs, and producing both genotyped and sites-only outputs per contig. Optional record sharding parallelizes processing.
+
+Inputs:
+- `File vcf`: VCF to preprocess.
+- `File vcf_idx`: Index for `vcf`.
+- `Array[String] contigs`: Contigs to process.
+- `Int? records_per_shard`: Optional record count per processing shard.
+- `File ref_fa`: Reference FASTA used for normalization.
+- `File ref_fai`: Index for `ref_fa`.
+
+Outputs:
+- `full_vcf`: Per-contig normalized, annotated, genotyped VCFs.
+- `full_vcf_idx`: Indexes for `full_vcf`.
+- `stripped_vcf`: Per-contig sites-only VCFs.
+- `stripped_vcf_idx`: Indexes for `stripped_vcf`.
 
 
 ### [QcAnnotations](https://github.com/broadinstitute/gatk-sv/blob/kj_project_gnomad_lr/wdl/QcAnnotations.wdl)
@@ -910,7 +928,7 @@ Outputs:
 - `subset_tsv`: Column-subset TSV.
 
 
-### [TransformAlleleType](../wdl/annotation_utils/TransformAlleleType.wdl)
+### [NormalizeAlleleTypes](../wdl/annotation_utils/NormalizeAlleleTypes.wdl)
 This utility reclassifies `allele_type` values and records the original type in a new `allele_subtype` field. Variants with `allele_type=dup` are tested for tandemness against their duplication source (from `INFO/ORIGIN`) using two criteria: size similarity between the insertion length and the ORIGIN region length must meet the `dup_size_similarity` threshold, and the insertion POS must fall within the ORIGIN region or within `dup_breakpoint_window` bases of its breakpoints. All get `allele_subtype=tandem_dup`; those passing keep `allele_type=dup`, while those failing are set to `allele_type=ins`. Variants with `allele_type` of `complex_dup`, `dup_interspersed`, `inv_dup`, `alu_ins`, `line_ins`, `sva_ins` or `numt` are set to `allele_type=ins`, and those with `alu_del`, `line_del` or `sva_del` are set to `allele_type=del`, each recording the original value in `allele_subtype`. REF/ALT/POS are never modified. Records with other `allele_type` values are passed through unchanged. Supports optional record-count sharding.
 
 Inputs:
@@ -924,6 +942,30 @@ Inputs:
 Outputs:
 - `transformed_vcf`: VCF with revised `allele_type`/`allele_subtype`.
 - `transformed_vcf_idx`: Index for `transformed_vcf`.
+
+
+### [ConvertVcfToBed](../wdl/annotation_utils/ConvertVcfToBed.wdl)
+This utility converts per-contig VCFs to one BED-like table with `svtk vcf2bed`. It can filter by variant length, rewrite selected INFO fields, convert records to insertion/deletion classes, shard large inputs, and control INFO, sample, filter, BND, CPX, compression, and output-extension behavior.
+
+Inputs:
+- `Array[File] vcfs`: Per-contig VCFs to convert.
+- `Array[File] vcf_idxs`: Indexes for `vcfs`.
+- `Array[String] contigs`: Contigs corresponding to `vcfs`.
+- `Int? records_per_shard`: Optional record count per conversion shard.
+- `Int? min_length`: Optional minimum absolute variant length.
+- `String length_field`: INFO field containing variant length (default `allele_length`).
+- `Boolean convert_to_ins_del`: Whether to reduce variant classes to insertions/deletions.
+- `Array[Array[String]]? switch_info_fields`: INFO-field/value rewrites applied before conversion.
+- `Array[String] info_columns`: INFO columns included in output (default `["ALL"]`).
+- `Boolean include_samples`: Whether to include sample columns (default `true`).
+- `Boolean include_filters`: Whether to include FILTER (default `true`).
+- `Boolean split_bnd`: Whether to split BND records (default `false`).
+- `Boolean split_cpx`: Whether to split complex records (default `false`).
+- `Boolean output_gz`: Whether to gzip output (default `false`).
+- `Boolean output_bed`: Whether to use a `.bed` extension instead of `.tsv` (default `false`).
+
+Outputs:
+- `bed`: Combined converted BED/TSV artifact.
 
 
 ## Tools
@@ -1013,7 +1055,7 @@ Outputs:
 - `hiphase_haplotagged_bam_idx`: Index for the haplotagged BAM (only when `run_haplotagging`).
 
 
-### [HiPhaseMerge](../wdl/tools/HiPhaseMerge.wdl)
+### [MergeHiPhaseCallsets](../wdl/tools/MergeHiPhaseCallsets.wdl)
 This tool merges per-sample HiPhase-phased VCFs into a cohort VCF on a per-contig basis, optionally also merging the TRGT tandem-repeat calls separately - fixing TRGT `END`/`AL` headers and propagating phase-set tags. It outputs the merged integrated VCF and an optional merged TRGT VCF.
 
 Inputs:
@@ -1163,7 +1205,7 @@ Outputs:
 - `mosdepth_regions_bed_csi`: Indexes for the windowed coverage BEDs.
 
 
-### [PALMER](../wdl/tools/PALMER.wdl)
+### [PALMERAssembly](../wdl/tools/PALMERAssembly.wdl)
 This workflow runs PALMER on a pair of aligned assembly haplotypes in order to generate MEI calls. It then convets the raw PALMER calls generated into a VCF, merges calls across the haplotypes to create a diploid VCF per haplotype and then finally integrates these into a final VCF containing multiple MEI types.
 
 Inputs:
@@ -1222,7 +1264,7 @@ Outputs:
 - `palmer_combined_vcf_idx`: Index for the combined VCF.
 
 
-### [PALMERMerge](../wdl/tools/PALMERMerge.wdl)
+### [MergePALMERCallsets](../wdl/tools/MergePALMERCallsets.wdl)
 This tool merges multiple PALMER MEI VCFs into a single VCF per contig and concatenates the result across contigs. It outputs the merged PALMER VCF.
 
 Inputs:

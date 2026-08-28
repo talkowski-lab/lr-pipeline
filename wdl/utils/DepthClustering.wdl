@@ -1,6 +1,7 @@
 version 1.0
 
 import "Structs.wdl"
+import "Helpers.wdl"
 
 workflow DepthClustering {
     input {
@@ -119,19 +120,33 @@ workflow DepthClustering {
         }
     }
 
-    call ConcatVCFs {
+    RuntimeAttr default_attr_concat_vcfs = object {
+        cpu_cores: 1,
+        mem_gb: 4,
+        disk_gb: ceil(size(GatkToSvtkVcf.svtk_vcf, "GB") * 3) + 50,
+        boot_disk_gb: 10,
+        preemptible_tries: 3,
+        max_retries: 1
+    }
+    RuntimeAttr concat_attr = select_first([runtime_attr_concat_vcfs, default_attr_concat_vcfs])
+
+    call Helpers.ConcatVcfs as ConcatVCFs {
         input:
             vcfs = GatkToSvtkVcf.svtk_vcf,
             vcf_idxs = GatkToSvtkVcf.svtk_vcf_index,
+            allow_overlaps = false,
+            naive = true,
+            no_version = true,
+            no_address = true,
             prefix = "~{prefix}-depth",
             docker = sv_base_mini_docker,
-            runtime_attr_override = runtime_attr_concat_vcfs
+            runtime_attr_override = concat_attr
     }
 
     output {
         File ploidy_table = CreatePloidyTableFromPed.ploidy_table
         File clustered_vcf = ConcatVCFs.concat_vcf
-        File clustered_vcf_index = ConcatVCFs.concat_vcf_index
+        File clustered_vcf_index = ConcatVCFs.concat_vcf_idx
     }
 }
 
@@ -347,49 +362,6 @@ task GatkToSvtkVcf {
         cpu_cores: 1,
         mem_gb: 4,
         disk_gb: ceil(size(vcf, "GB")) * 2 + 32,
-        boot_disk_gb: 10,
-        preemptible_tries: 3,
-        max_retries: 1
-    }
-    RuntimeAttr runtime_attr = select_first([runtime_attr_override, default_attr])
-    runtime {
-        cpu: select_first([runtime_attr.cpu_cores, default_attr.cpu_cores])
-        memory: select_first([runtime_attr.mem_gb, default_attr.mem_gb]) + " GiB"
-        disks: "local-disk " + select_first([runtime_attr.disk_gb, default_attr.disk_gb]) + " HDD"
-        bootDiskSizeGb: select_first([runtime_attr.boot_disk_gb, default_attr.boot_disk_gb])
-        docker: docker
-        preemptible: select_first([runtime_attr.preemptible_tries, default_attr.preemptible_tries])
-        maxRetries: select_first([runtime_attr.max_retries, default_attr.max_retries])
-        noAddress: true
-    }
-}
-
-task ConcatVCFs {
-    input {
-        Array[File] vcfs
-        Array[File] vcf_idxs
-        String prefix
-        String docker
-        RuntimeAttr? runtime_attr_override
-    }
-
-    command <<<
-        set -euo pipefail
-
-        bcftools concat --no-version --naive --output-type z --file-list '~{write_lines(vcfs)}' \
-            --output '~{prefix}.vcf.gz'
-        tabix '~{prefix}.vcf.gz'
-    >>>
-
-    output {
-        File concat_vcf = "~{prefix}.vcf.gz"
-        File concat_vcf_index = "~{prefix}.vcf.gz.tbi"
-    }
-
-    RuntimeAttr default_attr = object {
-        cpu_cores: 1,
-        mem_gb: 4,
-        disk_gb: ceil(size(vcfs, "GB") * 3) + 50,
         boot_disk_gb: 10,
         preemptible_tries: 3,
         max_retries: 1

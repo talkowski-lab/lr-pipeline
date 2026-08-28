@@ -2,21 +2,6 @@
 
 ## Annotation Utilities
 
-### [CombineCohortTRs](../wdl/annotation_utils/CombineCohortTRs.wdl)
-This utility combines tandem-repeat VCFs from multiple callers into a single cohort VCF. After checking sample consistency across the inputs, it sets missing filters to pass, tags each caller's calls, assigns TR identifiers, deduplicates overlapping variants and priority-merges the callers on a per-contig basis. It outputs the merged cohort TR VCF.
-
-Inputs:
-- `Array[File] tr_vcfs`: Tandem-repeat VCFs to combine, one per caller.
-- `Array[File] tr_vcf_idxs`: Indexes for `tr_vcfs`.
-- `Array[String] tr_callers`: Caller name for each VCF in `tr_vcfs`, used for tagging and merge priority.
-- `Array[String] contigs`: Contigs to process.
-- `Array[String] sample_ids`: Sample IDs expected across all input VCFs.
-
-Outputs:
-- `trgt_merged_vcf`: Merged cohort tandem-repeat VCF.
-- `trgt_merged_vcf_idx`: Index for the merged VCF.
-
-
 ### [CombineVcfsAcrossContigs](../wdl/annotation_utils/CombineVcfsAcrossContigs.wdl)
 This utility concatenates a set of per-contig VCFs into a single VCF, optionally dropping genotypes in the process. It outputs the combined VCF.
 
@@ -31,7 +16,7 @@ Outputs:
 - `concat_vcf_idx`: Index for the combined VCF.
 
 
-### [CompareBAMs](../wdl/annotation_utils/CompareBAMs.wdl)
+### [CompareBams](../wdl/annotation_utils/CompareBams.wdl)
 This utility compares two unaligned BAMs by read identity, sequence length, and sequence content. It reports total read counts, the number of reads whose IDs match across BAMs, the number of matched-ID pairs with identical sequence lengths, and the number with identical sequences (compared via MD5). It also emits a per-read TSV covering all reads from both files.
 
 Inputs:
@@ -60,7 +45,7 @@ Outputs:
 - `biallelic_vcf_idx`: Index for the biallelic VCF.
 
 
-### [CreatePEDAncestry](../wdl/annotation_utils/CreatePEDAncestry.wdl)
+### [CreatePedigreeAndAncestryFiles](../wdl/annotation_utils/CreatePedigreeAndAncestryFiles.wdl)
 This utility generates a minimal pedigree file and an ancestry-assignment file from a list of sample IDs and their sexes. It outputs both files.
 
 Inputs:
@@ -84,7 +69,7 @@ Outputs:
 - `String gcs_path`: GCS URI of the transferred file.
 
 
-### [DownloadConvertBAM](../wdl/annotation_utils/DownloadConvertBAM.wdl)
+### [CreateFastqFromS3Reads](../wdl/annotation_utils/CreateFastqFromS3Reads.wdl)
 This utility downloads BAM or FASTQ files from S3 in parallel, converts BAMs to FASTQ format preserving methylation tags, and merges all outputs into a single FASTQ.gz file.
 
 Inputs:
@@ -148,7 +133,7 @@ Outputs:
 
 
 ### [GQCalculateCounts](../wdl/annotation_utils/GQCalculateCounts.wdl)
-This utility computes GQ-stratified count tables used to derive GQ filtering cutoffs, from both a trio de novo analysis and a truth-set concordance analysis. Counts are bucketed by variant type, allele-length bin and supporting caller. For structural variants (`abs(allele_length) >= 50`), the `CALLER` column expands each call by its supporting callers using the `EV`/`BEV` FORMAT fields written by [SVAddRawCallers](#svaddrawcallers): `kanpig`-backed calls are recorded under `CALLER=kanpig` with their own GQ, calls backed by other callers are split into one row per caller carrying an allelic depth in `EV` (with a per-caller GQ recomputed from that depth), and calls with no `BEV` are recorded with a blank `CALLER`. It outputs one TSV per analysis.
+This utility computes GQ-stratified count tables used to derive GQ filtering cutoffs, from both a trio de novo analysis and a truth-set concordance analysis. Counts are bucketed by variant type, allele-length bin and supporting caller. For structural variants (`abs(allele_length) >= 50`), the `CALLER` column expands each call by its supporting callers using the `EV`/`BEV` FORMAT fields written by [AnnotateSvCallerSupport](#annotatesvcallersupport): `kanpig`-backed calls are recorded under `CALLER=kanpig` with their own GQ, calls backed by other callers are split into one row per caller carrying an allelic depth in `EV` (with a per-caller GQ recomputed from that depth), and calls with no `BEV` are recorded with a blank `CALLER`. It outputs one TSV per analysis.
 
 Inputs:
 - `Array[File] vcfs`: Cohort VCFs to analyze.
@@ -226,7 +211,7 @@ Outputs:
 - `merge_summary_tsv`: TSV summarizing the merge.
 
 
-### [ParseAbsoluteOrigin](../wdl/annotation_utils/ParseAbsoluteOrigin.wdl)
+### [NormalizeDuplicationOrigins](../wdl/annotation_utils/NormalizeDuplicationOrigins.wdl)
 This utility resolves the relative `ORIGIN` coordinates of duplications and NUMTs into absolute genomic coordinates and annotates them back onto the VCF. `ORIGIN` values prefixed with `flank_` encode coordinates relative to a flanking window and are converted to genome-absolute positions; values already in absolute form are kept as-is. When multiple comma-separated `ORIGIN` values are present - whether flank-relative, absolute, or mixed - each is processed individually and the resulting absolute values are written back in their original order. It outputs the VCF with absolute-origin annotations.
 
 Inputs:
@@ -239,7 +224,7 @@ Outputs:
 - `absolute_origin_vcf_idx`: Index for the annotated VCF.
 
 
-### [RenameInfoFields](../wdl/annotation_utils/RenameInfoFields.wdl)
+### [RenameVcfInfoFields](../wdl/annotation_utils/RenameVcfInfoFields.wdl)
 This utility renames INFO fields in a VCF, replacing each given field string and its header description with a new one, optionally sharding by record count. It outputs the VCF with renamed INFO fields.
 
 Inputs:
@@ -331,7 +316,7 @@ Outputs:
 - `subset_vcf_idxs`: Indexes for the per-sample VCFs.
 
 
-### [SVAddRawCallers](../wdl/annotation_utils/SVAddRawCallers.wdl)
+### [AnnotateSvCallerSupport](../wdl/annotation_utils/AnnotateSvCallerSupport.wdl)
 This utility annotates each SV in a cohort VCF with the set of raw callers that independently support it. For every sample it matches the cohort calls against that sample's per-caller VCFs (Kanpig, cuteSV, Sniffles, Delly, pbsv, Sawfish, dipcall and hapdiff) using reciprocal-overlap, size- and sequence-similarity and a breakpoint window, then merges the support back into the cohort VCF. It outputs the annotated VCF and a TSV of per-caller match counts.
 
 Inputs:
@@ -366,23 +351,6 @@ Outputs:
 - `sv_added_vcf`: Cohort VCF annotated with raw-caller support.
 - `sv_added_vcf_idx`: Index for the annotated VCF.
 - `sv_match_counts_tsv`: TSV of per-caller match counts.
-
-
-### [VcfToBed](../wdl/annotation_utils/VcfToBed.wdl)
-This utility converts one or more VCFs to BED format using svtk, optionally including sample and filter columns and splitting BND and complex records, with optional record-count sharding. It outputs the concatenated BED.
-
-Inputs:
-- `Array[File] vcfs`: VCFs to convert.
-- `Array[File] vcf_idxs`: Indexes for `vcfs`.
-- `Array[String] contigs`: Contigs to process.
-- `Int? records_per_shard`: Number of variants to keep within a single shard during conversion.
-- `Boolean include_samples`: Whether to include the per-sample columns (default `true`).
-- `Boolean include_filters`: Whether to include the filter column (default `true`).
-- `Boolean split_bnd`: Whether to split BND records (default `false`).
-- `Boolean split_cpx`: Whether to split complex records (default `false`).
-
-Outputs:
-- `bed`: Concatenated BED representation of the input VCFs.
 
 
 ## Tools

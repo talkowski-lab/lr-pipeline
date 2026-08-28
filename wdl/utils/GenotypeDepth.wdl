@@ -1,6 +1,7 @@
 version 1.0
 
 import "Structs.wdl"
+import "Helpers.wdl"
 
 workflow GenotypeDepth {
     input {
@@ -63,18 +64,32 @@ workflow GenotypeDepth {
         }
     }
 
-    call ConcatVCFs {
+    RuntimeAttr default_attr_concat_vcfs = object {
+        cpu_cores: 1,
+        mem_gb: 4,
+        disk_gb: ceil(size(GenotypeSVs.out, "GB") * 3) + 50,
+        boot_disk_gb: 10,
+        preemptible_tries: 3,
+        max_retries: 1
+    }
+    RuntimeAttr concat_attr = select_first([runtime_attr_concat_vcfs, default_attr_concat_vcfs])
+
+    call Helpers.ConcatVcfs as ConcatVCFs {
         input:
             vcfs = GenotypeSVs.out,
             vcf_idxs = GenotypeSVs.out_index,
+            allow_overlaps = true,
+            naive = false,
+            no_version = true,
+            no_address = true,
             prefix = batch_id + ".genotype_batch",
             docker = sv_base_mini_docker,
-            runtime_attr_override = runtime_attr_concat_vcfs
+            runtime_attr_override = concat_attr
     }
 
     output {
         File genotyped_depth_vcf = ConcatVCFs.concat_vcf
-        File genotyped_depth_vcf_index = ConcatVCFs.concat_vcf_index
+        File genotyped_depth_vcf_index = ConcatVCFs.concat_vcf_idx
         File genotyping_rd_table = TrainSVGenotyping.rd_table
     }
 }
@@ -213,48 +228,5 @@ task GenotypeSVs {
         docker: docker
         preemptible: select_first([runtime_attr.preemptible_tries, default_attr.preemptible_tries])
         maxRetries: select_first([runtime_attr.max_retries, default_attr.max_retries])
-    }
-}
-
-task ConcatVCFs {
-    input {
-        Array[File] vcfs
-        Array[File] vcf_idxs
-        String prefix
-        String docker
-        RuntimeAttr? runtime_attr_override
-    }
-
-    command <<<
-        set -euo pipefail
-
-        bcftools concat --no-version --allow-overlaps --output-type z --output '~{prefix}.vcf.gz' \
-            --file-list '~{write_lines(vcfs)}'
-        tabix '~{prefix}.vcf.gz'
-    >>>
-
-    output {
-        File concat_vcf = "~{prefix}.vcf.gz"
-        File concat_vcf_index = "~{prefix}.vcf.gz.tbi"
-    }
-
-    RuntimeAttr default_attr = object {
-        cpu_cores: 1,
-        mem_gb: 4,
-        disk_gb: ceil(size(vcfs, "GB") * 3) + 50,
-        boot_disk_gb: 10,
-        preemptible_tries: 3,
-        max_retries: 1
-    }
-    RuntimeAttr runtime_attr = select_first([runtime_attr_override, default_attr])
-    runtime {
-        cpu: select_first([runtime_attr.cpu_cores, default_attr.cpu_cores])
-        memory: select_first([runtime_attr.mem_gb, default_attr.mem_gb]) + " GiB"
-        disks: "local-disk " + select_first([runtime_attr.disk_gb, default_attr.disk_gb]) + " HDD"
-        bootDiskSizeGb: select_first([runtime_attr.boot_disk_gb, default_attr.boot_disk_gb])
-        docker: docker
-        preemptible: select_first([runtime_attr.preemptible_tries, default_attr.preemptible_tries])
-        maxRetries: select_first([runtime_attr.max_retries, default_attr.max_retries])
-        noAddress: true
     }
 }

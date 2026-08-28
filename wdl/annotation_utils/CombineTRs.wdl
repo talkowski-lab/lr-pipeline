@@ -11,7 +11,7 @@ workflow CombineTRs {
         Array[String] contigs
         String prefix
 
-        String sample_id
+        Array[String] sample_ids
 
         String utils_docker
 
@@ -29,7 +29,7 @@ workflow CombineTRs {
         input:
             vcfs = tr_vcfs,
             vcf_idxs = tr_vcf_idxs,
-            sample_ids = [sample_id],
+            sample_ids = sample_ids,
             docker = utils_docker,
             runtime_attr_override = runtime_attr_check_sample_consistency
     }
@@ -106,8 +106,8 @@ workflow CombineTRs {
     }
 
     output {
-        File trgt_combined_vcf = ConcatVcfs.concat_vcf
-        File trgt_combined_vcf_idx = ConcatVcfs.concat_vcf_idx
+        File combined_tr_vcf = ConcatVcfs.concat_vcf
+        File combined_tr_vcf_idx = ConcatVcfs.concat_vcf_idx
     }
 }
 

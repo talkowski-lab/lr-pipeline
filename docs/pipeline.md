@@ -37,24 +37,24 @@ The three callsets were integrated and phased. Steps were run as described below
 ### TR Callset Integration
 Concurrently with VCF integration, the per-sample TRGT callsets were processed:
 - **[CombineTRs](../wdl/annotation_utils/CombineTRs.wdl)** ([docs](workflows.md#combinetrs)) - deduplicated overlapping loci across the TRExplorer and Vamos catalogs per sample.
-- **[AddEndTRs](../wdl/annotation_utils/AddEndTRs.wdl)** ([docs](workflows.md#addendtrs)) - added the `END` INFO field required by `trgt merge` downstream.
+- **[AnnotateTREndTags](../wdl/annotation_utils/AnnotateTREndTags.wdl)** ([docs](workflows.md#annotatetrendtags)) - added the `END` INFO field required by `trgt merge` downstream.
 
 ### Phasing
 HiPhase was run twice per sample - once with the TRGT VCF and once without - then both runs were merged:
 1. **[HiPhase](../wdl/tools/HiPhase.wdl)** ([docs](workflows.md#hiphase)) - jointly phased per-sample SNV/indel, SV and (for the TRGT run) TRGT VCFs against the aligned reads.
-2. **[HiPhaseMerge](../wdl/tools/HiPhaseMerge.wdl)** ([docs](workflows.md#hiphasemerge)) - merged per-sample phased VCFs into a cohort phased VCF; when `merge_trgt` is enabled, also merged TRGT calls separately.
+2. **[MergeHiPhaseCallsets](../wdl/tools/MergeHiPhaseCallsets.wdl)** ([docs](workflows.md#mergehiphasecallsets)) - merged per-sample phased VCFs into a cohort phased VCF; when `merge_trgt` is enabled, also merged TRGT calls separately.
 3. **[FillPhasedGenotypes](../wdl/annotation_utils/FillPhasedGenotypes.wdl)** ([docs](workflows.md#fillphasedgenotypes)) - populated the cohort integrated VCF with phased genotypes from the HiPhase output.
 4. **[IntegrateTRs](../wdl/annotation_utils/IntegrateTRs.wdl)** ([docs](workflows.md#integratetrs)) - combined the TRGT VCF with the base phased VCF, flagging overlapping variants.
 
 ### Backbone Phasing
 Backbone phasing was used to extend HiPhase phase blocks by linking them using a phased truth set - the HGSVC2024v1.0 combined truth VCF and the HPRC v2.0 pangenome ("wave") VCF:
 1. **[BackbonePhase](../wdl/tools/BackbonePhase.wdl)** ([docs](workflows.md#backbonephase)) - transferred phasing from a set of truth base VCFs onto the target cohort VCF to connect phase blocks.
-2. **[MergeBackbonePhased](../wdl/annotation_utils/MergeBackbonePhased.wdl)** ([docs](workflows.md#mergebackbonephased)) - merged the backbone-phased VCFs into the final cohort phased VCF.
+2. **[FillBackbonePhasedGenotypes](../wdl/annotation_utils/FillBackbonePhasedGenotypes.wdl)** ([docs](workflows.md#fillbackbonephasedgenotypes)) - filled remaining unphased genotypes from the no-TRGT backbone-phased VCF.
 
 ### TRGT Downstream Processing
 Concurrently with phasing, the merged TRGT VCF was processed for downstream use:
 - **[TRGTLPS](../wdl/tools/TRGTLPS.wdl)** ([docs](workflows.md#trgtlps)) - computed the longest polymer sequence (LPS) per TRGT locus per sample; the resulting TSV is used downstream in allele frequency annotation.
-- **[GenerateTRGTJson](../wdl/annotation_utils/GenerateTRGTJson.wdl)** ([docs](workflows.md#generatetrgtjson)) - generated per-locus allele-frequency histograms for the TR browser.
+- **[CreateTRGTHistograms](../wdl/annotation_utils/CreateTRGTHistograms.wdl)** ([docs](workflows.md#createtrgthistograms)) - generated per-locus allele-frequency histograms for the TR browser.
 
 
 ---
@@ -97,6 +97,6 @@ The following workflows were run concurrently on the allele-type-annotated VCF:
 
 ### Downstream Integration and Post-Processing
 1. **[AnnotateVcf](../wdl/annotation_utils/AnnotateVcf.wdl)** ([docs](workflows.md#annotatevcf)) _(AnnotateVcf_Downstream)_ - integrated all annotation TSVs into the VCF as INFO fields.
-2. **[PostProcess](../wdl/annotation_utils/PostProcess.wdl)** ([docs](workflows.md#postprocess)) - applied final genotype updates using phased genotypes from the backbone-phased VCF, normalized ploidy, pruned MEIs, flagged homopolymer TRs and filtered singletons.
+2. **[PostprocessCallset](../wdl/annotation_utils/PostprocessCallset.wdl)** ([docs](workflows.md#postprocesscallset)) - applied final genotype updates using phased genotypes from the backbone-phased VCF, normalized ploidy, pruned MEIs, flagged homopolymer TRs and filtered singletons.
 3. **[AnnotateAF](https://github.com/broadinstitute/gatk-sv/blob/kj_project_gnomad_lr/wdl/AnnotateAF.wdl)** ([docs](workflows.md#annotateaf)) - annotated allele frequencies using sample ancestries and the TRGT LPS TSV.
-4. **[TransformAlleleType](../wdl/annotation_utils/TransformAlleleType.wdl)** ([docs](workflows.md#transformalleletype)) - reclassified `allele_type` values, keeping tandem duplications as `dup` and demoting other duplications, mobile element insertions and NUMTs to `ins` (or mobile element deletions to `del`) while recording their original type in `allele_subtype`.
+4. **[NormalizeAlleleTypes](../wdl/annotation_utils/NormalizeAlleleTypes.wdl)** ([docs](workflows.md#normalizealleletypes)) - reclassified `allele_type` values, keeping tandem duplications as `dup` and demoting other duplications, mobile element insertions and NUMTs to `ins` (or mobile element deletions to `del`) while recording their original type in `allele_subtype`.
