@@ -690,11 +690,11 @@ task CollectModelQualityMetrics {
             gcnv_model_tar=${gcnv_model_tar_array[$index]}
             mkdir MODEL_$index
             tar xzf $gcnv_model_tar -C MODEL_$index
-            ard_file=MODEL_$index/mu_ard_u_log__.tsv
+            ard_file="MODEL_$index/mu_ard_u_interval__.tsv"
 
-            #check whether all values for ARD components are negative
-            NUM_POSITIVE_VALUES=$(awk '{ if (index($0, "@") == 0) {if ($1 > 0.0) {print $1} }}' MODEL_$index/mu_ard_u_log__.tsv | wc -l)
-            if [ $NUM_POSITIVE_VALUES -eq 0 ]; then
+            # Check whether all ARD values are less than or equal to one.
+            NUM_ARD_VALUES_ABOVE_ONE=$(awk '!/^@/ && $1 != "VALUE_0" { ard = 1e10 / (1 + exp(-$1)); if (ard > 1.0) count++ } END { print count + 0 }' "$ard_file")
+            if [ $NUM_ARD_VALUES_ABOVE_ONE -eq 0 ]; then
                 qc_status="ALL_PRINCIPAL_COMPONENTS_USED"
                 break
             fi
