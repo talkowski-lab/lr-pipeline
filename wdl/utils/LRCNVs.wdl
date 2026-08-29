@@ -943,10 +943,10 @@ task GermlineCNVCallerCohortMode {
 
     RuntimeAttr default_attr = object {
         cpu_cores: 8,
-        mem_gb: 7,
+        mem_gb: 12,
         disk_gb: ceil((size(read_count_files, "GB") + size([contig_ploidy_calls_tar, intervals], "GB")) * 2) + 50,
         boot_disk_gb: 10,
-        preemptible_tries: 1,
+        preemptible_tries: 0,
         max_retries: 0
     }
     RuntimeAttr runtime_attr = select_first([runtime_attr_override, default_attr])
