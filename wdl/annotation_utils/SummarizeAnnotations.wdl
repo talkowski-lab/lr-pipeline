@@ -557,7 +557,7 @@ def get_info_gene_names(record, key):
                 genes.add(gene_name)
     return genes
 
-def get_vep_field_indices(header):
+def get_vep_field_idx(header):
     if "vep" not in header.info:
         return {}
     description = header.info["vep"].description or ""
@@ -567,8 +567,8 @@ def get_vep_field_indices(header):
     fields = [field.strip() for field in match.group(1).strip().rstrip(".").split("|")]
     return {field: idx for idx, field in enumerate(fields)}
 
-def extract_all_consequences(record, vep_field_indices):
-    consequence_idx = vep_field_indices.get("Consequence")
+def extract_all_consequences(record, vep_field_idx):
+    consequence_idx = vep_field_idx.get("Consequence")
     if consequence_idx is None or "vep" not in record.info:
         return set()
     annotations = get_info_value(record, "vep")
@@ -635,10 +635,10 @@ def determine_af_column(allele_type, af_value, af_bins, af_labels):
     if allele_type == "del": return f"DEL [{af_label}]"
     return f"Other [{af_label}]"
 
-def determine_row_weights(record, allele_type_value, allele_subtype_value, vep_field_indices):
+def determine_row_weights(record, allele_type_value, allele_subtype_value, vep_field_idx):
     allele_type = (allele_type_value or "").lower()
     subtype = (allele_subtype_value or "").lower()
-    consequences = extract_all_consequences(record, vep_field_indices)
+    consequences = extract_all_consequences(record, vep_field_idx)
     vep_label = determine_vep_label(consequences)
     svannotate_label = determine_svannotate_label(record)
 
@@ -797,7 +797,7 @@ sample_table = init_table(COLUMN_BUCKETS_SUMMARY)
 allele_table = init_table(COLUMN_BUCKETS_SUMMARY)
 
 vcf_in = pysam.VariantFile(VCF_PATH)
-vep_field_indices = get_vep_field_indices(vcf_in.header)
+vep_field_idx = get_vep_field_idx(vcf_in.header)
 sample_count = len(vcf_in.header.samples)
 
 with open(SAMPLE_COUNT_OUTPUT, "w") as handle:
@@ -852,7 +852,7 @@ with open(VARIANT_LIST_OUTPUT, 'w', newline='') as vl_handle:
 
             column_summary = determine_column(a_type, a_length, LENGTH_BINS_SUMMARY, SIZE_LABELS_SUMMARY)
             column_plotting = determine_column(a_type, a_length, LENGTH_BINS_PLOTTING, SIZE_LABELS_PLOTTING) if CREATE_PLOTTING else None
-            row_weights = determine_row_weights(record, a_type, a_sub, vep_field_indices)
+            row_weights = determine_row_weights(record, a_type, a_sub, vep_field_idx)
 
             tr_status = "TR" if has_info(record, "TR_ENVELOPED") else "Not TR"
             is_db_or_gnomad_matched = has_info(record, "dbSNP_ID") or has_info(record, "gnomAD_V4_match_ID")

@@ -56,7 +56,7 @@ task CombineVCFs {
         Boolean sort_after_merge
         Boolean naive=true
         Boolean allow_overlaps = false
-        Array[File]? vcf_indices
+        Array[File]? vcf_idx
         RuntimeAttr? runtime_attr_override
     }
 

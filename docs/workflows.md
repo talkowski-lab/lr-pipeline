@@ -318,9 +318,9 @@ Inputs:
 - `File exons_bed`: From [references](references.md).
 - `File repeats_bed`: From [references](references.md).
 - `File ref_fa`: From [references](references.md).
-- `Array[File] ref_fa_indices`: From [references](references.md).
+- `Array[File] ref_fa_idx`: From [references](references.md).
 - `File mei_fa`: From [references](references.md).
-- `Array[File] mei_fa_indices`: From [references](references.md).
+- `Array[File] mei_fa_idx`: From [references](references.md).
 
 Outputs:
 - `annotations_tsv_svan`: TSV of SVAN annotations.
@@ -361,7 +361,7 @@ Inputs:
 - `Int mm2_threshold`: Minimum minimap2 alignment score to flag an insertion.
 - `Float cov_threshold`: Minimum alignment coverage to flag an insertion.
 - `File ref_fa`: From [references](references.md).
-- `Array[File] ref_bwa_indices`: BWA indices for `ref_fa`, from [references](references.md).
+- `Array[File] ref_bwa_idx`: BWA indices for `ref_fa`, from [references](references.md).
 
 Outputs:
 - `annotations_tsv_remap`: TSV of insertion remap results.
@@ -582,7 +582,7 @@ This utility builds a binned coverage matrix across a cohort from per-sample mos
 
 Inputs:
 - `Array[File] mosdepth_bed_files`: Per-sample mosdepth coverage BED files.
-- `Array[File] mosdepth_bed_indices`: Indexes for `mosdepth_bed_files`.
+- `Array[File] mosdepth_bed_idx`: Indexes for `mosdepth_bed_files`.
 - `Array[String] contigs`: Contigs over which to compute coverage.
 - `Int window_size`: Size, in bp, of each genomic window.
 - `Int bin_size`: Size, in bp, of each coverage bin within a window.
@@ -641,7 +641,7 @@ This utility produces a binned read-counts file for a single sample from its per
 
 Inputs:
 - `Array[File] mosdepth_bed_files`: Per-contig mosdepth coverage BED files for the sample.
-- `Array[File] mosdepth_bed_indices`: Indexes for `mosdepth_bed_files`.
+- `Array[File] mosdepth_bed_idx`: Indexes for `mosdepth_bed_files`.
 - `Array[String] contigs`: Contigs over which to bin read counts.
 - `Int bin_size`: Size, in bp, of each read-count bin.
 - `String sample_id`: ID of the sample being processed.
@@ -1320,7 +1320,7 @@ Outputs:
 - `pav_results_tarball`: Tarball of the full PAV results directory.
 - `pav_log_tarball`: Tarball of the full PAV log directory.
 - `pav_vcfs`: Per-sample called VCFs.
-- `pav_vcf_indices`: Indexes for the per-sample VCFs.
+- `pav_vcf_idx`: Indexes for the per-sample VCFs.
 - `debug_sam`: Optional debug alignment file.
 - `debug_temp`: Optional debug intermediate files.
 

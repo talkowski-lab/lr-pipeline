@@ -70,14 +70,14 @@ with open(header_path, 'r') as f:
         if name:
             col_name_to_idx[name] = i + 5
 
-output_indices = [0, 1, 2, 3, 4]
+output_idx = [0, 1, 2, 3, 4]
 active_filters = {}
 for i, col_name in enumerate(cols_requested):
     if col_name not in col_name_to_idx:
         sys.stderr.write(f"Error: Column '{col_name}' not found in header file.\n")
         sys.exit(1)
     tsv_idx = col_name_to_idx[col_name]
-    output_indices.append(tsv_idx)
+    output_idx.append(tsv_idx)
 
     if i < len(filter_vals_list):
         allowed_values = filter_vals_list[i]
@@ -103,7 +103,7 @@ with open(tsv_path, 'r') as fin, open(out_path, 'w', newline='') as fout:
 
         if keep_row:
             out_row = []
-            for idx in output_indices:
+            for idx in output_idx:
                 if idx < len(row):
                     out_row.append(row[idx])
                 else:

@@ -459,7 +459,7 @@ def parse_callers(ev_value):
     return callers or None
 
 
-def assembly_only_singleton_alt_indices(record):
+def assembly_only_singleton_alt_idx(record):
     allele_counts = record.info.get("AC")
     if allele_counts is None:
         return []
@@ -496,11 +496,11 @@ def info_string(value):
     return str(value)
 
 
-def write_assembly_only_singleton_rows(record, alt_indices, tsv_writer):
-    if not alt_indices:
+def write_assembly_only_singleton_rows(record, alt_idx, tsv_writer):
+    if not alt_idx:
         return
     filters = ",".join(record.filter.keys()) if record.filter.keys() else "."
-    for alt_index in alt_indices:
+    for alt_index in alt_idx:
         variant_id = record.id or "{}-{}-{}-{}".format(
             record.chrom, record.pos, record.ref, record.alts[alt_index]
         )
@@ -561,7 +561,7 @@ def reassign_id_suffixes(buf):
             r.id = "{}_{}".format(base, i)
 
 
-def flush_buffer(buf, out_vcf, tsv_writer, assembly_alt_indices, reassign_suffixes, sort_records):
+def flush_buffer(buf, out_vcf, tsv_writer, assembly_alt_idx, reassign_suffixes, sort_records):
     def custom_sort_key(rec):
         al_val = get_scalar(rec.info.get("allele_length"))
         abs_al = abs(int(al_val)) if al_val is not None else 0
@@ -573,7 +573,7 @@ def flush_buffer(buf, out_vcf, tsv_writer, assembly_alt_indices, reassign_suffix
         buf.sort(key=custom_sort_key)
     for r in buf:
         out_vcf.write(r)
-        write_assembly_only_singleton_rows(r, assembly_alt_indices.pop(id(r), []), tsv_writer)
+        write_assembly_only_singleton_rows(r, assembly_alt_idx.pop(id(r), []), tsv_writer)
 
 
 sex_by_sample = parse_ped("~{default="NONE" ped}") if normalize_ploidy else {}
@@ -609,7 +609,7 @@ if transfer_genotypes:
     shared_samples &= set(transfer_reader.header.samples)
 
 buffer = []
-assembly_alt_indices = {}
+assembly_alt_idx = {}
 current_chrom = None
 current_pos = None
 
@@ -693,23 +693,23 @@ for record in base_reader:
         record.filter.add("SINGLE_READ_SUPPORT")
 
     # Flag singleton ALT alleles supported only by assembly-based callers
-    matching_assembly_alt_indices = []
+    matching_assembly_alt_idx = []
     if filter_assembly_only_singletons:
-        matching_assembly_alt_indices = assembly_only_singleton_alt_indices(record)
-        if matching_assembly_alt_indices:
+        matching_assembly_alt_idx = assembly_only_singleton_alt_idx(record)
+        if matching_assembly_alt_idx:
             record.filter.add("ASSEMBLY_ONLY_SINGLETON")
 
     if not sort_records and not reassign_suffixes:
         output_writer.write(record)
-        write_assembly_only_singleton_rows(record, matching_assembly_alt_indices, tsv_writer)
+        write_assembly_only_singleton_rows(record, matching_assembly_alt_idx, tsv_writer)
         continue
 
-    assembly_alt_indices[id(record)] = matching_assembly_alt_indices
+    assembly_alt_idx[id(record)] = matching_assembly_alt_idx
 
     # Buffer records sharing the exact same coordinate to sort and/or reassign ID suffixes
     if record.chrom != current_chrom or record.pos != current_pos:
         if buffer:
-            flush_buffer(buffer, output_writer, tsv_writer, assembly_alt_indices, reassign_suffixes, sort_records)
+            flush_buffer(buffer, output_writer, tsv_writer, assembly_alt_idx, reassign_suffixes, sort_records)
         buffer = [record]
         current_chrom = record.chrom
         current_pos = record.pos
@@ -717,7 +717,7 @@ for record in base_reader:
         buffer.append(record)
 
 if (sort_records or reassign_suffixes) and buffer:
-    flush_buffer(buffer, output_writer, tsv_writer, assembly_alt_indices, reassign_suffixes, sort_records)
+    flush_buffer(buffer, output_writer, tsv_writer, assembly_alt_idx, reassign_suffixes, sort_records)
 
 base_reader.close()
 output_writer.close()

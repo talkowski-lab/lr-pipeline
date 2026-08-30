@@ -947,26 +947,26 @@ task SubsetToPhaseSetAnchors {
             vcf_in.close()
 
             # determine which record indices are anchors
-            keep_indices = set()
+            keep_idx = set()
 
             for sample, ps_blocks in sample_ps_variants.items():
                 for ps, variants in ps_blocks.items():
                     # keep all variants meeting min_af_common threshold
                     common_in_block = [idx for idx, af in variants if af >= min_af_common]
                     if common_in_block:
-                        keep_indices.update(common_in_block)
+                        keep_idx.update(common_in_block)
                     else:
                         # no common variant in this block: keep the highest-AF variant
                         best_idx = max(variants, key=lambda x: x[1])[0]
-                        keep_indices.add(best_idx)
+                        keep_idx.add(best_idx)
 
             # write output, preserving original order
             vcf_out = pysam.VariantFile(output_vcf, "w", header=records[0].header if records else pysam.VariantFile(input_vcf, "r").header)
             for idx, rec in enumerate(records):
-                if idx in keep_indices:
+                if idx in keep_idx:
                     vcf_out.write(rec)
             vcf_out.close()
-            print(f"Retained {len(keep_indices)} / {len(records)} variants as phase-set anchors")
+            print(f"Retained {len(keep_idx)} / {len(records)} variants as phase-set anchors")
 
         subset_to_phase_set_anchors("~{vcf}", "anchors.unsorted.vcf", ~{min_af_common})
 

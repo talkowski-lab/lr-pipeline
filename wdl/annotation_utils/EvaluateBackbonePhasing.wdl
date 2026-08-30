@@ -346,14 +346,14 @@ def summarize(points):
     switch_error_count = 0
     flip_error_count = 0
     status_by_index = ["XC" if state == 1 else "CN" for state in states]
-    switch_indices = [idx for idx in range(1, matched_count) if states[idx] != states[idx - 1]]
-    flip_indices = set()
+    switch_idx = [idx for idx in range(1, matched_count) if states[idx] != states[idx - 1]]
+    flip_idx = set()
     idx = 0
-    while idx < len(switch_indices):
-        current_index = switch_indices[idx]
-        if idx + 1 < len(switch_indices) and switch_indices[idx + 1] == current_index + 1:
-            flip_indices.add(current_index)
-            flip_indices.add(current_index + 1)
+    while idx < len(switch_idx):
+        current_index = switch_idx[idx]
+        if idx + 1 < len(switch_idx) and switch_idx[idx + 1] == current_index + 1:
+            flip_idx.add(current_index)
+            flip_idx.add(current_index + 1)
             flip_error_count += 1
             idx += 2
         else:
@@ -361,7 +361,7 @@ def summarize(points):
             switch_error_count += 1
             idx += 1
 
-    for flip_index in flip_indices:
+    for flip_index in flip_idx:
         status_by_index[flip_index] = "FL"
 
     for idx, (_pos, _state, record_key) in enumerate(points):

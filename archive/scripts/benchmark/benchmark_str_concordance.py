@@ -45,8 +45,8 @@ def build_vamos_sequence(record, sample_name, ref_fa=None):
         if allele_idx is None:
             continue
         try:
-            motif_indices = [int(x) for x in alt_haps[allele_idx - 1].split("-")]
-            sequences.append("".join(motifs[i] for i in motif_indices).upper())
+            motif_idx = [int(x) for x in alt_haps[allele_idx - 1].split("-")]
+            sequences.append("".join(motifs[i] for i in motif_idx).upper())
         except BaseException:
             pass
     return tuple(sequences)
@@ -54,7 +54,7 @@ def build_vamos_sequence(record, sample_name, ref_fa=None):
 
 def build_trgt_sequence(record, sample_name, ref_fa=None):
     sequences = []
-    for allele_idx in record.samples[sample_name].allele_indices:
+    for allele_idx in record.samples[sample_name]["GT"]:
         if allele_idx is None:
             continue
         seq = str(record.ref) if allele_idx == 0 else str(record.alts[allele_idx - 1])
@@ -197,7 +197,7 @@ def get_non_ref_counts(
     trgt_h1_nonref = False
     for k in trgt_keys:
         rec = trgt_records[k]
-        gt = rec.samples[trgt_sample].allele_indices
+        gt = rec.samples[trgt_sample]["GT"]
         if len(gt) > 0 and gt[0] is not None and gt[0] > 0:
             trgt_h0_nonref = True
         if len(gt) > 1 and gt[1] is not None and gt[1] > 0:

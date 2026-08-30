@@ -8,7 +8,7 @@ workflow AnnotateTruvariRemap {
         File vcf
         File vcf_idx
         File ref_fa
-        Array[File] ref_bwa_indices
+        Array[File] ref_bwa_idx
         Array[String] contigs
         String prefix
 
@@ -71,7 +71,7 @@ workflow AnnotateTruvariRemap {
                     mm2_threshold = mm2_threshold,
                     cov_threshold = cov_threshold,
                     ref_fa = ref_fa,
-                    ref_bwa_indices = ref_bwa_indices,
+                    ref_bwa_idx = ref_bwa_idx,
                     prefix = "~{prefix}.~{contig}.remapped.shard_~{i}",
                     docker = remap_docker,
                     runtime_attr_override = runtime_attr_ins_remap
@@ -117,7 +117,7 @@ task InsRemap {
         Int mm2_threshold
         Float cov_threshold
         File ref_fa
-        Array[File] ref_bwa_indices
+        Array[File] ref_bwa_idx
         String prefix
         String docker
         RuntimeAttr? runtime_attr_override
@@ -132,7 +132,7 @@ task InsRemap {
 
         mkdir ref_files
         mv ~{ref_fa} ref_files/
-        for x in ~{sep=' ' ref_bwa_indices}; do
+        for x in ~{sep=' ' ref_bwa_idx}; do
             mv $x ref_files/
         done
 
@@ -162,7 +162,7 @@ task InsRemap {
     RuntimeAttr default_attr = object {
         cpu_cores: 4,
         mem_gb: 16,
-        disk_gb: 2 * ceil(size(vcf, "GB") + size(ref_fa, "GB") + size(ref_bwa_indices, "GB")) + 25,
+        disk_gb: 2 * ceil(size(vcf, "GB") + size(ref_fa, "GB") + size(ref_bwa_idx, "GB")) + 25,
         boot_disk_gb: 10,
         preemptible_tries: 1,
         max_retries: 0

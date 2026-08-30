@@ -33,7 +33,7 @@ workflow PAV {
         File pav_results_tarball = CallPAV.results_tar
         File pav_log_tarball = CallPAV.log_tar
         Array[File] pav_vcfs = CallPAV.vcfs
-        Array[File] pav_vcf_indices = CallPAV.vcf_indices
+        Array[File] pav_vcf_idx = CallPAV.vcf_idx
 
         File? debug_sam = CallPAV.debug_sam
         Array[File]? debug_temp = CallPAV.debug_temp
@@ -118,7 +118,7 @@ CODE
         File results_tar = "~{prefix}.pav_results.tar.gz"
         File log_tar = "~{prefix}.pav_log.tar.gz"
         Array[File] vcfs = glob("*.vcf.gz")
-        Array[File] vcf_indices = glob("*.vcf.gz.csi")
+        Array[File] vcf_idx = glob("*.vcf.gz.csi")
 
         File? debug_sam = "temp/HG00733/align/trim-none/align_qry_mat.sam.gz"
         Array[File]? debug_temp = glob("temp/**/*")

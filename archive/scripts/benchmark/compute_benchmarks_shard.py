@@ -140,10 +140,10 @@ def main():
     common_categories = set(eval_vep_fields) & set(truth_vep_fields)
     common_categories = {cat for cat in common_categories if cat not in skip_categories}
 
-    eval_indices = {
+    eval_idx = {
         i: cat for i, cat in enumerate(eval_vep_fields) if cat in common_categories
     }
-    truth_indices = {
+    truth_idx = {
         i: cat for i, cat in enumerate(truth_vep_fields) if cat in common_categories
     }
     af_rows = []
@@ -185,8 +185,8 @@ def main():
                     )
 
         # Process VEP annotations
-        eval_ann = extract_vep_annotations(eval_info, eval_vep_key, eval_indices)
-        truth_ann = extract_vep_annotations(truth_info, truth_vep_key, truth_indices)
+        eval_ann = extract_vep_annotations(eval_info, eval_vep_key, eval_idx)
+        truth_ann = extract_vep_annotations(truth_info, truth_vep_key, truth_idx)
         for cat in common_categories:
             eval_val = eval_ann.get(cat, "N/A")
             truth_val = truth_ann.get(cat, "N/A")

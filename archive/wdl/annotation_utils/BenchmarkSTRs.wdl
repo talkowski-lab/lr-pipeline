@@ -6,7 +6,7 @@ workflow BenchmarkSTRs {
     input {
         Array[String] sample_ids
         Array[File] trgt_vcfs
-        Array[File] trgt_vcf_indices
+        Array[File] trgt_vcf_idx
         File vamos_vcf
         File vamos_vcf_index
         File ref_fa
@@ -26,7 +26,7 @@ workflow BenchmarkSTRs {
     scatter (idx in range(length(sample_ids))) {
         String sample_id = sample_ids[idx]
         File trgt_vcf = trgt_vcfs[idx]
-        File trgt_vcf_index = trgt_vcf_indices[idx]
+        File trgt_vcf_index = trgt_vcf_idx[idx]
         
         call SubsetAndReheaderVamos {
             input:

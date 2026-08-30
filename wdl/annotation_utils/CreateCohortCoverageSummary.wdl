@@ -6,7 +6,7 @@ import "../utils/Helpers.wdl"
 workflow CreateCohortCoverageSummary {
     input {
         Array[File] mosdepth_bed_files
-        Array[File] mosdepth_bed_indices
+        Array[File] mosdepth_bed_idx
         File ref_fai
         Array[String] contigs
         String prefix
@@ -35,7 +35,7 @@ workflow CreateCohortCoverageSummary {
         call ComputeBinnedCoverage {
             input:
                 mosdepth_beds = mosdepth_bed_files,
-                mosdepth_bed_indices = mosdepth_bed_indices,
+                mosdepth_bed_idx = mosdepth_bed_idx,
                 region = region,
                 bin_size = bin_size,
                 thresholds = thresholds,
@@ -62,7 +62,7 @@ workflow CreateCohortCoverageSummary {
 task ComputeBinnedCoverage {
     input {
         Array[File] mosdepth_beds
-        Array[File] mosdepth_bed_indices
+        Array[File] mosdepth_bed_idx
         String region
         Int bin_size
         Array[Int] thresholds

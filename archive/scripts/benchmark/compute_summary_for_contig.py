@@ -120,7 +120,7 @@ def generate_summaries(
     all_rows = []
     match_counts = defaultdict(int)
     total_variants = 0
-    eval_vep_key, truth_vep_key, eval_indices, truth_indices = vep_keys
+    eval_vep_key, truth_vep_key, eval_idx, truth_idx = vep_keys
 
     with pysam.VariantFile(eval_vcf_path) as vcf_in:
         for record in vcf_in:
@@ -166,13 +166,13 @@ def generate_summaries(
                         row[f"{af_key_str}_truth"] = truth_af_pairs[af_key_set]
 
                     eval_annos = get_vep_annotations(
-                        record.info, eval_vep_key, eval_indices
+                        record.info, eval_vep_key, eval_idx
                     )
                     truth_annos = get_vep_annotations(
-                        truth_info, truth_vep_key, truth_indices
+                        truth_info, truth_vep_key, truth_idx
                     )
-                    for category in set(eval_indices.values()) | set(
-                        truth_indices.values()
+                    for category in set(eval_idx.values()) | set(
+                        truth_idx.values()
                     ):
                         row[f"{category}_eval"] = eval_annos.get(category, "N/A")
                         row[f"{category}_truth"] = truth_annos.get(category, "N/A")
@@ -249,10 +249,10 @@ def main():
     truth_vep_key, truth_fields = parse_vep_header_line(truth_header_line)
 
     common_categories = set(eval_fields) & set(truth_fields)
-    eval_indices = {
+    eval_idx = {
         i: cat for i, cat in enumerate(eval_fields) if cat in common_categories
     }
-    truth_indices = {
+    truth_idx = {
         i: cat for i, cat in enumerate(truth_fields) if cat in common_categories
     }
 
@@ -263,7 +263,7 @@ def main():
         args.eval_vcf,
         annotations,
         truth_info,
-        (eval_vep_key, truth_vep_key, eval_indices, truth_indices),
+        (eval_vep_key, truth_vep_key, eval_idx, truth_idx),
         args.contig,
         summary_table_path,
         summary_stats_path,

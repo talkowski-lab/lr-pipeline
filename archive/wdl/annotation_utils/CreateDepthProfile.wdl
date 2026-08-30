@@ -6,7 +6,7 @@ workflow CreateDepthProfile {
     input {
         Array[String] sample_ids
         Array[File] mosdepth_bed_files
-        Array[File] mosdepth_bed_indices
+        Array[File] mosdepth_bed_idx
         String contig
         Int window_start
         Int window_end
@@ -22,7 +22,7 @@ workflow CreateDepthProfile {
         call ExtractSampleDepth {
             input:
                 mosdepth_bed = mosdepth_bed_files[i],
-                mosdepth_bed_idx = mosdepth_bed_indices[i],
+                mosdepth_bed_idx = mosdepth_bed_idx[i],
                 sample_id = sample_ids[i],
                 contig = contig,
                 window_start = window_start,

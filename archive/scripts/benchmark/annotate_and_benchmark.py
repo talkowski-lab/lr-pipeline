@@ -76,7 +76,7 @@ def get_vep_format(vcf_path):
                     return vep_id, cleaned_format_str
 
 
-def get_vep_annotations(info_dict, vep_key, vep_indices):
+def get_vep_annotations(info_dict, vep_key, vep_idx):
     vep_string = ""
     if vep_key in info_dict:
         vep_value = info_dict.get(vep_key, "")
@@ -92,7 +92,7 @@ def get_vep_annotations(info_dict, vep_key, vep_indices):
             if index < len(vep_fields) and vep_fields[index]
             else "N/A"
         )
-        for index, category in vep_indices.items()
+        for index, category in vep_idx.items()
     }
     return vep_categories
 
@@ -276,8 +276,8 @@ def write_summary_stats(final_vcf_path, contig, output_path):
 def write_summary_table(final_vcf_path, truth_variants, vep_keys, output_path):
     all_variants_data = []
 
-    eval_vep_key, truth_vep_key, eval_indices, truth_indices = vep_keys
-    common_vep_categories = set(eval_indices.values())
+    eval_vep_key, truth_vep_key, eval_idx, truth_idx = vep_keys
+    common_vep_categories = set(eval_idx.values())
 
     with pysam.VariantFile(final_vcf_path) as vcf_in:
         for record in vcf_in:
@@ -315,10 +315,10 @@ def write_summary_table(final_vcf_path, truth_variants, vep_keys, output_path):
                         row_data[f"{af_key_str}_truth"] = truth_af_pairs[af_key_set]
 
                     eval_annos = get_vep_annotations(
-                        record.info, eval_vep_key, eval_indices
+                        record.info, eval_vep_key, eval_idx
                     )
                     truth_annos = get_vep_annotations(
-                        truth_info, truth_vep_key, truth_indices
+                        truth_info, truth_vep_key, truth_idx
                     )
                     for category in common_vep_categories:
                         if category in eval_annos or category in truth_annos:
@@ -506,10 +506,10 @@ def main():
     truth_vep_categories = truth_vep_format.split("|")
 
     common_categories = set(eval_vep_categories) & set(truth_vep_categories)
-    eval_indices = {
+    eval_idx = {
         i: cat for i, cat in enumerate(eval_vep_categories) if cat in common_categories
     }
-    truth_indices = {
+    truth_idx = {
         i: cat for i, cat in enumerate(truth_vep_categories) if cat in common_categories
     }
 
@@ -537,8 +537,8 @@ def main():
                     )
 
         # VEP data
-        eval_annos = get_vep_annotations(item["eval"], eval_vep_key, eval_indices)
-        truth_annos = get_vep_annotations(item["truth"], truth_vep_key, truth_indices)
+        eval_annos = get_vep_annotations(item["eval"], eval_vep_key, eval_idx)
+        truth_annos = get_vep_annotations(item["truth"], truth_vep_key, truth_idx)
         for category in common_categories:
             if category in eval_annos or category in truth_annos:
                 vep_data_by_category[category]["eval"].append(
@@ -562,7 +562,7 @@ def main():
 
     # Summary table
     summary_table_path = f"{args.prefix}.benchmark_summary.tsv"
-    vep_keys = (eval_vep_key, truth_vep_key, eval_indices, truth_indices)
+    vep_keys = (eval_vep_key, truth_vep_key, eval_idx, truth_idx)
     write_summary_table(final_vcf_path, truth_variants, vep_keys, summary_table_path)
 
     # Summary stats

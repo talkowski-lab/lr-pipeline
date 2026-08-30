@@ -6,7 +6,7 @@ import "../utils/Structs.wdl"
 workflow CreateSampleReadCounts {
     input {
         Array[File] mosdepth_bed_files
-        Array[File] mosdepth_bed_indices
+        Array[File] mosdepth_bed_idx
         File ref_dict
         Array[String] contigs
         String prefix
@@ -24,7 +24,7 @@ workflow CreateSampleReadCounts {
         call BinMosDepthCounts {
             input:
                 mosdepth_bed = mosdepth_bed_files[i],
-                mosdepth_bed_idx = mosdepth_bed_indices[i],
+                mosdepth_bed_idx = mosdepth_bed_idx[i],
                 contig = contigs[i],
                 bin_size = bin_size,
                 prefix = "~{prefix}.~{contigs[i]}",
@@ -36,7 +36,7 @@ workflow CreateSampleReadCounts {
     call MergeBinnedCounts {
         input:
             binned_counts = BinMosDepthCounts.binned_counts,
-            binned_counts_indices = BinMosDepthCounts.binned_counts_idx,
+            binned_counts_idx = BinMosDepthCounts.binned_counts_idx,
             ref_dict = ref_dict,
             sample_id = sample_id,
             prefix = "~{prefix}.counts",
@@ -136,7 +136,7 @@ CODE
 task MergeBinnedCounts {
     input {
         Array[File] binned_counts
-        Array[File] binned_counts_indices
+        Array[File] binned_counts_idx
         File ref_dict
         String sample_id
         String prefix

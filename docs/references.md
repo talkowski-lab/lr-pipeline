@@ -20,7 +20,7 @@
 - `insilico_spliceai_ht`: [SpliceAI scores for GRCh38](gs://fc-0bc12741-801b-4c10-8d3c-92075b188d3c/gnomad/v4.0/annotations/in_silico_predictors/gnomad.v4.0.spliceai.grch38.ht) from gnomAD V4.
 - `mei_catalog`: [Loci for GRCh38](gs://fc-107e0442-e00c-4bb9-9810-bbe370bda6e5/files_kj/references/meis_hg38.tsv) is a combination of ALU and LINE loci from [RepeatMasker](https://genome.ucsc.edu/cgi-bin/hgTables?db=hg38&hgta_group=rep&hgta_track=rmsk&hgta_table=rmsk&hgta_doSchema=describe+table+schema) and SVA loci from [van Bree et al](https://genome.cshlp.org/content/suppl/2022/03/24/gr.275515.121.DC1).
 - `mei_fa`: [Sequences for GRCh38](gs://fc-107e0442-e00c-4bb9-9810-bbe370bda6e5/files_kj/references/CONSENSUS.fa) from the [SVAN references](https://zenodo.org/records/15229020/files/hg38.tar.gz).
-- `mei_fa_indices`: BWA and Minimap indices for `mei_fa`.
+- `mei_fa_idx`: BWA and Minimap indices for `mei_fa`.
 - `noncoding_bed`: [Panel for GRCh38](gs://gcp-public-data--broad-references/hg38/v0/sv-resources/resources/v1/noncoding.sort.hg38.bed) from the [GATK-SV references](https://broadinstitute.github.io/gatk-sv/docs/resources).
 - `par_bed`: [Panel for GRCh38](gs://gatk-sv-resources-public/hg38/v0/sv-resources/resources/v1/hg38.par.bed) from the [GATK-SV references](https://broadinstitute.github.io/gatk-sv/docs/resources).
 - `ploidy_bed_female`: [Panel for GRCh38](gs://fc-107e0442-e00c-4bb9-9810-bbe370bda6e5/files_kj/references/grch38_female.bed) from the [Kanpig references](https://broadinstitute.github.io/gatk-sv/docs/resources).
@@ -28,8 +28,8 @@
 - `ref_dict`: Sequence dictionary for `ref_fa`.
 - `ref_fa`: [Sequences for GRCh38](gs://fc-107e0442-e00c-4bb9-9810-bbe370bda6e5/files_kj/references/hg38.no_alt.fa) from the [PAV references](https://github.com/BeckLaboratory/pav#a-note-on-references).
 - `ref_fai`: Index for `ref_fa`.
-- `ref_fa_bwa_indices`: BWA indices for `ref_fa`.
-- `ref_fa_indices`: BWA and Minimap indices for `ref_fa`.
+- `ref_fa_bwa_idx`: BWA indices for `ref_fa`.
+- `ref_fa_idx`: BWA and Minimap indices for `ref_fa`.
 - `ref_vep_cache`: [Cache for v105](gs://gcp-public-data--gnomad/resources/vep/v105/homo_sapiens_merged_vep_105_GRCh38.tar.gz) from the [VEP archives](https://ftp.ensembl.org/pub/release-105/variation/), with the most up-to-date list of these found [here](https://useast.ensembl.org/info/docs/tools/vep/script/vep_cache.html#cache).
 - `repeat_masker_bed`: [Loci for GRCh38](gs://gatk-sv-resources-public/hg38/v0/sv-resources/resources/v1/GenomicContext/hg38.RM.sorted.merged.bed) from the [GATK-SV references](https://broadinstitute.github.io/gatk-sv/docs/resources).
 - `repeats_bed`: [Loci for GRCh38](gs://fc-107e0442-e00c-4bb9-9810-bbe370bda6e5/files_kj/references/REPEATS_hg38.bed) from the [SVAN references](https://zenodo.org/records/15229020/files/hg38.tar.gz).
