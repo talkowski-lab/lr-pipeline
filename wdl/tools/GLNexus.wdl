@@ -170,10 +170,10 @@ task GetRanges {
         if [[ "~{defined(bed)}" == "true" ]]; then
             cat ~{bed} | awk '{ print $1 ":" $2 "-" $3 }' > ranges.txt
         else
-            grep '^@SQ' ~{dict} | \\
-                awk '{ print $2, $3 }' | \\
-                sed 's/[SL]N://g' | \\
-                awk '{ print $1 ":0-" $2 }' \\
+            grep '^@SQ' ~{dict} | \
+                awk '{ print $2, $3 }' | \
+                sed 's/[SL]N://g' | \
+                awk '{ print $1 ":0-" $2 }' \
                 > ranges.txt
         fi
     >>>
@@ -323,13 +323,13 @@ task GLNexusJointCall {
             gvcf_file_list=${fixed_gvcf_file_list}
         fi
 
-        glnexus_cli \\
-            --config ~{if (defined(config_file)) then "~{config_file}" else "~{config}"} \\
-            --bed range.bed \\
-            ~{if more_PL then "--more-PL" else ""} \\
-            ~{if squeeze then "--squeeze" else ""} \\
-            ~{if trim_uncalled_alleles then "--trim-uncalled-alleles" else ""} \\
-            --list ${gvcf_file_list} \\
+        glnexus_cli \
+            --config ~{if (defined(config_file)) then "~{config_file}" else "~{config}"} \
+            --bed range.bed \
+            ~{if more_PL then "--more-PL" else ""} \
+            ~{if squeeze then "--squeeze" else ""} \
+            ~{if trim_uncalled_alleles then "--trim-uncalled-alleles" else ""} \
+            --list ${gvcf_file_list} \
             > ~{prefix}.bcf
     >>>
 
