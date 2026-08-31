@@ -496,6 +496,15 @@ workflows:
         - /.*/
 
   - subclass: WDL
+    name: GLNexus
+    primaryDescriptorPath: /wdl/tools/GLNexus.wdl
+    filters:
+      branches:
+        - main
+      tags:
+        - /.*/
+
+  - subclass: WDL
     name: LongReadCNVs
     primaryDescriptorPath: /wdl/tools/LongReadCNVs.wdl
     filters:
