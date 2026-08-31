@@ -18,6 +18,7 @@ workflow GLNexus {
         background_sample_gvcfs: "Nested arrays of background GVCFs for joint calling."
         background_sample_gvcf_idxs: "Nested arrays of indexes corresponding to background_sample_gvcfs."
         force_add_missing_dp: "Add missing DP fields to gVCFs before joint calling."
+        remove_duplicate_zero_depth_reference_blocks: "Remove exact duplicate input gVCF records with a non-alt GT and MIN_DP=0 from each shard."
         bed: "Intervals to which joint calling should be restricted."
         config: "GLNexus configuration preset or .yml filename."
         config_file: "Custom GLNexus configuration file; overrides config."
@@ -47,6 +48,7 @@ workflow GLNexus {
         Array[Array[File]]? background_sample_gvcfs
         Array[Array[File]]? background_sample_gvcf_idxs
         Boolean force_add_missing_dp = false
+        Boolean remove_duplicate_zero_depth_reference_blocks = false
         File? bed
         String config = "DeepVariantWGS"
         File? config_file
@@ -97,6 +99,7 @@ workflow GLNexus {
                 gvcf = p.left,
                 tbi = p.right,
                 ranges = GetRanges.ranges,
+                remove_duplicate_zero_depth_reference_blocks = remove_duplicate_zero_depth_reference_blocks,
                 docker = glnexus_docker,
                 runtime_attr_override = runtime_attr_shard_vcf_by_ranges
         }
@@ -211,6 +214,7 @@ task ShardVCFByRanges {
         File gvcf
         File tbi
         Array[String] ranges
+        Boolean remove_duplicate_zero_depth_reference_blocks = false
         String docker
         RuntimeAttr? runtime_attr_override
     }
@@ -229,7 +233,59 @@ task ShardVCFByRanges {
             FRANGE=$(echo $RANGE | sed 's/[:-]/___/g')
             OUTFILE="per_contig/$PINDEX.~{basename(gvcf, ".g.vcf.gz")}.locus_$FRANGE.g.vcf.gz"
 
-            bcftools view ~{gvcf} $RANGE | bgzip > $OUTFILE
+            if [[ "~{remove_duplicate_zero_depth_reference_blocks}" == "true" ]]; then
+                bcftools view ~{gvcf} $RANGE | awk -F$'\t' '
+                    BEGIN { removed_count = 0 }
+                    function clear_group(    i) {
+                        for (i = 1; i <= row_count; i++) delete rows[i]
+                        for (i in duplicate_count) delete duplicate_count[i]
+                        for (i in removable) delete removable[i]
+                        row_count = 0
+                    }
+                    function flush_group(    i, line) {
+                        for (i = 1; i <= row_count; i++) {
+                            line = rows[i]
+                            if (removable[line] && duplicate_count[line] > 1) {
+                                removed_count++
+                            } else {
+                                print line
+                            }
+                        }
+                    }
+                    function is_removable_record(    format_fields, sample_fields, field_count, sample_count, i, gt_index, min_dp_index, gt) {
+                        field_count = split($9, format_fields, ":")
+                        gt_index = 0
+                        min_dp_index = 0
+                        for (i = 1; i <= field_count; i++) {
+                            if (format_fields[i] == "GT") gt_index = i
+                            if (format_fields[i] == "MIN_DP") min_dp_index = i
+                        }
+                        if (gt_index == 0 || min_dp_index == 0 || NF < 10) return 0
+                        sample_count = split($10, sample_fields, ":")
+                        if (sample_count < gt_index || sample_count < min_dp_index) return 0
+                        gt = sample_fields[gt_index]
+                        return sample_fields[min_dp_index] == "0" && gt ~ /^(0|\.)([\/|](0|\.))*$/
+                    }
+                    /^#/ { print; next }
+                    {
+                        coordinate = $1 SUBSEP $2
+                        if (row_count > 0 && coordinate != current_coordinate) {
+                            flush_group()
+                            clear_group()
+                        }
+                        current_coordinate = coordinate
+                        rows[++row_count] = $0
+                        duplicate_count[$0]++
+                        if (is_removable_record()) removable[$0] = 1
+                    }
+                    END {
+                        if (row_count > 0) flush_group()
+                        print "Removed " removed_count " duplicate zero-depth non-alt gVCF records" > "/dev/stderr"
+                    }
+                ' | bgzip > $OUTFILE
+            else
+                bcftools view ~{gvcf} $RANGE | bgzip > $OUTFILE
+            fi
 
             INDEX=$(($INDEX+1))
         done

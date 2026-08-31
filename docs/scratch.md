@@ -26,4 +26,7 @@
 - (HPRC/HGSVC Only) _ResolveHaplotypeOverlaps_.
 - (HPRC/HGSVC Only) _AnnotateAF_.
 - _NormalizeAlleleTypes_.
+- _PostprocessCallset-DropFilters_.
 - (AoU Only) _StripGenotypes_.
+- (HPRC/HGSVC Only) _PostprocessCallset-FilterAssemblySingletons_
+- (HPRC/HGSVC Only) _FilterLowCoverageRegions_
