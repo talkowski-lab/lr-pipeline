@@ -715,6 +715,24 @@ Outputs:
 - `sample_cutoffs_tsv`: TSV with `sample_id`, floored regular `cutoff`, and floored `median_coverage` for every input sample. Both values match those used for low-coverage calls and plots.
 
 
+### [FilterLowCoverageRegions](../wdl/annotation_utils/FilterLowCoverageRegions.wdl)
+This utility adds the `LOW_COVERAGE_REGION` FILTER to a VCF record when at least `min_region_coverage_cutoff` of its entire REF span overlaps a supplied low-coverage BED. The span is `POS-1` through `POS-1 + len(REF)` in 0-based half-open BED coordinates; therefore SNVs and insertions both have a one-base REF span at their VCF position. The decision is per record, independent of ALT count or content and `INFO/allele_type`. It adds the FILTER definition to the VCF header, preserves existing filters, and emits an indexed filtered VCF.
+
+Inputs:
+- `File vcf`: VCF to filter.
+- `File vcf_idx`: Index for VCF to filter.
+- `File low_coverage_regions_bed`: BED of low-coverage regions. It may include multiple contigs; the workflow subsets it to the requested `contigs`.
+- `Array[String] contigs`: Contigs to process within the input VCF.
+- `String prefix`: Prefix used for intermediate and output filenames.
+- `Float min_region_coverage_cutoff`: Inclusive minimum fraction of a variant's reference span that must overlap a low-coverage region to add the filter.
+- `Int? records_per_shard`: Number of variants per shard. When set, variants are processed in parallel shards and concatenated.
+- `String utils_docker`: Docker image containing required VCF and BED utilities.
+
+Outputs:
+- `low_coverage_region_filtered_vcf`: VCF with low-coverage-region filters added.
+- `low_coverage_region_filtered_vcf_idx`: Index for the filtered VCF.
+
+
 ### [FillPhasedGenotypes](../wdl/annotation_utils/FillPhasedGenotypes.wdl)
 This utility transfers phasing information from a phased VCF onto the genotypes of an unphased VCF over matching sites, optionally sharding each contig by region. It outputs the phased VCF.
 
