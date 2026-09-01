@@ -67,7 +67,6 @@ workflow AnnotateCallsetOverlap {
         RuntimeAttr? runtime_attr_truvari_run_truvari_05
         RuntimeAttr? runtime_attr_truvari_concat_matched
         RuntimeAttr? runtime_attr_truvari_concat_matched_truth
-        RuntimeAttr? runtime_attr_truvari_concat_unmatched
         RuntimeAttr? runtime_attr_append_truvari_annotations
         RuntimeAttr? runtime_attr_bedtools_subset_vcf
         RuntimeAttr? runtime_attr_bedtools_subset_truth
@@ -194,10 +193,8 @@ workflow AnnotateCallsetOverlap {
                 runtime_attr_run_truvari_09 = runtime_attr_truvari_run_truvari_09,
                 runtime_attr_run_truvari_07 = runtime_attr_truvari_run_truvari_07,
                 runtime_attr_run_truvari_05 = runtime_attr_truvari_run_truvari_05,
-                runtime_attr_subset_vcf = runtime_attr_truvari_subset_vcf,
                 runtime_attr_concat_matched = runtime_attr_truvari_concat_matched,
-                runtime_attr_concat_matched_truth = runtime_attr_truvari_concat_matched_truth,
-                runtime_attr_concat_unmatched = runtime_attr_truvari_concat_unmatched
+                runtime_attr_concat_matched_truth = runtime_attr_truvari_concat_matched_truth
         }
 
         call Helpers.AppendAnnotationsFromVcf as AppendTruvariAnnotations {
