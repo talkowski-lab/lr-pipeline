@@ -191,7 +191,7 @@ task GetRanges {
         disk_gb: disk_size,
         boot_disk_gb: 25,
         preemptible_tries: 1,
-        max_retries: 0
+        max_retries: 1
     }
     RuntimeAttr runtime_attr = select_first([runtime_attr_override, default_attr])
     runtime {
@@ -301,7 +301,7 @@ task ShardVCFByRanges {
         disk_gb: disk_size,
         boot_disk_gb: 25,
         preemptible_tries: 1,
-        max_retries: 0
+        max_retries: 1
     }
     RuntimeAttr runtime_attr = select_first([runtime_attr_override, default_attr])
     runtime {
@@ -399,7 +399,7 @@ task GLNexusJointCall {
         disk_gb: disk_size,
         boot_disk_gb: 25,
         preemptible_tries: 0,
-        max_retries: 0
+        max_retries: 1
     }
     RuntimeAttr runtime_attr = select_first([runtime_attr_override, default_attr])
     runtime {
@@ -448,7 +448,7 @@ task ConcatVariants {
         disk_gb: disk_size,
         boot_disk_gb: 25,
         preemptible_tries: 1,
-        max_retries: 0
+        max_retries: 1
     }
     RuntimeAttr runtime_attr = select_first([runtime_attr_override, default_attr])
     runtime {
