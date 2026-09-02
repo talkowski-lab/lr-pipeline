@@ -37,25 +37,27 @@ workflow SplitVcfPerContig {
     File base_vcf = select_first([AddMissingInfoHeaderLines.annotated_vcf, vcf])
     File base_vcf_idx = select_first([AddMissingInfoHeaderLines.annotated_vcf_idx, vcf_idx])
 
-    call SplitByContig {
-        input:
-            vcf = base_vcf,
-            vcf_idx = base_vcf_idx,
-            contigs = contigs,
-            prefix = prefix,
-            create_no_geno = create_no_geno,
-            modify_snv_ids = modify_snv_ids,
-            rename_dbsnp_contigs = rename_dbsnp_contigs,
-            rename_dbvar_contigs = rename_dbvar_contigs,
-            docker = utils_docker,
-            runtime_attr_override = runtime_attr_split_vcf
+    scatter (contig in contigs) {
+        call SplitByContig {
+            input:
+                vcf = base_vcf,
+                vcf_idx = base_vcf_idx,
+                contig = contig,
+                prefix = "~{prefix}.~{contig}",
+                create_no_geno = create_no_geno,
+                modify_snv_ids = modify_snv_ids,
+                rename_dbsnp_contigs = rename_dbsnp_contigs,
+                rename_dbvar_contigs = rename_dbvar_contigs,
+                docker = utils_docker,
+                runtime_attr_override = runtime_attr_split_vcf
+        }
     }
 
     output {
-        Array[File] contig_vcfs = SplitByContig.contig_vcfs
-        Array[File] contig_vcf_idxs = SplitByContig.contig_vcf_idxs
-        Array[File] contig_no_geno_vcfs = SplitByContig.contig_no_geno_vcfs
-        Array[File] contig_no_geno_vcf_idxs = SplitByContig.contig_no_geno_vcf_idxs
+        Array[File] contig_vcfs = SplitByContig.contig_vcf
+        Array[File] contig_vcf_idxs = SplitByContig.contig_vcf_idx
+        Array[File] contig_no_geno_vcfs = select_all(SplitByContig.contig_no_geno_vcf)
+        Array[File] contig_no_geno_vcf_idxs = select_all(SplitByContig.contig_no_geno_vcf_idx)
     }
 }
 
@@ -63,7 +65,7 @@ task SplitByContig {
     input {
         File vcf
         File vcf_idx
-        Array[String] contigs
+        String contig
         String prefix
         Boolean create_no_geno
         Boolean modify_snv_ids
@@ -71,6 +73,11 @@ task SplitByContig {
         Boolean rename_dbvar_contigs
         String docker
         RuntimeAttr? runtime_attr_override
+    }
+
+    parameter_meta {
+        vcf: { localization_optional: true }
+        vcf_idx: { localization_optional: true }
     }
 
     command <<<
@@ -103,15 +110,6 @@ NC_000022.11 chr22
 NC_000023.11 chrX
 NC_000024.10 chrY
 EOF
-
-            bcftools annotate \
-                --rename-chrs chr_name_mapping.txt \
-                -Oz -o ~{prefix}.renamed.vcf.gz \
-                ~{vcf}
-
-            tabix -p vcf ~{prefix}.renamed.vcf.gz
-
-            input_vcf="~{prefix}.renamed.vcf.gz"
         elif ~{rename_dbvar_contigs}; then
             cat > chr_name_mapping.txt <<EOF
 1 chr1
@@ -140,57 +138,62 @@ X chrX
 Y chrY
 MT chrM
 EOF
-
-            bcftools annotate \
-                --rename-chrs chr_name_mapping.txt \
-                -Oz -o ~{prefix}.renamed.vcf.gz \
-                ~{vcf}
-
-            tabix -p vcf ~{prefix}.renamed.vcf.gz
-
-            input_vcf="~{prefix}.renamed.vcf.gz"
-        else
-            input_vcf="~{vcf}"
         fi
 
-        while IFS= read -r contig; do
-            if ~{modify_snv_ids}; then
-                bcftools view \
-                    -r "${contig}" \
-                    "${input_vcf}" \
-                | awk 'BEGIN{OFS="\t"} /^#/ {print; next} $8 ~ /(^|;)allele_type=snv(;|$)/ {$3=$1"-"$2"-"$4"-"$5} {print}' \
-                | bgzip -c > "~{prefix}.${contig}.full.vcf.gz"
-            else
-                bcftools view \
-                    -r "${contig}" \
-                    "${input_vcf}" \
-                    -Oz -o "~{prefix}.${contig}.full.vcf.gz"
-            fi
+        if ~{rename_dbsnp_contigs} || ~{rename_dbvar_contigs}; then
+            source_contig=$(awk -v c="~{contig}" '$2 == c {print $1}' chr_name_mapping.txt)
+            echo "${source_contig} ~{contig}" > rename_mapping.txt
+        else
+            source_contig="~{contig}"
+        fi
 
-            tabix -p vcf "~{prefix}.${contig}.full.vcf.gz"
+        export GCS_OAUTH_TOKEN=$(gcloud auth application-default print-access-token)
 
-            if ~{create_no_geno}; then
-                bcftools view \
-                    -G \
-                    "~{prefix}.${contig}.full.vcf.gz" \
-                    -Oz -o "~{prefix}.${contig}.no_geno.vcf.gz"
-                
-                tabix -p vcf "~{prefix}.${contig}.no_geno.vcf.gz"
-            fi
-        done < ~{write_lines(contigs)}
+        bcftools view \
+            -r "${source_contig}" \
+            --threads $(nproc) \
+            ~{vcf} \
+            -Oz -o shard.vcf.gz
+
+        if ~{rename_dbsnp_contigs} || ~{rename_dbvar_contigs}; then
+            bcftools annotate \
+                --rename-chrs rename_mapping.txt \
+                -Oz -o shard.renamed.vcf.gz \
+                shard.vcf.gz
+            mv shard.renamed.vcf.gz shard.vcf.gz
+        fi
+
+        if ~{modify_snv_ids}; then
+            bcftools view shard.vcf.gz \
+            | awk 'BEGIN{OFS="\t"} /^#/ {print; next} $8 ~ /(^|;)allele_type=snv(;|$)/ {$3=$1"-"$2"-"$4"-"$5} {print}' \
+            | bgzip -c > "~{prefix}.full.vcf.gz"
+        else
+            mv shard.vcf.gz "~{prefix}.full.vcf.gz"
+        fi
+
+        tabix -p vcf "~{prefix}.full.vcf.gz"
+
+        if ~{create_no_geno}; then
+            bcftools view \
+                -G \
+                "~{prefix}.full.vcf.gz" \
+                -Oz -o "~{prefix}.no_geno.vcf.gz"
+
+            tabix -p vcf "~{prefix}.no_geno.vcf.gz"
+        fi
     >>>
 
     output {
-        Array[File] contig_vcfs = glob("~{prefix}.*.full.vcf.gz")
-        Array[File] contig_vcf_idxs = glob("~{prefix}.*.full.vcf.gz.tbi")
-        Array[File] contig_no_geno_vcfs = glob("~{prefix}.*.no_geno.vcf.gz")
-        Array[File] contig_no_geno_vcf_idxs = glob("~{prefix}.*.no_geno.vcf.gz.tbi")
+        File contig_vcf = "~{prefix}.full.vcf.gz"
+        File contig_vcf_idx = "~{prefix}.full.vcf.gz.tbi"
+        File? contig_no_geno_vcf = "~{prefix}.no_geno.vcf.gz"
+        File? contig_no_geno_vcf_idx = "~{prefix}.no_geno.vcf.gz.tbi"
     }
 
     RuntimeAttr default_attr = object {
-        cpu_cores: 4,
-        mem_gb: 8,
-        disk_gb: 5 * ceil(size(vcf, "GB")) + 10,
+        cpu_cores: 2,
+        mem_gb: 4,
+        disk_gb: 20,
         boot_disk_gb: 10,
         preemptible_tries: 1,
         max_retries: 0
