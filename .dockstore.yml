@@ -304,6 +304,15 @@ workflows:
         - /.*/
 
   - subclass: WDL
+    name: SplitVcfPerContig
+    primaryDescriptorPath: /wdl/annotation_utils/SplitVcfPerContig.wdl
+    filters:
+      branches:
+        - main
+      tags:
+        - /.*/
+
+  - subclass: WDL
     name: StripGenotypes
     primaryDescriptorPath: /wdl/annotation_utils/StripGenotypes.wdl
     filters:
