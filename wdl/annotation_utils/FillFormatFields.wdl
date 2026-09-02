@@ -13,7 +13,9 @@ workflow FillFormatFields {
         String prefix
 
         Array[String] format_fields
-        
+        String? subset_unfilled_vcf_field
+        String? subset_unfilled_vcf_value
+
         File? ref_fa
         File? ref_fai
 
@@ -182,6 +184,8 @@ workflow FillFormatFields {
                     filled_vcf_idx = SubsetFilled.subset_vcf_idx,
                     format_fields = format_fields,
                     match_by_id = match_by_id,
+                    subset_unfilled_vcf_field = subset_unfilled_vcf_field,
+                    subset_unfilled_vcf_value = subset_unfilled_vcf_value,
                     fill_alt_gts = fill_alt_gts,
                     fill_ref_gts = fill_ref_gts,
                     unphase_gts = unphase_gts,
@@ -213,6 +217,8 @@ workflow FillFormatFields {
                 filled_vcf_idx = final_filled_vcf_idx,
                 format_fields = format_fields,
                 match_by_id = match_by_id,
+                subset_unfilled_vcf_field = subset_unfilled_vcf_field,
+                subset_unfilled_vcf_value = subset_unfilled_vcf_value,
                 fill_alt_gts = fill_alt_gts,
                 fill_ref_gts = fill_ref_gts,
                 unphase_gts = unphase_gts,
@@ -237,6 +243,8 @@ task FillVcfFormatFields {
         File filled_vcf_idx
         Array[String] format_fields
         Boolean match_by_id
+        String? subset_unfilled_vcf_field
+        String? subset_unfilled_vcf_value
         Boolean fill_alt_gts
         Boolean fill_ref_gts
         Boolean unphase_gts
@@ -265,6 +273,8 @@ with open("$format_fields_file") as fh:
 assert "GT" not in format_fields, "GT must not be passed in format_fields; use fill_alt_gts/fill_ref_gts instead"
 
 match_by_id = ~{true="True" false="False" match_by_id}
+subset_field = ~{if defined(subset_unfilled_vcf_field) then "'" + subset_unfilled_vcf_field + "'" else "None"}
+subset_value = ~{if defined(subset_unfilled_vcf_value) then "'" + subset_unfilled_vcf_value + "'" else "None"}
 fill_alt_gts = ~{true="True" false="False" fill_alt_gts}
 fill_ref_gts = ~{true="True" false="False" fill_ref_gts}
 unphase_gts = ~{true="True" false="False" unphase_gts}
@@ -314,6 +324,16 @@ def ad_is_populated(ad):
 def unphase_gt(gt):
     return tuple(sorted(gt, key=lambda allele: (allele is None, allele if allele is not None else 0)))
 
+def in_subset(rec):
+    if subset_field is None:
+        return True
+    info_val = rec.info.get(subset_field)
+    if info_val is None:
+        return False
+    if isinstance(info_val, (list, tuple)):
+        return subset_value in [str(v) for v in info_val]
+    return str(info_val) == subset_value
+
 def alleles_key(rec):
     ref = rec.ref.upper() if rec.ref else rec.ref
     alts = tuple(a.upper() for a in rec.alts) if rec.alts else ()
@@ -325,11 +345,12 @@ for unfilled_rec in unfilled_in:
     # Find matching variant
     unfilled_rec.translate(out_header)
     match = None
-    unfilled_key = alleles_key(unfilled_rec)
-    for cand in filled_in.fetch(unfilled_rec.chrom, unfilled_rec.start, unfilled_rec.stop):
-        if alleles_key(cand) == unfilled_key:
-            match = cand
-            break
+    if in_subset(unfilled_rec):
+        unfilled_key = alleles_key(unfilled_rec)
+        for cand in filled_in.fetch(unfilled_rec.chrom, unfilled_rec.start, unfilled_rec.stop):
+            if alleles_key(cand) == unfilled_key:
+                match = cand
+                break
 
     if match:
         for sample in common_samples:

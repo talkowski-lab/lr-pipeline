@@ -734,7 +734,7 @@ Outputs:
 
 
 ### [FillFormatFields](../wdl/annotation_utils/FillFormatFields.wdl)
-This utility fills missing FORMAT fields in one VCF using the values from a second, more complete VCF covering the same sites. It supports selectively copying named format fields plus toggles for filling alternate and reference genotypes, unphasing genotypes and adding PL. Sites are matched on CHROM/POS/REF/ALT, optionally also requiring a matching ID. Either input can first be run through `bcftools norm`, sharded by record count so normalization never runs over a whole-contig VCF at once; normalized shards are re-concatenated with sorting (since normalization can shift a variant's position, e.g. when splitting a multiallelic) before being re-binned for matching. It outputs the refilled VCF.
+This utility fills missing FORMAT fields in one VCF using the values from a second, more complete VCF covering the same sites. It supports selectively copying named format fields plus toggles for filling alternate and reference genotypes, unphasing genotypes and adding PL. Sites are matched on CHROM/POS/REF/ALT, optionally also requiring a matching ID, and filling can be restricted to variants whose INFO field matches a given value. Either input can first be run through `bcftools norm`, sharded by record count so normalization never runs over a whole-contig VCF at once; normalized shards are re-concatenated with sorting (since normalization can shift a variant's position, e.g. when splitting a multiallelic) before being re-binned for matching. It outputs the refilled VCF.
 
 Inputs:
 - `File unfilled_vcf`: VCF whose FORMAT fields are filled.
@@ -744,6 +744,8 @@ Inputs:
 - `String contig`: Contig to process.
 - `Array[String] format_fields`: FORMAT fields to fill.
 - `Boolean match_by_id`: Whether matching also requires equal variant IDs, in addition to CHROM/POS/REF/ALT.
+- `String? subset_unfilled_vcf_field`: INFO field on `unfilled_vcf` used to limit which variants are filled. Requires `subset_unfilled_vcf_value`.
+- `String? subset_unfilled_vcf_value`: Value that `subset_unfilled_vcf_field` must equal for a variant to be filled. Variants that don't match are left unfilled.
 - `Boolean normalize_unfilled_vcf`: Whether to normalize `unfilled_vcf` with `bcftools norm` before matching.
 - `Boolean normalize_filled_vcf`: Whether to normalize `filled_vcf` with `bcftools norm` before matching.
 - `File? ref_fa`: Reference FASTA used for normalization. Required if either normalize input is `true`.
