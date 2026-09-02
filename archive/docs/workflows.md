@@ -97,29 +97,6 @@ Outputs:
 - `merged_fastq_gz`: Merged FASTQ.gz file containing reads from all input files.
 
 
-### [FillFormatFields](../wdl/annotation_utils/FillFormatFields.wdl)
-This utility fills missing FORMAT fields in one VCF using the values from a second, more complete VCF covering the same sites. It supports selectively copying named format fields plus toggles for filling alternate and reference genotypes, unphasing genotypes and adding PL, with optional region sharding. It outputs the refilled VCF.
-
-Inputs:
-- `File unfilled_vcf`: VCF whose FORMAT fields are filled.
-- `File unfilled_vcf_idx`: Index for `unfilled_vcf`.
-- `File filled_vcf`: VCF providing the FORMAT field values.
-- `File filled_vcf_idx`: Index for `filled_vcf`.
-- `String contig`: Contig to process.
-- `Int? shard_bin_size`: Region-bin size, in bp, used when sharding the contig.
-- `Array[String] format_fields`: FORMAT fields to fill.
-- `String? include_field`: FORMAT field whose value gates whether a record is filled.
-- `String? include_value`: Value of `include_field` required for a record to be filled.
-- `Boolean fill_alt_gts`: Whether to fill alternate-allele genotypes (default `false`).
-- `Boolean fill_ref_gts`: Whether to fill reference genotypes (default `false`).
-- `Boolean unphase_gts`: Whether to unphase genotypes while filling (default `false`).
-- `Boolean add_pl`: Whether to add a PL field (default `false`).
-
-Outputs:
-- `refilled_vcf`: VCF with FORMAT fields filled.
-- `refilled_vcf_idx`: Index for the refilled VCF.
-
-
 ### [FilterTRGTCalls](../wdl/annotation_utils/FilterTRGTCalls.wdl)
 This utility filters a TRGT tandem-repeat VCF, optionally dropping calls below a minimum repeat-unit length or length difference, or above a maximum catalog length. It outputs the filtered VCF.
 

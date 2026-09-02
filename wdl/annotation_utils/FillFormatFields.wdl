@@ -13,15 +13,29 @@ workflow FillFormatFields {
         String prefix
 
         Array[String] format_fields
+        
+        File? ref_fa
+        File? ref_fai
 
-        Int? shard_bin_size
+        Int? records_per_shard_normalize
+        Int? shard_bin_size_fill
 
-        Boolean fill_alt_gts = false
-        Boolean fill_ref_gts = false
-        Boolean unphase_gts = false
-        Boolean add_pl = false
+        Boolean normalize_unfilled_vcf
+        Boolean normalize_filled_vcf
+        Boolean fill_alt_gts
+        Boolean fill_ref_gts
+        Boolean unphase_gts
+        Boolean add_pl
+        Boolean match_by_id
 
         String utils_docker
+
+        RuntimeAttr? runtime_attr_shard_normalize_unfilled
+        RuntimeAttr? runtime_attr_normalize_unfilled
+        RuntimeAttr? runtime_attr_concat_normalize_unfilled
+        RuntimeAttr? runtime_attr_shard_normalize_filled
+        RuntimeAttr? runtime_attr_normalize_filled
+        RuntimeAttr? runtime_attr_concat_normalize_filled
 
         RuntimeAttr? runtime_attr_create_shards
         RuntimeAttr? runtime_attr_subset_unfilled
@@ -30,13 +44,108 @@ workflow FillFormatFields {
         RuntimeAttr? runtime_attr_concat
     }
 
-    if (defined(shard_bin_size)) {
+    # Optionally normalize the unfilled VCF, sharded by record count so normalization
+    # never has to run over a whole-contig VCF at once.
+    if (normalize_unfilled_vcf) {
+        if (defined(records_per_shard_normalize)) {
+            call Helpers.ShardVcfByRecords as ShardUnfilledForNormalize {
+                input:
+                    vcf = unfilled_vcf,
+                    vcf_idx = unfilled_vcf_idx,
+                    records_per_shard = select_first([records_per_shard_normalize]),
+                    prefix = "~{prefix}.unfilled.norm_shard",
+                    docker = utils_docker,
+                    runtime_attr_override = runtime_attr_shard_normalize_unfilled
+            }
+        }
+
+        Array[File] unfilled_vcfs_to_normalize = select_first([ShardUnfilledForNormalize.shards, [unfilled_vcf]])
+        Array[File] unfilled_vcf_idxs_to_normalize = select_first([ShardUnfilledForNormalize.shard_idxs, [unfilled_vcf_idx]])
+
+        scatter (i in range(length(unfilled_vcfs_to_normalize))) {
+            call Helpers.NormalizeVcf as NormalizeUnfilled {
+                input:
+                    vcf = unfilled_vcfs_to_normalize[i],
+                    vcf_idx = unfilled_vcf_idxs_to_normalize[i],
+                    ref_fa = select_first([ref_fa]),
+                    ref_fai = select_first([ref_fai]),
+                    prefix = "~{prefix}.unfilled.norm_shard_~{i}.normalized",
+                    docker = utils_docker,
+                    runtime_attr_override = runtime_attr_normalize_unfilled
+            }
+        }
+
+        # Normalization can shift a variant's position (e.g. splitting a multiallelic),
+        # so shards must be re-concatenated with sorting before being re-binned for matching.
+        call Helpers.ConcatVcfs as ConcatNormalizedUnfilled {
+            input:
+                vcfs = NormalizeUnfilled.normalized_vcf,
+                vcf_idxs = NormalizeUnfilled.normalized_vcf_idx,
+                allow_overlaps = true,
+                naive = false,
+                sort_output = true,
+                prefix = "~{prefix}.unfilled.normalized",
+                docker = utils_docker,
+                runtime_attr_override = runtime_attr_concat_normalize_unfilled
+        }
+    }
+
+    File final_unfilled_vcf = select_first([ConcatNormalizedUnfilled.concat_vcf, unfilled_vcf])
+    File final_unfilled_vcf_idx = select_first([ConcatNormalizedUnfilled.concat_vcf_idx, unfilled_vcf_idx])
+
+    # Same optional, sharded normalization for the filled VCF.
+    if (normalize_filled_vcf) {
+        if (defined(records_per_shard_normalize)) {
+            call Helpers.ShardVcfByRecords as ShardFilledForNormalize {
+                input:
+                    vcf = filled_vcf,
+                    vcf_idx = filled_vcf_idx,
+                    records_per_shard = select_first([records_per_shard_normalize]),
+                    prefix = "~{prefix}.filled.norm_shard",
+                    docker = utils_docker,
+                    runtime_attr_override = runtime_attr_shard_normalize_filled
+            }
+        }
+
+        Array[File] filled_vcfs_to_normalize = select_first([ShardFilledForNormalize.shards, [filled_vcf]])
+        Array[File] filled_vcf_idxs_to_normalize = select_first([ShardFilledForNormalize.shard_idxs, [filled_vcf_idx]])
+
+        scatter (i in range(length(filled_vcfs_to_normalize))) {
+            call Helpers.NormalizeVcf as NormalizeFilled {
+                input:
+                    vcf = filled_vcfs_to_normalize[i],
+                    vcf_idx = filled_vcf_idxs_to_normalize[i],
+                    ref_fa = select_first([ref_fa]),
+                    ref_fai = select_first([ref_fai]),
+                    prefix = "~{prefix}.filled.norm_shard_~{i}.normalized",
+                    docker = utils_docker,
+                    runtime_attr_override = runtime_attr_normalize_filled
+            }
+        }
+
+        call Helpers.ConcatVcfs as ConcatNormalizedFilled {
+            input:
+                vcfs = NormalizeFilled.normalized_vcf,
+                vcf_idxs = NormalizeFilled.normalized_vcf_idx,
+                allow_overlaps = true,
+                naive = false,
+                sort_output = true,
+                prefix = "~{prefix}.filled.normalized",
+                docker = utils_docker,
+                runtime_attr_override = runtime_attr_concat_normalize_filled
+        }
+    }
+
+    File final_filled_vcf = select_first([ConcatNormalizedFilled.concat_vcf, filled_vcf])
+    File final_filled_vcf_idx = select_first([ConcatNormalizedFilled.concat_vcf_idx, filled_vcf_idx])
+
+    if (defined(shard_bin_size_fill)) {
         call Helpers.CreateContigShards {
             input:
-                vcfs = [unfilled_vcf, filled_vcf],
-                vcf_idxs = [unfilled_vcf_idx, filled_vcf_idx],
+                vcfs = [final_unfilled_vcf, final_filled_vcf],
+                vcf_idxs = [final_unfilled_vcf_idx, final_filled_vcf_idx],
                 contig = contig,
-                shard_bin_size = select_first([shard_bin_size]),
+                shard_bin_size = select_first([shard_bin_size_fill]),
                 prefix = "~{prefix}.shards",
                 docker = utils_docker,
                 runtime_attr_override = runtime_attr_create_shards
@@ -47,8 +156,8 @@ workflow FillFormatFields {
 
             call Helpers.SubsetVcfToRegion as SubsetUnfilled {
                 input:
-                    vcf = unfilled_vcf,
-                    vcf_idx = unfilled_vcf_idx,
+                    vcf = final_unfilled_vcf,
+                    vcf_idx = final_unfilled_vcf_idx,
                     region = shard_region,
                     prefix = "~{prefix}.shard_~{i}.unfilled",
                     docker = utils_docker,
@@ -57,8 +166,8 @@ workflow FillFormatFields {
 
             call Helpers.SubsetVcfToRegion as SubsetFilled {
                 input:
-                    vcf = filled_vcf,
-                    vcf_idx = filled_vcf_idx,
+                    vcf = final_filled_vcf,
+                    vcf_idx = final_filled_vcf_idx,
                     region = shard_region,
                     prefix = "~{prefix}.shard_~{i}.filled_input",
                     docker = utils_docker,
@@ -72,6 +181,7 @@ workflow FillFormatFields {
                     filled_vcf = SubsetFilled.subset_vcf,
                     filled_vcf_idx = SubsetFilled.subset_vcf_idx,
                     format_fields = format_fields,
+                    match_by_id = match_by_id,
                     fill_alt_gts = fill_alt_gts,
                     fill_ref_gts = fill_ref_gts,
                     unphase_gts = unphase_gts,
@@ -94,14 +204,15 @@ workflow FillFormatFields {
         }
     }
 
-    if (!defined(shard_bin_size)) {
+    if (!defined(shard_bin_size_fill)) {
         call FillVcfFormatFields as FillVcfFormatFieldsNoSharding {
             input:
-                unfilled_vcf = unfilled_vcf,
-                unfilled_vcf_idx = unfilled_vcf_idx,
-                filled_vcf = filled_vcf,
-                filled_vcf_idx = filled_vcf_idx,
+                unfilled_vcf = final_unfilled_vcf,
+                unfilled_vcf_idx = final_unfilled_vcf_idx,
+                filled_vcf = final_filled_vcf,
+                filled_vcf_idx = final_filled_vcf_idx,
                 format_fields = format_fields,
+                match_by_id = match_by_id,
                 fill_alt_gts = fill_alt_gts,
                 fill_ref_gts = fill_ref_gts,
                 unphase_gts = unphase_gts,
@@ -125,10 +236,11 @@ task FillVcfFormatFields {
         File filled_vcf
         File filled_vcf_idx
         Array[String] format_fields
-        Boolean fill_alt_gts = false
-        Boolean fill_ref_gts = false
-        Boolean unphase_gts = false
-        Boolean add_pl = false
+        Boolean match_by_id
+        Boolean fill_alt_gts
+        Boolean fill_ref_gts
+        Boolean unphase_gts
+        Boolean add_pl
         String prefix
         String docker
         RuntimeAttr? runtime_attr_override
@@ -152,6 +264,7 @@ with open("$format_fields_file") as fh:
 
 assert "GT" not in format_fields, "GT must not be passed in format_fields; use fill_alt_gts/fill_ref_gts instead"
 
+match_by_id = ~{true="True" false="False" match_by_id}
 fill_alt_gts = ~{true="True" false="False" fill_alt_gts}
 fill_ref_gts = ~{true="True" false="False" fill_ref_gts}
 unphase_gts = ~{true="True" false="False" unphase_gts}
@@ -204,6 +317,8 @@ def unphase_gt(gt):
 def alleles_key(rec):
     ref = rec.ref.upper() if rec.ref else rec.ref
     alts = tuple(a.upper() for a in rec.alts) if rec.alts else ()
+    if match_by_id:
+        return (rec.chrom, rec.pos, ref, alts, rec.id)
     return (rec.chrom, rec.pos, ref, alts)
 
 for unfilled_rec in unfilled_in:
@@ -215,7 +330,7 @@ for unfilled_rec in unfilled_in:
         if alleles_key(cand) == unfilled_key:
             match = cand
             break
-    
+
     if match:
         for sample in common_samples:
             # Set GT field

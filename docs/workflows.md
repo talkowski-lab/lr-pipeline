@@ -733,6 +733,33 @@ Outputs:
 - `low_coverage_region_filtered_vcf_idx`: Index for the filtered VCF.
 
 
+### [FillFormatFields](../wdl/annotation_utils/FillFormatFields.wdl)
+This utility fills missing FORMAT fields in one VCF using the values from a second, more complete VCF covering the same sites. It supports selectively copying named format fields plus toggles for filling alternate and reference genotypes, unphasing genotypes and adding PL. Sites are matched on CHROM/POS/REF/ALT, optionally also requiring a matching ID. Either input can first be run through `bcftools norm`, sharded by record count so normalization never runs over a whole-contig VCF at once; normalized shards are re-concatenated with sorting (since normalization can shift a variant's position, e.g. when splitting a multiallelic) before being re-binned for matching. It outputs the refilled VCF.
+
+Inputs:
+- `File unfilled_vcf`: VCF whose FORMAT fields are filled.
+- `File unfilled_vcf_idx`: Index for `unfilled_vcf`.
+- `File filled_vcf`: VCF providing the FORMAT field values.
+- `File filled_vcf_idx`: Index for `filled_vcf`.
+- `String contig`: Contig to process.
+- `Array[String] format_fields`: FORMAT fields to fill.
+- `Boolean match_by_id`: Whether matching also requires equal variant IDs, in addition to CHROM/POS/REF/ALT.
+- `Boolean normalize_unfilled_vcf`: Whether to normalize `unfilled_vcf` with `bcftools norm` before matching.
+- `Boolean normalize_filled_vcf`: Whether to normalize `filled_vcf` with `bcftools norm` before matching.
+- `File? ref_fa`: Reference FASTA used for normalization. Required if either normalize input is `true`.
+- `File? ref_fai`: Index for `ref_fa`. Required if either normalize input is `true`.
+- `Int? records_per_shard_normalize`: Number of variants per shard when normalizing. When set, normalization runs in parallel shards that are re-concatenated and sorted afterward.
+- `Int? shard_bin_size_fill`: Region-bin size, in bp, used when sharding the contig for matching/filling.
+- `Boolean fill_alt_gts`: Whether to fill alternate-allele genotypes.
+- `Boolean fill_ref_gts`: Whether to fill reference genotypes.
+- `Boolean unphase_gts`: Whether to unphase genotypes while filling.
+- `Boolean add_pl`: Whether to add a PL field.
+
+Outputs:
+- `refilled_vcf`: VCF with FORMAT fields filled.
+- `refilled_vcf_idx`: Index for the refilled VCF.
+
+
 ### [FillPhasedGenotypes](../wdl/annotation_utils/FillPhasedGenotypes.wdl)
 This utility transfers phasing information from a phased VCF onto the genotypes of an unphased VCF over matching sites, optionally sharding each contig by region. It outputs the phased VCF.
 
