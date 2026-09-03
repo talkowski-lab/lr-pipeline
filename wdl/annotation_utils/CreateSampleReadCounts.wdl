@@ -18,6 +18,7 @@ workflow CreateSampleReadCounts {
 
         RuntimeAttr? runtime_attr_bin
         RuntimeAttr? runtime_attr_merge
+        RuntimeAttr? runtime_attr_sort
     }
 
     scatter (i in range(length(contigs))) {
@@ -39,13 +40,21 @@ workflow CreateSampleReadCounts {
             binned_counts_idx = BinMosDepthCounts.binned_counts_idx,
             ref_dict = ref_dict,
             sample_id = sample_id,
-            prefix = "~{prefix}.counts",
+            prefix = "~{prefix}.counts.unsorted",
             docker = utils_docker,
             runtime_attr_override = runtime_attr_merge
     }
 
+    call Helpers.SortReadCounts {
+        input:
+            read_counts = MergeBinnedCounts.merged_counts,
+            prefix = "~{prefix}.counts",
+            docker = utils_docker,
+            runtime_attr_override = runtime_attr_sort
+    }
+
     output {
-        File binned_read_counts = MergeBinnedCounts.merged_counts
+        File binned_read_counts = SortReadCounts.sorted_read_counts
     }
 }
 
@@ -150,9 +159,7 @@ task MergeBinnedCounts {
         grep "^@" ~{ref_dict} > ~{prefix}.tsv
         echo -e "@RG\tID:GATKCopyNumber\tSM:~{sample_id}" >> ~{prefix}.tsv
         echo -e "CONTIG\tSTART\tEND\tCOUNT" >> ~{prefix}.tsv
-
-        export LC_ALL=C
-        zcat ~{sep=' ' binned_counts} | sort -s -k1,1 >> ~{prefix}.tsv
+        zcat ~{sep=' ' binned_counts} >> ~{prefix}.tsv
 
         bgzip ~{prefix}.tsv
     >>>

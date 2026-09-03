@@ -4,6 +4,7 @@ import "../utils/LRCNVs.wdl"
 import "../utils/DepthPreprocessing.wdl"
 import "../utils/DepthClustering.wdl"
 import "../utils/GenotypeDepth.wdl"
+import "../utils/Helpers.wdl"
 import "../utils/Structs.wdl"
 
 workflow LongReadCNVs {
@@ -15,6 +16,7 @@ workflow LongReadCNVs {
         File intervals
         Array[String]+ sample_ids
         Array[File]+ depth_profiles
+        Boolean sort_depth_profiles
         String batch_id
         File contig_ploidy_priors
         Int num_intervals_per_scatter = 10000
@@ -115,6 +117,7 @@ workflow LongReadCNVs {
         File? gatk_to_svtk_script
         Boolean svtk_set_pass = false
 
+        RuntimeAttr? runtime_attr_sort_depth_profiles
         RuntimeAttr? runtime_attr_annotate_intervals
         RuntimeAttr? runtime_attr_filter_intervals
         RuntimeAttr? runtime_attr_scatter_intervals
@@ -138,11 +141,25 @@ workflow LongReadCNVs {
         RuntimeAttr? runtime_attr_concat_genotyped_vcfs
     }
 
+    if (sort_depth_profiles) {
+        scatter (i in range(length(depth_profiles))) {
+            call Helpers.SortReadCounts {
+                input:
+                    read_counts = depth_profiles[i],
+                    prefix = sample_ids[i] + ".sorted_counts",
+                    docker = sv_base_mini_docker,
+                    runtime_attr_override = runtime_attr_sort_depth_profiles
+            }
+        }
+    }
+
+    Array[File]+ depth_profiles_ = select_first([SortReadCounts.sorted_read_counts, depth_profiles])
+
     call LRCNVs.LRCNVs {
         input:
             intervals = intervals,
             sample_ids = sample_ids,
-            depth_profiles = depth_profiles,
+            depth_profiles = depth_profiles_,
             prefix = prefix,
             cohort_id = batch_id,
             contig_ploidy_priors = contig_ploidy_priors,

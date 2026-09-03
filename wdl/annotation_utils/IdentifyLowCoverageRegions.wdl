@@ -12,6 +12,7 @@ workflow IdentifyLowCoverageRegions {
         Int bin_size
         Float median_coverage_cutoff = 0.2
         Float sample_proportion_cutoff = 0.5
+        Float chrY_coverage_cutoff = 0.2
 
         String utils_docker
 
@@ -30,6 +31,7 @@ workflow IdentifyLowCoverageRegions {
                 prefix = "~{prefix}.~{sample_input.right}",
                 bin_size = bin_size,
                 median_coverage_cutoff = median_coverage_cutoff,
+                chrY_coverage_cutoff = chrY_coverage_cutoff,
                 docker = utils_docker,
                 runtime_attr_override = runtime_attr_bin_coverage
         }
@@ -43,7 +45,6 @@ workflow IdentifyLowCoverageRegions {
             sample_histograms = BinSampleCoverage.coverage_histogram,
             prefix = "~{prefix}.cohort",
             bin_size = bin_size,
-            ped = ped,
             sample_ids = sample_ids,
             sample_proportion_cutoff = sample_proportion_cutoff,
             docker = utils_docker,
@@ -67,6 +68,7 @@ task BinSampleCoverage {
         String prefix
         Int bin_size
         Float median_coverage_cutoff
+        Float chrY_coverage_cutoff
         String docker
         RuntimeAttr? runtime_attr_override
     }
@@ -90,9 +92,11 @@ PED = "~{ped}"
 SAMPLE_ID = "~{sample_id}"
 BIN_SIZE = ~{bin_size}
 MEDIAN_COVERAGE_CUTOFF = ~{median_coverage_cutoff}
+CHR_Y_COVERAGE_CUTOFF = ~{chrY_coverage_cutoff}
 PREFIX = "~{prefix}"
 CHR_X = "chrX"
 CHR_Y = "chrY"
+AUTOSOMES = {f"chr{i}" for i in range(1, 23)}
 
 plt.switch_backend("Agg")
 
@@ -127,6 +131,7 @@ def format_depth(depth):
 
 def read_sample_sex(path, sample_id):
     sex = None
+    found = False
     with open(path, "r") as handle:
         for line_number, line in enumerate(handle, 1):
             if not line.strip() or line.startswith("#"):
@@ -140,16 +145,48 @@ def read_sample_sex(path, sample_id):
                 parsed_sex = "male"
             elif fields[4] == "2":
                 parsed_sex = "female"
+            elif fields[4] == "0":
+                parsed_sex = None
             else:
                 raise ValueError(
                     f"Sample {sample_id} has unsupported PED sex code {fields[4]}"
                 )
-            if sex is not None and sex != parsed_sex:
+            if found and sex != parsed_sex:
                 raise ValueError(f"Sample {sample_id} has conflicting PED sex entries")
             sex = parsed_sex
-    if sex is None:
+            found = True
+    if not found:
         raise ValueError(f"Sample {sample_id} is missing from PED")
     return sex
+
+
+def determine_sex_from_coverage(path, chrY_coverage_cutoff):
+    autosome_counts = Counter()
+    autosome_bases = 0
+    chrY_counts = Counter()
+    chrY_bases = 0
+    with open_text(path) as source:
+        for line in source:
+            if not line.strip() or line.startswith("#"):
+                continue
+            chrom, start_text, end_text, depth_text = line.rstrip("\n").split("\t")[:4]
+            if chrom not in AUTOSOMES and chrom != CHR_Y:
+                continue
+            length = int(end_text) - int(start_text)
+            depth = float(depth_text)
+            if chrom == CHR_Y:
+                chrY_counts[depth] += length
+                chrY_bases += length
+            else:
+                autosome_counts[depth] += length
+                autosome_bases += length
+    if autosome_bases == 0:
+        raise ValueError("Cannot infer sex from coverage: no autosomal coverage found")
+    autosome_median = weighted_median(autosome_counts, autosome_bases)
+    chrY_median = weighted_median(chrY_counts, chrY_bases) if chrY_bases else 0.0
+    if chrY_median >= chrY_coverage_cutoff * autosome_median:
+        return "male"
+    return "female"
 
 
 def write_binned_coverage(input_path, output_path):
@@ -358,10 +395,14 @@ if BIN_SIZE <= 0:
     raise ValueError("bin_size must be greater than 0")
 if not 0 < MEDIAN_COVERAGE_CUTOFF <= 1:
     raise ValueError("median_coverage_cutoff must be greater than 0 and at most 1")
+if not 0 < CHR_Y_COVERAGE_CUTOFF <= 1:
+    raise ValueError("chrY_coverage_cutoff must be greater than 0 and at most 1")
 if not re.fullmatch(r"[A-Za-z0-9._-]+", SAMPLE_ID):
     raise ValueError("sample_id may contain only letters, numbers, '.', '_', and '-'")
 
 SEX = read_sample_sex(PED, SAMPLE_ID)
+if SEX is None:
+    SEX = determine_sex_from_coverage(INPUT, CHR_Y_COVERAGE_CUTOFF)
 binned_path = f"{PREFIX}.binned_coverage.tsv.gz"
 low_path = f"{PREFIX}.low_coverage.bed.gz"
 cutoff_path = f"{PREFIX}.low_coverage_cutoff.tsv"
@@ -449,7 +490,6 @@ task AggregateLowCoverage {
         Array[File] sample_histograms
         String prefix
         Int bin_size
-        File ped
         Array[String] sample_ids
         Float sample_proportion_cutoff
         String docker
@@ -481,7 +521,6 @@ COUNTS = "~{prefix}.coverage_counts.tsv"
 FAILED_BINS = "~{prefix}.failed_bins.bed"
 SAMPLE_CUTOFFS = "~{prefix}.sample_cutoffs.tsv"
 CHROMOSOME_COVERAGE = "~{chromosome_coverage}"
-PED = "~{ped}"
 BIN_SIZE = ~{bin_size}
 SAMPLE_PROPORTION_CUTOFF = ~{sample_proportion_cutoff}
 SAMPLE_IDS = """~{sep=',' sample_ids}""".split(",")
@@ -509,35 +548,6 @@ def chromosome_sort_key(chrom):
     return (1, order.get(name, 3), name)
 
 
-def read_sample_sexes(path, sample_ids):
-    sample_id_set = set(sample_ids)
-    sexes = {}
-    with open(path, "r") as source:
-        for line_number, line in enumerate(source, 1):
-            if not line.strip() or line.startswith("#"):
-                continue
-            fields = line.split()
-            if len(fields) < 5:
-                raise ValueError(f"PED line {line_number} has fewer than 5 columns")
-            sample_id = fields[1]
-            if sample_id not in sample_id_set:
-                continue
-            sex = {"1": "male", "2": "female"}.get(fields[4])
-            if sex is None:
-                raise ValueError(
-                    f"Sample {sample_id} has unsupported PED sex code {fields[4]}"
-                )
-            if sample_id in sexes and sexes[sample_id] != sex:
-                raise ValueError(f"Sample {sample_id} has conflicting PED sex entries")
-            sexes[sample_id] = sex
-    missing_sample_ids = sample_id_set - sexes.keys()
-    if missing_sample_ids:
-        raise ValueError(
-            "Samples missing from PED: " + ", ".join(sorted(missing_sample_ids))
-        )
-    return sexes
-
-
 def write_sample_cutoffs(input_paths, output_path, sample_ids):
     rows_by_sample = {}
     for path in input_paths:
@@ -546,7 +556,7 @@ def write_sample_cutoffs(input_paths, output_path, sample_ids):
         if len(rows) != 1:
             raise ValueError(f"Expected one cutoff row in {path}")
         row = rows[0]
-        required_columns = {"sample_id", "regular_cutoff", "median"}
+        required_columns = {"sample_id", "sex", "regular_cutoff", "median"}
         if not required_columns.issubset(row):
             raise ValueError(f"Unexpected cutoff TSV columns in {path}")
         sample_id = row["sample_id"]
@@ -561,6 +571,7 @@ def write_sample_cutoffs(input_paths, output_path, sample_ids):
         for sample_id in sample_ids:
             row = rows_by_sample[sample_id]
             writer.writerow([sample_id, row["regular_cutoff"], row["median"]])
+    return {sample_id: rows_by_sample[sample_id]["sex"] for sample_id in sample_ids}
 
 
 def plot_chromosome(chrom, chrom_end, flagged_bins, eligible_sample_count):
@@ -594,9 +605,8 @@ if not 0 < SAMPLE_PROPORTION_CUTOFF <= 1:
 if len(SAMPLE_CUTOFF_FILES) != len(SAMPLE_IDS):
     raise ValueError("sample_cutoff_tsvs must correspond to sample_ids")
 
-sample_sexes = read_sample_sexes(PED, SAMPLE_IDS)
+sample_sexes = write_sample_cutoffs(SAMPLE_CUTOFF_FILES, SAMPLE_CUTOFFS, SAMPLE_IDS)
 male_sample_count = sum(sex == "male" for sex in sample_sexes.values())
-write_sample_cutoffs(SAMPLE_CUTOFF_FILES, SAMPLE_CUTOFFS, SAMPLE_IDS)
 
 chromosome_ends = {}
 with open_text(CHROMOSOME_COVERAGE) as source:
