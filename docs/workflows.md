@@ -677,6 +677,19 @@ Outputs:
 - `dropped_vcf_idx`: Index for the sites-only VCF.
 
 
+### [DropGenotypes](../wdl/annotation_utils/DropGenotypes.wdl)
+This utility strips all genotype (sample) columns from a VCF, optionally sharding by record count for speed. It outputs the resulting sites-only VCF.
+
+Inputs:
+- `File vcf`: VCF whose genotypes are dropped.
+- `File vcf_idx`: Index for VCF.
+- `Int? records_per_shard`: Number of variants to keep within a single shard during processing.
+
+Outputs:
+- `dropped_vcf`: Sites-only VCF.
+- `dropped_vcf_idx`: Index for the sites-only VCF.
+
+
 ### [ExtractSampleVcfs](../wdl/annotation_utils/ExtractSampleVcfs.wdl)
 This utility extracts per-sample VCFs from a cohort VCF, splitting each sample's variants into a SNV/indel VCF and an SV VCF based on a minimum SV length. It outputs the per-sample SNV/indel and SV VCFs.
 
