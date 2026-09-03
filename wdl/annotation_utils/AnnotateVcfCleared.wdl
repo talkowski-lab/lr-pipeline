@@ -34,6 +34,7 @@ workflow AnnotateVcfCleared {
     Array[Boolean] sort_tsvs_resolved = select_first([sort_tsvs, []])
     Boolean single_contig = length(contigs) == 1
     Boolean has_subset = defined(subset_untrimmed_vcf)
+    Boolean sort_requested = length(sort_tsvs_resolved) > 0
 
     scatter (contig in contigs) {
         if (!single_contig) {
@@ -59,12 +60,15 @@ workflow AnnotateVcfCleared {
                 }
             }
 
+        }
+
+        if (!single_contig || sort_requested) {
             scatter (i in range(length(annotations_tsvs))) {
                 call Helpers.SubsetTsvToContig {
                     input:
                         tsv = annotations_tsvs[i],
                         contig = contig,
-                        sort_output = if length(sort_tsvs_resolved) > 0 then sort_tsvs_resolved[i] else false,
+                        sort_output = if sort_requested then sort_tsvs_resolved[i] else false,
                         prefix = "~{prefix}.~{contig}.tsv~{i}",
                         docker = utils_docker,
                         runtime_attr_override = runtime_attr_subset_tsv
