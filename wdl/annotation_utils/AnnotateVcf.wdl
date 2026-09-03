@@ -174,7 +174,7 @@ task AnnotateSequentially {
     command <<<
         set -euo pipefail
 
-        python3 <<EOF
+        python3 <<'EOF'
 import sys
 
 info_names = [line.strip().split('\t') for line in open('~{write_tsv(info_names)}')]
