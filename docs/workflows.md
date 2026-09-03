@@ -462,6 +462,7 @@ Inputs:
 - `Array[Boolean] sort_tsvs`: Per-TSV flag indicating whether to sort the TSV before annotation (default empty).
 - `Array[String] subset_vcf_strings`: Per-TSV `bcftools view` arguments used to pre-subset the VCF (default empty).
 - `Array[String] awk_tsv_conditions`: Per-TSV `awk` condition used to filter the TSV rows applied (default empty).
+- `Array[Array[Int]] subset_tsv_columns`: Per-TSV 1-based column indices (beyond the always-kept CHROM/POS/REF/ALT/ID columns 1-5) to keep from the TSV before annotation; an empty list for a TSV keeps all columns (default empty).
 - `Array[Array[String]] info_names`: INFO field names added by each annotation TSV.
 - `Array[Array[String]] info_descriptions`: INFO field header descriptions for each annotation TSV.
 - `Array[Array[String]] info_types`: INFO field types for each annotation TSV.

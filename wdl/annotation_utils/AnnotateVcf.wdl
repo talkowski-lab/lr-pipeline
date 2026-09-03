@@ -17,6 +17,7 @@ workflow AnnotateVcf {
         Array[Boolean] sort_tsvs = []
         Array[String] subset_vcf_strings = []
         Array[String] awk_tsv_conditions = []
+        Array[Array[Int]] subset_tsv_columns = []
 
         Array[Array[String]] info_names
         Array[Array[String]] info_descriptions
@@ -35,6 +36,7 @@ workflow AnnotateVcf {
     }
 
     Boolean single_contig = length(contigs) == 1
+    Boolean sort_requested = length(sort_tsvs) > 0
 
     scatter (contig in contigs) {
         if (!single_contig) {
@@ -47,13 +49,15 @@ workflow AnnotateVcf {
                     docker = utils_docker,
                     runtime_attr_override = runtime_attr_subset_vcf
             }
+        }
 
+        if (!single_contig || sort_requested) {
             scatter (i in range(length(annotations_tsvs))) {
                 call Helpers.SubsetTsvToContig {
                     input:
                         tsv = annotations_tsvs[i],
                         contig = contig,
-                        sort_output = if length(sort_tsvs) > 0 then sort_tsvs[i] else false,
+                        sort_output = if sort_requested then sort_tsvs[i] else false,
                         prefix = "~{prefix}.~{contig}.tsv~{i}",
                         docker = utils_docker,
                         runtime_attr_override = runtime_attr_subset_tsv
@@ -103,6 +107,7 @@ workflow AnnotateVcf {
                     annotations_tsvs = contig_tsvs,
                     subset_vcf_strings = subset_vcf_strings,
                     awk_tsv_conditions = awk_tsv_conditions,
+                    subset_tsv_columns = subset_tsv_columns,
                     info_names = info_names,
                     info_descriptions = info_descriptions,
                     info_types = info_types,
@@ -156,6 +161,7 @@ task AnnotateSequentially {
         Array[File] annotations_tsvs
         Array[String] subset_vcf_strings = []
         Array[String] awk_tsv_conditions = []
+        Array[Array[Int]] subset_tsv_columns = []
         Array[Array[String]] info_names
         Array[Array[String]] info_descriptions
         Array[Array[String]] info_types
@@ -175,6 +181,8 @@ info_names = [line.strip().split('\t') for line in open('~{write_tsv(info_names)
 info_descriptions = [line.strip().split('\t') for line in open('~{write_tsv(info_descriptions)}')]
 info_types = [line.strip().split('\t') for line in open('~{write_tsv(info_types)}')]
 info_numbers = [line.strip().split('\t') for line in open('~{write_tsv(info_numbers)}')]
+subset_tsv_columns = [line.strip().split('\t') for line in open('~{write_tsv(subset_tsv_columns)}')]
+subset_tsv_columns = [cols if cols != [''] else [] for cols in subset_tsv_columns]
 
 if len(info_names) != len(info_descriptions) or len(info_names) != len(info_types) or len(info_names) != len(info_numbers):
     sys.stderr.write("Error: All info arrays must have the same length.\n")
@@ -193,6 +201,12 @@ for i, (names, descs, types, numbers) in enumerate(zip(info_names, info_descript
     with open(f"columns_{i}.txt", "w") as f:
         f.write(column_spec)
 
+    cols = subset_tsv_columns[i] if i < len(subset_tsv_columns) else []
+    with open(f"colsel_{i}.txt", "w") as f:
+        if cols:
+            fields = ','.join(['$1', '$2', '$3', '$4', '$5'] + [f'${c}' for c in cols])
+            f.write('BEGIN{OFS="\\t"}{print ' + fields + '}')
+
 with open("num_tsvs.txt", "w") as f:
     f.write(str(len(info_names)))
 EOF
@@ -207,8 +221,14 @@ EOF
                 AWK_ARG=$(sed -n "$((i + 1))p" "$AWK_COND_FILE")
             fi
 
-            if [ -n "$AWK_ARG" ]; then
+            COLSEL_ARG=$(cat "colsel_${i}.txt")
+
+            if [ -n "$AWK_ARG" ] && [ -n "$COLSEL_ARG" ]; then
+                awk -F'\t' "$AWK_ARG" "$tsv_file" | awk -F'\t' "$COLSEL_ARG" | bgzip -c > "annotations_${i}.tsv.gz"
+            elif [ -n "$AWK_ARG" ]; then
                 awk -F'\t' "$AWK_ARG" "$tsv_file" | bgzip -c > "annotations_${i}.tsv.gz"
+            elif [ -n "$COLSEL_ARG" ]; then
+                awk -F'\t' "$COLSEL_ARG" "$tsv_file" | bgzip -c > "annotations_${i}.tsv.gz"
             else
                 bgzip -c "$tsv_file" > "annotations_${i}.tsv.gz"
             fi
