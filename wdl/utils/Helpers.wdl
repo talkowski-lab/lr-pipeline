@@ -3758,7 +3758,7 @@ task SortReadCounts {
 
         zcat ~{read_counts} > counts.tsv
         grep "^@" counts.tsv > ~{prefix}.tsv
-        grep -v "^@" counts.tsv | head -n 1 >> ~{prefix}.tsv
+        grep -v -m 1 "^@" counts.tsv >> ~{prefix}.tsv
         grep "^@SQ" counts.tsv | sed -E 's/^@SQ\tSN:([^\t]+).*/\1/' > contig_order.txt
         grep -v "^@" counts.tsv | tail -n +2 \
             | awk -F'\t' 'NR==FNR{rank[$1]=NR; next} {print rank[$1]"\t"$0}' contig_order.txt - \
