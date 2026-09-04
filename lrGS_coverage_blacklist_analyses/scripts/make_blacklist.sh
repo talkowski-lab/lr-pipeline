@@ -11,13 +11,14 @@
 #     male samples; eligible_sample_count excludes females from chrY)
 #
 # Output (for p in 90, 70, 50):
-#   hgsvc_hprc.blacklist.p${p}.raw.bed        -- merged bins where >=p% of
-#                                                 eligible samples show low
-#                                                 coverage
-#   hgsvc_hprc.blacklist.p${p}.annotated.bed  -- + size, + overlap bp with
-#                                                 telomere/centromere/
-#                                                 N-masked/SegDup/SimpRep,
-#                                                 + primary_annotation
+#   hgsvc_hprc.blacklist.p${p}.raw.bed(.gz)        -- merged bins where >=p%
+#                                                      of eligible samples
+#                                                      show low coverage
+#   hgsvc_hprc.blacklist.p${p}.annotated.bed(.gz)  -- + size, + overlap bp
+#                                                      with telomere/
+#                                                      centromere/N-masked/
+#                                                      SegDup/SimpRep,
+#                                                      + primary_annotation
 set -euo pipefail
 
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -41,3 +42,9 @@ python3 "$DIR/scripts/downsample_coverage.py"
 
 # 4. per-chromosome 3-panel plots (90/70/50, top to bottom)
 python3 "$DIR/scripts/plot_blacklist_per_chr.py"
+
+# 5. bgzip the bed outputs (bgzipped copies are what's tracked in git)
+for p in 90 70 50; do
+  bgzip -k -f "$DIR/hgsvc_hprc.blacklist.p${p}.raw.bed"
+  bgzip -k -f "$DIR/hgsvc_hprc.blacklist.p${p}.annotated.bed"
+done

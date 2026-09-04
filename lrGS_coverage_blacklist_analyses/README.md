@@ -4,12 +4,14 @@ A cohort-level blacklist of genomic regions that are systematically poorly
 covered by long-read genome sequencing (LRS), derived from 292 samples
 across the HPRC and HGSVC long-read cohorts.
 
-> **Data availability**: the large intermediate/output data files
-> (`hgsvc_hprc.cohort.coverage_counts.tsv`, `hgsvc_hprc.cohort.sample_cutoffs.tsv`,
-> and the `hgsvc_hprc.blacklist.p{90,70,50}.raw.bed` / `.annotated.bed` files)
-> are excluded from this repo by the repo-wide `.gitignore` (`*.tsv`, `*.bed`
-> patterns) and are only present in the local working copy — only the
-> figures, scripts, and this README are version-controlled here.
+> **Data availability**: the blacklist bed files
+> (`hgsvc_hprc.blacklist.p{90,70,50}.raw.bed.gz` / `.annotated.bed.gz`) are
+> bgzipped and version-controlled here (force-added past the repo-wide
+> `.gitignore`, which excludes `*.bed`/`*.bed.gz` by default). The larger
+> intermediate data files (`hgsvc_hprc.cohort.coverage_counts.tsv`,
+> `hgsvc_hprc.cohort.sample_cutoffs.tsv`, and the uncompressed `.bed`
+> originals) are excluded by that same `.gitignore` and are only present in
+> the local working copy.
 
 ## 1. Data
 
@@ -58,9 +60,9 @@ depends on how conservative a user wants to be:
 
 | threshold | file | regions | total size |
 |---|---|---|---|
-| ≥90% of eligible samples | `hgsvc_hprc.blacklist.p90.raw.bed` | 1,084 | 172.41 Mb |
-| ≥70% of eligible samples | `hgsvc_hprc.blacklist.p70.raw.bed` | 1,472 | 178.71 Mb |
-| ≥50% of eligible samples | `hgsvc_hprc.blacklist.p50.raw.bed` | 1,814 | 185.63 Mb |
+| ≥90% of eligible samples | [`hgsvc_hprc.blacklist.p90.raw.bed.gz`](hgsvc_hprc.blacklist.p90.raw.bed.gz) | 1,084 | 172.41 Mb |
+| ≥70% of eligible samples | [`hgsvc_hprc.blacklist.p70.raw.bed.gz`](hgsvc_hprc.blacklist.p70.raw.bed.gz) | 1,472 | 178.71 Mb |
+| ≥50% of eligible samples | [`hgsvc_hprc.blacklist.p50.raw.bed.gz`](hgsvc_hprc.blacklist.p50.raw.bed.gz) | 1,814 | 185.63 Mb |
 
 The three thresholds are **perfectly nested** (p90 ⊆ p70 ⊆ p50 — verified
 with `bedtools subtract`, zero bp difference either way) — see
@@ -84,7 +86,7 @@ reference tracks, all in the parent directory
 | segmental duplication | `hg38.SegDup.sorted.merged.bed` |
 | simple repeat | `hg38.SimpRep.sorted.merged.bed` |
 
-`hgsvc_hprc.blacklist.p{90,70,50}.annotated.bed` columns:
+`hgsvc_hprc.blacklist.p{90,70,50}.annotated.bed.gz` columns:
 
 - `chrom`, `start`, `end` — blacklist region coordinates
 - `size` — region length (bp)
@@ -130,10 +132,8 @@ for that panel, and the resulting merged blacklist regions shaded in red.
 A Venn diagram of the overlap between the three thresholds is at
 [`hgsvc_hprc.blacklist.cutoff_venn.png`](hgsvc_hprc.blacklist.cutoff_venn.png).
 
-(The pre-existing [`low_cov_region.per_chr/`](low_cov_region.per_chr/) and
-[`cov_dist.per_sample/`](cov_dist.per_sample/) plots show the raw
-per-chromosome and per-sample coverage signal without any blacklist
-overlay, for reference.)
+(The pre-existing [`cov_dist.per_sample/`](cov_dist.per_sample/) plots
+show the raw per-sample coverage histograms, for reference.)
 
 ## 5. Reproducing this pipeline
 
