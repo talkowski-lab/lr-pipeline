@@ -3,7 +3,7 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 from matplotlib_venn import venn3
 
-DIR = "/Users/xzhao/Downloads/analyses/gnomAD_LR_vcf/final_vcfs/low_cov_benchmark/low_cov_regions.hprc_hgsvc"
+DIR = "/Users/xzhao/Downloads/github/lr-annotation/lrGS_coverage_blacklist_analyses"
 
 p90_bp = 172409732
 p70_bp = 178705532

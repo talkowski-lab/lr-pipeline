@@ -6,7 +6,7 @@ import matplotlib.patches as mpatches
 import numpy as np
 
 SCR = "/private/tmp/claude-502/-Users-xzhao-Downloads-github/ce274515-e939-4f8a-9d3d-67c167dd0e2b/scratchpad"
-DIR = "/Users/xzhao/Downloads/analyses/gnomAD_LR_vcf/final_vcfs/low_cov_benchmark/low_cov_regions.hprc_hgsvc"
+DIR = "/Users/xzhao/Downloads/github/lr-annotation/lrGS_coverage_blacklist_analyses"
 OUTDIR = f"{DIR}/blacklist_region.per_chr"
 os.makedirs(OUTDIR, exist_ok=True)
 

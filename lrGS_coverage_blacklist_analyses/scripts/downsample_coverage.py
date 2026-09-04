@@ -1,6 +1,6 @@
 WINDOW = 5000  # bp, aggregate 100bp bins into 5kb windows via max (preserve spikes)
 
-DIR = "/Users/xzhao/Downloads/analyses/gnomAD_LR_vcf/final_vcfs/low_cov_benchmark/low_cov_regions.hprc_hgsvc"
+DIR = "/Users/xzhao/Downloads/github/lr-annotation/lrGS_coverage_blacklist_analyses"
 IN = f"{DIR}/hgsvc_hprc.cohort.coverage_counts.tsv"
 OUT = "/private/tmp/claude-502/-Users-xzhao-Downloads-github/ce274515-e939-4f8a-9d3d-67c167dd0e2b/scratchpad/coverage_downsampled.tsv"
 

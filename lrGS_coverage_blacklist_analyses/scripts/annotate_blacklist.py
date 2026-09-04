@@ -12,7 +12,7 @@ Usage: python3 annotate_blacklist.py 90   (or 70, or 50)
 import subprocess
 import sys
 
-DIR = "/Users/xzhao/Downloads/analyses/gnomAD_LR_vcf/final_vcfs/low_cov_benchmark/low_cov_regions.hprc_hgsvc"
+DIR = "/Users/xzhao/Downloads/github/lr-annotation/lrGS_coverage_blacklist_analyses"
 PARENT = "/Users/xzhao/Downloads/analyses/gnomAD_LR_vcf/final_vcfs/low_cov_benchmark"
 
 TRACKS = {

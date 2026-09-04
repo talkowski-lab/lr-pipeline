@@ -148,7 +148,7 @@ All generation scripts are under [`scripts/`](scripts/):
 - `plot_blacklist_venn.py` — generates the cutoff-overlap Venn diagram
 
 ```bash
-cd low_cov_regions.hprc_hgsvc
+cd lrGS_coverage_blacklist_analyses
 bash scripts/make_blacklist.sh
 python3 scripts/plot_blacklist_venn.py
 ```
