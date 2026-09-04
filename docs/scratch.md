@@ -4,9 +4,9 @@
 - _FillFormatFields_ on _allele_type_annotated_vcf_.
 - _NormalizeDuplicationOrigins_.
 - Annotation: _AnnotateCallsetOverlap_, _AnnotateDbVaR_, _AnnotateGQMetrics_, _AnnotateSQMetrics_, _AnnotateSVAnnotate_, (AoU Only)_AnnotateAgeMetrics_.
-- _AnnotateVcf_Functional_.
+- _AnnotateVcfFunctional_.
 - _AnnotateAF_.
-- _AnnotateVcf_Downstream_.
+- _AnnotateVcfDownstream_.
 - _PostprocessCallset_.
 - Untrim variants:
 	- _FindUntrimmedAlleles_.
@@ -16,7 +16,7 @@
 ## Callset Generation - V2
 - _NormalizeDuplicationOrigins_ on _allele_type_annotated_filled_vcf_.
 - Annotation: _AnnotateCallsetOverlap_, _AnnotateSVAnnotate_
-- _AnnotateVcf_Downstream_.
+- _AnnotateVcfDownstream_.
 - _PostprocessCallset_.
 - _AnnotateAF_.
 - Untrim variants:
@@ -29,7 +29,8 @@
 - _PostprocessCallset-DropFilters_ --> hprc_hgsvc_vcf, aou_vcf.
 - (HPRC/HGSVC Only) _PostprocessCallset-FilterAssemblySingletons_ --> hprc_hgsvc_vcf_V2.
 - _FilterLowCoverageRegions_ --> hprc_hgsvc_vcf_V3, aou_vcf_V2.
-- (AoU Only) _StripGenotypes_.
 - (HPRC/HGSVC Only)_FillFormatFields_ --> hprc_hgsvc_vcf_V4.
-- (HPRC/HGSVC Only) Annotation: _AnnotatSQMetrics_, _AnnotatGQMetrics_, _AnnotateCallsetOverlap_.
-- (HPRC/HGSVC Only) _AnnotateVcfCleared_ --> hprc_hgsvc_vcf_V5.
+- (HPRC/HGSVC Only) Annotation: _AnnotatSQMetrics_, _AnnotatGQMetrics_.
+- _AnnotateCallsetOverlap_.
+- (HPRC/HGSVC Only) _AnnotateVcfPostHoc_ --> hprc_hgsvc_vcf_V5, aou_vcf_V3.
+- (AoU Only) _StripGenotypes_.

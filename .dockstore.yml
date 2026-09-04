@@ -474,6 +474,15 @@ workflows:
       tags:
         - /.*/
 
+  - subclass: WDL
+    name: ExtractRandomCalls
+    primaryDescriptorPath: /wdl/annotation_utils/ExtractRandomCalls.wdl
+    filters:
+      branches:
+        - main
+      tags:
+        - /.*/
+
   # -----
   # Tools
   # -----
