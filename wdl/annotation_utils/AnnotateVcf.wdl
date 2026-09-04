@@ -12,9 +12,10 @@ workflow AnnotateVcf {
         String prefix
 
         Int? records_per_shard
-        Array[String]? strip_info_fields
 
         Array[Boolean] sort_tsvs = []
+        Array[Boolean] strip_info_fields_per_tsv = []
+        Array[String] strip_info_fields_by_name = []
         Array[String] subset_vcf_strings = []
         Array[String] awk_tsv_conditions = []
         Array[Array[Int]] subset_tsv_columns = []
@@ -37,6 +38,8 @@ workflow AnnotateVcf {
 
     Boolean single_contig = length(contigs) == 1
     Boolean sort_requested = length(sort_tsvs) > 0
+    Boolean per_tsv_strip_requested = length(strip_info_fields_per_tsv) > 0
+    Boolean by_name_strip_requested = length(strip_info_fields_by_name) > 0 && !per_tsv_strip_requested
 
     scatter (contig in contigs) {
         if (!single_contig) {
@@ -69,12 +72,12 @@ workflow AnnotateVcf {
         File contig_vcf_idx = select_first([SubsetVcfToContig.subset_vcf_idx, vcf_idx])
         Array[File] contig_tsvs = select_first([SubsetTsvToContig.subset_tsv, annotations_tsvs])
 
-        if (defined(strip_info_fields)) {
+        if (by_name_strip_requested) {
             call Helpers.StripInfoFields {
                 input:
                     vcf = contig_vcf,
                     vcf_idx = contig_vcf_idx,
-                    info_fields = select_first([strip_info_fields]),
+                    info_fields = strip_info_fields_by_name,
                     prefix = "~{prefix}.~{contig}.stripped",
                     docker = utils_docker,
                     runtime_attr_override = runtime_attr_strip
@@ -108,6 +111,7 @@ workflow AnnotateVcf {
                     subset_vcf_strings = subset_vcf_strings,
                     awk_tsv_conditions = awk_tsv_conditions,
                     subset_tsv_columns = subset_tsv_columns,
+                    strip_info_fields_per_tsv = strip_info_fields_per_tsv,
                     info_names = info_names,
                     info_descriptions = info_descriptions,
                     info_types = info_types,
@@ -162,6 +166,7 @@ task AnnotateSequentially {
         Array[String] subset_vcf_strings = []
         Array[String] awk_tsv_conditions = []
         Array[Array[Int]] subset_tsv_columns = []
+        Array[Boolean] strip_info_fields_per_tsv = []
         Array[Array[String]] info_names
         Array[Array[String]] info_descriptions
         Array[Array[String]] info_types
@@ -183,9 +188,14 @@ info_types = [line.strip().split('\t') for line in open('~{write_tsv(info_types)
 info_numbers = [line.strip().split('\t') for line in open('~{write_tsv(info_numbers)}')]
 subset_tsv_columns = [line.strip().split('\t') for line in open('~{write_tsv(subset_tsv_columns)}')]
 subset_tsv_columns = [cols if cols != [''] else [] for cols in subset_tsv_columns]
+strip_per_tsv = [line.strip() == "true" for line in open('~{write_lines(strip_info_fields_per_tsv)}')]
 
 if len(info_names) != len(info_descriptions) or len(info_names) != len(info_types) or len(info_names) != len(info_numbers):
     sys.stderr.write("Error: All info arrays must have the same length.\n")
+    sys.exit(1)
+
+if strip_per_tsv and len(strip_per_tsv) != len(info_names):
+    sys.stderr.write("Error: strip_info_fields_per_tsv must have the same length as info_names.\n")
     sys.exit(1)
 
 for i, (names, descs, types, numbers) in enumerate(zip(info_names, info_descriptions, info_types, info_numbers)):
@@ -206,6 +216,10 @@ for i, (names, descs, types, numbers) in enumerate(zip(info_names, info_descript
         if cols:
             fields = ','.join(['$1', '$2', '$3', '$4', '$5'] + [f'${c}' for c in cols])
             f.write('BEGIN{OFS="\\t"}{print ' + fields + '}')
+
+    with open(f"clear_{i}.txt", "w") as f:
+        if strip_per_tsv and strip_per_tsv[i]:
+            f.write(','.join(f'INFO/{name}' for name in names))
 
 with open("num_tsvs.txt", "w") as f:
     f.write(str(len(info_names)))
@@ -233,7 +247,14 @@ EOF
                 bgzip -c "$tsv_file" > "annotations_${i}.tsv.gz"
             fi
             tabix -s1 -b2 -e2 "annotations_${i}.tsv.gz"
-            
+
+            CLEAR_ARG=$(cat "clear_${i}.txt")
+            if [ -n "$CLEAR_ARG" ]; then
+                bcftools annotate -x "$CLEAR_ARG" -Oz -o "cleared_${i}.vcf.gz" "$current_vcf"
+                tabix -p vcf "cleared_${i}.vcf.gz"
+                current_vcf="cleared_${i}.vcf.gz"
+            fi
+
             COLUMN_SPEC=$(cat "columns_${i}.txt")
 
             SUBSET_ARG=""
