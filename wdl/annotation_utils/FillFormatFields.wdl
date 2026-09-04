@@ -359,8 +359,8 @@ for unfilled_rec in unfilled_in:
                 src_gt = match.samples[sample].get("GT")
                 cur_gt = unfilled_rec.samples[sample].get("GT")
                 if src_gt is not None and cur_gt is not None:
-                    cur_is_alt = gt_is_alt(cur_gt)
-                    if (fill_alt_gts and cur_is_alt) or (fill_ref_gts and not cur_is_alt):
+                    src_is_alt = gt_is_alt(src_gt)
+                    if (fill_alt_gts and src_is_alt) or (fill_ref_gts and not src_is_alt):
                         unfilled_rec.samples[sample]["GT"] = src_gt
                         unfilled_rec.samples[sample].phased = match.samples[sample].phased
 

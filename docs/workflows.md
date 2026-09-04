@@ -766,8 +766,8 @@ Inputs:
 - `File? ref_fai`: Index for `ref_fa`. Required if either normalize input is `true`.
 - `Int? records_per_shard_normalize`: Number of variants per shard when normalizing. When set, normalization runs in parallel shards that are re-concatenated and sorted afterward.
 - `Int? shard_bin_size_fill`: Region-bin size, in bp, used when sharding the contig for matching/filling.
-- `Boolean fill_alt_gts`: Whether to fill alternate-allele genotypes.
-- `Boolean fill_ref_gts`: Whether to fill reference genotypes.
+- `Boolean fill_alt_gts`: Whether to overwrite a sample's GT in `unfilled_vcf` with `filled_vcf`'s GT when `filled_vcf`'s GT is alt-containing, regardless of the current GT in `unfilled_vcf`.
+- `Boolean fill_ref_gts`: Whether to overwrite a sample's GT in `unfilled_vcf` with `filled_vcf`'s GT when `filled_vcf`'s GT is non-alt (hom-ref or no-call), regardless of the current GT in `unfilled_vcf`.
 - `Boolean unphase_gts`: Whether to unphase genotypes while filling.
 - `Boolean add_pl`: Whether to add a PL field.
 
