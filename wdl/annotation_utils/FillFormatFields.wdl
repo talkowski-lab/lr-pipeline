@@ -12,7 +12,8 @@ workflow FillFormatFields {
         String contig
         String prefix
 
-        Array[String] format_fields
+        Array[String] transfer_format_fields
+        Array[String] drop_format_fields = []
         String? subset_unfilled_vcf_field
         String? subset_unfilled_vcf_value
 
@@ -182,7 +183,8 @@ workflow FillFormatFields {
                     unfilled_vcf_idx = SubsetUnfilled.subset_vcf_idx,
                     filled_vcf = SubsetFilled.subset_vcf,
                     filled_vcf_idx = SubsetFilled.subset_vcf_idx,
-                    format_fields = format_fields,
+                    transfer_format_fields = transfer_format_fields,
+                    drop_format_fields = drop_format_fields,
                     match_by_id = match_by_id,
                     subset_unfilled_vcf_field = subset_unfilled_vcf_field,
                     subset_unfilled_vcf_value = subset_unfilled_vcf_value,
@@ -215,7 +217,8 @@ workflow FillFormatFields {
                 unfilled_vcf_idx = final_unfilled_vcf_idx,
                 filled_vcf = final_filled_vcf,
                 filled_vcf_idx = final_filled_vcf_idx,
-                format_fields = format_fields,
+                transfer_format_fields = transfer_format_fields,
+                drop_format_fields = drop_format_fields,
                 match_by_id = match_by_id,
                 subset_unfilled_vcf_field = subset_unfilled_vcf_field,
                 subset_unfilled_vcf_value = subset_unfilled_vcf_value,
@@ -241,7 +244,8 @@ task FillVcfFormatFields {
         File unfilled_vcf_idx
         File filled_vcf
         File filled_vcf_idx
-        Array[String] format_fields
+        Array[String] transfer_format_fields
+        Array[String] drop_format_fields = []
         Boolean match_by_id
         String? subset_unfilled_vcf_field
         String? subset_unfilled_vcf_value
@@ -257,7 +261,7 @@ task FillVcfFormatFields {
     command <<<
         set -euo pipefail
 
-        format_fields_file="~{write_lines(format_fields)}"
+        transfer_format_fields_file="~{write_lines(transfer_format_fields)}"
 
         if [[ "~{filled_vcf_idx}" != "~{filled_vcf}.tbi" ]]; then
             ln -sf "~{filled_vcf_idx}" "~{filled_vcf}.tbi"
@@ -267,10 +271,10 @@ task FillVcfFormatFields {
 import math
 import pysam
 
-with open("$format_fields_file") as fh:
-    format_fields = [l.strip() for l in fh if l.strip()]
+with open("$transfer_format_fields_file") as fh:
+    transfer_format_fields = [l.strip() for l in fh if l.strip()]
 
-assert "GT" not in format_fields, "GT must not be passed in format_fields; use fill_alt_gts/fill_ref_gts instead"
+assert "GT" not in transfer_format_fields, "GT must not be passed in transfer_format_fields; use fill_alt_gts/fill_ref_gts instead"
 
 match_by_id = ~{true="True" false="False" match_by_id}
 subset_field = ~{if defined(subset_unfilled_vcf_field) then "'" + subset_unfilled_vcf_field + "'" else "None"}
@@ -284,7 +288,7 @@ unfilled_in = pysam.VariantFile("~{unfilled_vcf}")
 filled_in = pysam.VariantFile("~{filled_vcf}")
 
 out_header = unfilled_in.header.copy()
-for field in format_fields:
+for field in transfer_format_fields:
     if field in filled_in.header.formats and field not in out_header.formats:
         out_header.add_record(filled_in.header.formats[field].record)
 if add_pl and "PL" not in out_header.formats:
@@ -365,7 +369,7 @@ for unfilled_rec in unfilled_in:
                         unfilled_rec.samples[sample].phased = match.samples[sample].phased
 
             # Copy over values for format fields
-            for field in format_fields:
+            for field in transfer_format_fields:
                 if field not in match.format:
                     continue
                 value = match.samples[sample].get(field)
@@ -396,6 +400,17 @@ for unfilled_rec in unfilled_in:
 
 out.close()
 CODE
+
+        drop_format_fields_file="~{write_lines(drop_format_fields)}"
+        if grep -qx "GT" "$drop_format_fields_file" 2>/dev/null; then
+            echo "GT must not be passed in drop_format_fields" >&2
+            exit 1
+        fi
+        if [ -s "$drop_format_fields_file" ]; then
+            drop_arg=$(awk '{print "FORMAT/"$0}' "$drop_format_fields_file" | paste -sd, -)
+            bcftools annotate -x "$drop_arg" -Oz -o ~{prefix}.dropped.vcf.gz ~{prefix}.vcf.gz
+            mv ~{prefix}.dropped.vcf.gz ~{prefix}.vcf.gz
+        fi
 
         tabix -p vcf ~{prefix}.vcf.gz
     >>>

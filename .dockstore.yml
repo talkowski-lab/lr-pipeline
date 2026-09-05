@@ -232,6 +232,15 @@ workflows:
         - /.*/
 
   - subclass: WDL
+    name: ConcatenateVcfsAcrossContigs
+    primaryDescriptorPath: /wdl/annotation_utils/ConcatenateVcfsAcrossContigs.wdl
+    filters:
+      branches:
+        - main
+      tags:
+        - /.*/
+
+  - subclass: WDL
     name: SummarizeAnnotations
     primaryDescriptorPath: /wdl/annotation_utils/SummarizeAnnotations.wdl
     filters:

@@ -756,7 +756,8 @@ Inputs:
 - `File filled_vcf`: VCF providing the FORMAT field values.
 - `File filled_vcf_idx`: Index for `filled_vcf`.
 - `String contig`: Contig to process.
-- `Array[String] format_fields`: FORMAT fields to fill.
+- `Array[String] transfer_format_fields`: FORMAT fields to fill from `filled_vcf`.
+- `Array[String] drop_format_fields`: FORMAT fields to drop entirely from the output (e.g. fields known to be unreliable). Cannot include `GT`.
 - `Boolean match_by_id`: Whether matching also requires equal variant IDs, in addition to CHROM/POS/REF/ALT.
 - `String? subset_unfilled_vcf_field`: INFO field on `unfilled_vcf` used to limit which variants are filled. Requires `subset_unfilled_vcf_value`.
 - `String? subset_unfilled_vcf_value`: Value that `subset_unfilled_vcf_field` must equal for a variant to be filled. Variants that don't match are left unfilled.
