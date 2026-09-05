@@ -124,6 +124,7 @@
 ## FILTER Values
 - `ASSEMBLY_ONLY_SINGLETON`: Variant with `AC = 1` whose sole carrier has support exclusively from assembly-based callers (`dipcall` and/or `hapdiff`).
 - `LARGE_SNV_INDEL`: Variant with `SOURCE = "DeepVariant"` that has `INFO/allele_length ≥ 50`.
+- `LOW_COVERAGE_REGION`: Variant region determined to have low coverage relative to entire genome.
 - `MONOALLELIC`: Variant in a region with multiple variants that could not be unified into non-overlapping multi-allelic sites.
 - `SINGLE_READ_SUPPORT`: Variant with `AC = 1` whose sole carrier has support from just a single read.
 - `SMALL_SV`: Variant with `SOURCE = "HPRC_SV_Integration"` that has `INFO/allele_length < 50`.

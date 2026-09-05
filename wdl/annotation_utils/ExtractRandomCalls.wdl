@@ -166,10 +166,42 @@ task SampleShardCalls {
 import random
 import pysam
 
+MIN_AF = "~{default='' min_af}"
+MAX_AF = "~{default='' max_af}"
+MIN_AC = "~{default='' min_ac}"
+MAX_AC = "~{default='' max_ac}"
+SINGLETON = "~{true='1' false='0' singleton}" == "1"
 INCLUDE_SAMPLES = [v for v in "~{sep=',' include_samples}".split(",") if v]
 EXCLUDE_SAMPLES = set(v for v in "~{sep=',' exclude_samples}".split(",") if v)
 COUNT = ~{count}
 SEED = ~{random_seed}
+
+min_af = float(MIN_AF) if MIN_AF else None
+max_af = float(MAX_AF) if MAX_AF else None
+min_ac = int(MIN_AC) if MIN_AC else None
+max_ac = int(MAX_AC) if MAX_AC else None
+if SINGLETON:
+    min_ac = max_ac = 1
+
+def allele_passes(idx, ac_field, af_field):
+    # AC/AF are Number=A (one value per ALT, e.g. multiallelic VAMOS/TR sites) on some
+    # callsets, plain scalars on others. The bcftools prefilter above only checked whether
+    # ANY element of the vector satisfied the bound, which is correct for keeping the
+    # record but wrong for attributing a hit to a specific sample: a sample carrying a
+    # common allele (e.g. AC=29) at a site that also has an unrelated true singleton ALT
+    # must not be reported as a singleton carrier. Index into the vector by the sample's
+    # actual ALT index (1-based in GT, so idx-1 into the tuple); a scalar applies as-is.
+    ac = ac_field[idx - 1] if isinstance(ac_field, tuple) else ac_field
+    af = af_field[idx - 1] if isinstance(af_field, tuple) else af_field
+    if min_ac is not None and (ac is None or ac < min_ac):
+        return False
+    if max_ac is not None and (ac is None or ac > max_ac):
+        return False
+    if min_af is not None and (af is None or af < min_af):
+        return False
+    if max_af is not None and (af is None or af > max_af):
+        return False
+    return True
 
 rng = random.Random(SEED)
 vcf_in = pysam.VariantFile("filtered.bcf")
@@ -184,10 +216,18 @@ for record in vcf_in:
     end = record.stop
     vid = record.id if record.id else "."
     allele_type = record.info.get("allele_type", ".")
+    ac_field = record.info.get("AC")
+    af_field = record.info.get("AF")
+    need_allele_check = min_ac is not None or max_ac is not None or min_af is not None or max_af is not None
 
     for sample in candidate_samples:
         gt = record.samples[sample]["GT"]
-        if gt is None or not any(a is not None and a > 0 for a in gt):
+        if gt is None:
+            continue
+        alt_indices = {a for a in gt if a is not None and a > 0}
+        if not alt_indices:
+            continue
+        if need_allele_check and not any(allele_passes(idx, ac_field, af_field) for idx in alt_indices):
             continue
         n_seen += 1
         pair = (chrom, start, end, vid, allele_type, sample)
