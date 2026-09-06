@@ -61,7 +61,7 @@ workflow LRCNVs {
         #        chrX           0.01           0.49           0.49           0.01
         #        chrY          0.495          0.495           0.01            0.0
         File contig_ploidy_priors
-        Int num_intervals_per_scatter = 10000
+        Int num_intervals_per_scatter = 1500
         File ref_fa
         File ref_fai
         File ref_dict
@@ -943,10 +943,10 @@ task GermlineCNVCallerCohortMode {
 
     RuntimeAttr default_attr = object {
         cpu_cores: 8,
-        mem_gb: 8,
+        mem_gb: 10,
         disk_gb: ceil((size(read_count_files, "GB") + size([contig_ploidy_calls_tar, intervals], "GB")) * 2) + 50,
         boot_disk_gb: 10,
-        preemptible_tries: 0,
+        preemptible_tries: 1,
         max_retries: 0
     }
     RuntimeAttr runtime_attr = select_first([runtime_attr_override, default_attr])

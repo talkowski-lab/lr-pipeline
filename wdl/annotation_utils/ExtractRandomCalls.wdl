@@ -9,20 +9,20 @@ workflow ExtractRandomCalls {
         String prefix
 
         Int count
+        Int random_seed = 42
+
         Float? min_af
         Float? max_af
         Int? min_ac
         Int? max_ac
         Boolean singleton = false
-        Array[String] filter_values = []
+        Array[String] filters = []
         Array[String] allele_types = []
         Int? min_allele_length
         Int? max_allele_length
-        Array[String] variant_types = []
         Array[String] include_samples = []
         Array[String] exclude_samples = []
-        Int random_seed = 42
-
+        
         String utils_docker
 
         RuntimeAttr? runtime_attr_sample
@@ -40,11 +40,10 @@ workflow ExtractRandomCalls {
                 min_ac = min_ac,
                 max_ac = max_ac,
                 singleton = singleton,
-                filter_values = filter_values,
+                filters = filters,
                 allele_types = allele_types,
                 min_allele_length = min_allele_length,
                 max_allele_length = max_allele_length,
-                variant_types = variant_types,
                 include_samples = include_samples,
                 exclude_samples = exclude_samples,
                 random_seed = random_seed + i,
@@ -85,11 +84,10 @@ task SampleShardCalls {
         Int? min_ac
         Int? max_ac
         Boolean singleton
-        Array[String] filter_values
+        Array[String] filters
         Array[String] allele_types
         Int? min_allele_length
         Int? max_allele_length
-        Array[String] variant_types
         Array[String] include_samples
         Array[String] exclude_samples
         Int random_seed
@@ -125,9 +123,9 @@ task SampleShardCalls {
             [ -n "$MAX_AC" ] && EXPR_PARTS+=("INFO/AC<=$MAX_AC")
         fi
 
-        FILTER_VALUES="~{sep=',' filter_values}"
-        if [ -n "$FILTER_VALUES" ]; then
-            IFS=',' read -ra FVALS <<< "$FILTER_VALUES"
+        FILTERS="~{sep=',' filters}"
+        if [ -n "$FILTERS" ]; then
+            IFS=',' read -ra FVALS <<< "$FILTERS"
             FSUB=()
             for v in "${FVALS[@]}"; do FSUB+=("FILTER=\"$v\""); done
             EXPR_PARTS+=("($(join_by '||' "${FSUB[@]}"))")
@@ -145,18 +143,6 @@ task SampleShardCalls {
         [ -n "$MIN_ALLELE_LENGTH" ] && EXPR_PARTS+=("abs(INFO/allele_length)>=$MIN_ALLELE_LENGTH")
         MAX_ALLELE_LENGTH="~{default='' max_allele_length}"
         [ -n "$MAX_ALLELE_LENGTH" ] && EXPR_PARTS+=("abs(INFO/allele_length)<=$MAX_ALLELE_LENGTH")
-
-        VARIANT_TYPES="~{sep=',' variant_types}"
-        if [ -n "$VARIANT_TYPES" ]; then
-            IFS=',' read -ra TVALS <<< "$VARIANT_TYPES"
-            TSUB=()
-            for v in "${TVALS[@]}"; do
-                bt=$(echo "$v" | tr '[:upper:]' '[:lower:]')
-                [ "$bt" = "snv" ] && bt="snp"
-                TSUB+=("TYPE=\"$bt\"")
-            done
-            EXPR_PARTS+=("($(join_by '||' "${TSUB[@]}"))")
-        fi
 
         # push every site-level filter down to bcftools (compiled C, single streaming pass)
         # so pysam below only has to walk the pre-shrunk set to do the per-sample GT check

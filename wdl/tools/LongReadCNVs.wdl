@@ -19,7 +19,7 @@ workflow LongReadCNVs {
         Boolean sort_depth_profiles
         String batch_id
         File contig_ploidy_priors
-        Int num_intervals_per_scatter = 10000
+        Int num_intervals_per_scatter = 1500
         File merged_bincov
         File merged_bincov_idx
         File ref_fa
