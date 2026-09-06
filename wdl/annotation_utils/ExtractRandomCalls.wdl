@@ -244,11 +244,12 @@ with open("~{prefix}.candidate_count.txt", "w") as out:
     out.write(str(n_seen) + "\n")
 
 final_keys = {(c, s, e) for c, s, e, _, _, _ in reservoir}
-with pysam.VariantFile("~{prefix}.candidate_sites.vcf.gz", "w", header=vcf_in.header) as sites_out:
+with pysam.VariantFile("candidate_sites.unsorted.vcf", "w", header=vcf_in.header) as sites_out:
     for key in final_keys:
         sites_out.write(record_cache[key])
 PYCODE
 
+        bcftools sort -Oz -o ~{prefix}.candidate_sites.vcf.gz candidate_sites.unsorted.vcf
         tabix -p vcf ~{prefix}.candidate_sites.vcf.gz
     >>>
 
