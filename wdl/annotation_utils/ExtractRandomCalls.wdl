@@ -58,6 +58,8 @@ workflow ExtractRandomCalls {
         input:
             pair_tsvs = SampleShardCalls.pairs_tsv,
             candidate_counts = SampleShardCalls.candidate_count,
+            candidate_vcfs = SampleShardCalls.candidate_sites_vcf,
+            candidate_vcf_idxs = SampleShardCalls.candidate_sites_vcf_idx,
             count = count,
             random_seed = random_seed,
             prefix = prefix,
@@ -68,6 +70,8 @@ workflow ExtractRandomCalls {
     output {
         File variant_sample_pairs = MergeRandomCalls.pairs_tsv
         File candidate_summary = MergeRandomCalls.summary_tsv
+        File variant_vcf = MergeRandomCalls.variant_vcf
+        File variant_vcf_idx = MergeRandomCalls.variant_vcf_idx
     }
 }
 
@@ -209,6 +213,7 @@ candidate_samples = INCLUDE_SAMPLES or list(vcf_in.header.samples)
 candidate_samples = [s for s in candidate_samples if s not in EXCLUDE_SAMPLES]
 
 reservoir = []
+record_cache = {}
 n_seen = 0
 for record in vcf_in:
     chrom = record.chrom
@@ -219,6 +224,7 @@ for record in vcf_in:
     ac_field = record.info.get("AC")
     af_field = record.info.get("AF")
     need_allele_check = min_ac is not None or max_ac is not None or min_af is not None or max_af is not None
+    key = (chrom, start, end)
 
     for sample in candidate_samples:
         gt = record.samples[sample]["GT"]
@@ -233,10 +239,14 @@ for record in vcf_in:
         pair = (chrom, start, end, vid, allele_type, sample)
         if len(reservoir) < COUNT:
             reservoir.append(pair)
+            # htslib reuses the record buffer on the next iteration, so a bare reference
+            # would silently turn into whichever record was read last -- copy() detaches it
+            record_cache.setdefault(key, record.copy())
         else:
             j = rng.randint(0, n_seen - 1)
             if j < COUNT:
                 reservoir[j] = pair
+                record_cache.setdefault(key, record.copy())
 
 reservoir.sort(key=lambda p: (p[0], p[1]))
 with open("~{prefix}.pairs.tsv", "w") as out:
@@ -246,12 +256,21 @@ with open("~{prefix}.pairs.tsv", "w") as out:
 
 with open("~{prefix}.candidate_count.txt", "w") as out:
     out.write(str(n_seen) + "\n")
+
+final_keys = {(c, s, e) for c, s, e, _, _, _ in reservoir}
+with pysam.VariantFile("~{prefix}.candidate_sites.vcf.gz", "w", header=vcf_in.header) as sites_out:
+    for key in final_keys:
+        sites_out.write(record_cache[key])
 PYCODE
+
+        tabix -p vcf ~{prefix}.candidate_sites.vcf.gz
     >>>
 
     output {
         File pairs_tsv = "~{prefix}.pairs.tsv"
         Int candidate_count = read_int("~{prefix}.candidate_count.txt")
+        File candidate_sites_vcf = "~{prefix}.candidate_sites.vcf.gz"
+        File candidate_sites_vcf_idx = "~{prefix}.candidate_sites.vcf.gz.tbi"
     }
 
     RuntimeAttr default_attr = object {
@@ -278,6 +297,8 @@ task MergeRandomCalls {
     input {
         Array[File] pair_tsvs
         Array[Int] candidate_counts
+        Array[File] candidate_vcfs
+        Array[File] candidate_vcf_idxs
         Int count
         Int random_seed
         String prefix
@@ -288,8 +309,13 @@ task MergeRandomCalls {
     command <<<
         set -euo pipefail
 
+        bcftools concat -a ~{sep=" " candidate_vcfs} \
+            | bcftools sort -Oz -o pooled.vcf.gz -
+        tabix -p vcf pooled.vcf.gz
+
         python3 <<'PYCODE'
 import random
+import pysam
 
 PAIR_FILES = "~{sep=',' pair_tsvs}".split(",")
 COUNTS = [int(v) for v in "~{sep=',' candidate_counts}".split(",") if v]
@@ -315,18 +341,35 @@ with open("~{prefix}.candidate_summary.txt", "w") as out:
     out.write(f"requested\t{COUNT}\n")
     out.write(f"total_candidates_found\t{sum(COUNTS)}\n")
     out.write(f"pairs_written\t{len(selected)}\n")
+
+# candidate_vcfs holds every site any shard's reservoir ever touched, a superset of the
+# final draw (shard-level sampling caps at COUNT, but the global draw above trims that
+# pool down to COUNT again) -- key on (chrom, start, end) to pull out exactly the winners
+final_keys = {(line.split("\t")[0], int(line.split("\t")[1]), int(line.split("\t")[2])) for line in selected}
+pooled = pysam.VariantFile("pooled.vcf.gz")
+written = set()
+with pysam.VariantFile("~{prefix}.variant_sample_pairs.vcf.gz", "w", header=pooled.header) as vcf_out:
+    for record in pooled:
+        key = (record.chrom, record.pos + 1, record.stop)
+        if key in final_keys and key not in written:
+            vcf_out.write(record)
+            written.add(key)
 PYCODE
+
+        tabix -p vcf ~{prefix}.variant_sample_pairs.vcf.gz
     >>>
 
     output {
         File pairs_tsv = "~{prefix}.variant_sample_pairs.tsv"
         File summary_tsv = "~{prefix}.candidate_summary.txt"
+        File variant_vcf = "~{prefix}.variant_sample_pairs.vcf.gz"
+        File variant_vcf_idx = "~{prefix}.variant_sample_pairs.vcf.gz.tbi"
     }
 
     RuntimeAttr default_attr = object {
         cpu_cores: 1,
         mem_gb: 2,
-        disk_gb: 10,
+        disk_gb: 4 * ceil(size(candidate_vcfs, "GB")) + 10,
         boot_disk_gb: 10,
         preemptible_tries: 1,
         max_retries: 0
