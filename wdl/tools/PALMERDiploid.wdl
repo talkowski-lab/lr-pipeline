@@ -18,7 +18,6 @@ workflow PALMERDiploid {
         String mode
         Array[String] mei_types
 
-        String annotate_palmer_docker
         String palmer_docker
         String utils_docker
 
@@ -103,7 +102,7 @@ workflow PALMERDiploid {
                 ref_fai = ref_fai,
                 haplotype = "1/1",
                 prefix = "~{prefix}.~{mei_type}",
-                docker = annotate_palmer_docker,
+                docker = utils_docker,
                 runtime_attr_override = runtime_attr_palmer_to_vcf
         }
     }

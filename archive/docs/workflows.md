@@ -365,3 +365,52 @@ Outputs:
 - `methylation_tagged_bam`: Aligned BAM with methylation tags transferred.
 - `methylation_tagged_bai`: Index for the tagged BAM.
 - `methylation_tags`: TSV of the transferred methylation tags.
+
+
+### [VcfDist](../wdl/tools/VcfDist.wdl)
+This tool runs [vcfdist](https://github.com/TimD1/vcfdist) in order to benchmark an evaluation VCF against a truth VCF per contig, computing alignment-based precision/recall and phasing accuracy. It outputs vcfdist's precision-recall, phasing, switch-flip, phase-block and supercluster reports.
+
+Inputs:
+- `File vcf_eval`: VCF being evaluated.
+- `File vcf_eval_idx`: Index for `vcf_eval`.
+- `File vcf_truth`: Truth VCF to evaluate against.
+- `File vcf_truth_idx`: Index for `vcf_truth`.
+- `Array[String] contigs`: Contigs to evaluate.
+- `File? bed_regions`: BED of regions to restrict the evaluation to.
+- `String? mode`: vcfdist evaluation mode.
+- `Float? threshold`: vcfdist matching threshold.
+- `String? vcfdist_args`: Additional arguments passed to vcfdist.
+- `File ref_fa`: From [references](references.md).
+
+Outputs:
+- `vcfdist_phasing_summary_tsv`: Per-contig phasing summaries.
+- `vcfdist_switchflips_tsv`: Per-contig switch and flip errors.
+- `vcfdist_precision_recall_tsv`: Per-contig precision-recall curves.
+- `vcfdist_precision_recall_summary_tsv`: Per-contig precision-recall summaries.
+- `vcfdist_phase_blocks_tsv`: Per-contig phase blocks.
+- `vcfdist_superclusters_tsv`: Per-contig variant superclusters.
+- `vcfdist_query_tsv`: Per-contig query-variant results.
+- `vcfdist_truth_tsv`: Per-contig truth-variant results.
+- `vcfdist_summary_vcf`: Per-contig annotated summary VCFs.
+
+
+### [VcfDistCohort](../wdl/tools/VcfDistCohort.wdl)
+This tool runs [vcfdist](https://github.com/TimD1/vcfdist) across a cohort by pairing each evaluation VCF with its corresponding truth VCF and benchmarking every assigned sample, then aggregating the per-sample results. It outputs cohort-level precision/recall and phasing summaries.
+
+Inputs:
+- `Array[File] eval_vcfs`: Evaluation VCFs, one per group.
+- `Array[File] eval_vcf_idxs`: Indexes for `eval_vcfs`.
+- `Array[File] truth_vcfs`: Truth VCFs, aligned to `eval_vcfs`.
+- `Array[File] truth_vcf_idxs`: Indexes for `truth_vcfs`.
+- `Array[String] contigs`: Contigs to evaluate.
+- `Array[String]? subset_samples`: Samples to restrict the evaluation to.
+- `String? vcfdist_args`: Additional arguments passed to vcfdist.
+- `File ref_fa`: From [references](references.md).
+
+Outputs:
+- `vcfdist_phasing_summary_tsv`: Cohort phasing summary.
+- `vcfdist_precision_recall_summary_tsv`: Cohort precision-recall summary.
+- `vcfdist_precision_recall_tsv`: Cohort precision-recall curves.
+- `vcfdist_switchflips_tsv`: Cohort switch and flip errors.
+- `vcfdist_phase_blocks_tsv`: Cohort phase blocks.
+- `vcfdist_missing_samples`: Samples with no matching truth VCF.

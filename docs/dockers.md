@@ -1,20 +1,21 @@
 # Docker images
 
-Docker images used across lr-pipeline workflows, as configured in the Terra
-workspace (`attributes.tsv`). Grouped by who builds/maintains each image.
+Every `String *_docker` input declared across `wdl/` (source of truth — checked
+against every workflow, not just the Terra workspace snapshot), mapped to
+where it's built. Grouped by who builds/maintains each image.
 
 ## Repo dockers
 
 Built from `Dockerfiles` in this repo ([dockerfiles/](../dockerfiles/)), pushed to
 `us-central1-docker.pkg.dev/talkowski-sv-gnomad/kj-dockers/`.
 
-| Attribute | Image | Dockerfile |
+| Argument Name | Image | Dockerfile |
 |---|---|---|
 | `intact_mei_docker` | kj-dockers/intactmei:latest | `Dockerfile.intactmei` |
 | `palmer_docker` | kj-dockers/palmer:latest | `Dockerfile.palmer` |
 | `cpg_docker` | kj-dockers/cpgtools:latest | `Dockerfile.cpgtools` |
 | `vrs_docker` | kj-dockers/vrs:latest | `Dockerfile.vrs` |
-| `l1meaid_docker` | kj-dockers/l1meaid:latest ⚠️ | `Dockerfile.l1meaid` |
+| `l1meaid_docker` | kj-dockers/l1meaid:latest | `Dockerfile.l1meaid` |
 | `vep_hail_docker` | kj-dockers/vephail:latest | `Dockerfile.vephail` |
 | `stranalysis_docker` | kj-dockers/stranalysis:latest | `Dockerfile.stranalysis` |
 | `utils_docker` | kj-dockers/utils:latest | `Dockerfile.utils` |
@@ -23,17 +24,28 @@ Built from `Dockerfiles` in this repo ([dockerfiles/](../dockerfiles/)), pushed 
 | `trgt_lps_docker` | kj-dockers/trgt-lps:latest | `Dockerfile.trgtlps` |
 | `trgt_docker` | kj-dockers/trgt:latest | `Dockerfile.trgt` |
 | `mosdepth_docker` | kj-dockers/mosdepth:latest | `Dockerfile.mosdepth` |
+| `mosdepthstream_docker` | kj-dockers/mosdepthstream:latest | `Dockerfile.mosdepthstream` |
 | `kanpig_docker` | kj-dockers/kanpig:latest | `Dockerfile.kanpig` |
 | `svan_docker` | kj-dockers/svan:latest | `Dockerfile.svan` |
 | `whatshap_docker` | kj-dockers/whatshap:latest | `Dockerfile.whatshap` |
+| `hificnv_docker` | kj-dockers/hificnv:latest | `Dockerfile.hificnv` |
+| `sawfish_docker` | kj-dockers/sawfish:latest | `Dockerfile.sawfish` |
 
-`Dockerfile.utils` is the base image for most other repo Dockerfiles.
+`Dockerfile.utils` is the base image for most other repo Dockerfiles. Every
+Dockerfile currently in `dockerfiles/` maps to exactly one argument above —
+none are unused.
+
+Note: `Dockerfile.trgtlps` is pushed under the image name `trgt-lps` (hyphenated),
+not `trgtlps` as `build_docker.sh`'s naming convention would derive from the
+filename — a pre-existing drift from [repository-structure.md](repository-structure.md)'s
+"Dockerfile suffix mechanically is the image name" rule. Works today since the
+attribute matches the actual pushed name; just don't assume the two always match.
 
 ## Collaborator dockers
 
 Built/maintained by collaborators, outside this repo.
 
-| Attribute | Image | Source |
+| Argument Name | Image | Source |
 |---|---|---|
 | `sv_base_mini_docker` | gatk-sv/sv-base-mini:2024-10-25-... | gatk-sv, see [dockers.json](https://github.com/broadinstitute/gatk-sv/blob/main/inputs/values/dockers.json) |
 | `sv_pipeline_docker` | gatk-sv/sv-pipeline:2025-10-02-... | gatk-sv, dockers.json |
@@ -44,23 +56,14 @@ Built/maintained by collaborators, outside this repo.
 | `remap_docker` | quay.io/ymostovoy/lr-remap | Yulia Mostovoy |
 | `minimap_docker` | eichlerlab/assembly_eval:0.2 | Eichler lab |
 | `automop_docker` | broad-dsde-methods/automop:0.1 | Broad DSP team (same group as `hiphase_docker`/`hiphase_preprocess_docker`) |
+| `vcfdist_docker` | timd1/vcfdist:v2.6.4 | [TimD1/vcfdist](https://github.com/TimD1/vcfdist) author's own published image. Only consumer, `VcfDist`/`VcfDistCohort`, is archived — see [archive/docs/workflows.md](../archive/docs/workflows.md#tools) |
 
 ## Published
 
 Public images, not custom-built for this project.
 
-| Attribute | Image | Source |
+| Argument Name | Image | Source |
 |---|---|---|
 | `repeatmasker_docker` | dfam/tetools:1.8 | Dfam consortium |
 | `hail_docker` | hailgenetics/hail:0.2.105 | Hail team |
 | `glnexus_docker` | ghcr.io/dnanexus-rnd/glnexus:v1.4.1 | DNAnexus |
-
-`Dockerfile.sawfish`, `Dockerfile.hificnv`, and `Dockerfile.mosdepthstream` also
-exist in [dockerfiles/](../dockerfiles/) with no matching workspace attribute
-currently wired up.
-
-⚠️ `l1meaid_docker` points at `kj-dockers/l1meaid:latest`, but that tag has
-never been pushed — the registry only has `l1meaid:kj_V1`. Any task using this
-attribute will fail to pull. Fix by running `dockerfiles/build_docker.sh l1meaid`
-(pushes a new version and retags `:latest`), or point the attribute at
-`l1meaid:kj_V1` directly until then.

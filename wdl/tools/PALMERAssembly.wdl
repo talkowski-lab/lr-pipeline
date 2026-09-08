@@ -23,7 +23,6 @@ workflow PALMERAssembly {
         Array[String] mei_types
         Array[String]? truvari_collapse_params
 
-        String annotate_palmer_docker
         String palmer_docker
         String utils_docker
 
@@ -89,7 +88,7 @@ workflow PALMERAssembly {
                 ref_fai = ref_fai,
                 haplotype = "1|0",
                 prefix = "~{prefix}.~{mei_type}.pat",
-                docker = annotate_palmer_docker,
+                docker = utils_docker,
                 runtime_attr_override = runtime_attr_palmer_to_vcf
         }
 
@@ -143,7 +142,7 @@ workflow PALMERAssembly {
                 ref_fai = ref_fai,
                 haplotype = "0|1",
                 prefix = "~{prefix}.~{mei_type}.mat",
-                docker = annotate_palmer_docker,
+                docker = utils_docker,
                 runtime_attr_override = runtime_attr_palmer_to_vcf
         }
 
