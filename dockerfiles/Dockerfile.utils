@@ -56,6 +56,7 @@ RUN python3 -m pip install --upgrade pip && \
     python3 -m pip install --no-cache-dir \
         "truvari>=5.0.0" \
         pysam \
+        edlib \
         scipy \
         pandas \
         pyarrow \

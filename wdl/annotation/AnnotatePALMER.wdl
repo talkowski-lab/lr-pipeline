@@ -44,7 +44,7 @@ workflow AnnotatePALMER {
         Float ins_size_similarity_hervk = 0.9
         Int ins_min_shared_samples_hervk = 0
 
-        String annotate_palmer_docker
+        String utils_docker
 
         RuntimeAttr? runtime_attr_subset
         RuntimeAttr? runtime_attr_shard
@@ -63,7 +63,7 @@ workflow AnnotatePALMER {
                 min_length = min_length,
                 extra_args = if single_contig then "" else "--regions ~{contig}",
                 prefix = "~{prefix}.~{contig}.filtered",
-                docker = annotate_palmer_docker,
+                docker = utils_docker,
                 runtime_attr_override = runtime_attr_subset
         }
 
@@ -74,7 +74,7 @@ workflow AnnotatePALMER {
                     vcf_idx = SubsetVcfByLength.subset_vcf_idx,
                     records_per_shard = select_first([records_per_shard]),
                     prefix = "~{prefix}.~{contig}.filtered",
-                    docker = annotate_palmer_docker,
+                    docker = utils_docker,
                     runtime_attr_override = runtime_attr_shard
             }
         }
@@ -114,7 +114,7 @@ workflow AnnotatePALMER {
                     ins_size_similarity_hervk = ins_size_similarity_hervk,
                     ins_min_shared_samples_hervk = ins_min_shared_samples_hervk,
                     prefix = "~{prefix}.~{contig}.filtered.shard_~{i}",
-                    docker = annotate_palmer_docker,
+                    docker = utils_docker,
                     runtime_attr_override = runtime_attr_filter_palmer
             }
         }
@@ -125,7 +125,7 @@ workflow AnnotatePALMER {
                     tsvs = FilterPALMER.annotations_tsv,
                     sort_output = false,
                     prefix = "~{prefix}.~{contig}.filtered",
-                    docker = annotate_palmer_docker,
+                    docker = utils_docker,
                     runtime_attr_override = runtime_attr_concat_shards
             }
         }
@@ -139,7 +139,7 @@ workflow AnnotatePALMER {
                 tsvs = contig_annotations_tsv,
                 sort_output = false,
                 prefix = "~{prefix}.palmer_annotations",
-                docker = annotate_palmer_docker,
+                docker = utils_docker,
                 runtime_attr_override = runtime_attr_concat
         }
     }

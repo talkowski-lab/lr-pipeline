@@ -52,20 +52,14 @@ workflow LRCNVs {
         Array[File]+ depth_profiles
         String prefix
         String cohort_id
-        # A TSV with the prior probability of each ploidy state of each contig.
-        # e.g.
-        # CONTIG_NAME PLOIDY_PRIOR_0 PLOIDY_PRIOR_1 PLOIDY_PRIOR_2 PLOIDY_PRIOR_3
-        #        chr1            0.0           0.01           0.98           0.01
-        #        chr2            0.0           0.01           0.98           0.01
-        # ...
-        #        chrX           0.01           0.49           0.49           0.01
-        #        chrY          0.495          0.495           0.01            0.0
+        
         File contig_ploidy_priors
-        Int num_intervals_per_scatter = 1500
         File ref_fa
         File ref_fai
         File ref_dict
         String gatk_docker
+
+        Int num_intervals_per_scatter
 
         File? gatk4_jar_override
 
@@ -946,7 +940,7 @@ task GermlineCNVCallerCohortMode {
         mem_gb: 10,
         disk_gb: ceil((size(read_count_files, "GB") + size([contig_ploidy_calls_tar, intervals], "GB")) * 2) + 50,
         boot_disk_gb: 10,
-        preemptible_tries: 1,
+        preemptible_tries: 3,
         max_retries: 0
     }
     RuntimeAttr runtime_attr = select_first([runtime_attr_override, default_attr])

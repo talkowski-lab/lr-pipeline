@@ -19,7 +19,6 @@ workflow LongReadCNVs {
         Boolean sort_depth_profiles
         String batch_id
         File contig_ploidy_priors
-        Int num_intervals_per_scatter = 1500
         File merged_bincov
         File merged_bincov_idx
         File ref_fa
@@ -28,14 +27,15 @@ workflow LongReadCNVs {
 
         File pedigree
         File primary_contigs_list
-        File? contig_subset_list
         File training_intervals
         File median_coverage
-        Int gcnv_qs_cutoff = 30
+        File? contig_subset_list
 
         String prefix
         String variant_prefix
 
+        Int gcnv_qs_cutoff = 30
+        Int num_intervals_per_scatter = 1500
         String chr_x = "chrX"
         String chr_y = "chrY"
 
