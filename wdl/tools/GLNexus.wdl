@@ -226,6 +226,13 @@ task ShardVCFByRanges {
 
         mkdir per_contig
 
+        # Localization can place the gVCF and its index in separate directories,
+        # which prevents bcftools from finding the index; co-locate them.
+        gvcf_idx_target="~{gvcf}.tbi"
+        if [[ ! -e "${gvcf_idx_target}" ]]; then
+            ln -s ~{tbi} "${gvcf_idx_target}"
+        fi
+
         INDEX=0
         for RANGE in ~{sep=' ' ranges}
         do
