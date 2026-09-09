@@ -12,24 +12,28 @@ workflow FillFormatFields {
         String contig
         String prefix
 
-        Array[String] transfer_format_fields
-        Array[String] drop_format_fields = []
-        String? subset_unfilled_vcf_field
-        String? subset_unfilled_vcf_value
-
         File? ref_fa
         File? ref_fai
 
         Int? records_per_shard_normalize
         Int? shard_bin_size_fill
 
-        Boolean normalize_unfilled_vcf
-        Boolean normalize_filled_vcf
+        Array[String] transfer_format_fields
+        Array[String] drop_format_fields
+
         Boolean fill_alt_gts
         Boolean fill_ref_gts
-        Boolean unphase_gts
-        Boolean add_pl
+
+
         Boolean match_by_id
+        Boolean unphase_gts
+        Boolean add_missing_pl_via_ad
+        Boolean expand_ad_across_alleles
+        Boolean split_rnc_across_alleles
+        Boolean normalize_unfilled_vcf
+        Boolean normalize_filled_vcf
+        String? subset_unfilled_vcf_field
+        String? subset_unfilled_vcf_value
 
         String utils_docker
 
@@ -191,7 +195,9 @@ workflow FillFormatFields {
                     fill_alt_gts = fill_alt_gts,
                     fill_ref_gts = fill_ref_gts,
                     unphase_gts = unphase_gts,
-                    add_pl = add_pl,
+                    add_missing_pl_via_ad = add_missing_pl_via_ad,
+                    expand_ad_across_alleles = expand_ad_across_alleles,
+                    split_rnc_across_alleles = split_rnc_across_alleles,
                     prefix = "~{prefix}.shard_~{i}.filled",
                     docker = utils_docker,
                     runtime_attr_override = runtime_attr_fill
@@ -225,7 +231,9 @@ workflow FillFormatFields {
                 fill_alt_gts = fill_alt_gts,
                 fill_ref_gts = fill_ref_gts,
                 unphase_gts = unphase_gts,
-                add_pl = add_pl,
+                add_missing_pl_via_ad = add_missing_pl_via_ad,
+                expand_ad_across_alleles = expand_ad_across_alleles,
+                split_rnc_across_alleles = split_rnc_across_alleles,
                 prefix = prefix,
                 docker = utils_docker,
                 runtime_attr_override = runtime_attr_fill
@@ -252,7 +260,9 @@ task FillVcfFormatFields {
         Boolean fill_alt_gts
         Boolean fill_ref_gts
         Boolean unphase_gts
-        Boolean add_pl
+        Boolean add_missing_pl_via_ad
+        Boolean expand_ad_across_alleles
+        Boolean split_rnc_across_alleles
         String prefix
         String docker
         RuntimeAttr? runtime_attr_override
@@ -274,15 +284,15 @@ import pysam
 with open("$transfer_format_fields_file") as fh:
     transfer_format_fields = [l.strip() for l in fh if l.strip()]
 
-assert "GT" not in transfer_format_fields, "GT must not be passed in transfer_format_fields; use fill_alt_gts/fill_ref_gts instead"
-
 match_by_id = ~{true="True" false="False" match_by_id}
 subset_field = ~{if defined(subset_unfilled_vcf_field) then "'" + subset_unfilled_vcf_field + "'" else "None"}
 subset_value = ~{if defined(subset_unfilled_vcf_value) then "'" + subset_unfilled_vcf_value + "'" else "None"}
 fill_alt_gts = ~{true="True" false="False" fill_alt_gts}
 fill_ref_gts = ~{true="True" false="False" fill_ref_gts}
 unphase_gts = ~{true="True" false="False" unphase_gts}
-add_pl = ~{true="True" false="False" add_pl}
+add_missing_pl_via_ad = ~{true="True" false="False" add_missing_pl_via_ad}
+expand_ad_across_alleles = ~{true="True" false="False" expand_ad_across_alleles}
+split_rnc_across_alleles = ~{true="True" false="False" split_rnc_across_alleles}
 
 unfilled_in = pysam.VariantFile("~{unfilled_vcf}")
 filled_in = pysam.VariantFile("~{filled_vcf}")
@@ -291,7 +301,7 @@ out_header = unfilled_in.header.copy()
 for field in transfer_format_fields:
     if field in filled_in.header.formats and field not in out_header.formats:
         out_header.add_record(filled_in.header.formats[field].record)
-if add_pl and "PL" not in out_header.formats:
+if add_missing_pl_via_ad and "PL" not in out_header.formats:
     out_header.add_line('##FORMAT=<ID=PL,Number=G,Type=Integer,Description="Phred-scaled genotype likelihoods">')
 
 filled_samples = set(filled_in.header.samples)
@@ -324,6 +334,25 @@ def calculate_pl(ref_reads, alt_reads, ploidy):
 
 def ad_is_populated(ad):
     return ad is not None and len(ad) == 2 and all(value is not None for value in ad)
+
+def reshape_transfer_value(field, value, unfilled_rec):
+    # GLnexus can serialize a fully-missing multi-value field as a single
+    # bare "." rather than the comma-delimited missing form its own header
+    # Number declares (e.g. AD Number=R written as "." instead of ".,."),
+    # and serializes RNC's per-allele-copy codes as one merged string (e.g.
+    # "MM") rather than comma-delimited characters ("M,M"). pysam parses
+    # both of these into a malformed 1-tuple, which then fails to assign
+    # into a field declared with a larger Number. Reshape into the correct
+    # arity before assignment so it doesn't spuriously fail.
+    if value is None or len(value) != 1:
+        return value
+    if field == "AD" and expand_ad_across_alleles and value[0] is None:
+        expected_len = len(unfilled_rec.alleles)
+        if expected_len > 1:
+            return (None,) * expected_len
+    if field == "RNC" and split_rnc_across_alleles and isinstance(value[0], str) and len(value[0]) > 1:
+        return tuple(value[0])
+    return value
 
 def unphase_gt(gt):
     return tuple(sorted(gt, key=lambda allele: (allele is None, allele if allele is not None else 0)))
@@ -368,18 +397,21 @@ for unfilled_rec in unfilled_in:
                         unfilled_rec.samples[sample]["GT"] = src_gt
                         unfilled_rec.samples[sample].phased = match.samples[sample].phased
 
-            # Copy over values for format fields
+            # Copy over values for other FORMAT fields
             for field in transfer_format_fields:
                 if field not in match.format:
                     continue
                 value = match.samples[sample].get(field)
+                value = reshape_transfer_value(field, value, unfilled_rec)
                 try:
                     unfilled_rec.samples[sample][field] = value
-                except Exception:
-                    print(f"[{unfilled_rec.id}] Could not set {field} for {sample}.")
-                    pass
+                except Exception as e:
+                    raise RuntimeError(
+                        f"Could not set {field} for {sample} at "
+                        f"{unfilled_rec.chrom}:{unfilled_rec.pos} (id={unfilled_rec.id}): {e}"
+                    ) from e
 
-    # Unphase genotypes
+    # Unphase genotypes if unphase_gts = true
     if unphase_gts:
         for sample in all_samples:
             current_gt = unfilled_rec.samples[sample].get("GT")
@@ -387,8 +419,8 @@ for unfilled_rec in unfilled_in:
                 unfilled_rec.samples[sample]["GT"] = unphase_gt(current_gt)
                 unfilled_rec.samples[sample].phased = False
 
-    # Set PL
-    if add_pl and "PL" not in unfilled_rec.format and "AD" in unfilled_rec.format:
+    # Set PL if add_missing_pl_via_ad = true
+    if add_missing_pl_via_ad and "PL" not in unfilled_rec.format and "AD" in unfilled_rec.format:
         for sample in all_samples:
             ad = unfilled_rec.samples[sample].get("AD")
             if ad_is_populated(ad):
