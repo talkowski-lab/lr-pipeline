@@ -336,21 +336,14 @@ def ad_is_populated(ad):
     return ad is not None and len(ad) == 2 and all(value is not None for value in ad)
 
 def reshape_transfer_value(field, value, unfilled_rec):
-    # GLnexus can serialize a fully-missing multi-value field as a single
-    # bare "." rather than the comma-delimited missing form its own header
-    # Number declares (e.g. AD Number=R written as "." instead of ".,."),
-    # and serializes RNC's per-allele-copy codes as one merged string (e.g.
-    # "MM") rather than comma-delimited characters ("M,M"). pysam parses
-    # both of these into a malformed 1-tuple, which then fails to assign
-    # into a field declared with a larger Number. Reshape into the correct
-    # arity before assignment so it doesn't spuriously fail.
-    if value is None or len(value) != 1:
-        return value
-    if field == "AD" and expand_ad_across_alleles and value[0] is None:
+    if field == "AD" and expand_ad_across_alleles and value == (None,):
+        # GLnexus writes a fully-missing AD (Number=R) as bare "." instead of ".,."
         expected_len = len(unfilled_rec.alleles)
         if expected_len > 1:
             return (None,) * expected_len
-    if field == "RNC" and split_rnc_across_alleles and isinstance(value[0], str) and len(value[0]) > 1:
+    elif (field == "RNC" and split_rnc_across_alleles and isinstance(value, tuple)
+            and len(value) == 1 and isinstance(value[0], str) and len(value[0]) > 1):
+        # GLnexus merges RNC's per-allele-copy codes, e.g. "MI" instead of "M,I"
         return tuple(value[0])
     return value
 
