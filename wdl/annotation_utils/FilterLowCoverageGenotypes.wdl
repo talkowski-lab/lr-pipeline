@@ -7,85 +7,80 @@ workflow FilterLowCoverageGenotypes {
     input {
         File vcf
         File vcf_idx
-        Array[String] contigs
-        File sample_cutoffs_tsv
         String prefix
+
+        File sample_cutoffs_tsv
+        File ped
+        String? subset_unfilled_vcf_field
+        String? subset_unfilled_vcf_value
 
         Int? records_per_shard
 
         String utils_docker
 
-        RuntimeAttr? runtime_attr_subset
         RuntimeAttr? runtime_attr_shard
         RuntimeAttr? runtime_attr_filter
         RuntimeAttr? runtime_attr_concat_vcfs
         RuntimeAttr? runtime_attr_concat_tsvs
     }
 
-    scatter (contig in contigs) {
-        call Helpers.SubsetVcfToContig {
+    if (defined(records_per_shard)) {
+        call Helpers.ShardVcfByRecords {
             input:
                 vcf = vcf,
                 vcf_idx = vcf_idx,
-                contig = contig,
-                prefix = "~{prefix}.~{contig}",
+                records_per_shard = select_first([records_per_shard]),
+                prefix = "~{prefix}.sharded",
                 docker = utils_docker,
-                runtime_attr_override = runtime_attr_subset
-        }
-
-        if (defined(records_per_shard)) {
-            call Helpers.ShardVcfByRecords {
-                input:
-                    vcf = SubsetVcfToContig.subset_vcf,
-                    vcf_idx = SubsetVcfToContig.subset_vcf_idx,
-                    records_per_shard = select_first([records_per_shard]),
-                    prefix = "~{prefix}.~{contig}.sharded",
-                    docker = utils_docker,
-                    runtime_attr_override = runtime_attr_shard
-            }
-        }
-
-        Array[File] shard_vcfs = select_first([ShardVcfByRecords.shards, [SubsetVcfToContig.subset_vcf]])
-        Array[File] shard_vcf_idxs = select_first([ShardVcfByRecords.shard_idxs, [SubsetVcfToContig.subset_vcf_idx]])
-
-        scatter (i in range(length(shard_vcfs))) {
-            call FilterLowCoverageGenotypesShard {
-                input:
-                    vcf = shard_vcfs[i],
-                    vcf_idx = shard_vcf_idxs[i],
-                    sample_cutoffs_tsv = sample_cutoffs_tsv,
-                    prefix = "~{prefix}.~{contig}.shard_~{i}",
-                    docker = utils_docker,
-                    runtime_attr_override = runtime_attr_filter
-            }
+                runtime_attr_override = runtime_attr_shard
         }
     }
 
-    call Helpers.ConcatVcfs {
-        input:
-            vcfs = flatten(FilterLowCoverageGenotypesShard.filtered_vcf),
-            vcf_idxs = flatten(FilterLowCoverageGenotypesShard.filtered_vcf_idx),
-            allow_overlaps = false,
-            naive = true,
-            prefix = "~{prefix}.low_coverage_filtered",
-            docker = utils_docker,
-            runtime_attr_override = runtime_attr_concat_vcfs
+    Array[File] vcfs_to_process = select_first([ShardVcfByRecords.shards, [vcf]])
+    Array[File] vcf_idxs_to_process = select_first([ShardVcfByRecords.shard_idxs, [vcf_idx]])
+
+    scatter (i in range(length(vcfs_to_process))) {
+        call FilterLowCoverageGenotypesShard {
+            input:
+                vcf = vcfs_to_process[i],
+                vcf_idx = vcf_idxs_to_process[i],
+                sample_cutoffs_tsv = sample_cutoffs_tsv,
+                ped = ped,
+                subset_unfilled_vcf_field = subset_unfilled_vcf_field,
+                subset_unfilled_vcf_value = subset_unfilled_vcf_value,
+                prefix = "~{prefix}.shard_~{i}",
+                docker = utils_docker,
+                runtime_attr_override = runtime_attr_filter
+        }
     }
 
-    call Helpers.ConcatTsvs {
-        input:
-            tsvs = flatten(FilterLowCoverageGenotypesShard.filtered_genotypes_tsv),
-            sort_output = false,
-            preserve_header = true,
-            prefix = "~{prefix}.low_coverage_filtered_genotypes",
-            docker = utils_docker,
-            runtime_attr_override = runtime_attr_concat_tsvs
+    if (defined(records_per_shard)) {
+        call Helpers.ConcatVcfs {
+            input:
+                vcfs = FilterLowCoverageGenotypesShard.filtered_vcf,
+                vcf_idxs = FilterLowCoverageGenotypesShard.filtered_vcf_idx,
+                allow_overlaps = false,
+                naive = true,
+                prefix = "~{prefix}.low_coverage_filtered",
+                docker = utils_docker,
+                runtime_attr_override = runtime_attr_concat_vcfs
+        }
+
+        call Helpers.ConcatTsvs {
+            input:
+                tsvs = FilterLowCoverageGenotypesShard.filtered_genotypes_tsv,
+                sort_output = false,
+                preserve_header = true,
+                prefix = "~{prefix}.low_coverage_filtered_genotypes",
+                docker = utils_docker,
+                runtime_attr_override = runtime_attr_concat_tsvs
+        }
     }
 
     output {
-        File filtered_vcf = ConcatVcfs.concat_vcf
-        File filtered_vcf_idx = ConcatVcfs.concat_vcf_idx
-        File filtered_genotypes_tsv = ConcatTsvs.concatenated_tsv
+        File filtered_vcf = select_first([ConcatVcfs.concat_vcf, FilterLowCoverageGenotypesShard.filtered_vcf[0]])
+        File filtered_vcf_idx = select_first([ConcatVcfs.concat_vcf_idx, FilterLowCoverageGenotypesShard.filtered_vcf_idx[0]])
+        File filtered_genotypes_tsv = select_first([ConcatTsvs.concatenated_tsv, FilterLowCoverageGenotypesShard.filtered_genotypes_tsv[0]])
     }
 }
 
@@ -94,6 +89,9 @@ task FilterLowCoverageGenotypesShard {
         File vcf
         File vcf_idx
         File sample_cutoffs_tsv
+        File ped
+        String? subset_unfilled_vcf_field
+        String? subset_unfilled_vcf_value
         String prefix
         String docker
         RuntimeAttr? runtime_attr_override
@@ -110,8 +108,12 @@ import pysam
 
 VCF = "~{vcf}"
 CUTOFFS = "~{sample_cutoffs_tsv}"
+PED = "~{ped}"
+SUBSET_FIELD = ~{if defined(subset_unfilled_vcf_field) then "'" + subset_unfilled_vcf_field + "'" else "None"}
+SUBSET_VALUE = ~{if defined(subset_unfilled_vcf_value) then "'" + subset_unfilled_vcf_value + "'" else "None"}
 OUTPUT_VCF = "~{prefix}.vcf.gz"
 OUTPUT_TSV = "~{prefix}.filtered_genotypes.tsv"
+SEX_CHROMS = {"chrX", "chrY"}
 
 
 def read_cutoffs(path):
@@ -134,8 +136,32 @@ def read_cutoffs(path):
     return cutoffs
 
 
-def is_nonref(gt):
-    return gt is not None and any(allele is not None and allele > 0 for allele in gt)
+def read_ped_sexes(path):
+    sexes = {}
+    with open(path, "r") as handle:
+        for line_number, line in enumerate(handle, 1):
+            if not line.strip() or line.startswith("#"):
+                continue
+            fields = line.split()
+            if len(fields) < 5:
+                raise ValueError(f"PED line {line_number} has fewer than 5 columns")
+            sample_id = fields[1]
+            if fields[4] == "1":
+                sex = "male"
+            elif fields[4] == "2":
+                sex = "female"
+            elif fields[4] == "0":
+                sex = None
+            else:
+                raise ValueError(f"Sample {sample_id} has unsupported PED sex code {fields[4]}")
+            if sample_id in sexes and sexes[sample_id] != sex:
+                raise ValueError(f"Sample {sample_id} has conflicting PED sex entries")
+            sexes[sample_id] = sex
+    return sexes
+
+
+def is_called(gt):
+    return gt is not None and any(allele is not None for allele in gt)
 
 
 def allele_counts(record):
@@ -150,9 +176,22 @@ def allele_counts(record):
     return ",".join(str(count) for count in counts)
 
 
+def in_subset(record):
+    if SUBSET_FIELD is None:
+        return True
+    info_val = record.info.get(SUBSET_FIELD)
+    if info_val is None:
+        return False
+    if isinstance(info_val, (list, tuple)):
+        return SUBSET_VALUE in [str(v) for v in info_val]
+    return str(info_val) == SUBSET_VALUE
+
+
 cutoffs = read_cutoffs(CUTOFFS)
+sexes = read_ped_sexes(PED)
 vcf_in = pysam.VariantFile(VCF)
 vcf_samples = set(vcf_in.header.samples)
+
 cutoff_samples = set(cutoffs)
 if vcf_samples != cutoff_samples:
     missing_cutoffs = vcf_samples - cutoff_samples
@@ -165,6 +204,18 @@ if vcf_samples != cutoff_samples:
     raise ValueError(
         "sample_cutoffs_tsv does not match VCF samples (" + "; ".join(details) + ")"
     )
+
+missing_ped_samples = vcf_samples - set(sexes)
+if missing_ped_samples:
+    raise ValueError("Samples missing from PED: " + ", ".join(sorted(missing_ped_samples)))
+
+
+def sample_cutoff(sample_id, chrom):
+    base_cutoff = cutoffs[sample_id]
+    if sexes[sample_id] == "male" and chrom in SEX_CHROMS:
+        return base_cutoff / 2
+    return base_cutoff
+
 
 vcf_out = pysam.VariantFile(OUTPUT_VCF, "wz", header=vcf_in.header)
 with open(OUTPUT_TSV, "w", newline="") as report_handle:
@@ -184,11 +235,11 @@ with open(OUTPUT_TSV, "w", newline="") as report_handle:
     for record in vcf_in:
         ac_before = allele_counts(record)
         filtered_samples = []
-        if "GT" in record.format and "DP" in record.format:
+        if in_subset(record) and "GT" in record.format and "DP" in record.format:
             for sample_id, sample in record.samples.items():
                 gt = sample.get("GT")
                 dp = sample.get("DP")
-                if not is_nonref(gt) or dp is None or dp > cutoffs[sample_id]:
+                if not is_called(gt) or dp is None or dp > sample_cutoff(sample_id, record.chrom):
                     continue
                 filtered_samples.append(sample_id)
                 for field in record.format.keys():

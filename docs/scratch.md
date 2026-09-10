@@ -24,12 +24,16 @@
 	- _AnnotateCallsetOverlap_.
 	- _AnnotateVcfCleared_.
 - (HPRC/HGSVC Only) _ResolveHaplotypeOverlaps_.
-- (HPRC/HGSVC Only) _AnnotateAF_.
+- (HPRC/HGSVC Only) _AnnotateAFPostHoc_.
 - _NormalizeAlleleTypes_.
 - _PostprocessCallset-DropFilters_ --> hprc_hgsvc_vcf_V1, aou_vcf_V1.
 - (HPRC/HGSVC Only) _PostprocessCallset-FilterAssemblySingletons_ --> hprc_hgsvc_vcf_V2.
 - _FilterLowCoverageRegions_ --> hprc_hgsvc_vcf_V3, aou_vcf_V2.
-- (HPRC/HGSVC Only)_FillFormatFields_ --> hprc_hgsvc_vcf_V4.
-- _AnnotateCallsetOverlap_, (HPRC/HGSVC Only) _AnnotatSQMetrics_, (HPRC/HGSVC Only) _AnnotatGQMetrics_.
-- _AnnotateVcfPostHoc_ --> hprc_hgsvc_vcf_V5, aou_vcf_V3.
-- (AoU Only) _StripGenotypes_.
+- _AnnotateCallsetOverlap_.
+- _AnnotateVcfPostHoc_ --> hprc_hgsvc_vcf_V4, aou_vcf_V3.
+- (AoU Only) _StripGenotypes_ --> aou_sites_vcf.
+- (HPRC/HGSVC Only)_FillFormatFields_ --> hprc_hgsvc_vcf_V5.
+- (HPRC/HGSVC Only) _FilterLowCoverageGenotypes_ --> hprc_hgsvc_vcf_V6.
+- (HPRC/HGSVC Only) _AnnotatSQMetrics_, _AnnotatGQMetrics_.
+- (HPRC/HGSVC Only) _AnnotateVcfGQSQ_ --> hprc_hgsvc_vcf_V7.
+- (HPRC/HGSVC Only) _AnnotateAFPostHoc_ --> hprc_hgsvc_vcf_V8.

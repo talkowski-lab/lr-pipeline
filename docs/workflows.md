@@ -747,6 +747,24 @@ Outputs:
 - `low_coverage_region_filtered_vcf_idx`: Index for the filtered VCF.
 
 
+### [FilterLowCoverageGenotypes](../wdl/annotation_utils/FilterLowCoverageGenotypes.wdl)
+This utility nulls out (`./.`) individual genotype calls whose `FORMAT/DP` is present and at or below that sample's low-coverage cutoff. Male chrX/chrY calls use half the sample's cutoff, with sex read from a six-column PED. A called genotype (any allele present, ref or alt) is nulled along with every other FORMAT field for that sample when its DP is at or below the applicable cutoff; calls missing GT or DP are left unchanged. Filtering can be restricted to variants whose INFO field matches a given value. It optionally shards by record count and outputs the filtered VCF plus a report of affected variants.
+
+Inputs:
+- `File vcf`: Cohort VCF to filter.
+- `File vcf_idx`: Index for the cohort VCF.
+- `File sample_cutoffs_tsv`: `sample_cutoffs_tsv` output from `IdentifyLowCoverageRegions`, containing `sample_id` and `cutoff` columns for every VCF sample.
+- `File ped`: Six-column PED containing every VCF sample and its sex.
+- `String? subset_unfilled_vcf_field`: INFO field used to limit which variants are filtered. Requires `subset_unfilled_vcf_value`.
+- `String? subset_unfilled_vcf_value`: Value that `subset_unfilled_vcf_field` must equal for a variant to be filtered. Variants that don't match are left unfiltered.
+- `Int? records_per_shard`: Number of variants per shard. When set, variants are processed in parallel shards and concatenated.
+
+Outputs:
+- `filtered_vcf`: VCF with low-coverage genotypes set to missing.
+- `filtered_vcf_idx`: Index for `filtered_vcf`.
+- `filtered_genotypes_tsv`: TSV with one row per affected variant: `CHROM`, `POS`, `REF`, `ALT`, `ID`, pre- and post-filter allele counts, number of filtered samples, and comma-separated filtered sample IDs.
+
+
 ### [FillFormatFields](../wdl/annotation_utils/FillFormatFields.wdl)
 This utility fills missing FORMAT fields in one VCF using the values from a second, more complete VCF covering the same sites. It supports selectively copying named format fields plus toggles for filling alternate and reference genotypes, unphasing genotypes and adding PL. Sites are matched on CHROM/POS/REF/ALT, optionally also requiring a matching ID, and filling can be restricted to variants whose INFO field matches a given value. Either input can first be run through `bcftools norm`, sharded by record count so normalization never runs over a whole-contig VCF at once; normalized shards are re-concatenated with sorting (since normalization can shift a variant's position, e.g. when splitting a multiallelic) before being re-binned for matching. It outputs the refilled VCF.
 

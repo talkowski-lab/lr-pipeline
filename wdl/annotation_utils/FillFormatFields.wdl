@@ -24,7 +24,6 @@ workflow FillFormatFields {
         Boolean fill_alt_gts
         Boolean fill_ref_gts
 
-
         Boolean match_by_id
         Boolean unphase_gts
         Boolean add_missing_pl_via_ad
@@ -399,10 +398,7 @@ for unfilled_rec in unfilled_in:
                 try:
                     unfilled_rec.samples[sample][field] = value
                 except Exception as e:
-                    raise RuntimeError(
-                        f"Could not set {field} for {sample} at "
-                        f"{unfilled_rec.chrom}:{unfilled_rec.pos} (id={unfilled_rec.id}): {e}"
-                    ) from e
+                    raise RuntimeError(f"{field} for {sample} at {unfilled_rec.id}) - {e}") from e
 
     # Unphase genotypes if unphase_gts = true
     if unphase_gts:
