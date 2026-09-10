@@ -41,6 +41,10 @@ workflow TRGTLPS {
                 runtime_attr_override = runtime_attr_trgt_lps
         }
 
+        # Needs an str-analysis image built after str_analysis.extract_trid_metadata_from_TRGT_vcf
+        # was merged to the str-analysis default branch: the image installs that package straight
+        # from the branch with no ref pin, so an older image fails here with ModuleNotFoundError.
+        #
         # Runs against the same subset VCF trgt-lps just read. That matters: the extractor skips
         # all-no-call records because trgt-lps drops them too, so pairing an LPS row with its VCF
         # record only works when both were derived from the same file. The output is emitted per
