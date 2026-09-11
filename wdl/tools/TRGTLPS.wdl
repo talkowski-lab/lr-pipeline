@@ -143,9 +143,6 @@ task ExtractTridMetadata {
     command <<<
         set -eou pipefail
 
-        # The extractor reads through tabix and looks for the index at <vcf>.tbi. Cromwell usually
-        # localizes a file and its index side by side, but it is not required to, so put them in a
-        # known layout rather than depending on that.
         ln -s ~{vcf} input.vcf.gz
         ln -s ~{vcf_idx} input.vcf.gz.tbi
 
