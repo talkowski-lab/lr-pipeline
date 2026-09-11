@@ -7,12 +7,16 @@ version 1.0
 ## Output columns: chrom, start, end, ID, allele_type, samples
 ## `samples` lists every carrier (non-ref, non-missing GT) for that variant,
 ## comma-separated.
+##
+## The output basename defaults to the variant_ids filename with its
+## ".ids.txt" suffix stripped (e.g. "foo.ids.txt" -> "foo.igv_variants.tsv"),
+## and can be overridden explicitly.
 
 workflow ExtractIGVVariants {
   input {
     File variant_ids
     Array[File] vcfs
-    String output_basename = "igv_variants"
+    String output_basename = sub(basename(variant_ids), "\\.ids\\.txt$", "")
     String docker = "python:3.11-slim"
   }
 
@@ -140,16 +144,16 @@ task CombineAndSort {
   command <<<
     set -euo pipefail
 
-    printf "#chrom\tstart\tend\tID\tallele_type\tsamples\n" > ~{output_basename}.tsv
-    cat ~{sep=" " tsvs} | sort -k1,1 -k2,2n >> ~{output_basename}.tsv
+    printf "#chrom\tstart\tend\tID\tallele_type\tsamples\n" > ~{output_basename}.igv_variants.tsv
+    cat ~{sep=" " tsvs} | sort -k1,1 -k2,2n >> ~{output_basename}.igv_variants.tsv
 
-    tail -n +2 ~{output_basename}.tsv | cut -f4 | sort -u > found_ids.txt
+    tail -n +2 ~{output_basename}.igv_variants.tsv | cut -f4 | sort -u > found_ids.txt
     sort -u ~{ids_file} > wanted_ids.txt
     comm -23 wanted_ids.txt found_ids.txt > ~{output_basename}.missing_ids.txt
   >>>
 
   output {
-    File combined_tsv = "~{output_basename}.tsv"
+    File combined_tsv = "~{output_basename}.igv_variants.tsv"
     File missing_ids = "~{output_basename}.missing_ids.txt"
   }
 
