@@ -486,13 +486,12 @@ for entry in catalog:
 loci = [(locus_id, explorer, *parse_explorer(explorer)) for explorer, ids in locus_ids.items() for locus_id in ids]
 
 src = pysam.VariantFile('~{vcf}')
-header = src.header.copy()
-if 'AC' not in header.info:
-    header.add_meta(
+if 'AC' not in src.header.info:
+    src.header.add_meta(
         'INFO',
         items=[('ID', 'AC'), ('Number', 'A'), ('Type', 'Integer'), ('Description', 'Number of alleles observed')],
     )
-out = pysam.VariantFile('~{prefix}.vcf.gz', 'wz', header=header)
+out = pysam.VariantFile('~{prefix}.vcf.gz', 'wz', header=src.header)
 status = open('~{prefix}.status.tsv', 'w')
 status.write('source\tlocus_id\tTRExplorerV1\tmatching_vcf_ids\tstatus\n')
 kept = 0
