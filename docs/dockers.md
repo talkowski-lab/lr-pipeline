@@ -65,5 +65,5 @@ Public images, not custom-built for this project.
 | Argument Name | Image | Source |
 |---|---|---|
 | `repeatmasker_docker` | dfam/tetools:1.8 | Dfam consortium |
-| `hail_docker` | hailgenetics/hail:0.2.105 | Hail team |
+| `hail_docker` | hailgenetics/hail:0.2.122 | Hail team |
 | `glnexus_docker` | ghcr.io/dnanexus-rnd/glnexus:v1.4.1 | DNAnexus |

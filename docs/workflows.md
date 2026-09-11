@@ -844,22 +844,29 @@ Outputs:
 
 
 ### [PostprocessTRLoci](../wdl/annotation_utils/PostprocessTRLoci.wdl)
-This utility reconciles disease-associated `TRExplorerV1` catalog loci with one integrated contig VCF. Only catalog records whose `Diseases` value is a non-empty array are eligible; records with a missing, non-array, or empty value are ignored. It uses only literal `TRExplorerV1` substring matches against `INFO/TRID`, searches unmatched catalog loci in per-sample TRGT VCFs, merges recovered loci with TRGT, drops merged calls with `AC=0`, and replaces overlapping integrated TRVs. Replacement calls receive VRS, region, and in-silico annotations; these annotations run directly on only the recovered calls and are not sharded. Eligible diploid genotypes with one reference and one non-reference allele inherit phase orientation and `PS` from the nearest phased SNV within `max_phase_distance`. Genotypes such as `1/2`, whose orientation cannot be inferred from one biallelic SNV, remain unchanged. It clears and reapplies `gnomAD_STR`, refreshes TR envelope tags, and emits an audit TSV including multiple catalog matches, replacement details, phasing counts, and AC-drop status.
+This utility reconciles disease-associated `TRExplorerV1` catalog loci with one integrated contig VCF. Only catalog records whose `Diseases` value is a non-empty array are eligible; records with a missing, non-array, or empty value are ignored. It uses only literal `TRExplorerV1` substring matches against `INFO/TRID`, searches unmatched catalog loci in per-sample TRGT VCFs, merges recovered loci with TRGT, drops merged calls with `AC=0`, and replaces overlapping integrated TRVs. Replacement calls receive VRS, region, and in-silico annotations; these annotations run directly on only recovered calls and are not sharded.
+
+For each replaced, non-reference heterozygous TRGT genotype, it finds sample's matching truth/base VCF, reconstructs reference-relative sequence for both phased base haplotypes across replacement locus, and compares those sequences with both possible TRGT genotype orientations. It applies phase only when winning orientation improves total edit distance over alternative by at least `min_phase_edit_distance_delta` and its mean normalized haplotype similarity reaches `min_phase_similarity`; writes phased GT, sets `PS` to locus `POS`, and flags locus with `POSTHOC_BACKBONE_PHASED`. Reference, homozygous-alt, missing, and unresolved heterozygous calls remain unphased. It clears and reapplies `gnomAD_STR`, refreshes TR envelope tags, and emits catalog-match and per-genotype TRV-phasing audit TSVs. When enabled, TRV ID decrementing applies only to replacement TRVs, so input TRVs already processed by `PostprocessCallset` are not decremented twice.
 
 Inputs:
 - `File vcf` / `File vcf_idx`: Single-contig integrated cohort VCF and index.
 - `String contig`: Contig represented by `vcf`.
 - `Array[File] trgt_vcfs` / `Array[File] trgt_vcf_idxs`: Per-sample TRGT VCFs and indexes, aligned with `sample_ids`.
 - `Array[String] sample_ids`: Cohort sample IDs in exact main-VCF and TRGT merge order; each parallel TRGT VCF must contain only its corresponding sample.
+- `Array[File] base_vcfs` / `Array[File] base_vcf_idxs`: Indexed truth/base VCFs supplying phased haplotypes for replacement-call phasing.
+- `File? swap_samples_base`: Optional whitespace-delimited raw-to-canonical sample-ID map applied when assigning cohort samples to `base_vcfs`.
 - `File gnomad_tr_json`: TRExplorer catalog JSON.
 - `File ref_fa` / `File ref_fai`: Reference used by `trgt merge`.
-- `Int max_phase_distance`: Largest permitted distance from replacement locus start or end to a phased SNV (default `1000000`).
+- `Int min_phase_edit_distance_delta`: Minimum total edit-distance improvement required before assigning a TRGT heterozygous genotype to base-VCF haplotype orientation (default `10`).
+- `Float min_phase_similarity`: Minimum mean normalized similarity required for winning orientation (default `0.90`). Each haplotype similarity is `1 - edit_distance / max(len(TRGT_haplotype), len(base_haplotype), 1)`, then the two values are averaged.
+- `Boolean run_decrement_trv_ids`: Whether to decrement IDs only for newly introduced replacement TRVs; existing input TRVs are left unchanged.
 - `seqrepo_tar`, regional BEDs, and in-silico Hail table inputs: Resources used to annotate recovered calls.
 
 Outputs:
-- `updated_vcf` / `updated_vcf_idx`: Input-style contig VCF with recovered calls replacing old TRVs where applicable.
-- `updated_trv_vcf` / `updated_trv_vcf_idx`: All final `INFO/allele_type=trv` calls.
-- `catalog_match_tsv`: Catalog-to-main/TRGT match audit, including `AC=0` drops.
+- `trv_postprocessed_vcf` / `trv_postprocessed_vcf_idx`: Input-style contig VCF with recovered calls replacing old TRVs where applicable.
+- `trv_updated_vcf` / `trv_updated_vcf_idx`: All final `INFO/allele_type=trv` calls.
+- `trv_catalog_match_tsv`: Catalog-to-main/TRGT match audit, including `AC=0` drops.
+- `trv_phasing_summary_tsv`: One row per replaced non-reference heterozygous genotype, including TRGT and reconstructed base-haplotype sequences, edit distances and similarities for both orientations, threshold values, winning GT, and phase decision.
 
 
 ### [IntegrateVcfs](../wdl/annotation_utils/IntegrateVcfs.wdl)

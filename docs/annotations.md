@@ -70,6 +70,7 @@
 	- `revel_max`: Maximum REVEL score at a site's MANE Select or canonical transcript. An ensemble score for predicting the pathogenicity of missense variants based on 13 other variant predictors. Scores range from 0 to 1, with higher scores predicted to be more likely to be deleterious.
 	- `spliceai_ds_max`: Illumina's SpliceAI max delta score, interpreted as the probability of the variant being splice-altering.
 - `ORIGIN`: Origin of duplicated sequence for duplications and NUMTs.
+- `POSTHOC_BACKBONE_PHASED`: Flag on a replacement TRV for which one or more non-reference heterozygous genotypes were post-hoc phased by sequence agreement with base-VCF haplotypes.
 - SVAnnotate: Predicted functional effects for SVs on coding genes and noncoding regulatory elements, as annotated by GATK SVAnnotate.
 	- `PREDICTED_LOF`: Gene(s) predicted to undergo complete loss of function due to a deletion, truncation, or disruption of coding sequence.
 	- `PREDICTED_COPY_GAIN`: Gene(s) predicted to undergo copy gain from a duplication spanning the entire gene body.
