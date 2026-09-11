@@ -10,8 +10,8 @@ workflow CreateTRGTHistograms {
         Array[String] contigs
         String prefix
 
-        # Per-contig TRID metadata from TRGTLPS.vcf_trid_metadata_tsvs, index-aligned with
-        # `contigs`. Without it the converter cannot resolve a compound TRID (a variation cluster
+        # Per-contig TRID metadata from TRGTLPS.vcf_trid_metadata_tsvs, index-aligned with the
+        # `contigs` input array. Without it the converter cannot resolve a compound TRID (a variation cluster
         # record whose INFO/TRID lists several LocusIds) and fails on the first one it sees, so it
         # is required for any callset genotyped against a catalog containing variation clusters.
         # Left empty for a catalog of isolated repeats only, which keeps the previous behavior.

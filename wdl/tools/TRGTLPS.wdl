@@ -73,7 +73,8 @@ workflow TRGTLPS {
 
     output {
         File trgt_lps_tsv = ConcatTsvs.concatenated_tsv
-        # Index-aligned with "contigs", which is what CreateTRGTHistograms indexes into.
+        # Index-aligned with the "contigs" input array, which is what CreateTRGTHistograms
+        # indexes into.
         Array[File] vcf_trid_metadata_tsvs = ExtractTridMetadata.trid_metadata_tsv
     }
 }
