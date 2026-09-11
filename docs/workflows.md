@@ -818,7 +818,7 @@ Inputs:
 - `File lps_tsv`: Multisample LPS table.
 - `File metadata_tsv`: Sample metadata (population, sex) used to stratify the histograms.
 - `Array[String] contigs`: Contigs to process within the LPS table.
-- `Array[File] vcf_trid_metadata_tsvs`: Per-contig TRID metadata from `TRGTLPS.vcf_trid_metadata_tsvs`, index-aligned with the `contigs` input array. Required for any callset genotyped against a catalog containing variation clusters, since without it a TRID naming several loci cannot be resolved. Defaults to empty, which keeps the previous behavior for catalogs of isolated repeats only.
+- `Array[File] vcf_trid_metadata_tsvs`: Per-contig TRID metadata from `TRGTLPS.vcf_trid_metadata_tsvs`, index-aligned with the `contigs` input array. Required for any callset genotyped against a catalog that contains variation clusters, as it allows TRIDs that include several comma-separated LocusIds to be processed correctly. Defaults to empty, which keeps the previous behavior for catalogs of isolated repeats only.
 
 Outputs:
 - `trgt_histograms_tsv`: Combined per-locus allele-frequency histograms TSV.
