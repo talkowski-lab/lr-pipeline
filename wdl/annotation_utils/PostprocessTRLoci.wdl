@@ -7,8 +7,6 @@ import "../tools/MergeHiPhaseCallsets.wdl"
 import "../utils/Structs.wdl"
 import "AnnotateVcf.wdl"
 
-# Reconcile TRExplorer catalog loci with an integrated contig VCF.  Catalog
-# matching deliberately uses only literal TRExplorerV1 substring matches.
 workflow PostprocessTRLoci {
     input {
         File vcf
@@ -138,7 +136,6 @@ workflow PostprocessTRLoci {
                     runtime_attr_override = runtime_attr_prepare
             }
 
-            # These replacement-only annotation tasks run in parallel on at most a few loci.
             call AnnotateVRS.AnnotateVcfWithVRS as AnnotateReplacementVRS {
                 input:
                     vcf = PrepareReplacementLoci.prepared_vcf,
@@ -230,6 +227,7 @@ workflow PostprocessTRLoci {
     }
 }
 
+# Find disease-associated catalog loci in the main VCF, then in per-sample TRGT VCFs.
 task DiscoverTRLoci {
     input {
         File vcf
@@ -247,6 +245,7 @@ task DiscoverTRLoci {
     command <<<
         set -euo pipefail
 
+        # Validate sample/file alignment before using indexed windows for strict TRID matching.
         python3 <<'PY'
 import json
 import os
@@ -286,6 +285,10 @@ with open('~{gnomad_tr_json}') as handle:
     catalog = json.load(handle)
 loci = []
 for entry in catalog:
+    # Catalog key is capitalized. Missing, non-array, and empty Diseases values are ignored.
+    diseases = entry.get('Diseases') if entry else None
+    if not isinstance(diseases, list) or not diseases:
+        continue
     if not entry or not entry.get('LocusId'):
         continue
     explorers = entry.get('TRExplorerV1')
@@ -364,6 +367,7 @@ PY
     }
 }
 
+# Retain only disease-associated fallback loci selected during discovery from one sample VCF.
 task SubsetTRGTForCatalogLoci {
     input {
         File vcf
@@ -377,6 +381,7 @@ task SubsetTRGTForCatalogLoci {
     command <<<
         set -euo pipefail
 
+        # Fetch narrow catalog intervals and confirm strict TRID matches before writing records.
         python3 <<'PY'
 import pysam
 
@@ -431,6 +436,7 @@ PY
     }
 }
 
+# Recompute cohort allele counts, retain AC-positive merged loci, and audit AC-zero drops.
 task KeepMergedTRGTWithAC {
     input {
         File vcf
@@ -445,6 +451,7 @@ task KeepMergedTRGTWithAC {
     command <<<
         set -euo pipefail
 
+        # Rebuild selected disease-locus metadata and calculate AC directly from merged genotypes.
         python3 <<'PY'
 import json
 import pysam
@@ -467,6 +474,10 @@ with open('~{gnomad_tr_json}') as handle:  # noqa: E305
 selected_keys = {line.strip() for line in open('~{match_keys}') if line.strip()}
 locus_ids = {}
 for entry in catalog:
+    # Apply the same non-empty Diseases-array rule used during initial discovery.
+    diseases = entry.get('Diseases') if entry else None
+    if not isinstance(diseases, list) or not diseases:
+        continue
     explorer = entry.get('TRExplorerV1') if entry else None
     explorers = explorer if isinstance(explorer, list) else [explorer]
     for value in explorers:
@@ -548,6 +559,7 @@ PY
     }
 }
 
+# Reconcile replacement headers, select old TRVs by overlap, and transfer nearby SNV phase.
 task PrepareReplacementLoci {
     input {
         File vcf
@@ -564,6 +576,7 @@ task PrepareReplacementLoci {
     command <<<
         set -euo pipefail
 
+        # Match FORMAT/AL to the main VCF before records move between pysam headers.
         python3 <<'PY'
 import subprocess
 
@@ -579,6 +592,7 @@ PY
         bcftools reheader -h replacement.header ~{replacement_vcf} \
             | bcftools view -Ov -o replacement.normalized.vcf
 
+        # Require unique positive-overlap replacements and phase eligible heterozygous calls.
         python3 <<'PY'
 import pysam
 
@@ -700,6 +714,7 @@ PY
     }
 }
 
+# Replace selected TRVs, rebuild envelope relationships, and produce final VCFs and audit.
 task ApplyTRLocusUpdates {
     input {
         File vcf
@@ -718,6 +733,7 @@ task ApplyTRLocusUpdates {
     command <<<
         set -euo pipefail
 
+        # Stream the full contig while clearing and rebuilding TR and gnomAD STR annotations.
         python3 <<'PY'
 import json
 import os
@@ -736,6 +752,10 @@ with open('~{gnomad_tr_json}') as handle:  # noqa: E305
     catalog = json.load(handle)
 loci = []
 for entry in catalog:
+    # Prevent ignored non-disease loci from receiving gnomAD_STR during final annotation.
+    diseases = entry.get('Diseases') if entry else None
+    if not isinstance(diseases, list) or not diseases:
+        continue
     explorer = entry.get('TRExplorerV1') if entry else None
     explorers = explorer if isinstance(explorer, list) else [explorer]
     for value in explorers:
