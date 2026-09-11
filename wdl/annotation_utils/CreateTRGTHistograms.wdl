@@ -101,7 +101,7 @@ task SubsetLpsTsvToContig {
 
                 {
                     split($1, arr, ",")
-                    # A self-named variation cluster is "VC:{chrom}:{start}-{end}", so its chrom
+                    # The new-style variation cluster ID is "VC:{chrom}:{start}-{end}", so its chrom
                     # is the second colon-delimited field. Splitting such a TRID on "-" like an
                     # ordinary LocusId would yield "VC:{chrom}:{start}", matching no contig and
                     # silently dropping the row from every shard.
