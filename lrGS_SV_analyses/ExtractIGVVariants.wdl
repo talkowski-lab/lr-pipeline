@@ -1,8 +1,8 @@
 version 1.0
 
-## Given a list of variant IDs and one VCF per contig, scan each VCF for
-## matching records and combine the hits into one genome-wide TSV in the
-## same format as example.igv_variants.tsv.
+## Given a file of variant IDs (one per line) and one VCF per contig, scan
+## each VCF for matching records and combine the hits into one genome-wide
+## TSV in the same format as example.igv_variants.tsv.
 ##
 ## Output columns: chrom, start, end, ID, allele_type, samples
 ## `samples` lists every carrier (non-ref, non-missing GT) for that variant,
@@ -10,19 +10,17 @@ version 1.0
 
 workflow ExtractIGVVariants {
   input {
-    Array[String] variant_ids
+    File variant_ids
     Array[File] vcfs
     String output_basename = "igv_variants"
     String docker = "python:3.11-slim"
   }
 
-  File ids_file = write_lines(variant_ids)
-
   scatter (vcf in vcfs) {
     call ExtractFromVcf {
       input:
         vcf = vcf,
-        ids_file = ids_file,
+        ids_file = variant_ids,
         docker = docker,
     }
   }
@@ -30,7 +28,7 @@ workflow ExtractIGVVariants {
   call CombineAndSort {
     input:
       tsvs = ExtractFromVcf.out_tsv,
-      ids_file = ids_file,
+      ids_file = variant_ids,
       output_basename = output_basename,
       docker = docker,
   }
