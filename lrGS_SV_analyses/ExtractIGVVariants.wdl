@@ -69,6 +69,8 @@ samples = []
 rows = []
 with open_vcf("~{vcf}") as fh:
     for line in fh:
+        if not line.strip():
+            continue
         if line.startswith("##"):
             continue
         if line.startswith("#CHROM"):
