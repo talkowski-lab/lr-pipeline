@@ -48,7 +48,6 @@ workflow PostprocessTRLoci {
         RuntimeAttr? runtime_attr_merge_trgt
         RuntimeAttr? runtime_attr_filter_merged
         RuntimeAttr? runtime_attr_prepare
-        RuntimeAttr? runtime_attr_vrs_drop_fields
         RuntimeAttr? runtime_attr_vrs_annotate
         RuntimeAttr? runtime_attr_vrs_extract
         RuntimeAttr? runtime_attr_region_annotate
@@ -139,40 +138,42 @@ workflow PostprocessTRLoci {
                     runtime_attr_override = runtime_attr_prepare
             }
 
-            # These three small-locus annotation workflows have no record sharding and run in parallel.
-            call AnnotateVRS.AnnotateVRS as AnnotateReplacementVRS {
+            # These replacement-only annotation tasks run in parallel on at most a few loci.
+            call AnnotateVRS.AnnotateVcfWithVRS as AnnotateReplacementVRS {
                 input:
                     vcf = PrepareReplacementLoci.prepared_vcf,
                     vcf_idx = PrepareReplacementLoci.prepared_vcf_idx,
-                    contigs = [contig],
-                    prefix = "~{prefix}.~{contig}.replacement",
+                    prefix = "~{prefix}.~{contig}.replacement.vrs",
                     seqrepo_tar = seqrepo_tar,
-                    utils_docker = utils_docker,
-                    vrs_docker = vrs_docker,
-                    runtime_attr_drop_fields = runtime_attr_vrs_drop_fields,
-                    runtime_attr_annotate_vrs = runtime_attr_vrs_annotate,
-                    runtime_attr_extract = runtime_attr_vrs_extract
+                    docker = vrs_docker,
+                    runtime_attr_override = runtime_attr_vrs_annotate
             }
 
-            call AnnotateRegion.AnnotateRegion as AnnotateReplacementRegion {
+            call AnnotateVRS.ExtractVRSAnnotations as ExtractReplacementVRS {
+                input:
+                    vcf = AnnotateReplacementVRS.annotated_vcf,
+                    vcf_idx = AnnotateReplacementVRS.annotated_vcf_idx,
+                    prefix = "~{prefix}.~{contig}.replacement.vrs",
+                    docker = utils_docker,
+                    runtime_attr_override = runtime_attr_vrs_extract
+            }
+
+            call AnnotateRegion.AnnotateGenomicContext as AnnotateReplacementRegion {
                 input:
                     vcf = PrepareReplacementLoci.prepared_vcf,
                     vcf_idx = PrepareReplacementLoci.prepared_vcf_idx,
-                    contigs = [contig],
-                    prefix = "~{prefix}.~{contig}.replacement",
                     simple_repeats_bed = simple_repeats_bed,
                     seg_dup_bed = seg_dup_bed,
                     repeat_masked_bed = repeat_masked_bed,
-                    utils_docker = utils_docker,
-                    runtime_attr_annotate_region = runtime_attr_region_annotate
+                    prefix = "~{prefix}.~{contig}.replacement.region",
+                    docker = utils_docker,
+                    runtime_attr_override = runtime_attr_region_annotate
             }
 
-            call AnnotateInSilicoPredictors.AnnotateInSilicoPredictors as AnnotateReplacementInSilico {
+            call AnnotateInSilicoPredictors.AnnotateInSilicoPredictorsTask as AnnotateReplacementInSilico {
                 input:
                     vcf = PrepareReplacementLoci.prepared_vcf,
                     vcf_idx = PrepareReplacementLoci.prepared_vcf_idx,
-                    contigs = [contig],
-                    prefix = "~{prefix}.~{contig}.replacement",
                     cadd_ht = cadd_ht,
                     pangolin_ht = pangolin_ht,
                     phylop_ht = phylop_ht,
@@ -180,25 +181,27 @@ workflow PostprocessTRLoci {
                     spliceai_ht = spliceai_ht,
                     annotate_in_silico_predictors_script = annotate_in_silico_predictors_script,
                     genome_build = genome_build,
-                    utils_docker = utils_docker,
-                    hail_docker = hail_docker,
-                    runtime_attr_annotate = runtime_attr_insilico_annotate
+                    prefix = "~{prefix}.~{contig}.replacement.in_silico",
+                    docker = hail_docker,
+                    runtime_attr_override = runtime_attr_insilico_annotate
             }
 
-            call AnnotateVcf.AnnotateVcf as AttachReplacementAnnotations {
+            call AnnotateVcf.AnnotateSequentially as AttachReplacementAnnotations {
                 input:
                     vcf = PrepareReplacementLoci.prepared_vcf,
                     vcf_idx = PrepareReplacementLoci.prepared_vcf_idx,
-                    annotations_tsvs = [AnnotateReplacementVRS.annotations_tsv_vrs, AnnotateReplacementRegion.annotations_tsv_region, AnnotateReplacementInSilico.annotations_tsv_insilico],
-                    contigs = [contig],
+                    annotations_tsvs = [ExtractReplacementVRS.annotations_tsv, AnnotateReplacementRegion.annotations_tsv, AnnotateReplacementInSilico.annotations_tsv],
                     prefix = "~{prefix}.~{contig}.replacement_annotated",
                     info_names = [["VRS_Allele_IDs", "VRS_Error", "VRS_Starts", "VRS_Ends", "VRS_States", "VRS_Lengths", "VRS_RepeatSubunitLengths"], ["REGION"], ["cadd_raw_score", "cadd_phred", "pangolin_largest", "revel_max", "phylop", "spliceai_ds_max"]],
                     info_descriptions = [["VRS allele identifiers", "VRS annotation error", "VRS start positions", "VRS end positions", "VRS allele states", "VRS allele lengths", "VRS repeat subunit lengths"], ["Genomic context of variant"], ["CADD raw score", "CADD PHRED score", "Largest Pangolin delta score", "Maximum REVEL score", "PhyloP score", "Maximum SpliceAI delta score"]],
                     info_types = [["String", "String", "Integer", "Integer", "String", "String", "String"], ["String"], ["Float", "Float", "Float", "Float", "Float", "Float"]],
                     info_numbers = [["R", ".", "R", "R", ".", ".", "."], ["1"], ["1", "1", "1", "1", "1", "1"]],
+                    subset_vcf_strings = [],
+                    awk_tsv_conditions = [],
                     subset_tsv_columns = [[6, 7, 8, 9, 10, 11, 12], [6], [6, 7, 8, 9, 10, 11]],
-                    utils_docker = utils_docker,
-                    runtime_attr_annotate = runtime_attr_attach_annotations
+                    strip_info_fields_per_tsv = [],
+                    docker = utils_docker,
+                    runtime_attr_override = runtime_attr_attach_annotations
             }
         }
     }
