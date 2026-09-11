@@ -748,7 +748,7 @@ Outputs:
 
 
 ### [FilterLowCoverageGenotypes](../wdl/annotation_utils/FilterLowCoverageGenotypes.wdl)
-This utility nulls out (`./.`) individual genotype calls whose `FORMAT/DP` is present and at or below that sample's low-coverage cutoff. Male chrX/chrY calls use half the sample's cutoff, with sex read from a six-column PED. A called genotype (any allele present, ref or alt) is nulled along with every other FORMAT field for that sample when its DP is at or below the applicable cutoff; calls missing GT or DP are left unchanged. Filtering can be restricted to variants whose INFO field matches a given value. It optionally shards by record count and outputs the filtered VCF plus a report of affected variants.
+This utility sets selected individual genotype calls to missing (`./.`) when `FORMAT/DP` is present and at or below that sample's low-coverage cutoff, while preserving every other FORMAT field. Male chrX/chrY calls use half the sample's cutoff, with sex read from a six-column PED. Reference genotypes are always eligible for filtering; when `filter_non_ref` is true, genotypes containing an alternate allele, including partially called genotypes such as `./1`, are also eligible. Calls missing every GT allele or DP are left unchanged. Filtering can be restricted to variants whose INFO field matches a given value. It optionally shards by record count and outputs the filtered VCF plus a report of affected variants.
 
 Inputs:
 - `File vcf`: Cohort VCF to filter.
@@ -757,6 +757,7 @@ Inputs:
 - `File ped`: Six-column PED containing every VCF sample and its sex.
 - `String? subset_unfilled_vcf_field`: INFO field used to limit which variants are filtered. Requires `subset_unfilled_vcf_value`.
 - `String? subset_unfilled_vcf_value`: Value that `subset_unfilled_vcf_field` must equal for a variant to be filtered. Variants that don't match are left unfiltered.
+- `Boolean filter_non_ref`: Whether low-coverage genotypes containing an alternate allele should also be set to missing. When false, only genotypes without an alternate allele are filtered.
 - `Int? records_per_shard`: Number of variants per shard. When set, variants are processed in parallel shards and concatenated.
 
 Outputs:
