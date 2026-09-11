@@ -818,6 +818,7 @@ Inputs:
 - `File lps_tsv`: Multisample LPS table.
 - `File metadata_tsv`: Sample metadata (population, sex) used to stratify the histograms.
 - `Array[String] contigs`: Contigs to process within the LPS table.
+- `Array[File] vcf_trid_metadata_tsvs`: Per-contig TRID metadata from `TRGTLPS.vcf_trid_metadata_tsvs`, index-aligned with the `contigs` input array. Required for any callset genotyped against a catalog that contains variation clusters, as it allows TRIDs that include several comma-separated LocusIds to be processed correctly. Defaults to empty, which keeps the previous behavior for catalogs of isolated repeats only.
 
 Outputs:
 - `trgt_histograms_tsv`: Combined per-locus allele-frequency histograms TSV.
@@ -1456,7 +1457,7 @@ Outputs:
 
 
 ### [TRGTLPS](../wdl/tools/TRGTLPS.wdl)
-This tool runs the [trgt-lps](https://github.com/PacificBiosciences/trgt-lps) tool per contig to compute the longest polymer sequence (LPS) within each TRGT-genotyped tandem-repeat locus for every sample, concatenating the results into a single TSV. It outputs the LPS TSV.
+This tool runs the [trgt-lps](https://github.com/PacificBiosciences/trgt-lps) tool per contig to compute the longest polymer sequence (LPS) within each TRGT-genotyped tandem-repeat locus for every sample, concatenating the results into a single TSV. Alongside each contig's LPS table it extracts a small TRID-metadata TSV from the same subset VCF, mapping every `(TRID, motif)` to the LocusIds that record covers, which `CreateTRGTHistograms` needs to resolve variation-cluster records whose TRID names several loci. It outputs the LPS TSV and the per-contig TRID-metadata TSVs.
 
 Inputs:
 - `File vcf`: TRGT VCF to process.
@@ -1465,6 +1466,7 @@ Inputs:
 
 Outputs:
 - `trgt_lps_tsv`: TSV of per-locus longest polymer sequences.
+- `vcf_trid_metadata_tsvs`: Per-contig TRID-metadata TSVs, index-aligned with the `contigs` input array, to be passed straight to `CreateTRGTHistograms`.
 
 
 ### [Vamos](../wdl/tools/Vamos.wdl)

@@ -10,6 +10,13 @@ workflow CreateTRGTHistograms {
         Array[String] contigs
         String prefix
 
+        # Per-contig TRID metadata from TRGTLPS.vcf_trid_metadata_tsvs, index-aligned with the
+        # `contigs` input array. Without it the converter cannot resolve a compound TRID (a variation cluster
+        # record whose INFO/TRID lists several LocusIds) and fails on the first one it sees, so it
+        # is required for any callset genotyped against a catalog containing variation clusters.
+        # Left empty for a catalog of isolated repeats only.
+        Array[File] vcf_trid_metadata_tsvs = []
+
         String stranalysis_docker
         String utils_docker
 
@@ -20,7 +27,18 @@ workflow CreateTRGTHistograms {
 
     Boolean single_contig = length(contigs) == 1
 
-    scatter (contig in contigs) {
+    # Scatter by index rather than over `contigs` directly so each shard can pick the TRID
+    # metadata TSV belonging to its own contig. The converter rejects metadata rows that no LPS
+    # row claims, so a whole-genome metadata file paired with one contig's LPS rows would fail.
+    scatter (i in range(length(contigs))) {
+        String contig = contigs[i]
+
+        # Declared inside the conditional so it is File? outside it, matching the task's optional
+        # input. Indexing here is what requires the two arrays to be the same length and order.
+        if (length(vcf_trid_metadata_tsvs) > 0) {
+            File contig_trid_metadata_tsv = vcf_trid_metadata_tsvs[i]
+        }
+
         if (!single_contig) {
             call SubsetLpsTsvToContig {
                 input:
@@ -38,6 +56,7 @@ workflow CreateTRGTHistograms {
             input:
                 lps_tsv = contig_lps_tsv,
                 metadata_tsv = metadata_tsv,
+                vcf_trid_metadata_tsv = contig_trid_metadata_tsv,
                 prefix = "~{prefix}.~{contig}.af_histograms",
                 docker = stranalysis_docker,
                 runtime_attr_override = runtime_attr_convert
@@ -82,8 +101,17 @@ task SubsetLpsTsvToContig {
 
                 {
                     split($1, arr, ",")
-                    split(arr[1], parts, "-")
-                    chr = parts[1]
+                    # The new-style variation cluster ID is "VC:{chrom}:{start}-{end}", so its chrom
+                    # is the second colon-delimited field. Splitting such a TRID on "-" like an
+                    # ordinary LocusId would yield "VC:{chrom}:{start}", matching no contig and
+                    # silently dropping the row from every shard.
+                    if (arr[1] ~ /^VC:/) {
+                        split(arr[1], vcparts, ":")
+                        chr = vcparts[2]
+                    } else {
+                        split(arr[1], parts, "-")
+                        chr = parts[1]
+                    }
                     if (chr ~ /^chr/) chr = substr(chr, 4)
                     if (chr ~ /^trid/) header = $0
                     else if (chr == contig) data[++n] = $0
@@ -126,6 +154,7 @@ task ConvertLPSTableToAFHistograms {
     input {
         File lps_tsv
         File metadata_tsv
+        File? vcf_trid_metadata_tsv
         String prefix
         String docker
         RuntimeAttr? runtime_attr_override
@@ -137,6 +166,7 @@ task ConvertLPSTableToAFHistograms {
         python3 -m str_analysis.convert_multisample_LPS_table_to_allele_frequency_histograms \
             --input-table ~{lps_tsv} \
             --sample-metadata-tsv ~{metadata_tsv} \
+            ~{if defined(vcf_trid_metadata_tsv) then "--vcf-trid-metadata-tsv " + vcf_trid_metadata_tsv else ""} \
             --output-format TSV \
             --stratify-by-population \
             --stratify-by-sex
