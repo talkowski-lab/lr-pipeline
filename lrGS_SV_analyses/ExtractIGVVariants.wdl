@@ -61,7 +61,9 @@ with open("~{ids_file}") as f:
 def open_vcf(path):
     with open(path, "rb") as fh:
         is_gz = fh.read(2) == b"\x1f\x8b"
-    return gzip.open(path, "rt") if is_gz else open(path, "rt")
+    if is_gz:
+        return gzip.open(path, "rt", encoding="utf-8", errors="replace")
+    return open(path, "rt", encoding="utf-8", errors="replace")
 
 samples = []
 rows = []
