@@ -216,7 +216,7 @@ workflow PostprocessTRLoci {
                     subset_vcf_strings = [],
                     awk_tsv_conditions = [],
                     subset_tsv_columns = [[6, 7, 8, 9, 10, 11, 12], [6], [6, 7, 8, 9, 10, 11]],
-                    strip_info_fields_per_tsv = [],
+                    strip_info_fields_per_tsv = [false, false, false],
                     docker = utils_docker,
                     runtime_attr_override = runtime_attr_attach_annotations
             }
