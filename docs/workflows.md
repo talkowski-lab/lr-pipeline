@@ -841,6 +841,25 @@ Outputs:
 - `tr_annotated_vcf_idx`: Index for the annotated VCF.
 
 
+### [PostprocessTRLoci](../wdl/annotation_utils/PostprocessTRLoci.wdl)
+This utility reconciles `TRExplorerV1` catalog loci with one integrated contig VCF. It uses only literal `TRExplorerV1` substring matches against `INFO/TRID`, searches unmatched catalog loci in per-sample TRGT VCFs, merges recovered loci with TRGT, drops merged calls with `AC=0`, and replaces overlapping integrated TRVs. Replacement calls receive VRS, region, and in-silico annotations; eligible diploid genotypes with one reference and one non-reference allele inherit phase orientation and `PS` from the nearest phased SNV within `max_phase_distance`. Genotypes such as `1/2`, whose orientation cannot be inferred from one biallelic SNV, remain unchanged. It clears and reapplies `gnomAD_STR`, refreshes TR envelope tags, and emits an audit TSV including multiple catalog matches, replacement details, phasing counts, and AC-drop status.
+
+Inputs:
+- `File vcf` / `File vcf_idx`: Single-contig integrated cohort VCF and index.
+- `String contig`: Contig represented by `vcf`.
+- `Array[File] trgt_vcfs` / `Array[File] trgt_vcf_idxs`: Per-sample TRGT VCFs and indexes, aligned with `sample_ids`.
+- `Array[String] sample_ids`: Cohort sample IDs in exact main-VCF and TRGT merge order; each parallel TRGT VCF must contain only its corresponding sample.
+- `File gnomad_tr_json`: TRExplorer catalog JSON.
+- `File ref_fa` / `File ref_fai`: Reference used by `trgt merge`.
+- `Int max_phase_distance`: Largest permitted distance from replacement locus start or end to a phased SNV (default `1000000`).
+- `seqrepo_tar`, regional BEDs, and in-silico Hail table inputs: Resources used to annotate recovered calls.
+
+Outputs:
+- `updated_vcf` / `updated_vcf_idx`: Input-style contig VCF with recovered calls replacing old TRVs where applicable.
+- `updated_trv_vcf` / `updated_trv_vcf_idx`: All final `INFO/allele_type=trv` calls.
+- `catalog_match_tsv`: Catalog-to-main/TRGT match audit, including `AC=0` drops.
+
+
 ### [IntegrateVcfs](../wdl/annotation_utils/IntegrateVcfs.wdl)
 This utility integrates a SNV/indel VCF and an SV VCF into a single cohort VCF. Each input is normalized, harmonized to a common sample set and tagged with a source label and a size-based flag, after which the two are merged and the combined variants are renamed and filtered - for example to flag large SNVs/indels and small SVs. Sample IDs can optionally be swapped first. It outputs the integrated VCF.
 

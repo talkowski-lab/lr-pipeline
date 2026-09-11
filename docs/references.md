@@ -1,46 +1,51 @@
 # References
-- `coding_gtf`: [GENCODE v39](gs://talkowski-sv-gnomad-output/zero/RerunAnno/genes_grch38_annotated_4_mapped_gencode_v39.CDS.gtf) from the gnomAD workspace.
-- `dbsnp_vcf` (per-contig in data table): [Build 156 variants for GRCh38](gs://fc-107e0442-e00c-4bb9-9810-bbe370bda6e5/files_kj/references/GCF_000001405.40.vcf.gz) from [dbSNP](https://ftp.ncbi.nih.gov/snp/archive/b156/VCF/GCF_000001405.40.gz).
+- [`coding_gtf`](gs://talkowski-sv-gnomad-output/zero/RerunAnno/genes_grch38_annotated_4_mapped_gencode_v39.CDS.gtf): GENCODE v39 annotations from the gnomAD workspace.
+- [`dbsnp_vcf`](gs://fc-107e0442-e00c-4bb9-9810-bbe370bda6e5/files_kj/references/GCF_000001405.40.vcf.gz) (per-contig in data table): Build 156 variants for GRCh38 from [dbSNP](https://ftp.ncbi.nih.gov/snp/archive/b156/VCF/GCF_000001405.40.gz).
 - `dbsnp_vcf_idx` (per-contig in data table): Index for `dbsnp_vcf`.
-- `dbvar_vcf` (per-contig in data table): [Variants for GRCh38](gs://fc-107e0442-e00c-4bb9-9810-bbe370bda6e5/files_kj/GRCh38.variant_call.all.vcf.gz) from [dbVaR](https://ftp.ncbi.nlm.nih.gov/pub/dbVar/data/Homo_sapiens/by_assembly/GRCh38/vcf/GRCh38.variant_call.all.vcf.gz).
+- [`dbvar_vcf`](gs://fc-107e0442-e00c-4bb9-9810-bbe370bda6e5/files_kj/GRCh38.variant_call.all.vcf.gz) (per-contig in data table): Variants for GRCh38 from [dbVaR](https://ftp.ncbi.nlm.nih.gov/pub/dbVar/data/Homo_sapiens/by_assembly/GRCh38/vcf/GRCh38.variant_call.all.vcf.gz).
 - `dbvar_vcf_idx` (per-contig in data table): Index for `dbvar_vcf`.
-- `exons_bed`: [Loci for GRCh38](gs://fc-107e0442-e00c-4bb9-9810-bbe370bda6e5/files_kj/references/EXONS_hg38.bed) from the [references](https://zenodo.org/records/15229020/files/hg38.tar.gz) listed in the SVAN repository.
-- `fix_variant_collisions_java`: [Script for phasing](gs://fc-107e0442-e00c-4bb9-9810-bbe370bda6e5/files_kj/references/FixVariantCollisions-9daf9b2.java) from the DSP Long-Read SV team.
-- `genetic_maps_tsv`: [Maps for GRCh38](gs://fc-107e0442-e00c-4bb9-9810-bbe370bda6e5/files_kj/references/genetic_map_b38.tsv) from the [GLIMPSE references](https://github.com/odelaneau/GLIMPSE/tree/master/maps/genetic_maps.b38).
-- `gnomad_sv_constraint`: Genic constraint results for `gnomad_sv_vcf`.
-- `gnomad_sv_vcf`: [gnomAD V4 structural variants](gs://gcp-public-data--gnomad/release/4.1/genome_sv/gnomad.v4.1.sv.sites.vcf.gz) from the [gnomAD downloads](https://gnomad.broadinstitute.org/data#v4).
+- [`exons_bed`](gs://fc-107e0442-e00c-4bb9-9810-bbe370bda6e5/files_kj/references/EXONS_hg38.bed): Loci for GRCh38 from the [references](https://zenodo.org/records/15229020/files/hg38.tar.gz) listed in the SVAN repository.
+- [`fix_variant_collisions_java`](gs://fc-107e0442-e00c-4bb9-9810-bbe370bda6e5/files_kj/references/FixVariantCollisions-9daf9b2.java): Script for phasing from the DSP Long-Read SV team.
+- [`genetic_maps_tsv`](gs://fc-107e0442-e00c-4bb9-9810-bbe370bda6e5/files_kj/references/genetic_map_b38.tsv): Maps for GRCh38 from the [GLIMPSE references](https://github.com/odelaneau/GLIMPSE/tree/master/maps/genetic_maps.b38).
+- [`gnomad_sv_constraint`](gs://fc-107e0442-e00c-4bb9-9810-bbe370bda6e5/files_kj/references/gnomAD_constraint.tsv): Genic constraint results for `gnomad_sv_vcf`.
+- [`gnomad_sv_vcf`](gs://gcp-public-data--gnomad/release/4.1/genome_sv/gnomad.v4.1.sv.sites.vcf.gz): gnomAD V4 structural variants from the [gnomAD downloads](https://gnomad.broadinstitute.org/data#v4).
 - `gnomad_sv_vcf_idx`: Index for `gnomad_sv_vcf`.
-- `gnomad_tr_json`: [gnomAD V4 tandem repeats](gs://fc-107e0442-e00c-4bb9-9810-bbe370bda6e5/files_kj/references/variant_catalog_without_offtargets.GRCh38.json) from the [str-analysis references](https://github.com/broadinstitute/str-analysis/blob/main/str_analysis/variant_catalogs/variant_catalog_without_offtargets.GRCh38.json).
-- `gnomad_vcf` (per-contig in data table): [gnomAD V4 short variants](gs://gcp-public-data--gnomad/release/4.1/vcf/genomes/) from the [gnomAD downloads](https://gnomad.broadinstitute.org/data#v4).
+- [`gnomad_tr_json`](gs://fc-107e0442-e00c-4bb9-9810-bbe370bda6e5/files_kj/references/variant_catalog_without_offtargets.GRCh38.json): gnomAD V4 tandem repeats from the [str-analysis references](https://github.com/broadinstitute/str-analysis/blob/main/str_analysis/variant_catalogs/variant_catalog_without_offtargets.GRCh38.json).
+- [`gnomad_vcf`](gs://gcp-public-data--gnomad/release/4.1/vcf/genomes/) (per-contig in data table): gnomAD V4 short variants from the [gnomAD downloads](https://gnomad.broadinstitute.org/data#v4).
 - `gnomad_vcf_idx` (per-contig in data table): Indexes for `gnomad_vcfs`.
-- `insilico_cadd_ht`: [CADD scores for GRCh38](gs://fc-0bc12741-801b-4c10-8d3c-92075b188d3c/gnomad/v4.0/annotations/in_silico_predictors/gnomad.v4.0.cadd.grch38.ht) from gnomAD V4.
-- `insilico_pangolin_ht`: [Pangolin scores for GRCh38](gs://fc-0bc12741-801b-4c10-8d3c-92075b188d3c/gnomad/v4.0/annotations/in_silico_predictors/gnomad.v4.0.pangolin.grch38.ht) from gnomAD V4.
-- `insilico_phylop_ht`: [PhyloP scores for GRCh38](gs://fc-0bc12741-801b-4c10-8d3c-92075b188d3c/gnomad/v4.0/annotations/in_silico_predictors/gnomad.v4.0.phylop.grch38.ht) from gnomAD V4.
-- `insilico_revel_ht`: [REVEL scores for GRCh38](gs://fc-0bc12741-801b-4c10-8d3c-92075b188d3c/gnomad/v4.0/annotations/in_silico_predictors/gnomad.v4.0.revel.grch38.ht) from gnomAD V4.
-- `insilico_spliceai_ht`: [SpliceAI scores for GRCh38](gs://fc-0bc12741-801b-4c10-8d3c-92075b188d3c/gnomad/v4.0/annotations/in_silico_predictors/gnomad.v4.0.spliceai.grch38.ht) from gnomAD V4.
-- `mei_catalog`: [Loci for GRCh38](gs://fc-107e0442-e00c-4bb9-9810-bbe370bda6e5/files_kj/references/meis_hg38.tsv) is a combination of ALU and LINE loci from [RepeatMasker](https://genome.ucsc.edu/cgi-bin/hgTables?db=hg38&hgta_group=rep&hgta_track=rmsk&hgta_table=rmsk&hgta_doSchema=describe+table+schema) and SVA loci from [van Bree et al](https://genome.cshlp.org/content/suppl/2022/03/24/gr.275515.121.DC1).
-- `mei_fa`: [Sequences for GRCh38](gs://fc-107e0442-e00c-4bb9-9810-bbe370bda6e5/files_kj/references/CONSENSUS.fa) from the [SVAN references](https://zenodo.org/records/15229020/files/hg38.tar.gz).
-- `mei_fa_idx`: BWA and Minimap indices for `mei_fa`.
-- `noncoding_bed`: [Panel for GRCh38](gs://gcp-public-data--broad-references/hg38/v0/sv-resources/resources/v1/noncoding.sort.hg38.bed) from the [GATK-SV references](https://broadinstitute.github.io/gatk-sv/docs/resources).
-- `par_bed`: [Panel for GRCh38](gs://gatk-sv-resources-public/hg38/v0/sv-resources/resources/v1/hg38.par.bed) from the [GATK-SV references](https://broadinstitute.github.io/gatk-sv/docs/resources).
-- `ploidy_bed_female`: [Panel for GRCh38](gs://fc-107e0442-e00c-4bb9-9810-bbe370bda6e5/files_kj/references/grch38_female.bed) from the [Kanpig references](https://broadinstitute.github.io/gatk-sv/docs/resources).
-- `ploidy_bed_male`: [Panel for GRCh38](gs://fc-107e0442-e00c-4bb9-9810-bbe370bda6e5/files_kj/references/grch38_male.bed) from the [Kanpig references](https://broadinstitute.github.io/gatk-sv/docs/resources).
-- `ref_dict`: Sequence dictionary for `ref_fa`.
-- `ref_fa`: [Sequences for GRCh38](gs://fc-107e0442-e00c-4bb9-9810-bbe370bda6e5/files_kj/references/hg38.no_alt.fa) from the [PAV references](https://github.com/BeckLaboratory/pav#a-note-on-references).
-- `ref_fai`: Index for `ref_fa`.
-- `ref_fa_bwa_idx`: BWA indices for `ref_fa`.
-- `ref_fa_idx`: BWA and Minimap indices for `ref_fa`.
-- `ref_vep_cache`: [Cache for v105](gs://gcp-public-data--gnomad/resources/vep/v105/homo_sapiens_merged_vep_105_GRCh38.tar.gz) from the [VEP archives](https://ftp.ensembl.org/pub/release-105/variation/), with the most up-to-date list of these found [here](https://useast.ensembl.org/info/docs/tools/vep/script/vep_cache.html#cache).
-- `repeat_masker_bed`: [Loci for GRCh38](gs://gatk-sv-resources-public/hg38/v0/sv-resources/resources/v1/GenomicContext/hg38.RM.sorted.merged.bed) from the [GATK-SV references](https://broadinstitute.github.io/gatk-sv/docs/resources).
-- `repeats_bed`: [Loci for GRCh38](gs://fc-107e0442-e00c-4bb9-9810-bbe370bda6e5/files_kj/references/REPEATS_hg38.bed) from the [SVAN references](https://zenodo.org/records/15229020/files/hg38.tar.gz).
-- `repeat_catalog_trgt`: [Catalog for GRCh38](gs://fc-107e0442-e00c-4bb9-9810-bbe370bda6e5/files_kj/references/variation_clusters_and_isolated_TRs_v1.0.1.hg38.TRGT.bed.gz) from [the TR Catalog references](https://github.com/broadinstitute/tandem-repeat-catalog/releases), as used in All of Us Phase.
-- `seg_dup_bed`: [Loci for GRCh38](gs://gatk-sv-resources-public/hg38/v0/sv-resources/resources/v1/GenomicContext/hg38.SegDup.sorted.merged.bed) from the [GATK-SV references](https://broadinstitute.github.io/gatk-sv/docs/resources).
-- `simple_repeat_bed`: [Loci for GRCh38](gs://gatk-sv-resources-public/hg38/v0/sv-resources/resources/v1/GenomicContext/hg38.SimpRep.sorted.merged.bed) from the [GATK-SV references](https://broadinstitute.github.io/gatk-sv/docs/resources).
-- `seqrepo_tar`: [Sequence repository v2024-12-20 for GRCh38](gs://fc-107e0442-e00c-4bb9-9810-bbe370bda6e5/files_kj/references/seqrepo_2024-12-20.tar.gz) from the [latest release of seqrepo](https://github.com/biocommons/biocommons.seqrepo).
-- `truth_hgsvc_ped`: Sample pedigree file from the [HGSVC FTP server](https://ftp.1000genomes.ebi.ac.uk/vol1/ftp/data_collections/HGSVC3/).
-- `truth_hgsvc_vcf`: [HGSVC3 release](https://ftp.1000genomes.ebi.ac.uk/vol1/ftp/data_collections/HGSVC3/release/Variant_Calls/1.0/GRCh38/), combined across the specific VCFs for SNVs, indels and SVs, from the [HGSVC FTP server](https://ftp.1000genomes.ebi.ac.uk/vol1/ftp/data_collections/HGSVC3/).
-- `truth_hgsvc_vcf_idx`: Index for `truth_hgsvc_vcf`.
-- `truth_hprc_ped`: Sample pedigree file from the [HPRC AWS bucket](https://s3-us-west-2.amazonaws.com/human-pangenomics/index.html?prefix=).
-- `truth_hprc_vcf`: [HPRC2 release](https://s3-us-west-2.amazonaws.com/human-pangenomics/pangenomes/freeze/release2/minigraph-cactus/hprc-v2.0-mc-grch38.wave.vcf.gz) from the [HPRC AWS bucket](https://s3-us-west-2.amazonaws.com/human-pangenomics/index.html?prefix=).
-- `truth_hprc_vcf_idx`: Index for `truth_hprc_vcf`.
-- `vntr_bed`: [Loci for GRCh38](gs://fc-107e0442-e00c-4bb9-9810-bbe370bda6e5/files_kj/references/VNTR_hg38.bed) from the [SVAN references](https://zenodo.org/records/15229020/files/hg38.tar.gz).
+- [`insilico_cadd_ht`](gs://fc-0bc12741-801b-4c10-8d3c-92075b188d3c/gnomad/v4.0/annotations/in_silico_predictors/gnomad.v4.0.cadd.grch38.ht): CADD scores for GRCh38 from gnomAD V4.
+- [`insilico_pangolin_ht`](gs://fc-0bc12741-801b-4c10-8d3c-92075b188d3c/gnomad/v4.0/annotations/in_silico_predictors/gnomad.v4.0.pangolin.grch38.ht): Pangolin scores for GRCh38 from gnomAD V4.
+- [`insilico_phylop_ht`](gs://fc-0bc12741-801b-4c10-8d3c-92075b188d3c/gnomad/v4.0/annotations/in_silico_predictors/gnomad.v4.0.phylop.grch38.ht): PhyloP scores for GRCh38 from gnomAD V4.
+- [`insilico_revel_ht`](gs://fc-0bc12741-801b-4c10-8d3c-92075b188d3c/gnomad/v4.0/annotations/in_silico_predictors/gnomad.v4.0.revel.grch38.ht): REVEL scores for GRCh38 from gnomAD V4.
+- [`insilico_spliceai_ht`](gs://fc-0bc12741-801b-4c10-8d3c-92075b188d3c/gnomad/v4.0/annotations/in_silico_predictors/gnomad.v4.0.spliceai.grch38.ht): SpliceAI scores for GRCh38 from gnomAD V4.
+- [`low_coverage_regions`](gs://fc-107e0442-e00c-4bb9-9810-bbe370bda6e5/files_kj/metadata/low_coverage_regions.bed): Per-sample regions of low sequencing coverage, used to mask annotations in those regions.
+- [`mei_catalog`](gs://fc-107e0442-e00c-4bb9-9810-bbe370bda6e5/files_kj/references/meis_hg38.tsv): Loci for GRCh38, a combination of ALU and LINE loci from [RepeatMasker](https://genome.ucsc.edu/cgi-bin/hgTables?db=hg38&hgta_group=rep&hgta_track=rmsk&hgta_table=rmsk&hgta_doSchema=describe+table+schema) and SVA loci from [van Bree et al](https://genome.cshlp.org/content/suppl/2022/03/24/gr.275515.121.DC1).
+- [`mei_fa`](gs://fc-107e0442-e00c-4bb9-9810-bbe370bda6e5/files_kj/references/CONSENSUS/CONSENSUS.fa): Sequences for GRCh38 from the [SVAN references](https://zenodo.org/records/15229020/files/hg38.tar.gz).
+- [`mei_fa_idx`](gs://fc-107e0442-e00c-4bb9-9810-bbe370bda6e5/files_kj/references/CONSENSUS/): BWA and Minimap indices for `mei_fa`.
+- [`noncoding_bed`](gs://gcp-public-data--broad-references/hg38/v0/sv-resources/resources/v1/noncoding.sort.hg38.bed): Panel for GRCh38 from the [GATK-SV references](https://broadinstitute.github.io/gatk-sv/docs/resources).
+- [`par_bed`](gs://gatk-sv-resources-public/hg38/v0/sv-resources/resources/v1/hg38.par.bed): Panel for GRCh38 from the [GATK-SV references](https://broadinstitute.github.io/gatk-sv/docs/resources).
+- [`ped`](gs://fc-107e0442-e00c-4bb9-9810-bbe370bda6e5/files_kj/metadata/pedigree.original.ped): Pedigree file for the LR cohort samples.
+- [`ploidy_bed_female`](gs://fc-107e0442-e00c-4bb9-9810-bbe370bda6e5/files_kj/references/grch38_female.bed): Panel for GRCh38 from the [Kanpig references](https://broadinstitute.github.io/gatk-sv/docs/resources).
+- [`ploidy_bed_male`](gs://fc-107e0442-e00c-4bb9-9810-bbe370bda6e5/files_kj/references/grch38_male.bed): Panel for GRCh38 from the [Kanpig references](https://broadinstitute.github.io/gatk-sv/docs/resources).
+- [`primary_contigs_list`](gs://gcp-public-data--broad-references/hg38/v0/sv-resources/resources/v1/primary_contigs.list): List of primary (non-alt/decoy) contigs for GRCh38 from the [GATK-SV references](https://broadinstitute.github.io/gatk-sv/docs/resources).
+- [`ref_dict`](gs://fc-107e0442-e00c-4bb9-9810-bbe370bda6e5/files_kj/references/hg38.no_alt/hg38.no_alt.dict): Sequence dictionary for `ref_fa`.
+- [`ref_fa`](gs://fc-107e0442-e00c-4bb9-9810-bbe370bda6e5/files_kj/references/hg38.no_alt/hg38.no_alt.fa): Sequences for GRCh38 from the [PAV references](https://github.com/BeckLaboratory/pav#a-note-on-references).
+- [`ref_fai`](gs://fc-107e0442-e00c-4bb9-9810-bbe370bda6e5/files_kj/references/hg38.no_alt/hg38.no_alt.fa.fai): Index for `ref_fa`.
+- [`ref_fa_bwa_idx`](gs://fc-107e0442-e00c-4bb9-9810-bbe370bda6e5/files_kj/references/hg38.no_alt/): BWA indices for `ref_fa`.
+- [`ref_fa_idx`](gs://fc-107e0442-e00c-4bb9-9810-bbe370bda6e5/files_kj/references/hg38.no_alt/): BWA and Minimap indices for `ref_fa`.
+- [`ref_vep_cache`](gs://gcp-public-data--gnomad/resources/vep/v105/homo_sapiens_merged_vep_105_GRCh38.tar.gz): Cache for v105 from the [VEP archives](https://ftp.ensembl.org/pub/release-105/variation/), with the most up-to-date list of these found [here](https://useast.ensembl.org/info/docs/tools/vep/script/vep_cache.html#cache).
+- [`repeat_catalog_trexplorer`](gs://fc-107e0442-e00c-4bb9-9810-bbe370bda6e5/files_kj/references/variation_clusters_and_isolated_TRs_v1.0.1.hg38.TRGT.bed.gz): TRGT catalog for GRCh38, variation clusters + isolated TRs release [v1.0.1](https://github.com/broadinstitute/trexplorer-catalog/releases/tag/v1.0.1) from the TRExplorer catalog, as used in All of Us Phase.
+- [`repeat_catalog_vamos`](gs://fc-107e0442-e00c-4bb9-9810-bbe370bda6e5/files_kj/references/vamos_catalog.ori.v2.1.TRGT.bed.gz): TRGT-format conversion of the original-motif VAMOS catalog [v2.1](https://zenodo.org/records/13263615), used by `Vamos.wdl` to genotype tandem repeats.
+- [`repeat_masked_bed`](gs://gatk-sv-resources-public/hg38/v0/sv-resources/resources/v1/GenomicContext/hg38.RM.sorted.merged.bed): Loci for GRCh38 from the [GATK-SV references](https://broadinstitute.github.io/gatk-sv/docs/resources).
+- [`repeats_bed`](gs://fc-107e0442-e00c-4bb9-9810-bbe370bda6e5/files_kj/references/REPEATS_hg38.bed): Loci for GRCh38 from the [SVAN references](https://zenodo.org/records/15229020/files/hg38.tar.gz).
+- [`seg_dup_bed`](gs://gatk-sv-resources-public/hg38/v0/sv-resources/resources/v1/GenomicContext/hg38.SegDup.sorted.merged.bed): Loci for GRCh38 from the [GATK-SV references](https://broadinstitute.github.io/gatk-sv/docs/resources).
+- [`seqrepo_tar`](gs://fc-107e0442-e00c-4bb9-9810-bbe370bda6e5/files_kj/references/seqrepo_2024-12-20.tar.gz): Sequence repository v2024-12-20 for GRCh38 from the [latest release of seqrepo](https://github.com/biocommons/biocommons.seqrepo).
+- [`simple_repeat_bed`](gs://gatk-sv-resources-public/hg38/v0/sv-resources/resources/v1/GenomicContext/hg38.SimpRep.sorted.merged.bed): Loci for GRCh38 from the [GATK-SV references](https://broadinstitute.github.io/gatk-sv/docs/resources).
+- [`swap_samples_sv`](gs://fc-107e0442-e00c-4bb9-9810-bbe370bda6e5/files_kj/metadata/swap_samples_sv.tsv): List of samples with swapped SV genotype calls, used by `IntegrateVcfs.wdl` to correct sample-swap errors.
+- [`truth_hgsvc_ped`](gs://fc-107e0442-e00c-4bb9-9810-bbe370bda6e5/files_kj/references/truth/hgsvc.ped): Sample pedigree file from the [HGSVC FTP server](https://ftp.1000genomes.ebi.ac.uk/vol1/ftp/data_collections/HGSVC3/).
+- [`truth_hgsvc_vcf`](gs://fc-107e0442-e00c-4bb9-9810-bbe370bda6e5/files_kj/references/truth/variants_GRCh38_combined_HGSVC2024v1.0.vcf.gz): HGSVC3 [release](https://ftp.1000genomes.ebi.ac.uk/vol1/ftp/data_collections/HGSVC3/release/Variant_Calls/1.0/GRCh38/), combined across the specific VCFs for SNVs, indels and SVs, from the [HGSVC FTP server](https://ftp.1000genomes.ebi.ac.uk/vol1/ftp/data_collections/HGSVC3/).
+- [`truth_hgsvc_vcf_idx`](gs://fc-107e0442-e00c-4bb9-9810-bbe370bda6e5/files_kj/references/truth/variants_GRCh38_combined_HGSVC2024v1.0.vcf.gz.tbi): Index for `truth_hgsvc_vcf`.
+- [`truth_hprc_ped`](gs://fc-107e0442-e00c-4bb9-9810-bbe370bda6e5/files_kj/references/truth/hprc.ped): Sample pedigree file from the [HPRC AWS bucket](https://s3-us-west-2.amazonaws.com/human-pangenomics/index.html?prefix=).
+- [`truth_hprc_vcf`](gs://fc-107e0442-e00c-4bb9-9810-bbe370bda6e5/files_kj/references/truth/hprc-v2.0-mc-grch38.wave.vcf.gz): HPRC2 [release](https://s3-us-west-2.amazonaws.com/human-pangenomics/pangenomes/freeze/release2/minigraph-cactus/hprc-v2.0-mc-grch38.wave.vcf.gz) from the [HPRC AWS bucket](https://s3-us-west-2.amazonaws.com/human-pangenomics/index.html?prefix=).
+- [`truth_hprc_vcf_idx`](gs://fc-107e0442-e00c-4bb9-9810-bbe370bda6e5/files_kj/references/truth/hprc-v2.0-mc-grch38.wave.vcf.gz.tbi): Index for `truth_hprc_vcf`.
+- [`vntr_bed`](gs://fc-107e0442-e00c-4bb9-9810-bbe370bda6e5/files_kj/references/VNTR_hg38.bed): Loci for GRCh38 from the [SVAN references](https://zenodo.org/records/15229020/files/hg38.tar.gz).

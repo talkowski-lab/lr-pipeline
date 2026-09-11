@@ -412,6 +412,15 @@ workflows:
         - /.*/
 
   - subclass: WDL
+    name: PostprocessTRLoci
+    primaryDescriptorPath: /wdl/annotation_utils/PostprocessTRLoci.wdl
+    filters:
+      branches:
+        - main
+      tags:
+        - /.*/
+
+  - subclass: WDL
     name: IntegrateVcfs
     primaryDescriptorPath: /wdl/annotation_utils/IntegrateVcfs.wdl
     filters:
