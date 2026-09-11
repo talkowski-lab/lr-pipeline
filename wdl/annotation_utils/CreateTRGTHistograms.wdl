@@ -14,7 +14,7 @@ workflow CreateTRGTHistograms {
         # `contigs` input array. Without it the converter cannot resolve a compound TRID (a variation cluster
         # record whose INFO/TRID lists several LocusIds) and fails on the first one it sees, so it
         # is required for any callset genotyped against a catalog containing variation clusters.
-        # Left empty for a catalog of isolated repeats only, which keeps the previous behavior.
+        # Left empty for a catalog of isolated repeats only.
         Array[File] vcf_trid_metadata_tsvs = []
 
         String stranalysis_docker
