@@ -376,6 +376,15 @@ workflows:
         - /.*/
 
   - subclass: WDL
+    name: FilterDuplicateZeroDepthReferenceBlocks
+    primaryDescriptorPath: /wdl/annotation_utils/FilterDuplicateZeroDepthReferenceBlocks.wdl
+    filters:
+      branches:
+        - main
+      tags:
+        - /.*/
+
+  - subclass: WDL
     name: FillFormatFields
     primaryDescriptorPath: /wdl/annotation_utils/FillFormatFields.wdl
     filters:

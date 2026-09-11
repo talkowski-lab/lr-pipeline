@@ -1076,6 +1076,21 @@ Outputs:
 - `bed`: Combined converted BED/TSV artifact.
 
 
+### [FilterDuplicateZeroDepthReferenceBlocks](../wdl/annotation_utils/FilterDuplicateZeroDepthReferenceBlocks.wdl)
+This utility cleans a single-sample gVCF by removing every member of each identical duplicate-record group at a coordinate when its first-sample `MIN_DP=0` and `GT` is non-alt, matching GLNexus with `remove_duplicate_zero_depth_reference_blocks=true`. Singleton records and distinct nonmatching records at the same coordinate are retained, as are records with an alternate `GT` or non-zero/missing `MIN_DP`.
+
+Inputs:
+- `File gvcf`: Single-sample gVCF to clean.
+- `File gvcf_idx`: Index for `gvcf`.
+- `String prefix`: Prefix for cleaned gVCF outputs.
+- `String utils_docker`: Container image with filtering utilities.
+- `RuntimeAttr? runtime_attr_filter`: Optional runtime overrides for filtering task.
+
+Outputs:
+- `cleaned_vcf`: Cleaned gVCF.
+- `cleaned_vcf_idx`: Index for `cleaned_vcf`.
+
+
 ## Tools
 
 ### [Automop](../wdl/tools/Automop.wdl)
