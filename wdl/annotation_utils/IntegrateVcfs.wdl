@@ -80,10 +80,10 @@ workflow IntegrateVcfs {
             input: vcf = select_first([sv_vcf]), vcf_idx = select_first([sv_vcf_idx]), sample_swap_list = select_first([swap_samples_sv]), prefix = "~{prefix}.sv.swapped", docker = utils_docker, runtime_attr_override = runtime_attr_swap_samples_sv
         }
     }
-    File? final_snv_vcf = select_first([SwapSnvIndel.swapped_vcf, snv_indel_vcf])
-    File? final_snv_idx = select_first([SwapSnvIndel.swapped_vcf_idx, snv_indel_vcf_idx])
-    File? final_sv_vcf = select_first([SwapSv.swapped_vcf, sv_vcf])
-    File? final_sv_idx = select_first([SwapSv.swapped_vcf_idx, sv_vcf_idx])
+    File? final_snv_vcf = if (defined(SwapSnvIndel.swapped_vcf)) then SwapSnvIndel.swapped_vcf else snv_indel_vcf
+    File? final_snv_idx = if (defined(SwapSnvIndel.swapped_vcf_idx)) then SwapSnvIndel.swapped_vcf_idx else snv_indel_vcf_idx
+    File? final_sv_vcf = if (defined(SwapSv.swapped_vcf)) then SwapSv.swapped_vcf else sv_vcf
+    File? final_sv_idx = if (defined(SwapSv.swapped_vcf_idx)) then SwapSv.swapped_vcf_idx else sv_vcf_idx
     Array[File] input_vcfs = select_all([final_snv_vcf, final_sv_vcf])
     Array[File] input_idxs = select_all([final_snv_idx, final_sv_idx])
 
