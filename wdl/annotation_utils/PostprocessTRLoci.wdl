@@ -19,10 +19,11 @@ workflow PostprocessTRLoci {
         Array[File] base_vcf_idxs
         String prefix
 
+        Boolean run_decrement_trv_ids
+        Boolean replace_gnomad_str
         File? swap_samples_base
         Int min_phase_edit_distance_delta = 10
         Float min_phase_similarity = 0.90
-        Boolean run_decrement_trv_ids
 
         File gnomad_tr_json
         File ref_fa
@@ -121,8 +122,6 @@ workflow PostprocessTRLoci {
             input:
                 vcf = TRGTMergeContig.merged_vcf,
                 vcf_idx = TRGTMergeContig.merged_vcf_idx,
-                match_keys = DiscoverTRLoci.trgt_match_keys,
-                gnomad_tr_json = gnomad_tr_json,
                 prefix = "~{prefix}.~{contig}.missing_loci.ac",
                 docker = utils_docker,
                 runtime_attr_override = runtime_attr_filter_merged
@@ -146,6 +145,9 @@ workflow PostprocessTRLoci {
                 input:
                     vcf = PrepareReplacementLoci.prepared_vcf,
                     vcf_idx = PrepareReplacementLoci.prepared_vcf_idx,
+                    original_vcf = vcf,
+                    original_vcf_idx = vcf_idx,
+                    replacement_map_tsv = PrepareReplacementLoci.replacement_map_tsv,
                     base_vcfs = base_vcfs,
                     base_vcf_idxs = base_vcf_idxs,
                     swap_samples_base = swap_samples_base,
@@ -232,8 +234,7 @@ workflow PostprocessTRLoci {
             replacement_map_tsv = PrepareReplacementLoci.replacement_map_tsv,
             input_trv_phasing_summary_tsv = PhaseReplacementLoci.trv_phasing_summary_tsv,
             input_trv_catalog_match_tsv = DiscoverTRLoci.trv_catalog_match_tsv,
-            merged_status_tsv = KeepMergedTRGTWithAC.status_tsv,
-            gnomad_tr_json = gnomad_tr_json,
+            replace_gnomad_str = replace_gnomad_str,
             prefix = "~{prefix}.~{contig}",
             docker = utils_docker,
             runtime_attr_override = runtime_attr_apply
@@ -249,7 +250,7 @@ workflow PostprocessTRLoci {
     }
 }
 
-# Find disease-associated catalog loci in the main VCF, then in per-sample TRGT VCFs.
+# Build one contig-level catalog report, then select eligible unmatched TRGT loci for replacement.
 task DiscoverTRLoci {
     input {
         File vcf
@@ -290,9 +291,6 @@ def values(value):  # noqa: E302
         return []
     return [str(item) for item in value] if isinstance(value, tuple) else [str(value)]
 
-def record_key(rec):  # noqa: E302
-    return rec.id if rec.id and rec.id != '.' else f'{rec.chrom}:{rec.pos}:{rec.ref}:{",".join(rec.alts or [])}'
-
 trgt_paths = [line.rstrip('\n') for line in open('~{write_lines(trgt_vcfs)}') if line.strip()]  # noqa: E305
 trgt_indexes = [line.rstrip('\n') for line in open('~{write_lines(trgt_vcf_idxs)}') if line.strip()]
 sample_ids = [line.rstrip('\n') for line in open('~{write_lines(sample_ids)}') if line.strip()]
@@ -303,62 +301,119 @@ if len(set(sample_ids)) != len(sample_ids):
 if not os.path.exists('~{vcf_idx}') or not all(os.path.exists(path) for path in trgt_indexes):
     raise RuntimeError('All VCF indexes must be localized')
 
+def record_end(rec):  # noqa: E302
+    return rec.stop if rec.stop is not None else rec.pos + len(rec.ref) - 1
+
+def overlaps(rec, start, stop):  # noqa: E302
+    return rec.pos <= stop and record_end(rec) >= start
+
+def trid_text(rec):  # noqa: E302
+    return '|'.join(values(rec.info.get('TRID')))
+
+def nonref_allele_count(rec):  # noqa: E302
+    return sum(
+        1
+        for sample in rec.samples.values()
+        for allele in (sample.get('GT') or [])
+        if allele is not None and allele > 0
+    )
+
 with open('~{gnomad_tr_json}') as handle:
     catalog = json.load(handle)
+
+# One report row represents one contig-relevant catalog entry. Multiple
+# TRExplorerV1 values from one entry are shown together and match independently.
 loci = []
 for entry in catalog:
-    # Catalog key is capitalized. Missing, non-array, and empty Diseases values are ignored.
-    diseases = entry.get('Diseases') if entry else None
-    if not isinstance(diseases, list) or not diseases:
-        continue
     if not entry or not entry.get('LocusId'):
         continue
-    explorers = entry.get('TRExplorerV1')
-    explorers = explorers if isinstance(explorers, list) else [explorers]
-    for explorer in explorers:
-        parsed = parse_explorer(str(explorer)) if explorer else None
+    values_from_catalog = entry.get('TRExplorerV1')
+    values_from_catalog = values_from_catalog if isinstance(values_from_catalog, list) else [values_from_catalog]
+    explorers = []
+    for value in values_from_catalog:
+        parsed = parse_explorer(str(value)) if value else None
         if parsed and normalize_contig(parsed[0]) == normalize_contig('~{contig}'):
-            loci.append((str(entry['LocusId']), str(explorer), parsed[1], parsed[2]))
+            explorers.append((str(value), parsed[1], parsed[2]))
+    if explorers:
+        diseases = entry.get('Diseases')
+        loci.append({
+            'locus_id': str(entry['LocusId']),
+            'explorers': explorers,
+            # Only catalog loci with one or more associated diseases are eligible.
+            'disease_eligible': isinstance(diseases, list) and len(diseases) > 0,
+        })
 
 with pysam.VariantFile('~{vcf}') as main:
     if list(main.header.samples) != sample_ids:
         raise RuntimeError('sample_ids must exactly match main VCF sample order')
-    main_matches = {explorer: [] for _, explorer, _, _ in loci}
-    for _, explorer, start, stop in loci:
-        for rec in main.fetch('~{contig}', max(0, start - 1), stop + 1):
-            if rec.info.get('allele_type') != 'trv':
-                continue
-            if explorer in '|'.join(values(rec.info.get('TRID'))):
-                main_matches[explorer].append(record_key(rec))
+    for locus in loci:
+        locus['main_trids'] = []
+        locus['main_strict'] = False
+        if not locus['disease_eligible']:
+            continue
+        seen = set()
+        for explorer, start, stop in locus['explorers']:
+            for rec in main.fetch('~{contig}', max(0, start - 1), stop + 1):
+                if rec.info.get('allele_type') != 'trv' or not overlaps(rec, start, stop):
+                    continue
+                trid = trid_text(rec)
+                if trid and trid not in seen:
+                    locus['main_trids'].append(trid)
+                    seen.add(trid)
+                if explorer in trid:
+                    locus['main_strict'] = True
 
+for locus in loci:
+    locus['trgt_trids'] = []
+    locus['trgt_strict'] = False
+    locus['trgt_ac'] = 0
+    locus['trgt_seen'] = set()
+
+# Open each per-sample VCF once, then query every eligible catalog interval.
 for i, path in enumerate(trgt_paths):
     with pysam.VariantFile(path) as trgt:
         if list(trgt.header.samples) != [sample_ids[i]]:
             raise RuntimeError(f'TRGT VCF {path} must contain only sample {sample_ids[i]}')
-
-trgt_matches = {explorer: [] for _, explorer, _, _ in loci}
-for path in trgt_paths:
-    with pysam.VariantFile(path) as trgt:
-        for _, explorer, start, stop in loci:
-            if main_matches[explorer]:
+        for locus in loci:
+            if not locus['disease_eligible']:
                 continue
-            for rec in trgt.fetch('~{contig}', max(0, start - 1), stop + 1):
-                if explorer in '|'.join(values(rec.info.get('TRID'))):
-                    trgt_matches[explorer].append(record_key(rec))
+            for explorer, start, stop in locus['explorers']:
+                for rec in trgt.fetch('~{contig}', max(0, start - 1), stop + 1):
+                    if not overlaps(rec, start, stop):
+                        continue
+                    trid = trid_text(rec)
+                    if trid and trid not in locus['trgt_seen']:
+                        locus['trgt_trids'].append(trid)
+                        locus['trgt_seen'].add(trid)
+                    if explorer in trid:
+                        locus['trgt_strict'] = True
+                        locus['trgt_ac'] += nonref_allele_count(rec)
 
 with open('~{prefix}.trv_catalog_match.tsv', 'w') as out:
-    out.write('source\tlocus_id\tTRExplorerV1\tmatching_vcf_ids\tstatus\n')
-    for locus_id, explorer, _, _ in loci:
-        if main_matches[explorer]:
-            out.write(f'main_vcf\t{locus_id}\t{explorer}\t{",".join(sorted(set(main_matches[explorer])))}\tmain_match\n')
-        elif trgt_matches[explorer]:
-            out.write(f'trgt_vcf\t{locus_id}\t{explorer}\t{",".join(sorted(set(trgt_matches[explorer])))}\ttrgt_candidate\n')
-        else:
-            out.write(f'none\t{locus_id}\t{explorer}\t.\tno_match\n')
+    out.write(
+        'locus_id\tTRExplorerV1\thas_diseases\tmain_overlapping_TRIDs'
+        '\tmain_has_TRExplorerV1_substring\ttrgt_overlapping_TRIDs'
+        '\ttrgt_has_TRExplorerV1_substring\ttrgt_matching_allele_count_ge_1\n'
+    )
+    for locus in loci:
+        explorers = ','.join(value for value, _, _ in locus['explorers'])
+        if not locus['disease_eligible']:
+            out.write(f'{locus["locus_id"]}\t{explorers}\tfalse\t.\t.\t.\t.\t.\n')
+            continue
+        out.write(
+            f'{locus["locus_id"]}\t{explorers}\ttrue\t'
+            f'{",".join(locus["main_trids"]) or "."}\t{str(locus["main_strict"]).lower()}\t'
+            f'{",".join(locus["trgt_trids"]) or "."}\t{str(locus["trgt_strict"]).lower()}\t'
+            f'{str(locus["trgt_ac"] >= 1).lower()}\n'
+        )
+
+# Only true/false/true/true rows feed cohort merging and replacement.
 with open('~{prefix}.trgt_match_keys.txt', 'w') as out:
-    for _, explorer, _, _ in loci:
-        if not main_matches[explorer] and trgt_matches[explorer]:
-            out.write(explorer + '\n')
+    for locus in loci:
+        if (locus['disease_eligible'] and not locus['main_strict']
+                and locus['trgt_strict'] and locus['trgt_ac'] >= 1):
+            for explorer, _, _ in locus['explorers']:
+                out.write(explorer + '\n')
 PY
         wc -l < ~{prefix}.trgt_match_keys.txt
     >>>
@@ -458,13 +513,11 @@ PY
     }
 }
 
-# Recompute cohort allele counts, retain AC-positive merged loci, and audit AC-zero drops.
+# Recompute cohort allele counts and retain AC-positive merged loci.
 task KeepMergedTRGTWithAC {
     input {
         File vcf
         File vcf_idx
-        File match_keys
-        File gnomad_tr_json
         String prefix
         String docker
         RuntimeAttr? runtime_attr_override
@@ -473,49 +526,17 @@ task KeepMergedTRGTWithAC {
     command <<<
         set -euo pipefail
 
-        # Rebuild selected disease-locus metadata and calculate AC directly from merged genotypes.
+        # Calculate AC directly from merged genotypes rather than trusting upstream INFO/AC.
         python3 <<'PY'
-import json
 import pysam
 
-def record_key(rec):  # noqa: E302
-    return rec.id if rec.id and rec.id != '.' else f'{rec.chrom}:{rec.pos}:{rec.ref}:{",".join(rec.alts or [])}'
-
-def vals(value):  # noqa: E302
-    return [str(item) for item in value] if isinstance(value, tuple) else ([] if value is None else [str(value)])
-
-def normalize_contig(value):  # noqa: E302
-    return value[3:] if value.lower().startswith('chr') else value
-
-def parse_explorer(value):  # noqa: E302
-    fields = value.rsplit('-', 3)
-    return fields[0], int(fields[1]), int(fields[2])
-
-with open('~{gnomad_tr_json}') as handle:  # noqa: E305
-    catalog = json.load(handle)
-selected_keys = {line.strip() for line in open('~{match_keys}') if line.strip()}
-locus_ids = {}
-for entry in catalog:
-    # Apply the same non-empty Diseases-array rule used during initial discovery.
-    diseases = entry.get('Diseases') if entry else None
-    if not isinstance(diseases, list) or not diseases:
-        continue
-    explorer = entry.get('TRExplorerV1') if entry else None
-    explorers = explorer if isinstance(explorer, list) else [explorer]
-    for value in explorers:
-        if entry and entry.get('LocusId') and value and str(value) in selected_keys:
-            locus_ids.setdefault(str(value), set()).add(str(entry['LocusId']))
-loci = [(locus_id, explorer, *parse_explorer(explorer)) for explorer, ids in locus_ids.items() for locus_id in ids]
-
-src = pysam.VariantFile('~{vcf}')
+src = pysam.VariantFile('~{vcf}')  # noqa: E305
 if 'AC' not in src.header.info:
     src.header.add_meta(
         'INFO',
         items=[('ID', 'AC'), ('Number', 'A'), ('Type', 'Integer'), ('Description', 'Number of alleles observed')],
     )
 out = pysam.VariantFile('~{prefix}.vcf.gz', 'wz', header=src.header)
-status = open('~{prefix}.status.tsv', 'w')
-status.write('source\tlocus_id\tTRExplorerV1\tmatching_vcf_ids\tstatus\n')
 kept = 0
 for rec in src:
     counts = [0] * len(rec.alts or [])
@@ -526,29 +547,12 @@ for rec in src:
                 if allele is not None and 0 < allele <= len(counts):
                     counts[allele - 1] += 1
     ac = sum(counts)
-    searchable = '|'.join(vals(rec.info.get('TRID')))
-    found = [(locus, explorer) for locus, explorer, _, _, _ in loci if explorer in searchable]
-    if not found:
-        found = [
-            (locus, explorer)
-            for locus, explorer, locus_contig, start, stop in loci
-            if normalize_contig(locus_contig) == normalize_contig(rec.contig)
-            and max(rec.pos, start) < min(rec.stop, stop)
-        ]
-    if not found:
-        raise RuntimeError(f'Merged TRGT record {record_key(rec)} could not be attributed to a selected catalog locus')
     if ac >= 1:
         rec.info['AC'] = tuple(counts)
         out.write(rec)
         kept += 1
-        for locus, explorer in found:
-            status.write(f'trgt_merged\t{locus}\t{explorer}\t{record_key(rec)}\ttrgt_merged_retained_AC={ac}\n')
-    else:
-        for locus, explorer in found:
-            status.write(f'trgt_merged\t{locus}\t{explorer}\t{record_key(rec)}\tdropped_AC0\n')
 src.close()
 out.close()
-status.close()
 PY
         tabix -f -p vcf ~{prefix}.vcf.gz
         bcftools view -H ~{prefix}.vcf.gz | wc -l
@@ -556,7 +560,6 @@ PY
     output {
         File retained_vcf = "~{prefix}.vcf.gz"
         File retained_vcf_idx = "~{prefix}.vcf.gz.tbi"
-        File status_tsv = "~{prefix}.status.tsv"
         Int retained_count = read_int(stdout())
     }
 
@@ -662,7 +665,7 @@ if 'PS' not in incoming.header.formats:
 header = incoming.header.copy()
 out = pysam.VariantFile('~{prefix}.vcf.gz', 'wz', header=header)
 mapping = open('~{prefix}.map.tsv', 'w')
-mapping.write('new_record_id\told_record_id\toverlap_bp\tstatus\tphase_summary\n')
+mapping.write('new_record_id\told_record_id\toverlap_bp\tstatus\tphase_summary\told_contig\told_pos\told_end\n')
 
 samples = [line.rstrip('\n') for line in open('~{write_lines(sample_ids)}') if line.strip()]
 if list(base.header.samples) != samples or list(header.samples) != samples:
@@ -693,7 +696,10 @@ for rec in incoming:
     rec.id = new_id if id_seen[new_id] == 1 else f'{new_id}_{id_seen[new_id]}'
     rec.info['allele_type'] = 'trv'
     rec.info['SOURCE'] = 'TRExplorer'
-    mapping.write(f'{record_key(rec)}\t{old_key}\t{best_overlap}\treplace\tsee_trv_phasing_summary_tsv\n')
+    mapping.write(
+        f'{record_key(rec)}\t{old_key}\t{best_overlap}\treplace\tsee_trv_phasing_summary_tsv'
+        f'\t{best.contig}\t{best.pos}\t{record_end(best)}\n'
+    )
     out.write(rec)
 base.close()
 incoming.close()
@@ -734,6 +740,9 @@ task PhaseReplacementLoci {
     input {
         File vcf
         File vcf_idx
+        File original_vcf
+        File original_vcf_idx
+        File replacement_map_tsv
         Array[File] base_vcfs
         Array[File] base_vcf_idxs
         File? swap_samples_base
@@ -770,6 +779,13 @@ def gt_string(gt, phased=False):  # noqa: E302
     return ('|' if phased else '/').join('.' if allele is None else str(allele) for allele in gt)
 
 
+def trid_text(rec):  # noqa: E302
+    value = rec.info.get('TRID')
+    if value is None:
+        return '.'
+    return '|'.join(str(item) for item in value) if isinstance(value, tuple) else str(value)
+
+
 def contig_for(handle, contig):  # noqa: E302
     if contig in handle.header.contigs:
         return contig
@@ -781,16 +797,16 @@ def normalized_base_gt(call):  # noqa: E302
     """Keep only base calls whose two haplotypes can be unambiguously reconstructed."""
     gt = call.get('GT')
     if not gt or len(gt) != 2:
-        return None, 'base_missing_gt', 0
+        return None, 'base_missing_gt'
     if gt == (None, None):
         # Sparse truth records encode no call at this site; reconstruct both haplotypes as REF.
-        return (0, 0), None, 2
+        return (0, 0), None
     if any(allele is not None and allele < 0 for allele in gt):
-        return None, 'base_invalid_gt', 0
+        return None, 'base_invalid_gt'
     if not call.phased and (None in gt or gt[0] != gt[1]):
         # 1/. and unphased heterozygotes have unknown haplotype orientation.
-        return None, 'base_ambiguous_unphased_gt', 0
-    return tuple(0 if allele is None else allele for allele in gt), None, gt.count(None)
+        return None, 'base_ambiguous_unphased_gt'
+    return tuple(0 if allele is None else allele for allele in gt), None
 
 
 def reconstruct_haplotypes(base_handle, contig, sample, rec):  # noqa: E302
@@ -798,31 +814,28 @@ def reconstruct_haplotypes(base_handle, contig, sample, rec):  # noqa: E302
     locus_start = rec.pos
     locus_end = record_end(rec)
     variants = []
-    missing_as_reference_count = 0
     for base_rec in base_handle.fetch(contig, rec.start, rec.stop):
         call = base_rec.samples[sample]
-        gt, status, missing_as_reference = normalized_base_gt(call)
+        gt, status = normalized_base_gt(call)
         if status:
-            return None, None, status, [], 0
-        missing_as_reference_count += missing_as_reference
+            return None, None, status
         # Cohort VCFs contain many overlapping records carried as reference for this sample.
         if gt == (0, 0):
             continue
         base_end = record_end(base_rec)
         if base_rec.pos < locus_start or base_end > locus_end:
-            return None, None, 'base_boundary_overlapping_variant', [], 0
+            return None, None, 'base_boundary_overlapping_variant'
         if any(allele > len(base_rec.alts or []) for allele in gt):
-            return None, None, 'base_invalid_allele_index', [], 0
+            return None, None, 'base_invalid_allele_index'
         selected_alts = [base_rec.alts[allele - 1] for allele in gt if allele > 0]
         if any(not alt or alt == '*' or alt.startswith('<') or '[' in alt or ']' in alt for alt in selected_alts):
-            return None, None, 'base_symbolic_allele', [], 0
+            return None, None, 'base_symbolic_allele'
         offset = base_rec.pos - locus_start
         if rec.ref[offset:offset + len(base_rec.ref)].upper() != base_rec.ref.upper():
-            return None, None, 'base_reference_mismatch', [], 0
+            return None, None, 'base_reference_mismatch'
         variants.append((offset, base_rec, gt))
     variants.sort(key=lambda item: item[0])
     output = [[], []]
-    variant_ids = []
     for haplotype in range(2):
         cursor = 0
         for offset, base_rec, gt in variants:
@@ -830,14 +843,12 @@ def reconstruct_haplotypes(base_handle, contig, sample, rec):  # noqa: E302
             if allele == 0:
                 continue
             if offset < cursor:
-                return None, None, 'base_overlapping_variants', [], 0
+                return None, None, 'base_overlapping_variants'
             output[haplotype].append(rec.ref[cursor:offset])
             output[haplotype].append(base_rec.alts[allele - 1])
             cursor = offset + len(base_rec.ref)
         output[haplotype].append(rec.ref[cursor:])
-    for _, base_rec, _ in variants:
-        variant_ids.append(record_key(base_rec))
-    return ''.join(output[0]), ''.join(output[1]), 'ok', variant_ids, missing_as_reference_count
+    return ''.join(output[0]), ''.join(output[1]), 'ok'
 
 
 def distance(left, right):  # noqa: E302
@@ -885,6 +896,30 @@ for index, path in enumerate(base_paths):
         sample_to_base.setdefault(canonical_sample, (index, raw_sample))
 
 source = pysam.VariantFile('~{vcf}')
+original = pysam.VariantFile('~{original_vcf}', index_filename='~{original_vcf_idx}')
+if list(original.header.samples) != list(source.header.samples):
+    raise RuntimeError('Original main VCF and replacement VCF sample order must match exactly')
+
+# The preparation map links each normalized replacement to its displaced main-VCF TRV.
+replacement_to_old = {}
+with open('~{replacement_map_tsv}') as mapping:
+    next(mapping, None)
+    for line in mapping:
+        fields = line.rstrip('\n').split('\t')
+        if len(fields) >= 8 and fields[3] == 'replace':
+            replacement_to_old[fields[0]] = (fields[1], fields[5], int(fields[6]), int(fields[7]))
+
+# Indexed lookups avoid scanning a multi-million-record cohort VCF for a handful of displaced TRVs.
+old_records = {}
+for old_key, old_contig, old_pos, old_end in set(replacement_to_old.values()):
+    for old_rec in original.fetch(old_contig, max(0, old_pos - 1), old_end):
+        if record_key(old_rec) == old_key:
+            old_records[old_key] = old_rec.copy()
+            break
+    if old_key not in old_records:
+        raise RuntimeError(f'Replacement map target not found in original VCF: {old_key}')
+original.close()
+
 header = source.header.copy()
 if 'POSTHOC_BACKBONE_PHASED' not in header.info:
     header.add_meta(
@@ -899,16 +934,11 @@ if 'PS' not in header.formats:
     )
 
 audit_fields = [
-    'record_id', 'chrom', 'pos', 'end', 'sample_id', 'input_gt',
-    'trgt_haplotype_1_sequence', 'trgt_haplotype_2_sequence', 'base_vcf_index', 'base_sample_id',
-    'base_variant_ids', 'base_missing_as_reference_count', 'base_haplotype_1_sequence',
-    'base_haplotype_2_sequence', 'direct_haplotype_1_edit_distance',
-    'direct_haplotype_2_edit_distance', 'direct_edit_distance', 'swapped_haplotype_1_edit_distance',
-    'swapped_haplotype_2_edit_distance', 'swapped_edit_distance', 'distance_delta',
-    'direct_similarity', 'swapped_similarity', 'winning_orientation', 'winning_phased_gt',
-    'winning_edit_distance', 'winning_similarity', 'min_phase_edit_distance_delta',
-    'min_phase_similarity', 'passes_edit_distance_delta', 'passes_similarity',
-    'phase_set', 'status', 'details',
+    'original_TRID', 'replacement_TRID', 'sample_id', 'original_GT',
+    'base_vcf_haplotype_1_sequence', 'base_vcf_haplotype_2_sequence', 'replacement_input_GT',
+    'replacement_vcf_haplotype_1_sequence', 'replacement_vcf_haplotype_2_sequence',
+    'direct_edit_distance', 'swapped_edit_distance', 'min_phase_edit_distance_delta',
+    'min_phase_similarity', 'final_replacement_GT',
 ]
 output = pysam.VariantFile('~{prefix}.vcf.gz', 'wz', header=header)
 audit = open('~{prefix}.trv_phasing_summary.tsv', 'w')
@@ -918,134 +948,84 @@ with output, audit:
     for rec in source:
         rec.translate(header)
         any_phased = False
+        old_mapping = replacement_to_old.get(record_key(rec))
+        old_rec = old_records.get(old_mapping[0]) if old_mapping else None
+        replacement_trid = trid_text(rec)
+        original_trid = trid_text(old_rec) if old_rec is not None else '.'
         for sample in header.samples:
             call = rec.samples[sample]
             gt = call.get('GT')
-            input_gt = gt_string(gt, call.phased)
             # Replacement calls must be unphased unless sequence evidence below selects an orientation.
             call.phased = False
             if call.get('PS') is not None:
                 call['PS'] = None
-            # Only complete, diploid, non-reference heterozygotes can receive an orientation.
-            if (
-                not gt or len(gt) != 2 or any(allele is None for allele in gt)
-                or gt[0] == gt[1] or not any(allele > 0 for allele in gt)
-            ):
-                continue
             row = dict.fromkeys(audit_fields, '.')
             row.update({
-                'record_id': record_key(rec), 'chrom': rec.contig, 'pos': rec.pos,
-                'end': record_end(rec), 'sample_id': sample, 'input_gt': input_gt,
+                'original_TRID': original_trid,
+                'replacement_TRID': replacement_trid,
+                'sample_id': sample,
+                'original_GT': gt_string(old_rec.samples[sample].get('GT'), old_rec.samples[sample].phased)
+                    if old_rec is not None else '.',
+                'replacement_input_GT': gt_string(gt, False),
                 'min_phase_edit_distance_delta': ~{min_phase_edit_distance_delta},
                 'min_phase_similarity': f'{~{min_phase_similarity}:.6f}',
+                'final_replacement_GT': gt_string(gt, False),
             })
-            if any(allele < 0 or allele > len(rec.alts or []) for allele in gt):
-                row['status'] = 'invalid_trgt_allele_index'
+            # Construct both sequences for every complete diploid call; only non-reference
+            # heterozygotes can use those comparisons to receive an orientation.
+            if not gt or len(gt) != 2 or any(allele is None for allele in gt):
                 writer.writerow(row)
                 continue
+            if any(allele < 0 or allele > len(rec.alts or []) for allele in gt):
+                writer.writerow(row)
+                continue
+            phase_eligible = gt[0] != gt[1] and any(allele > 0 for allele in gt)
             trgt_haps = [rec.ref if allele == 0 else rec.alts[allele - 1] for allele in gt]
-            row['trgt_haplotype_1_sequence'], row['trgt_haplotype_2_sequence'] = trgt_haps
+            row['replacement_vcf_haplotype_1_sequence'], row['replacement_vcf_haplotype_2_sequence'] = trgt_haps
             assignment = sample_to_base.get(sample)
             if assignment is None:
-                row['status'] = 'no_matching_base_sample'
                 writer.writerow(row)
                 continue
             base_index, base_sample = assignment
             base_handle = base_handles[base_index]
             base_contig = contig_for(base_handle, rec.contig)
-            row.update({'base_vcf_index': base_index, 'base_sample_id': base_sample})
             if base_contig is None:
-                row['status'] = 'base_contig_missing'
                 writer.writerow(row)
                 continue
-            base_hap_1, base_hap_2, status, variant_ids, missing_as_reference = reconstruct_haplotypes(
+            base_hap_1, base_hap_2, status = reconstruct_haplotypes(
                 base_handle, base_contig, base_sample, rec)
             if status != 'ok':
-                row['status'] = status
                 writer.writerow(row)
                 continue
-            row['base_haplotype_1_sequence'] = base_hap_1
-            row['base_haplotype_2_sequence'] = base_hap_2
-            row['base_variant_ids'] = ','.join(variant_ids) if variant_ids else '.'
-            row['base_missing_as_reference_count'] = missing_as_reference
-            row['details'] = f'base_missing_as_reference_count={missing_as_reference}'
+            row['base_vcf_haplotype_1_sequence'] = base_hap_1
+            row['base_vcf_haplotype_2_sequence'] = base_hap_2
             direct_1, direct_2 = distance(trgt_haps[0], base_hap_1), distance(trgt_haps[1], base_hap_2)
             swapped_1, swapped_2 = distance(trgt_haps[0], base_hap_2), distance(trgt_haps[1], base_hap_1)
             direct, swapped = direct_1 + direct_2, swapped_1 + swapped_2
-            direct_similarity = (
-                similarity(direct_1, trgt_haps[0], base_hap_1)
-                + similarity(direct_2, trgt_haps[1], base_hap_2)
-            ) / 2
-            swapped_similarity = (
-                similarity(swapped_1, trgt_haps[0], base_hap_2)
-                + similarity(swapped_2, trgt_haps[1], base_hap_1)
-            ) / 2
             row.update({
-                'direct_edit_distance': direct,
-                'direct_haplotype_1_edit_distance': direct_1,
-                'direct_haplotype_2_edit_distance': direct_2,
-                'swapped_edit_distance': swapped,
-                'swapped_haplotype_1_edit_distance': swapped_1,
-                'swapped_haplotype_2_edit_distance': swapped_2,
-                'distance_delta': abs(direct - swapped),
-                'direct_similarity': f'{direct_similarity:.6f}',
-                'swapped_similarity': f'{swapped_similarity:.6f}',
-                'min_phase_edit_distance_delta': ~{min_phase_edit_distance_delta},
-                'min_phase_similarity': f'{~{min_phase_similarity}:.6f}',
+                'direct_edit_distance': f'{direct} ({direct_1}, {direct_2})',
+                'swapped_edit_distance': f'{swapped} ({swapped_1}, {swapped_2})',
             })
-            if direct == swapped:
-                row.update({
-                    'winning_edit_distance': direct,
-                    'winning_similarity': f'{direct_similarity:.6f}',
-                    'passes_edit_distance_delta': 'false',
-                    'passes_similarity': str(direct_similarity >= ~{min_phase_similarity}).lower(),
-                    'winning_orientation': 'tie',
-                    'details': (
-                        f'base_missing_as_reference_count={missing_as_reference};'
-                        f'min_phase_edit_distance_delta=~{min_phase_edit_distance_delta};'
-                        f'min_phase_similarity={~{min_phase_similarity}:.6f}'
-                    ),
-                })
-                row['status'] = 'orientation_tie'
-            else:
-                direct_wins = direct < swapped
-                winning_distance = direct if direct_wins else swapped
-                winning_similarity = direct_similarity if direct_wins else swapped_similarity
-                passes_delta = abs(direct - swapped) >= ~{min_phase_edit_distance_delta}
-                passes_similarity = winning_similarity >= ~{min_phase_similarity}
-                row.update({
-                    'winning_edit_distance': winning_distance,
-                    'winning_similarity': f'{winning_similarity:.6f}',
-                    'passes_edit_distance_delta': str(passes_delta).lower(),
-                    'passes_similarity': str(passes_similarity).lower(),
-                    'winning_orientation': 'direct' if direct_wins else 'swapped',
-                    'details': (
-                        f'base_missing_as_reference_count={missing_as_reference};'
-                        f'min_phase_edit_distance_delta=~{min_phase_edit_distance_delta};'
-                        f'min_phase_similarity={~{min_phase_similarity}:.6f}'
-                    ),
-                })
-                if not passes_delta and not passes_similarity:
-                    row['status'] = 'phase_thresholds_not_met'
-                elif not passes_delta:
-                    row['status'] = 'edit_distance_delta_below_threshold'
-                elif not passes_similarity:
-                    row['status'] = 'winning_similarity_below_threshold'
-                elif direct_wins:
+            direct_passes_similarity = (
+                similarity(direct_1, trgt_haps[0], base_hap_1) >= ~{min_phase_similarity}
+                and similarity(direct_2, trgt_haps[1], base_hap_2) >= ~{min_phase_similarity}
+            )
+            swapped_passes_similarity = (
+                similarity(swapped_1, trgt_haps[0], base_hap_2) >= ~{min_phase_similarity}
+                and similarity(swapped_2, trgt_haps[1], base_hap_1) >= ~{min_phase_similarity}
+            )
+            if phase_eligible and abs(direct - swapped) >= ~{min_phase_edit_distance_delta}:
+                if direct < swapped and direct_passes_similarity:
                     call['GT'] = gt
                     call.phased = True
                     call['PS'] = rec.pos
-                    row.update({'winning_phased_gt': gt_string(gt, True), 'phase_set': rec.pos, 'status': 'phased_direct'})
+                    row['final_replacement_GT'] = gt_string(gt, True)
                     any_phased = True
-                else:
+                elif swapped < direct and swapped_passes_similarity:
                     call['GT'] = (gt[1], gt[0])
                     call.phased = True
                     call['PS'] = rec.pos
-                    row.update({
-                        'winning_phased_gt': gt_string((gt[1], gt[0]), True),
-                        'phase_set': rec.pos,
-                        'status': 'phased_swapped',
-                    })
+                    row['final_replacement_GT'] = gt_string((gt[1], gt[0]), True)
                     any_phased = True
             writer.writerow(row)
         if any_phased:
@@ -1068,7 +1048,7 @@ PY
     RuntimeAttr default_attr = object {
         cpu_cores: 2,
         mem_gb: 12,
-        disk_gb: 2 * ceil(size(vcf, "GB") + size(base_vcfs, "GB")) + 20,
+        disk_gb: 2 * ceil(size(vcf, "GB") + size(original_vcf, "GB") + size(base_vcfs, "GB")) + 20,
         boot_disk_gb: 10,
         preemptible_tries: 1,
         max_retries: 0
@@ -1095,8 +1075,7 @@ task ApplyTRLocusUpdates {
         File? replacement_map_tsv
         File? input_trv_phasing_summary_tsv
         File input_trv_catalog_match_tsv
-        File? merged_status_tsv
-        File gnomad_tr_json
+        Boolean replace_gnomad_str
         String prefix
         String docker
         RuntimeAttr? runtime_attr_override
@@ -1105,9 +1084,9 @@ task ApplyTRLocusUpdates {
     command <<<
         set -euo pipefail
 
-        # Stream the full contig while clearing and rebuilding TR and gnomAD STR annotations.
+        # Stream the full contig while rebuilding TR envelope annotations. When requested,
+        # derive gnomAD_STR assignments solely from the catalog match report.
         python3 <<'PY'
-import json
 import os
 import pysam
 
@@ -1120,48 +1099,88 @@ def vals(value):  # noqa: E302
 def record_end(rec):  # noqa: E302
     return rec.stop if rec.stop is not None else rec.pos + len(rec.ref) - 1
 
-with open('~{gnomad_tr_json}') as handle:  # noqa: E305
-    catalog = json.load(handle)
-loci = []
-for entry in catalog:
-    # Prevent ignored non-disease loci from receiving gnomAD_STR during final annotation.
-    diseases = entry.get('Diseases') if entry else None
-    if not isinstance(diseases, list) or not diseases:
-        continue
-    explorer = entry.get('TRExplorerV1') if entry else None
-    explorers = explorer if isinstance(explorer, list) else [explorer]
-    for value in explorers:
-        if entry and entry.get('LocusId') and value:
-            loci.append((str(entry['LocusId']), str(value)))
-locus_explorer = {locus: explorer for locus, explorer in loci}
+def normalize_contig(value):  # noqa: E302
+    return value[3:] if value.lower().startswith('chr') else value
 
-# Preserve matches established before a replacement is merged/renamed. Every
-# mapping here originates from the same strict substring test in prior tasks.
-record_loci = {}
-for audit_path in ['~{input_trv_catalog_match_tsv}', '~{merged_status_tsv}']:
-    if not audit_path or not os.path.exists(audit_path):
-        continue
-    with open(audit_path) as audit:
-        next(audit, None)
-        for line in audit:
-            fields = line.rstrip('\n').split('\t')
-            if len(fields) < 4 or fields[3] == '.':
-                continue
-            for record_id in fields[3].split(','):
-                record_loci.setdefault(record_id, set()).add(fields[1])
+def parse_explorer(value):  # noqa: E302
+    fields = value.rsplit('-', 3)
+    if len(fields) != 4:
+        return None
+    try:
+        return fields[0], int(fields[1]), int(fields[2])
+    except ValueError:
+        return None
+
+def overlaps(rec, start, stop):  # noqa: E302
+    return rec.pos <= stop and record_end(rec) >= start
+
+def inclusive_overlap(rec, start, stop):  # noqa: E302
+    return max(0, min(record_end(rec), stop) - max(rec.pos, start) + 1)
+
+def trid_text(rec):  # noqa: E302
+    return '|'.join(vals(rec.info.get('TRID')))
+
+def truth(value):  # noqa: E302
+    return value.strip().lower() == 'true'
+
+def signature(rec):  # noqa: E302
+    return (rec.contig, rec.pos, record_end(rec), rec.ref,
+            ','.join(rec.alts or []), rec.id or '.')
+
+def matching_candidates(records, explorers):  # noqa: E302
+    candidates = []
+    for rec in records:
+        if rec.info.get('allele_type') != 'trv':
+            continue
+        trid = trid_text(rec)
+        for explorer, start, stop in explorers:
+            if explorer in trid and overlaps(rec, start, stop):
+                candidates.append((inclusive_overlap(rec, start, stop), rec))
+                break
+    return sorted(candidates, key=lambda item: (-item[0], signature(item[1]), trid_text(item[1])))
+
+# Catalog report controls gnomAD_STR selection. Its boolean columns make the
+# decision reproducible without reinterpreting the JSON during output assembly.
+catalog_rows = []
+with open('~{input_trv_catalog_match_tsv}') as handle:
+    header = next(handle, '').rstrip('\n').split('\t')
+    expected = [
+        'locus_id', 'TRExplorerV1', 'has_diseases', 'main_overlapping_TRIDs',
+        'main_has_TRExplorerV1_substring', 'trgt_overlapping_TRIDs',
+        'trgt_has_TRExplorerV1_substring', 'trgt_matching_allele_count_ge_1',
+    ]
+    if header != expected:
+        raise RuntimeError('Unexpected trv_catalog_match_tsv header')
+    for line_number, line in enumerate(handle, start=2):
+        fields = line.rstrip('\n').split('\t')
+        if len(fields) != len(expected):
+            raise RuntimeError(f'Malformed catalog report row {line_number}')
+        if not truth(fields[2]):
+            continue
+        explorers = []
+        for value in fields[1].split(','):
+            parsed = parse_explorer(value)
+            if parsed:
+                explorers.append((value, parsed[1], parsed[2]))
+        if not explorers:
+            raise RuntimeError(f'Eligible catalog row {line_number} has no parseable TRExplorerV1 value')
+        catalog_rows.append({
+            'line_number': line_number,
+            'locus_id': fields[0],
+            'explorers': explorers,
+            'main_strict': truth(fields[4]),
+            'trgt_strict': truth(fields[6]),
+            'trgt_ac': truth(fields[7]),
+        })
 
 replacement_path = '~{replacement_vcf}'
 map_path = '~{replacement_map_tsv}'
+replace_gnomad_str = '~{replace_gnomad_str}'.lower() == 'true'
 replacements = []
 replace_old = set()
 if replacement_path and os.path.exists(replacement_path):
     with pysam.VariantFile(replacement_path) as handle:
         replacements = [rec.copy() for rec in handle]
-    for rec in replacements:
-        searchable = '|'.join(vals(rec.info.get('TRID')))
-        for locus, explorer in loci:
-            if explorer in searchable:
-                record_loci.setdefault(record_key(rec), set()).add(locus)
 if map_path and os.path.exists(map_path):
     with open(map_path) as handle:
         next(handle, None)
@@ -1170,8 +1189,44 @@ if map_path and os.path.exists(map_path):
             if len(fields) >= 4 and fields[3] == 'replace' and fields[1] != '.':
                 replace_old.add(fields[1])
 
-base = pysam.VariantFile('~{vcf}')
+base = pysam.VariantFile('~{vcf}', index_filename='~{vcf_idx}')
 header = base.header.copy()
+
+def vcf_contig_for(header, catalog_contig):  # noqa: E302
+    for name in header.contigs:
+        if normalize_contig(name) == normalize_contig(catalog_contig):
+            return name
+    raise RuntimeError(f'Catalog contig {catalog_contig} absent from input VCF')
+
+# Select exactly one output target for every catalog row that can be assigned.
+# Main-VCF rows take precedence; raw-TRGT rows select only retained replacements.
+gnomad_assignments = {}
+if replace_gnomad_str:
+    for row in catalog_rows:
+        if row['main_strict']:
+            main_records = []
+            for _, start, stop in row['explorers']:
+                contig = vcf_contig_for(base.header, row['explorers'][0][0].rsplit('-', 3)[0])
+                main_records.extend(
+                    rec.copy() for rec in base.fetch(contig, max(0, start - 1), stop + 1)
+                    if record_key(rec) not in replace_old
+                )
+            candidates = matching_candidates(main_records, row['explorers'])
+            target_kind = 'main VCF'
+        elif row['trgt_strict'] and row['trgt_ac']:
+            candidates = matching_candidates(replacements, row['explorers'])
+            target_kind = 'replacement VCF'
+        else:
+            continue
+        if not candidates:
+            raise RuntimeError(
+                f'Catalog row {row["line_number"]} ({row["locus_id"]}) has no matching {target_kind} record'
+            )
+        target = signature(candidates[0][1])
+        gnomad_assignments.setdefault(target, set()).add(row['locus_id'])
+base.close()
+
+base = pysam.VariantFile('~{vcf}')
 if replacements:
     # Preserve all annotations generated on the small replacement VCF.
     with pysam.VariantFile(replacement_path) as repl_header_source:
@@ -1179,7 +1234,6 @@ if replacements:
 for name, number, type_, description in [
         ('TR_ENVELOPED', '0', 'Flag', 'Variant enveloped by tandem repeat'),
         ('TRID', '1', 'String', 'ID of enveloping tandem repeat'),
-        ('gnomAD_STR', '1', 'String', 'Matched gnomAD tandem-repeat locus ID'),
         ('allele_type', '1', 'String', 'Allele type'),
         ('SOURCE', '1', 'String', 'Source of variant call'),
         ('allele_length', '1', 'Integer', 'Allele length'),
@@ -1190,6 +1244,26 @@ for name, number, type_, description in [
             'INFO',
             items=[('ID', name), ('Number', number), ('Type', type_), ('Description', description)],
         )
+if replace_gnomad_str:
+    # Multiple disease-associated catalog loci can intentionally select one TRV.
+    # Rebuild instead of mutating in place: htslib numeric field IDs can shift when
+    # an existing definition is removed, corrupting translated INFO/FORMAT fields.
+    rebuilt_header = pysam.VariantHeader()
+    for line in str(header).splitlines():
+        if not line.startswith('##'):
+            continue
+        if (line.startswith('##fileformat=') or line.startswith('##FILTER=<ID=PASS,')
+                or line.startswith('##INFO=<ID=gnomAD_STR,')):
+            continue
+        rebuilt_header.add_line(line)
+    for sample in header.samples:
+        rebuilt_header.add_sample(sample)
+    header = rebuilt_header
+    header.add_meta(
+        'INFO',
+        items=[('ID', 'gnomAD_STR'), ('Number', '.'), ('Type', 'String'),
+               ('Description', 'Matched gnomAD tandem-repeat locus ID')],
+    )
 if 'PS' not in header.formats:
     header.add_meta(
         'FORMAT',
@@ -1213,6 +1287,7 @@ with pysam.VariantFile('~{prefix}.pre_envelope.vcf', 'w', header=header) as out:
             out.write(replacement)
             replacement_index += 1
         if record_key(rec) not in replace_old:
+            rec.translate(header)
             out.write(rec)
     while replacement_index < len(replacements):
         replacement = replacements[replacement_index].copy()
@@ -1234,12 +1309,14 @@ for interval in intervals:
 
 src = pysam.VariantFile('~{prefix}.pre_envelope.vcf')
 out = pysam.VariantFile('~{prefix}.trv_postprocessed.vcf.gz', 'wz', header=header)
+emitted_gnomad_targets = set()
 with src, out:
     current_contig = None
     contig_intervals = []
     interval_index = 0
     active = []
     for rec in src:
+        rec.translate(header)
         if rec.contig != current_contig:
             current_contig = rec.contig
             contig_intervals = by_contig.get(current_contig, [])
@@ -1253,7 +1330,7 @@ with src, out:
             del rec.info['TR_ENVELOPED']
             if 'TRID' in rec.info:
                 del rec.info['TRID']
-        if 'gnomAD_STR' in rec.info:
+        if replace_gnomad_str and 'gnomAD_STR' in rec.info:
             del rec.info['gnomAD_STR']
         if rec.info.get('allele_type') != 'trv':
             for _, start, stop, trid in active:
@@ -1261,45 +1338,29 @@ with src, out:
                     rec.info['TR_ENVELOPED'] = True
                     rec.info['TRID'] = trid
                     break
-        searchable = '|'.join(vals(rec.info.get('TRID')))
-        matches = sorted(
-            set(record_loci.get(record_key(rec), set()))
-            | {locus for locus, explorer in loci if rec.info.get('allele_type') == 'trv' and explorer in searchable}
-        )
-        if matches:
-            rec.info['gnomAD_STR'] = ','.join(matches)
+        target = signature(rec)
+        if replace_gnomad_str and target in gnomad_assignments:
+            if target in emitted_gnomad_targets:
+                raise RuntimeError(f'gnomAD_STR target was emitted more than once: {target}')
+            rec.info['gnomAD_STR'] = tuple(sorted(gnomad_assignments[target]))
+            emitted_gnomad_targets.add(target)
         out.write(rec)
+
+if replace_gnomad_str and emitted_gnomad_targets != set(gnomad_assignments):
+    missing = sorted(set(gnomad_assignments) - emitted_gnomad_targets)
+    raise RuntimeError(f'gnomAD_STR targets were not emitted: {missing}')
 
 with open('~{prefix}.trv_catalog_match.tsv', 'w') as out, open('~{input_trv_catalog_match_tsv}') as source:
     out.write(source.read())
-status_path = '~{merged_status_tsv}'
-if status_path and os.path.exists(status_path):
-    with open(status_path) as source, open('~{prefix}.trv_catalog_match.tsv', 'a') as out:
-        next(source, None)
-        for line in source:
-            out.write(line)
-if map_path and os.path.exists(map_path):
-    with open(map_path) as source, open('~{prefix}.trv_catalog_match.tsv', 'a') as out:
-        next(source, None)
-        for line in source:
-            new_id, old_id, overlap_bp, status, phase_summary = line.rstrip('\n').split('\t')
-            for locus in sorted(record_loci.get(new_id, [])):
-                detail = f'{status};old_id={old_id};overlap_bp={overlap_bp};{phase_summary}'
-                out.write(f'replacement\t{locus}\t{locus_explorer.get(locus, ".")}\t{new_id}\t{detail}\n')
 
 # Always materialize phase audit so no-replacement contigs have stable workflow output.
 phase_audit_path = '~{input_trv_phasing_summary_tsv}'
 phase_header = (
-    'record_id\tchrom\tpos\tend\tsample_id\tinput_gt'
-    '\ttrgt_haplotype_1_sequence\ttrgt_haplotype_2_sequence\tbase_vcf_index\tbase_sample_id'
-    '\tbase_variant_ids\tbase_missing_as_reference_count\tbase_haplotype_1_sequence'
-    '\tbase_haplotype_2_sequence\tdirect_haplotype_1_edit_distance'
-    '\tdirect_haplotype_2_edit_distance\tdirect_edit_distance\tswapped_haplotype_1_edit_distance'
-    '\tswapped_haplotype_2_edit_distance\tswapped_edit_distance\tdistance_delta'
-    '\tdirect_similarity\tswapped_similarity\twinning_orientation\twinning_phased_gt'
-    '\twinning_edit_distance\twinning_similarity\tmin_phase_edit_distance_delta'
-    '\tmin_phase_similarity\tpasses_edit_distance_delta\tpasses_similarity'
-    '\tphase_set\tstatus\tdetails\n'
+    'original_TRID\treplacement_TRID\tsample_id\toriginal_GT'
+    '\tbase_vcf_haplotype_1_sequence\tbase_vcf_haplotype_2_sequence\treplacement_input_GT'
+    '\treplacement_vcf_haplotype_1_sequence\treplacement_vcf_haplotype_2_sequence'
+    '\tdirect_edit_distance\tswapped_edit_distance\tmin_phase_edit_distance_delta'
+    '\tmin_phase_similarity\tfinal_replacement_GT\n'
 )
 with open('~{prefix}.trv_phasing_summary.tsv', 'w') as out:
     if phase_audit_path and os.path.exists(phase_audit_path):

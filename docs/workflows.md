@@ -869,32 +869,25 @@ Outputs:
 - `trv_phasing_summary_tsv`: One row per replaced non-reference heterozygous genotype, including TRGT and reconstructed base-haplotype sequences, edit distances and similarities for both orientations, threshold values, winning GT, and phase decision.
 
 
-### [IntegrateVcfs](../wdl/annotation_utils/IntegrateVcfs.wdl)
-This utility integrates a SNV/indel VCF and an SV VCF into a single cohort VCF. Each input is normalized, harmonized to a common sample set and tagged with a source label and a size-based flag, after which the two are merged and the combined variants are renamed and filtered - for example to flag large SNVs/indels and small SVs. Sample IDs can optionally be swapped first. It outputs the integrated VCF.
+### [PreprocessVcfs](../wdl/annotation_utils/PreprocessVcfs.wdl)
+This utility preprocesses and integrates one or more cohort VCFs into a single VCF. Each VCF is optionally normalized, sample-harmonized, annotated with core variant attributes and a source label, then length-filtered. Inputs specific to each VCF are aligned in parallel arrays. Sample IDs can optionally be swapped per VCF before preprocessing.
 
 Inputs:
-- `File snv_indel_vcf`: SNV/indel VCF to integrate.
-- `File snv_indel_vcf_idx`: Index for `snv_indel_vcf`.
-- `File sv_vcf`: SV VCF to integrate.
-- `File sv_vcf_idx`: Index for `sv_vcf`.
-- `Array[String] contigs`: Contigs to process.
-- `Array[String] sample_ids`: Samples shared between the two VCFs.
-- `String snv_indel_vcf_source_tag`: `SOURCE` value applied to the SNV/indel calls.
-- `String snv_indel_vcf_size_flag`: Filter flag applied to out-of-range SNV/indel calls.
-- `String snv_indel_vcf_size_flag_description`: Header description for `snv_indel_vcf_size_flag`.
-- `String sv_vcf_source_tag`: `SOURCE` value applied to the SV calls.
-- `String sv_vcf_size_flag`: Filter flag applied to out-of-range SV calls.
-- `String sv_vcf_size_flag_description`: Header description for `sv_vcf_size_flag`.
+- `Array[File] vcfs`: Cohort VCFs to preprocess and merge.
+- `Array[File] vcf_idxs`: Indexes for `vcfs`.
+- `Array[String] source_tags`: `SOURCE` values to apply to `vcfs`; aligned with `vcfs`.
+- `Array[Boolean] normalize_vcfs`: Whether to normalize each VCF; aligned with `vcfs`.
+- `Array[File?] swap_sample_lists`: Optional sample-ID swap maps to apply before preprocessing each VCF; aligned with `vcfs`.
+- `Array[Int] min_length_cutoffs`: Minimum absolute allele lengths for `vcfs`; calls below the corresponding cutoff receive the `SMALL_{source_tags[i]}` filter.
+- `Array[Int] max_length_cutoffs`: Maximum absolute allele lengths for `vcfs`; calls above the corresponding cutoff receive the `LARGE_{source_tags[i]}` filter.
+- `Array[String]? sample_ids`: Optional samples to retain. When absent, all input VCFs must contain the same samples.
 - `Int? records_per_shard`: Number of variants to keep within a single shard during processing.
-- `Int min_sv_length`: Length boundary separating SNVs/indels from SVs (default `50`).
-- `File? swap_samples_snv_indel`: Sample-ID swap map applied to the SNV/indel VCF.
-- `File? swap_samples_sv`: Sample-ID swap map applied to the SV VCF.
 - `File ref_fa`: From [references](references.md).
 - `File ref_fai`: From [references](references.md).
 
 Outputs:
-- `integrated_vcf`: Integrated cohort VCF.
-- `integrated_vcf_idx`: Index for the integrated VCF.
+- `preprocessed_vcf`: Preprocessed and merged cohort VCF.
+- `preprocessed_vcf_idx`: Index for the preprocessed VCF.
 
 
 ### [FillBackbonePhasedGenotypes](../wdl/annotation_utils/FillBackbonePhasedGenotypes.wdl)
@@ -960,24 +953,6 @@ Outputs:
 - `post_processed_vcf`: Post-processed VCF.
 - `post_processed_vcf_idx`: Index for the post-processed VCF.
 - `assembly_only_singletons_tsv`: Optional TSV containing one row per assembly-only singleton ALT allele; present only when `run_filter_assembly_only_singletons` is true.
-
-
-### [PreprocessGregorVcf](../wdl/annotation_utils/PreprocessGregorVcf.wdl)
-This utility prepares a VCF for GREGOR by normalizing variants, annotating canonical variant attributes, assigning standardized variant IDs, and producing both genotyped and sites-only outputs per contig. Optional record sharding parallelizes processing.
-
-Inputs:
-- `File vcf`: VCF to preprocess.
-- `File vcf_idx`: Index for `vcf`.
-- `Array[String] contigs`: Contigs to process.
-- `Int? records_per_shard`: Optional record count per processing shard.
-- `File ref_fa`: Reference FASTA used for normalization.
-- `File ref_fai`: Index for `ref_fa`.
-
-Outputs:
-- `full_vcf`: Per-contig normalized, annotated, genotyped VCFs.
-- `full_vcf_idx`: Indexes for `full_vcf`.
-- `stripped_vcf`: Per-contig sites-only VCFs.
-- `stripped_vcf_idx`: Indexes for `stripped_vcf`.
 
 
 ### [QcAnnotations](https://github.com/broadinstitute/gatk-sv/blob/kj_project_gnomad_lr/wdl/QcAnnotations.wdl)

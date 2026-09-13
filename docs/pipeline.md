@@ -31,7 +31,7 @@ Raw reads were aligned to GRCh38 at 65x coverage using Minimap2, then downsample
 The three callsets were integrated and phased. Steps were run as described below.
 
 ### VCF Integration
-1. **[IntegrateVcfs](../wdl/annotation_utils/IntegrateVcfs.wdl)** ([docs](workflows.md#integratevcfs)): Normalized multiallelics, flagged short variants ≥ 50bp, added core INFO fields (`allele_type`, `allele_length`), renamed variant IDs and merged the SNV/indel and SV VCFs into a single cohort integrated VCF.
+1. **[PreprocessVcfs](../wdl/annotation_utils/PreprocessVcfs.wdl)** ([docs](workflows.md#preprocessvcfs)): Normalized, sample-harmonized, source-tagged and length-filtered one or more cohort VCFs, added core INFO fields (`allele_type`, `allele_length`), renamed variant IDs and merged them into a single cohort VCF.
 2. **[ExtractSampleVcfs](../wdl/annotation_utils/ExtractSampleVcfs.wdl)** ([docs](workflows.md#extractsamplevcfs)): Split the cohort VCF into per-sample SNV/indel and SV VCFs for phasing.
 
 ### TR Callset Integration

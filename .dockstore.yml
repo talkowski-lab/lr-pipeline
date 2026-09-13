@@ -430,8 +430,8 @@ workflows:
         - /.*/
 
   - subclass: WDL
-    name: IntegrateVcfs
-    primaryDescriptorPath: /wdl/annotation_utils/IntegrateVcfs.wdl
+    name: PreprocessVcfs
+    primaryDescriptorPath: /wdl/annotation_utils/PreprocessVcfs.wdl
     filters:
       branches:
         - main
@@ -459,15 +459,6 @@ workflows:
   - subclass: WDL
     name: PostprocessCallset
     primaryDescriptorPath: /wdl/annotation_utils/PostprocessCallset.wdl
-    filters:
-      branches:
-        - main
-      tags:
-        - /.*/
-
-  - subclass: WDL
-    name: PreprocessGregorVcf
-    primaryDescriptorPath: /wdl/annotation_utils/PreprocessGregorVcf.wdl
     filters:
       branches:
         - main
