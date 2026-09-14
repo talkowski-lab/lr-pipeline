@@ -241,6 +241,15 @@ workflows:
         - /.*/
 
   - subclass: WDL
+    name: ValidateTRGTWithCatalog
+    primaryDescriptorPath: /wdl/annotation_utils/ValidateTRGTWithCatalog.wdl
+    filters:
+      branches:
+        - main
+      tags:
+        - /.*/
+
+  - subclass: WDL
     name: SummarizeAnnotations
     primaryDescriptorPath: /wdl/annotation_utils/SummarizeAnnotations.wdl
     filters:

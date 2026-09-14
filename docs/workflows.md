@@ -501,6 +501,20 @@ Outputs:
 - `mosdepth_per_base_combined`: Combined per-base coverage BED.
 - `mosdepth_per_base_combined_idx`: Index for the combined BED.
 
+### [ValidateTRGTWithCatalog](../wdl/annotation_utils/ValidateTRGTWithCatalog.wdl)
+This utility validates that each TRGT variant's literal `CHROM`, `POS` and `INFO/END` values match columns 1, 2 and 3 of a TRGT catalog BED. It outputs an indexed VCF containing only variants without a matching catalog position, including records with a missing or malformed `END` tag. The VCF and compressed catalog are subset per contig; when `records_per_shard` is set, each contig VCF is additionally sharded by record count and validated in parallel.
+
+Inputs:
+- `File trgt_full_merged_vcf`: TRGT VCF to validate.
+- `File trgt_full_merged_vcf_idx`: Index for `trgt_full_merged_vcf`.
+- `Array[String] contigs`: Contigs to validate within the input VCF and catalog.
+- `File trgt_catalog_bed_gz`: Gzipped TRGT catalog BED whose first three columns are `CHROM`, `POS` and `END`.
+- `Int? records_per_shard`: Number of variants to keep within a validation shard. When unset, each contig is processed as one shard.
+
+Outputs:
+- `incongruent_vcf`: Indexed VCF containing variants without a matching catalog position.
+- `incongruent_vcf_idx`: Index for `incongruent_vcf`.
+
 ### [SummarizeAnnotations](../wdl/annotation_utils/SummarizeAnnotations.wdl)
 This utility tallies annotation values across one or more VCFs to produce summary count tables, size-binned by allele class (SNV/DEL/INS/DUP/TRV). It always counts at the site level and can optionally count per sample, per allele, per functional gene consequence (from VEP/SVAnnotate `PREDICTED_*` fields), as raw per-variant value lists, and — when `create_plotting` is enabled — produce a separate set of AF-binned, region-aware Parquet tables for plotting (including a de novo transmission breakdown when a PED file is supplied and trios are found).
 
