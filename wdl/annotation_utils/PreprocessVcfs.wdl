@@ -10,11 +10,11 @@ workflow PreprocessVcfs {
 
         Array[Boolean] normalize_vcfs
         Array[String] source_tags
-        Array[File?] swap_sample_lists
+        Array[File] swap_sample_lists
         Array[Int] min_length_cutoffs
         Array[Int] max_length_cutoffs
         Int? records_per_shard
-        Array[String]? sample_ids
+        Array[String] sample_ids
 
         File ref_fa
         File ref_fai
@@ -52,59 +52,75 @@ workflow PreprocessVcfs {
     Boolean inputs_valid = ValidatePreprocessVcfsInputs.status == "success"
 
     if (inputs_valid) {
-        scatter (vcf_index in range(length(vcfs))) {
-            if (defined(swap_sample_lists[vcf_index])) {
-                call Helpers.SwapSampleIds as SwapSampleIds {
+        if (length(swap_sample_lists) > 0) {
+            scatter (vcf_index in range(length(vcfs))) {
+                if (size(swap_sample_lists[vcf_index], "B") > 0) {
+                    call Helpers.SwapSampleIds as SwapSampleIds {
+                        input:
+                            vcf = vcfs[vcf_index],
+                            vcf_idx = vcf_idxs[vcf_index],
+                            sample_swap_list = swap_sample_lists[vcf_index],
+                            prefix = "~{prefix}.vcf_~{vcf_index}.swapped",
+                            docker = utils_docker,
+                            runtime_attr_override = runtime_attr_swap_samples
+                    }
+                }
+
+                File swapped_vcf = select_first([
+                    SwapSampleIds.swapped_vcf,
+                    vcfs[vcf_index]
+                ])
+                File swapped_vcf_idx = select_first([
+                    SwapSampleIds.swapped_vcf_idx,
+                    vcf_idxs[vcf_index]
+                ])
+            }
+        }
+
+        Array[File] swapped_vcfs = select_first([swapped_vcf, vcfs])
+        Array[File] swapped_vcf_idxs = select_first([swapped_vcf_idx, vcf_idxs])
+
+        if (length(sample_ids) > 0) {
+            scatter (vcf_index in range(length(vcfs))) {
+                call Helpers.SubsetVcfToSamples as SubsetInputVcfToSamples {
                     input:
-                        vcf = vcfs[vcf_index],
-                        vcf_idx = vcf_idxs[vcf_index],
-                        sample_swap_list = select_first([swap_sample_lists[vcf_index]]),
-                        prefix = "~{prefix}.vcf_~{vcf_index}.swapped",
+                        vcf = swapped_vcfs[vcf_index],
+                        vcf_idx = swapped_vcf_idxs[vcf_index],
+                        samples = sample_ids,
+                        prefix = "~{prefix}.vcf_~{vcf_index}.subset",
                         docker = utils_docker,
-                        runtime_attr_override = runtime_attr_swap_samples
+                        runtime_attr_override = runtime_attr_subset_samples
                 }
             }
-
-            File swapped_vcf = select_first([
-                SwapSampleIds.swapped_vcf,
-                vcfs[vcf_index]
-            ])
-            File swapped_vcf_idx = select_first([
-                SwapSampleIds.swapped_vcf_idx,
-                vcf_idxs[vcf_index]
-            ])
         }
 
-        Array[File] final_input_vcfs = swapped_vcf
-        Array[File] final_input_vcf_idxs = swapped_vcf_idx
-
-        if (!defined(sample_ids)) {
-            call Helpers.GetSamplesFromVcf {
-                input:
-                    vcf = final_input_vcfs[0],
-                    vcf_idx = final_input_vcf_idxs[0],
-                    docker = utils_docker,
-                    runtime_attr_override = runtime_attr_get_samples
-            }
-
-            call Helpers.CheckSampleConsistency as CheckInputSamples {
-                input:
-                    vcfs = final_input_vcfs,
-                    vcf_idxs = final_input_vcf_idxs,
-                    sample_ids = GetSamplesFromVcf.samples,
-                    docker = utils_docker,
-                    runtime_attr_override = runtime_attr_check_samples
-            }
-        }
-
-        Array[String] final_sample_ids = select_first([
-            sample_ids,
-            GetSamplesFromVcf.samples
+        Array[File] final_input_vcfs = select_first([
+            SubsetInputVcfToSamples.subset_vcf,
+            swapped_vcfs
         ])
-        Boolean input_samples_valid = select_first([
-            CheckInputSamples.status,
-            "success"
-        ]) == "success"
+        Array[File] final_input_vcf_idxs = select_first([
+            SubsetInputVcfToSamples.subset_vcf_idx,
+            swapped_vcf_idxs
+        ])
+
+        call Helpers.GetSamplesFromVcf {
+            input:
+                vcf = final_input_vcfs[0],
+                vcf_idx = final_input_vcf_idxs[0],
+                docker = utils_docker,
+                runtime_attr_override = runtime_attr_get_samples
+        }
+
+        call Helpers.CheckSampleConsistency as CheckInputSamples {
+            input:
+                vcfs = final_input_vcfs,
+                vcf_idxs = final_input_vcf_idxs,
+                sample_ids = GetSamplesFromVcf.samples,
+                docker = utils_docker,
+                runtime_attr_override = runtime_attr_check_samples
+        }
+
+        Boolean input_samples_valid = CheckInputSamples.status == "success"
 
         if (input_samples_valid) {
             scatter (vcf_index in range(length(final_input_vcfs))) {
@@ -130,7 +146,7 @@ workflow PreprocessVcfs {
                 ])
 
                 scatter (shard_index in range(length(shard_vcfs))) {
-                    if (normalize_vcfs[vcf_index]) {
+                    if (length(normalize_vcfs) > 0 && normalize_vcfs[vcf_index]) {
                         call Helpers.NormalizeVcf {
                             input:
                                 vcf = shard_vcfs[shard_index],
@@ -152,69 +168,106 @@ workflow PreprocessVcfs {
                         shard_vcf_idxs[shard_index]
                     ])
 
-                    if (defined(sample_ids)) {
-                        call Helpers.SubsetVcfToSamples {
-                            input:
-                                vcf = normalized_vcf,
-                                vcf_idx = normalized_vcf_idx,
-                                samples = final_sample_ids,
-                                prefix = "~{prefix}.vcf_~{vcf_index}.shard_~{shard_index}.subset",
-                                docker = utils_docker,
-                                runtime_attr_override = runtime_attr_subset_samples
-                        }
-                    }
-
-                    File subset_vcf = select_first([
-                        SubsetVcfToSamples.subset_vcf,
-                        normalized_vcf
-                    ])
-                    File subset_vcf_idx = select_first([
-                        SubsetVcfToSamples.subset_vcf_idx,
-                        normalized_vcf_idx
-                    ])
-
                     call Helpers.AnnotateVariantAttributes {
                         input:
-                            vcf = subset_vcf,
-                            vcf_idx = subset_vcf_idx,
+                            vcf = normalized_vcf,
+                            vcf_idx = normalized_vcf_idx,
                             prefix = "~{prefix}.vcf_~{vcf_index}.shard_~{shard_index}.annotated",
                             docker = utils_docker,
                             runtime_attr_override = runtime_attr_annotate_attributes
                     }
 
-                    call Helpers.AddInfo {
-                        input:
-                            vcf = AnnotateVariantAttributes.annotated_vcf,
-                            vcf_idx = AnnotateVariantAttributes.annotated_vcf_idx,
-                            tag_id = "SOURCE",
-                            tag_value = source_tags[vcf_index],
-                            tag_description = "Source of variant call",
-                            prefix = "~{prefix}.vcf_~{vcf_index}.shard_~{shard_index}.source",
-                            docker = utils_docker,
-                            runtime_attr_override = runtime_attr_add_info
+                    if (length(source_tags) > 0) {
+                        call Helpers.AddInfo {
+                            input:
+                                vcf = AnnotateVariantAttributes.annotated_vcf,
+                                vcf_idx = AnnotateVariantAttributes.annotated_vcf_idx,
+                                tag_id = "SOURCE",
+                                tag_value = source_tags[vcf_index],
+                                tag_description = "Source of variant call",
+                                prefix = "~{prefix}.vcf_~{vcf_index}.shard_~{shard_index}.source",
+                                docker = utils_docker,
+                                runtime_attr_override = runtime_attr_add_info
+                        }
                     }
 
-                    call AddLengthFilters {
-                        input:
-                            vcf = AddInfo.annotated_vcf,
-                            vcf_idx = AddInfo.annotated_vcf_idx,
-                            source_tag = source_tags[vcf_index],
-                            min_length_cutoff = min_length_cutoffs[vcf_index],
-                            max_length_cutoff = max_length_cutoffs[vcf_index],
-                            source_tags = source_tags,
-                            min_length_cutoffs = min_length_cutoffs,
-                            max_length_cutoffs = max_length_cutoffs,
-                            prefix = "~{prefix}.vcf_~{vcf_index}.shard_~{shard_index}.length_filtered",
-                            docker = utils_docker,
-                            runtime_attr_override = runtime_attr_add_length_filters
+                    File source_annotated_vcf = select_first([
+                        AddInfo.annotated_vcf,
+                        AnnotateVariantAttributes.annotated_vcf
+                    ])
+                    File source_annotated_vcf_idx = select_first([
+                        AddInfo.annotated_vcf_idx,
+                        AnnotateVariantAttributes.annotated_vcf_idx
+                    ])
+
+                    if (length(min_length_cutoffs) > 0 && length(max_length_cutoffs) > 0) {
+                        call AddLengthFilters as AddMinAndMaxLengthFilters {
+                            input:
+                                vcf = source_annotated_vcf,
+                                vcf_idx = source_annotated_vcf_idx,
+                                source_tag = source_tags[vcf_index],
+                                min_length_cutoff = min_length_cutoffs[vcf_index],
+                                max_length_cutoff = max_length_cutoffs[vcf_index],
+                                source_tags = source_tags,
+                                min_length_cutoffs = min_length_cutoffs,
+                                max_length_cutoffs = max_length_cutoffs,
+                                prefix = "~{prefix}.vcf_~{vcf_index}.shard_~{shard_index}.length_filtered",
+                                docker = utils_docker,
+                                runtime_attr_override = runtime_attr_add_length_filters
+                        }
                     }
+
+                    if (length(min_length_cutoffs) > 0 && length(max_length_cutoffs) == 0) {
+                        call AddLengthFilters as AddMinLengthFilters {
+                            input:
+                                vcf = source_annotated_vcf,
+                                vcf_idx = source_annotated_vcf_idx,
+                                source_tag = source_tags[vcf_index],
+                                min_length_cutoff = min_length_cutoffs[vcf_index],
+                                source_tags = source_tags,
+                                min_length_cutoffs = min_length_cutoffs,
+                                max_length_cutoffs = max_length_cutoffs,
+                                prefix = "~{prefix}.vcf_~{vcf_index}.shard_~{shard_index}.length_filtered",
+                                docker = utils_docker,
+                                runtime_attr_override = runtime_attr_add_length_filters
+                        }
+                    }
+
+                    if (length(min_length_cutoffs) == 0 && length(max_length_cutoffs) > 0) {
+                        call AddLengthFilters as AddMaxLengthFilters {
+                            input:
+                                vcf = source_annotated_vcf,
+                                vcf_idx = source_annotated_vcf_idx,
+                                source_tag = source_tags[vcf_index],
+                                max_length_cutoff = max_length_cutoffs[vcf_index],
+                                source_tags = source_tags,
+                                min_length_cutoffs = min_length_cutoffs,
+                                max_length_cutoffs = max_length_cutoffs,
+                                prefix = "~{prefix}.vcf_~{vcf_index}.shard_~{shard_index}.length_filtered",
+                                docker = utils_docker,
+                                runtime_attr_override = runtime_attr_add_length_filters
+                        }
+                    }
+
+                    File filtered_vcf = select_first([
+                        AddMinAndMaxLengthFilters.filtered_vcf,
+                        AddMinLengthFilters.filtered_vcf,
+                        AddMaxLengthFilters.filtered_vcf,
+                        source_annotated_vcf
+                    ])
+                    File filtered_vcf_idx = select_first([
+                        AddMinAndMaxLengthFilters.filtered_vcf_idx,
+                        AddMinLengthFilters.filtered_vcf_idx,
+                        AddMaxLengthFilters.filtered_vcf_idx,
+                        source_annotated_vcf_idx
+                    ])
                 }
 
                 if (defined(records_per_shard)) {
                     call Helpers.ConcatVcfs as ConcatShards {
                         input:
-                            vcfs = AddLengthFilters.filtered_vcf,
-                            vcf_idxs = AddLengthFilters.filtered_vcf_idx,
+                            vcfs = filtered_vcf,
+                            vcf_idxs = filtered_vcf_idx,
                             allow_overlaps = false,
                             naive = true,
                             prefix = "~{prefix}.vcf_~{vcf_index}.concatenated",
@@ -225,19 +278,18 @@ workflow PreprocessVcfs {
 
                 File processed_vcf = select_first([
                     ConcatShards.concat_vcf,
-                    AddLengthFilters.filtered_vcf[0]
+                    filtered_vcf[0]
                 ])
                 File processed_vcf_idx = select_first([
                     ConcatShards.concat_vcf_idx,
-                    AddLengthFilters.filtered_vcf_idx[0]
+                    filtered_vcf_idx[0]
                 ])
             }
-
             call Helpers.CheckSampleConsistency as CheckProcessedSamples {
                 input:
                     vcfs = processed_vcf,
                     vcf_idxs = processed_vcf_idx,
-                    sample_ids = final_sample_ids,
+                    sample_ids = GetSamplesFromVcf.samples,
                     docker = utils_docker,
                     runtime_attr_override = runtime_attr_check_samples
             }
@@ -289,7 +341,7 @@ task ValidatePreprocessVcfsInputs {
         Array[File] vcf_idxs
         Array[Boolean] normalize_vcfs
         Array[String] source_tags
-        Array[File?] swap_sample_lists
+        Array[File] swap_sample_lists
         Array[Int] min_length_cutoffs
         Array[Int] max_length_cutoffs
         String docker
@@ -317,25 +369,51 @@ if not inputs["vcfs"]:
     raise ValueError("vcfs must not be empty")
 
 expected_length = len(inputs["vcfs"])
-if any(len(values) != expected_length for values in inputs.values()):
-    raise ValueError("all per-VCF inputs must have equal lengths")
+
+if len(inputs["vcf_idxs"]) != expected_length:
+    raise ValueError(
+        f"vcf_idxs must contain one index per VCF: expected {expected_length}, got {len(inputs['vcf_idxs'])}"
+    )
+
+for name in (
+    "normalize_vcfs",
+    "source_tags",
+    "swap_sample_lists",
+    "min_length_cutoffs",
+    "max_length_cutoffs",
+):
+    values = inputs[name]
+    if values and len(values) != expected_length:
+        raise ValueError(
+            f"{name} is enabled, so it must contain one value per VCF: expected {expected_length}, got {len(values)}"
+        )
 
 source_tags = inputs["source_tags"]
-if len(set(source_tags)) != len(source_tags):
-    raise ValueError("source_tags must be unique")
+cutoffs_enabled = bool(inputs["min_length_cutoffs"] or inputs["max_length_cutoffs"])
+if cutoffs_enabled and not source_tags:
+    raise ValueError("source_tags must be provided when min_length_cutoffs or max_length_cutoffs is enabled")
 
-for index, source_tag in enumerate(source_tags):
-    if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_.]*", source_tag):
-        raise ValueError(f"source_tags[{index}] is not a valid VCF FILTER identifier")
+if source_tags:
+    if len(set(source_tags)) != len(source_tags):
+        raise ValueError("source_tags must be unique")
+    for index, source_tag in enumerate(source_tags):
+        if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_.]*", source_tag):
+            raise ValueError(f"source_tags[{index}] is not a valid VCF FILTER identifier")
 
-    min_length = inputs["min_length_cutoffs"][index]
-    max_length = inputs["max_length_cutoffs"][index]
-    if min_length < 0:
-        raise ValueError(f"min_length_cutoffs[{index}] must be nonnegative")
-    if max_length < 0:
-        raise ValueError(f"max_length_cutoffs[{index}] must be nonnegative")
-    if min_length > max_length:
-        raise ValueError(f"min_length_cutoffs[{index}] must be less than or equal to max_length_cutoffs[{index}]")
+for name in ("min_length_cutoffs", "max_length_cutoffs"):
+    for index, cutoff in enumerate(inputs[name]):
+        if cutoff < 0:
+            raise ValueError(f"{name}[{index}] must be nonnegative")
+
+if inputs["min_length_cutoffs"] and inputs["max_length_cutoffs"]:
+    for index, (min_length, max_length) in enumerate(zip(
+        inputs["min_length_cutoffs"],
+        inputs["max_length_cutoffs"],
+    )):
+        if min_length > max_length:
+            raise ValueError(
+                f"min_length_cutoffs[{index}] must be less than or equal to max_length_cutoffs[{index}]"
+            )
 CODE
     >>>
 
@@ -368,8 +446,8 @@ task AddLengthFilters {
         File vcf
         File vcf_idx
         String source_tag
-        Int min_length_cutoff
-        Int max_length_cutoff
+        Int? min_length_cutoff
+        Int? max_length_cutoff
         Array[String] source_tags
         Array[Int] min_length_cutoffs
         Array[Int] max_length_cutoffs
@@ -389,17 +467,16 @@ min_length_cutoffs = json.load(open("~{write_json(min_length_cutoffs)}"))
 max_length_cutoffs = json.load(open("~{write_json(max_length_cutoffs)}"))
 
 with open("length_filter_headers.txt", "w") as output:
-    for source_tag, min_length_cutoff, max_length_cutoff in zip(
-        source_tags,
-        min_length_cutoffs,
-        max_length_cutoffs,
-    ):
-        output.write(
-            f'##FILTER=<ID=SMALL_{source_tag},Description="Allele length is below {min_length_cutoff}">\\n'
-        )
-        output.write(
-            f'##FILTER=<ID=LARGE_{source_tag},Description="Allele length is above {max_length_cutoff}">\\n'
-        )
+    if min_length_cutoffs:
+        for source_tag, min_length_cutoff in zip(source_tags, min_length_cutoffs):
+            output.write(
+                f'##FILTER=<ID=SMALL_{source_tag},Description="Allele length is below {min_length_cutoff}">\\n'
+            )
+    if max_length_cutoffs:
+        for source_tag, max_length_cutoff in zip(source_tags, max_length_cutoffs):
+            output.write(
+                f'##FILTER=<ID=LARGE_{source_tag},Description="Allele length is above {max_length_cutoff}">\\n'
+            )
 CODE
 
         bcftools view -h ~{vcf} | grep "^##" > header.txt
@@ -409,11 +486,15 @@ CODE
         bcftools reheader -h header.txt ~{vcf} | bcftools view -Oz -o reheader.vcf.gz
         input_vcf=reheader.vcf.gz
 
-        bcftools filter --mode + -s SMALL_~{source_tag} -e 'abs(INFO/allele_length) < ~{min_length_cutoff}' -Oz -o min_filtered.vcf.gz "$input_vcf"
-        input_vcf=min_filtered.vcf.gz
+        if [ "~{defined(min_length_cutoff)}" = "true" ]; then
+            bcftools filter --mode + -s SMALL_~{source_tag} -e 'abs(INFO/allele_length) < ~{select_first([min_length_cutoff, 0])}' -Oz -o min_filtered.vcf.gz "$input_vcf"
+            input_vcf=min_filtered.vcf.gz
+        fi
 
-        bcftools filter --mode + -s LARGE_~{source_tag} -e 'abs(INFO/allele_length) > ~{max_length_cutoff}' -Oz -o max_filtered.vcf.gz "$input_vcf"
-        input_vcf=max_filtered.vcf.gz
+        if [ "~{defined(max_length_cutoff)}" = "true" ]; then
+            bcftools filter --mode + -s LARGE_~{source_tag} -e 'abs(INFO/allele_length) > ~{select_first([max_length_cutoff, 0])}' -Oz -o max_filtered.vcf.gz "$input_vcf"
+            input_vcf=max_filtered.vcf.gz
+        fi
 
         mv "$input_vcf" ~{prefix}.vcf.gz
         tabix -p vcf ~{prefix}.vcf.gz
