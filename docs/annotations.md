@@ -1,4 +1,6 @@
 # Annotations
+This document describes the INFO and FORMAT fields and FILTER values present in the annotated callset VCFs.
+
 
 ## INFO Fields
 - `allele_length`: Length of variant - positive for insertions, negative for deletions and 0 for SNVs.

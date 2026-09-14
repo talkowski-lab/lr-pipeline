@@ -1,7 +1,8 @@
 # Workflows
+This document describes each WDL workflow in the pipeline, including its purpose, inputs and outputs.
+
 
 ## Annotations
-
 ### [AnnotateAF](https://github.com/broadinstitute/gatk-sv/blob/kj_project_gnomad_lr/wdl/AnnotateAF.wdl)
 This workflow leverages [AnnotateVcf](https://github.com/broadinstitute/gatk-sv/blob/main/wdl/AnnotateVcf.wdl) from the GATK-SV pipeline in order to annotate internal allele frequencies based on sample sexes and ancestries. It runs on all variants in the input VCF, including SVs.
 
@@ -20,7 +21,6 @@ Outputs:
 - `af_annotated_vcf`: Annotated VCF.
 - `af_annotated_vcf_idx`: Index for annotated VCF.
 
-
 ### [AnnotateAgeMetrics](../wdl/annotation/AnnotateAgeMetrics.wdl)
 This workflow computes the age distribution of carriers for every variant in the input VCF. For each sample it derives an age from a date-of-birth table relative to a fixed reference date, then tabulates the number of heterozygous and homozygous carriers of each allele that fall into a set of user-defined age bins, along with overflow `smaller` and `larger` bins for ages outside the configured range. It emits a TSV of these per-allele age-bin counts.
 
@@ -35,7 +35,6 @@ Inputs:
 
 Outputs:
 - `annotations_tsv_age`: TSV of per-allele carrier counts across the age bins.
-
 
 ### [AnnotateCallsetOverlap](../wdl/annotation/AnnotateCallsetOverlap.wdl)
 This workflow ingests a callset VCF and two truth VCFs - one of SNVs & indels and one of SVs - and finds matching variants across them, annotating each matched callset variant with the truth callset's AC/AF/AN and genotype-count fields. This enables benchmarking annotations against an existing cohort (e.g. gnomAD) and surfacing variants that are outliers relative to it.
@@ -870,17 +869,17 @@ Outputs:
 
 
 ### [PreprocessVcfs](../wdl/annotation_utils/PreprocessVcfs.wdl)
-This utility preprocesses and integrates one or more cohort VCFs into a single VCF. Each VCF is optionally normalized, sample-harmonized, annotated with core variant attributes and a source label, then length-filtered. Inputs specific to each VCF are aligned in parallel arrays. Sample IDs can optionally be swapped per VCF before preprocessing.
+This utility preprocesses and integrates one or more cohort VCFs into a single VCF. It first applies any per-VCF sample-ID swaps, then optionally subsets every VCF to the requested samples, and validates that the resulting sample sets are identical. Each VCF is then optionally normalized, annotated with core variant attributes and an optional source label, and length-filtered. Per-VCF controls are required arrays: an empty array disables that control for every VCF; a non-empty array must align with `vcfs`.
 
 Inputs:
 - `Array[File] vcfs`: Cohort VCFs to preprocess and merge.
 - `Array[File] vcf_idxs`: Indexes for `vcfs`.
-- `Array[String] source_tags`: `SOURCE` values to apply to `vcfs`; aligned with `vcfs`.
-- `Array[Boolean] normalize_vcfs`: Whether to normalize each VCF; aligned with `vcfs`.
-- `Array[File?] swap_sample_lists`: Optional sample-ID swap maps to apply before preprocessing each VCF; aligned with `vcfs`.
-- `Array[Int] min_length_cutoffs`: Minimum absolute allele lengths for `vcfs`; calls below the corresponding cutoff receive the `SMALL_{source_tags[i]}` filter.
-- `Array[Int] max_length_cutoffs`: Maximum absolute allele lengths for `vcfs`; calls above the corresponding cutoff receive the `LARGE_{source_tags[i]}` filter.
-- `Array[String]? sample_ids`: Optional samples to retain. When absent, all input VCFs must contain the same samples.
+- `Array[Boolean] normalize_vcfs`: Per-VCF normalization settings. `[]` disables normalization; otherwise aligned with `vcfs`.
+- `Array[String] source_tags`: Per-VCF `SOURCE` values. `[]` disables source tagging; otherwise aligned with `vcfs`. Required when either length-cutoff array is non-empty.
+- `Array[File] swap_sample_lists`: Per-VCF sample-ID swap maps, applied before sample subsetting. `[]` disables swapping; otherwise aligned with `vcfs`. A zero-byte map means no swap for that VCF.
+- `Array[Int] min_length_cutoffs`: Per-VCF minimum absolute allele lengths. `[]` disables minimum-length filtering; otherwise aligned with `vcfs`. Calls with `abs(allele_length)` strictly below the corresponding cutoff receive `SMALL_{source_tags[i]}`.
+- `Array[Int] max_length_cutoffs`: Per-VCF maximum absolute allele lengths. `[]` disables maximum-length filtering; otherwise aligned with `vcfs`. Calls with `abs(allele_length)` strictly above the corresponding cutoff receive `LARGE_{source_tags[i]}`.
+- `Array[String] sample_ids`: Samples to retain in every VCF. `[]` skips sample subsetting. After swaps and any subsetting, all input VCFs must contain identical sample sets.
 - `Int? records_per_shard`: Number of variants to keep within a single shard during processing.
 - `File ref_fa`: From [references](references.md).
 - `File ref_fai`: From [references](references.md).

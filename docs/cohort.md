@@ -1,4 +1,6 @@
 # Cohort
+This document describes the sample cohorts (HPRC, HGSVC, All of Us) used to build and validate the callset.
+
 
 ## HPRC/HGSVC
 - HPRC.

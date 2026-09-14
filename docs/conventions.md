@@ -1,4 +1,6 @@
 # Conventions
+This document defines the WDL and Python style conventions to follow when writing or editing code in this repository.
+
 
 ## WDL
 - Workflows should be structured in the following order, with each of the below separated by a blank line:

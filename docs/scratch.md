@@ -1,4 +1,6 @@
 # Processing Notes
+This document tracks ad hoc processing notes across callset generation versions.
+
 
 ## Callset Generation - V1
 - _FillFormatFields_ on _allele_type_annotated_vcf_.

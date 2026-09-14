@@ -1,7 +1,8 @@
 # Repository Structure
+This document is a map of the repository - how the WDL workflows are organized, how Dockerfiles are built and consumed, what lives under `scripts/`, and how CI/CD is wired up.
 
-This document is a map of the repository: how the WDL workflows are organized, how Dockerfiles are built and consumed, what lives under `scripts/`, and how CI/CD is wired up. See [Conventions](conventions.md) for the detailed WDL/Python style rules, and [Workflows](workflows.md) for per-workflow input/output documentation.
 
+## File Structure
 ```
 wdl/
   annotation/        # Main annotation workflows (prefix: Annotate*)
@@ -61,7 +62,7 @@ This script:
 - **`annotation/`** - standalone annotation scripts not tied to a Hail/VEP or MEI-specific workflow (e.g. genomic context annotation).
 
 
-## GitHub Actions / CI-CD
+## CI-CD
 Three CI workflows currently run on push/PR to `main`, each gated on the paths they check:
 
 | Workflow | Trigger paths | What it does |
