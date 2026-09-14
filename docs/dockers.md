@@ -2,8 +2,9 @@
 This document lists the Docker images used by the pipeline - repo-built, collaborator-built, and published third-party.
 
 
-## Repo dockers
+## Repository
 Built from [dockerfiles/](../dockerfiles/) in this repository.
+
 | Argument Name | Image | Dockerfile |
 |---|---|---|
 | `intact_mei_docker` | kj-dockers/intactmei:latest | `Dockerfile.intactmei` |
@@ -36,8 +37,10 @@ filename — a pre-existing drift from [repository-structure.md](repository-stru
 "Dockerfile suffix mechanically is the image name" rule. Works today since the
 attribute matches the actual pushed name; just don't assume the two always match.
 
-## Collaborator dockers
+
+## Collaborators
 Built/maintained by collaborators.
+
 | Argument Name | Image | Source |
 |---|---|---|
 | `sv_base_mini_docker` | gatk-sv/sv-base-mini:2024-10-25-... | GATK-SV |
@@ -50,8 +53,10 @@ Built/maintained by collaborators.
 | `minimap_docker` | eichlerlab/assembly_eval:0.2 | Eichler Lab |
 | `automop_docker` | broad-dsde-methods/automop:0.1 | Broad DSP |
 
+
 ## Published
 Public images.
+
 | Argument Name | Image | Source |
 |---|---|---|
 | `repeatmasker_docker` | dfam/tetools:1.8 | Dfam consortium |

@@ -1,7 +1,6 @@
 # References
 This document catalogs the external and internal reference files used by the pipeline, along with their sources.
 
-
 | Reference | Path | Source | Version |
 |---|---|---|---|
 | `coding_gtf` | [genes_grch38...CDS.gtf](gs://talkowski-sv-gnomad-output/zero/RerunAnno/genes_grch38_annotated_4_mapped_gencode_v39.CDS.gtf) | GENCODE annotations, via the gnomAD workspace | v39 |

@@ -1,8 +1,8 @@
 # Processing Notes
-This document tracks ad hoc processing notes across callset generation versions.
+This document tracks ad hoc processing notes across generated callsets.
 
 
-## Callset Generation - V1
+## V1
 - _FillFormatFields_ on _allele_type_annotated_vcf_.
 - _NormalizeDuplicationOrigins_.
 - Annotation: _AnnotateCallsetOverlap_, _AnnotateDbVaR_, _AnnotateGQMetrics_, _AnnotateSQMetrics_, _AnnotateSVAnnotate_, (AoU Only)_AnnotateAgeMetrics_.
@@ -15,7 +15,8 @@ This document tracks ad hoc processing notes across callset generation versions.
 	- Annotation: _AnnotateCallsetOverlap_, _AnnotateDbSNP_, _AnnotateDbVaR_, _AnnotateInSilicoPredictors_, _AnnotateVRS_.
 	- _AnnotateVcfCleared_.
 
-## Callset Generation - V2
+
+## V2
 - _NormalizeDuplicationOrigins_ on _allele_type_annotated_filled_vcf_.
 - Annotation: _AnnotateCallsetOverlap_, _AnnotateSVAnnotate_
 - _AnnotateVcfDownstream_.

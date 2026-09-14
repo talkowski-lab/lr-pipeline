@@ -15,7 +15,7 @@ This document defines the WDL and Python style conventions to follow when writin
 	3. Command.
 	4. Outputs.
 	5. Runtime settings - default parameters, followed by a select first with the runtime override, then the actual runtime block.
-- Inputs should be structured in the following order, with each of the below separated by a blank lines:
+- Inputs should be structured in the following order, with each of the below separated by a blank line:
 	1. Core input files that will be run through the workflow - e.g. VCFs being annotated, BAMs being analyzed etc (as well as their indexes if applicable). Also the contigs to be run on as well as the prefix.
 	2. Parameters that govern how the file will be processed - e.g. prefixes, modes, input arguments to tools being called, PEDs, metadata files etc.
 	3. Reference files - e.g. reference fasta, their indexes, catalogs used for annotations, etc.
@@ -24,7 +24,7 @@ This document defines the WDL and Python style conventions to follow when writin
 - Workflows should take in an input `prefix` that is passed to every task that creates output files, which should be used in conjunction with a descriptive suffix when creating outputs.
 - Workflow imports should not be renamed using the `as` operator.
 - Workflows should never contain any blank comments - e.g. `#########################`.
-- Workflows should never contain be any consecutive blank lines - i.e. they should have a maximum of one blank line at a time.
+- Workflows should never contain any consecutive blank lines - i.e. they should have a maximum of one blank line at a time.
 - Inputs passed to a task should not have blank lines between inputs.
 - The order of inputs passed to a task should reflect their order in the inputs on the workflow level.
 - Inputs passed to a task should have a space on either side of the `=` character.
@@ -64,7 +64,21 @@ This document defines the WDL and Python style conventions to follow when writin
 
 
 ## Python
-- All code should be compliant with `flake8`.
+- All code should be compliant with `flake8`, using the repository configuration: a 130-character maximum line length and `E203` and `W503` ignored.
+- Executable scripts should use `#!/usr/bin/env python3`.
+- Command-line scripts should use `argparse` to define and parse their arguments.
+- Scripts with an application entry point should define a `main()` function and call it from an `if __name__ == "__main__":` guard.
+- Functions and variables should use snake_case; module-level constants should use uppercase names.
+- File I/O should use context managers.
+- Use f-strings for string interpolation.
+- `pyproject.toml` sets Black's line length to 88. Use Black when formatting a script, but do not assume existing scripts are already Black-formatted.
+
+
+## Markdown
+- Do not leave blank lines between a heading and its content.
+- Use two blank lines before every `##` heading and before the first `###` heading in a `##` section.
+- Use one blank line between subsequent `###` sections.
+- Do not use thematic section dividers such as `---`.
 
 
 ## Workspace

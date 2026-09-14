@@ -1,12 +1,10 @@
-# Pipeline 
+# Pipeline
 This document describes how the gnomAD long-read callsets were generated end-to-end, covering three major phases: callset generation, callset processing phasing and callset annotation.
-
-
----
 
 
 ## 1. Callset Generation
 Raw reads were aligned to GRCh38 at 65x coverage using Minimap2, then downsampled to 30x with samtools. Three variant callsets were produced in parallel from the downsampled reads.
+
 
 ### SNV/Indel Callset
 1. **DeepVariant**: Call short variants per sample from the downsampled reads.
@@ -24,11 +22,9 @@ Raw reads were aligned to GRCh38 at 65x coverage using Minimap2, then downsample
    - Vamos v2.1.
 
 
----
-
-
 ## 2. Callset Processing
 The three callsets were integrated and phased. Steps were run as described below.
+
 
 ### VCF Integration
 1. **[PreprocessVcfs](../wdl/annotation_utils/PreprocessVcfs.wdl)** ([docs](workflows.md#preprocessvcfs)): Normalized, sample-harmonized, source-tagged and length-filtered one or more cohort VCFs, added core INFO fields (`allele_type`, `allele_length`), renamed variant IDs and merged them into a single cohort VCF.
@@ -57,11 +53,9 @@ Concurrently with phasing, the merged TRGT VCF was processed for downstream use:
 - **[CreateTRGTHistograms](../wdl/annotation_utils/CreateTRGTHistograms.wdl)** ([docs](workflows.md#createtrgthistograms)) - generated per-locus allele-frequency histograms for the TR browser.
 
 
----
-
-
 ## 3. Callset Annotation
 The phased cohort VCF was annotated in two broad stages: a set of parallel variant characterization workflows, followed by downstream integration and post-processing.
+
 
 ### Variant Characterization (parallel)
 The following workflows were run concurrently on the phased cohort VCF:
