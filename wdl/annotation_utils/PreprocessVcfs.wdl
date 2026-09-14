@@ -208,9 +208,6 @@ workflow PreprocessVcfs {
                                 source_tag = source_tags[vcf_index],
                                 min_length_cutoff = min_length_cutoffs[vcf_index],
                                 max_length_cutoff = max_length_cutoffs[vcf_index],
-                                source_tags = source_tags,
-                                min_length_cutoffs = min_length_cutoffs,
-                                max_length_cutoffs = max_length_cutoffs,
                                 prefix = "~{prefix}.vcf_~{vcf_index}.shard_~{shard_index}.length_filtered",
                                 docker = utils_docker,
                                 runtime_attr_override = runtime_attr_add_length_filters
@@ -224,9 +221,6 @@ workflow PreprocessVcfs {
                                 vcf_idx = source_annotated_vcf_idx,
                                 source_tag = source_tags[vcf_index],
                                 min_length_cutoff = min_length_cutoffs[vcf_index],
-                                source_tags = source_tags,
-                                min_length_cutoffs = min_length_cutoffs,
-                                max_length_cutoffs = max_length_cutoffs,
                                 prefix = "~{prefix}.vcf_~{vcf_index}.shard_~{shard_index}.length_filtered",
                                 docker = utils_docker,
                                 runtime_attr_override = runtime_attr_add_length_filters
@@ -240,9 +234,6 @@ workflow PreprocessVcfs {
                                 vcf_idx = source_annotated_vcf_idx,
                                 source_tag = source_tags[vcf_index],
                                 max_length_cutoff = max_length_cutoffs[vcf_index],
-                                source_tags = source_tags,
-                                min_length_cutoffs = min_length_cutoffs,
-                                max_length_cutoffs = max_length_cutoffs,
                                 prefix = "~{prefix}.vcf_~{vcf_index}.shard_~{shard_index}.length_filtered",
                                 docker = utils_docker,
                                 runtime_attr_override = runtime_attr_add_length_filters
@@ -448,9 +439,6 @@ task AddLengthFilters {
         String source_tag
         Int? min_length_cutoff
         Int? max_length_cutoff
-        Array[String] source_tags
-        Array[Int] min_length_cutoffs
-        Array[Int] max_length_cutoffs
         String prefix
         String docker
         RuntimeAttr? runtime_attr_override
@@ -459,32 +447,7 @@ task AddLengthFilters {
     command <<<
         set -euo pipefail
 
-        python3 <<'CODE'
-import json
-
-source_tags = json.load(open("~{write_json(source_tags)}"))
-min_length_cutoffs = json.load(open("~{write_json(min_length_cutoffs)}"))
-max_length_cutoffs = json.load(open("~{write_json(max_length_cutoffs)}"))
-
-with open("length_filter_headers.txt", "w") as output:
-    if min_length_cutoffs:
-        for source_tag, min_length_cutoff in zip(source_tags, min_length_cutoffs):
-            output.write(
-                f'##FILTER=<ID=SMALL_{source_tag},Description="Allele length is below {min_length_cutoff}">\\n'
-            )
-    if max_length_cutoffs:
-        for source_tag, max_length_cutoff in zip(source_tags, max_length_cutoffs):
-            output.write(
-                f'##FILTER=<ID=LARGE_{source_tag},Description="Allele length is above {max_length_cutoff}">\\n'
-            )
-CODE
-
-        bcftools view -h ~{vcf} | grep "^##" > header.txt
-        cat length_filter_headers.txt >> header.txt
-        bcftools view -h ~{vcf} | grep "^#CHROM" >> header.txt
-
-        bcftools reheader -h header.txt ~{vcf} | bcftools view -Oz -o reheader.vcf.gz
-        input_vcf=reheader.vcf.gz
+        input_vcf=~{vcf}
 
         if [ "~{defined(min_length_cutoff)}" = "true" ]; then
             bcftools filter --mode + -s SMALL_~{source_tag} -e 'abs(INFO/allele_length) < ~{select_first([min_length_cutoff, 0])}' -Oz -o min_filtered.vcf.gz "$input_vcf"
