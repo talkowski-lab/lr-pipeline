@@ -33,10 +33,11 @@ This document tracks ad hoc processing notes across generated callsets.
 - (HPRC/HGSVC Only) _PostprocessCallset-FilterAssemblySingletons_ --> hprc_hgsvc_vcf_V2.
 - _FilterLowCoverageRegions_ --> hprc_hgsvc_vcf_V3, aou_vcf_V2.
 - _AnnotateCallsetOverlap_.
-- _AnnotateVcfPostHoc_ --> hprc_hgsvc_vcf_V4, aou_vcf_V3.
+- _AnnotateVcfCallsetOverlap_ --> hprc_hgsvc_vcf_V4, aou_vcf_V3.
 - (AoU Only) _StripGenotypes_ --> aou_sites_vcf.
 - (HPRC/HGSVC Only)_FillFormatFields_ --> hprc_hgsvc_vcf_V5.
 - (HPRC/HGSVC Only) _FilterLowCoverageGenotypes_ --> hprc_hgsvc_vcf_V6.
 - (HPRC/HGSVC Only) _AnnotatSQMetrics_, _AnnotatGQMetrics_.
 - (HPRC/HGSVC Only) _AnnotateVcfGQSQ_ --> hprc_hgsvc_vcf_V7.
 - (HPRC/HGSVC Only) _AnnotateAFPostHoc_ --> hprc_hgsvc_vcf_V8.
+- TODO: _PostprocessTRLoci_.

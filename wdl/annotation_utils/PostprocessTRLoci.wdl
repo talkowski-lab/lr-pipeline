@@ -1,7 +1,9 @@
 version 1.0
 
 import "../annotation/AnnotateInSilicoPredictors.wdl"
+import "../annotation/AnnotateGQMetrics.wdl"
 import "../annotation/AnnotateRegion.wdl"
+import "../annotation/AnnotateSQMetrics.wdl"
 import "../annotation/AnnotateVRS.wdl"
 import "../tools/MergeHiPhaseCallsets.wdl"
 import "../utils/Structs.wdl"
@@ -19,8 +21,10 @@ workflow PostprocessTRLoci {
         Array[File] base_vcf_idxs
         String prefix
 
-        Boolean run_decrement_trv_ids
+        Boolean run_flag_homopolymer_trvs
+        Boolean run_normalize_ploidy
         Boolean replace_gnomad_str
+        File? ped
         File? swap_samples_base
         Int min_phase_edit_distance_delta = 10
         Float min_phase_similarity = 0.90
@@ -53,6 +57,9 @@ workflow PostprocessTRLoci {
         RuntimeAttr? runtime_attr_filter_merged
         RuntimeAttr? runtime_attr_prepare
         RuntimeAttr? runtime_attr_phase_replacements
+        RuntimeAttr? runtime_attr_replacement_sq_metrics
+        RuntimeAttr? runtime_attr_replacement_sd_metrics
+        RuntimeAttr? runtime_attr_replacement_ab_metrics
         RuntimeAttr? runtime_attr_vrs_annotate
         RuntimeAttr? runtime_attr_vrs_extract
         RuntimeAttr? runtime_attr_region_annotate
@@ -60,6 +67,8 @@ workflow PostprocessTRLoci {
         RuntimeAttr? runtime_attr_attach_annotations
         RuntimeAttr? runtime_attr_apply
     }
+
+    Boolean do_normalize_ploidy = run_normalize_ploidy && defined(ped)
 
     call DiscoverTRLoci {
         input:
@@ -135,7 +144,9 @@ workflow PostprocessTRLoci {
                     replacement_vcf = KeepMergedTRGTWithAC.retained_vcf,
                     replacement_vcf_idx = KeepMergedTRGTWithAC.retained_vcf_idx,
                     sample_ids = sample_ids,
-                    run_decrement_trv_ids = run_decrement_trv_ids,
+                    run_flag_homopolymer_trvs = run_flag_homopolymer_trvs,
+                    normalize_ploidy = do_normalize_ploidy,
+                    ped = ped,
                     prefix = "~{prefix}.~{contig}.replacement_seed",
                     docker = utils_docker,
                     runtime_attr_override = runtime_attr_prepare
@@ -156,6 +167,38 @@ workflow PostprocessTRLoci {
                     prefix = "~{prefix}.~{contig}.replacement_seed.trv_phasing",
                     docker = utils_docker,
                     runtime_attr_override = runtime_attr_phase_replacements
+            }
+
+            call AnnotateSQMetrics.CalculateSiteMetrics as CalculateReplacementSQMetrics {
+                input:
+                    vcf = PhaseReplacementLoci.phased_vcf,
+                    vcf_idx = PhaseReplacementLoci.phased_vcf_idx,
+                    prefix = "~{prefix}.~{contig}.replacement.sq_metrics",
+                    docker = utils_docker,
+                    runtime_attr_override = runtime_attr_replacement_sq_metrics
+            }
+
+            call AnnotateGQMetrics.GenerateGQAnnotationTsv as CalculateReplacementSDMetrics {
+                input:
+                    vcf = PhaseReplacementLoci.phased_vcf,
+                    vcf_idx = PhaseReplacementLoci.phased_vcf_idx,
+                    gq_field = "SD",
+                    gq_bins = [0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70, 75, 80, 85, 90, 95, 100],
+                    gq_variant_filter = ".",
+                    gq_larger_field = false,
+                    prefix = "~{prefix}.~{contig}.replacement.sd_metrics",
+                    docker = utils_docker,
+                    runtime_attr_override = runtime_attr_replacement_sd_metrics
+            }
+
+            call AnnotateGQMetrics.GenerateABAnnotationTsv as CalculateReplacementABMetrics {
+                input:
+                    vcf = PhaseReplacementLoci.phased_vcf,
+                    vcf_idx = PhaseReplacementLoci.phased_vcf_idx,
+                    ab_bins = [0.00, 0.05, 0.10, 0.15, 0.20, 0.25, 0.30, 0.35, 0.40, 0.45, 0.50, 0.55, 0.60, 0.65, 0.70, 0.75, 0.80, 0.85, 0.90, 0.95, 1.00],
+                    prefix = "~{prefix}.~{contig}.replacement.ab_metrics",
+                    docker = utils_docker,
+                    runtime_attr_override = runtime_attr_replacement_ab_metrics
             }
 
             call AnnotateVRS.AnnotateVcfWithVRS as AnnotateReplacementVRS {
@@ -209,16 +252,16 @@ workflow PostprocessTRLoci {
                 input:
                     vcf = PhaseReplacementLoci.phased_vcf,
                     vcf_idx = PhaseReplacementLoci.phased_vcf_idx,
-                    annotations_tsvs = [ExtractReplacementVRS.annotations_tsv, AnnotateReplacementRegion.annotations_tsv, AnnotateReplacementInSilico.annotations_tsv],
+                    annotations_tsvs = [AnnotateReplacementRegion.annotations_tsv, AnnotateReplacementInSilico.annotations_tsv, ExtractReplacementVRS.annotations_tsv, CalculateReplacementSQMetrics.annotations_tsv, CalculateReplacementSDMetrics.annotation_tsv, CalculateReplacementABMetrics.annotation_tsv],
                     prefix = "~{prefix}.~{contig}.replacement_annotated",
-                    info_names = [["VRS_Allele_IDs", "VRS_Error", "VRS_Starts", "VRS_Ends", "VRS_States", "VRS_Lengths", "VRS_RepeatSubunitLengths"], ["REGION"], ["cadd_raw_score", "cadd_phred", "pangolin_largest", "revel_max", "phylop", "spliceai_ds_max"]],
-                    info_descriptions = [["VRS allele identifiers", "VRS annotation error", "VRS start positions", "VRS end positions", "VRS allele states", "VRS allele lengths", "VRS repeat subunit lengths"], ["Genomic context of variant"], ["CADD raw score", "CADD PHRED score", "Largest Pangolin delta score", "Maximum REVEL score", "PhyloP score", "Maximum SpliceAI delta score"]],
-                    info_types = [["String", "String", "Integer", "Integer", "String", "String", "String"], ["String"], ["Float", "Float", "Float", "Float", "Float", "Float"]],
-                    info_numbers = [["R", ".", "R", "R", ".", ".", "."], ["1"], ["1", "1", "1", "1", "1", "1"]],
+                    info_names = [["REGION"], ["cadd_raw_score", "cadd_phred", "pangolin_largest", "revel_max", "phylop", "spliceai_ds_max"], ["VRS_Allele_IDs", "VRS_Error", "VRS_Starts", "VRS_Ends", "VRS_States", "VRS_Lengths", "VRS_RepeatSubunitLengths"], ["inbreeding_coeff", "AS_pab_max", "AS_QUALapprox", "AS_QD", "AS_VarDP", "HWE"], ["sd_hist_all_bin_freq", "sd_hist_alt_bin_freq"], ["ab_hist_alt_bin_freq"]],
+                    info_descriptions = [["Genomic context of variant"], ["CADD raw score", "CADD PHRED score", "Largest Pangolin delta score", "Maximum REVEL score", "PhyloP score", "Maximum SpliceAI delta score"], ["VRS allele identifiers", "VRS annotation error", "VRS start positions", "VRS end positions", "VRS allele states", "VRS allele lengths", "VRS repeat subunit lengths"], ["Inbreeding coefficient, the excess heterozygosity at a variant site, computed as 1 - (the number of heterozygous genotypes)/(the number of heterozygous genotypes expected under Hardy-Weinberg equilibrium).", "Allele-specific maximum p-value over callset for binomial test of observed allele balance for a heterozygous genotype, given expectation of AB=0.5.", "Allele-specific sum of PL[0] values; used to approximate the QUAL score.", "Allele-specific variant call confidence normalized by depth of sample reads supporting a variant.", "Allele-specific depth over variant genotypes (does not include depth of reference samples).", "Hardy-Weinberg equilibrium p-value."], ["Histogram for SD calculated on high quality genotypes; bin edges are: 0|5|10|15|20|25|30|35|40|45|50|55|60|65|70|75|80|85|90|95|100.", "Histogram for SD in heterozygous individuals calculated on high quality genotypes; bin edges are: 0|5|10|15|20|25|30|35|40|45|50|55|60|65|70|75|80|85|90|95|100."], ["Histogram for AB in heterozygous individuals calculated on high quality genotypes; bin edges are: 0.00|0.05|0.10|0.15|0.20|0.25|0.30|0.35|0.40|0.45|0.50|0.55|0.60|0.65|0.70|0.75|0.80|0.85|0.90|0.95|1.00."]],
+                    info_types = [["String"], ["Float", "Float", "Float", "Float", "Float", "Float"], ["String", "String", "Integer", "Integer", "String", "String", "String"], ["Float", "Float", "Integer", "Float", "Integer", "Float"], ["String", "String"], ["String"]],
+                    info_numbers = [["1"], ["1", "1", "1", "1", "1", "1"], ["R", ".", "R", "R", ".", ".", "."], ["A", "A", "A", "A", "A", "1"], ["1", "1"], ["1"]],
                     subset_vcf_strings = [],
                     awk_tsv_conditions = [],
-                    subset_tsv_columns = [[6, 7, 8, 9, 10, 11, 12], [6], [6, 7, 8, 9, 10, 11]],
-                    strip_info_fields_per_tsv = [false, false, false],
+                    subset_tsv_columns = [[6], [6, 7, 8, 9, 10, 11], [6, 7, 8, 9, 10, 11, 12], [6, 7, 8, 9, 10, 11], [6, 7], [6]],
+                    strip_info_fields_per_tsv = [false, false, false, false, false, false],
                     docker = utils_docker,
                     runtime_attr_override = runtime_attr_attach_annotations
             }
@@ -308,7 +351,8 @@ def overlaps(rec, start, stop):  # noqa: E302
     return rec.pos <= stop and record_end(rec) >= start
 
 def trid_text(rec):  # noqa: E302
-    return '|'.join(values(rec.info.get('TRID')))
+    # Preserve VCF comma separation within one INFO/TRID field.
+    return ','.join(values(rec.info.get('TRID')))
 
 def nonref_allele_count(rec):  # noqa: E302
     return sum(
@@ -402,8 +446,8 @@ with open('~{prefix}.trv_catalog_match.tsv', 'w') as out:
             continue
         out.write(
             f'{locus["locus_id"]}\t{explorers}\ttrue\t'
-            f'{",".join(locus["main_trids"]) or "."}\t{str(locus["main_strict"]).lower()}\t'
-            f'{",".join(locus["trgt_trids"]) or "."}\t{str(locus["trgt_strict"]).lower()}\t'
+            f'{"|".join(locus["main_trids"]) or "."}\t{str(locus["main_strict"]).lower()}\t'
+            f'{"|".join(locus["trgt_trids"]) or "."}\t{str(locus["trgt_strict"]).lower()}\t'
             f'{str(locus["trgt_ac"] >= 1).lower()}\n'
         )
 
@@ -591,7 +635,9 @@ task PrepareReplacementLoci {
         File replacement_vcf
         File replacement_vcf_idx
         Array[String] sample_ids
-        Boolean run_decrement_trv_ids
+        Boolean run_flag_homopolymer_trvs
+        Boolean normalize_ploidy
+        File? ped
         String prefix
         String docker
         RuntimeAttr? runtime_attr_override
@@ -629,15 +675,68 @@ def record_end(rec):  # noqa: E302
 def overlap(left, right):  # noqa: E302
     return max(0, min(record_end(left), record_end(right)) - max(left.pos, right.pos) + 1)
 
-def decrement_trv_id(trv_id):  # noqa: E302
-    """Match PostprocessCallset decrementing for only newly introduced TRVs."""
-    head, _, tail = trv_id.rpartition('-')
-    if not head.endswith('-TRV'):
-        return trv_id
-    try:
-        return f'{head}-{int(tail) - 1}'
-    except ValueError:
-        return trv_id
+def shortest_motif_length(rec):  # noqa: E302
+    """Match PostprocessCallset: a shortest MOTIFS element of length one is homopolymer."""
+    motifs = rec.info.get('MOTIFS')
+    if motifs is None:
+        return None
+    raw_values = motifs if isinstance(motifs, (list, tuple)) else [motifs]
+    motif_values = [
+        part
+        for value in raw_values if value is not None
+        for part in str(value).split(',') if part and part != '.'
+    ]
+    return min((len(motif) for motif in motif_values), default=None)
+
+def parse_ped(path):  # noqa: E302
+    """Read PED sex codes using the same mapping as PostprocessCallset."""
+    sex_by_sample = {}
+    with open(path) as handle:
+        for line in handle:
+            fields = line.strip().split()
+            if not fields:
+                continue
+            sample_id = fields[1]
+            sex_code = fields[4]
+            if sex_code == '1':
+                sex_by_sample[sample_id] = 'M'
+            elif sex_code == '2':
+                sex_by_sample[sample_id] = 'F'
+            else:
+                sex_by_sample[sample_id] = None
+    return sex_by_sample
+
+def clear_format_fields(sample_data):  # noqa: E302
+    sample_data['GT'] = (None, None)
+    sample_data.phased = False
+
+def right_align_unphased(gt):  # noqa: E302
+    if gt is None:
+        return gt
+    return tuple(sorted(gt, key=lambda allele: (allele is not None, allele if allele is not None else -1)))
+
+def make_male_hemizygous(gt, phased):  # noqa: E302
+    if gt is None:
+        return gt
+    alleles = list(gt)
+    called_positions = [index for index, allele in enumerate(alleles) if allele is not None]
+    if len(called_positions) <= 1:
+        return tuple(alleles)
+    alt_positions = [index for index, allele in enumerate(alleles) if allele is not None and allele > 0]
+    if phased:
+        if len(alt_positions) == 1:
+            keep_index = alt_positions[0]
+        elif alt_positions:
+            keep_index = alt_positions[-1]
+        else:
+            keep_index = called_positions[-1]
+        new_gt = [None] * len(alleles)
+        new_gt[keep_index] = alleles[keep_index]
+        return tuple(new_gt)
+    keep_allele = alleles[alt_positions[-1]] if alt_positions else alleles[called_positions[-1]]
+    new_gt = [None] * len(alleles)
+    new_gt[-1] = keep_allele
+    return right_align_unphased(tuple(new_gt))
 
 base = pysam.VariantFile('~{vcf}')  # noqa: E305
 incoming = pysam.VariantFile('replacement.normalized.vcf')
@@ -662,6 +761,16 @@ if 'PS' not in incoming.header.formats:
         'FORMAT',
         items=[('ID', 'PS'), ('Number', '1'), ('Type', 'Integer'), ('Description', 'Phase set')],
     )
+run_flag_homopolymer_trvs = ~{true="True" false="False" run_flag_homopolymer_trvs}
+normalize_ploidy = ~{true="True" false="False" normalize_ploidy}
+sex_by_sample = parse_ped('~{default="NONE" ped}') if normalize_ploidy else {}
+if run_flag_homopolymer_trvs and 'HOMOPOLYMER_TRV' not in incoming.header.info:
+    incoming.header.info.add(
+        'HOMOPOLYMER_TRV',
+        0,
+        'Flag',
+        'Tandem repeat call where the shortest motif has length 1.',
+    )
 header = incoming.header.copy()
 out = pysam.VariantFile('~{prefix}.vcf.gz', 'wz', header=header)
 mapping = open('~{prefix}.map.tsv', 'w')
@@ -671,8 +780,15 @@ samples = [line.rstrip('\n') for line in open('~{write_lines(sample_ids)}') if l
 if list(base.header.samples) != samples or list(header.samples) != samples:
     raise RuntimeError('Main, merged TRGT, and sample_ids sample order must match exactly')
 used_old_records = set()
+# Match IntegrateTRs.SetTrVariantIds exactly: count canonical IDs first, then
+# suffix every duplicated ID in input order (_1, _2, ...).
+id_counts = {}
+id_input = pysam.VariantFile('replacement.normalized.vcf')
+for record in id_input:
+    new_id = f'{record.chrom}-{record.pos}-TRV-{len(record.ref) - 1}'
+    id_counts[new_id] = id_counts.get(new_id, 0) + 1
+id_input.close()
 id_seen = {}
-run_decrement_trv_ids = ~{true="True" false="False" run_decrement_trv_ids}
 for rec in incoming:
     old_candidates = [
         old.copy()
@@ -687,15 +803,39 @@ for rec in incoming:
     if old_key in used_old_records:
         raise RuntimeError(f'Multiple replacement records selected main VCF TRV {old_key}')
     used_old_records.add(old_key)
-    # Match IntegrateTRs naming so enveloped records can point to a stable replacement ID.
-    # Decrement new replacement IDs before suffixing; existing main-VCF IDs remain untouched.
+    # Match IntegrateTRs.SetTrVariantIds naming so envelope links use canonical IDs.
     new_id = f'{rec.chrom}-{rec.pos}-TRV-{len(rec.ref) - 1}'
-    if run_decrement_trv_ids:
-        new_id = decrement_trv_id(new_id)
-    id_seen[new_id] = id_seen.get(new_id, 0) + 1
-    rec.id = new_id if id_seen[new_id] == 1 else f'{new_id}_{id_seen[new_id]}'
+    if id_counts[new_id] > 1:
+        id_seen[new_id] = id_seen.get(new_id, 0) + 1
+        rec.id = f'{new_id}_{id_seen[new_id]}'
+    else:
+        rec.id = new_id
     rec.info['allele_type'] = 'trv'
     rec.info['SOURCE'] = 'TRExplorer'
+    # Flag only replacement records; original main-VCF records never enter this task.
+    if run_flag_homopolymer_trvs and shortest_motif_length(rec) == 1:
+        rec.info['HOMOPOLYMER_TRV'] = True
+    # TRGT uses an unset FILTER; normalize only those replacements to PASS.
+    # Preserve any named filters emitted by TRGT.
+    if not tuple(rec.filter.keys()):
+        rec.filter.add('PASS')
+    if normalize_ploidy:
+        # Normalize only replacement genotypes; unchanged main-VCF records bypass this task.
+        for sample in samples:
+            sample_data = rec.samples[sample]
+            sample_sex = sex_by_sample.get(sample)
+            if rec.chrom == 'chrY' and sample_sex == 'F':
+                clear_format_fields(sample_data)
+                continue
+            if rec.chrom in {'chrX', 'chrY'} and sample_sex == 'M':
+                sample_data['GT'] = make_male_hemizygous(sample_data.get('GT'), sample_data.phased)
+            current_gt = sample_data.get('GT')
+            if current_gt is None:
+                sample_data['GT'] = (None, None)
+            elif len(current_gt) == 1:
+                sample_data['GT'] = (None, current_gt[0])
+            if not sample_data.phased:
+                sample_data['GT'] = right_align_unphased(sample_data.get('GT'))
     mapping.write(
         f'{record_key(rec)}\t{old_key}\t{best_overlap}\treplace\tsee_trv_phasing_summary_tsv'
         f'\t{best.contig}\t{best.pos}\t{record_end(best)}\n'
@@ -783,7 +923,7 @@ def trid_text(rec):  # noqa: E302
     value = rec.info.get('TRID')
     if value is None:
         return '.'
-    return '|'.join(str(item) for item in value) if isinstance(value, tuple) else str(value)
+    return ','.join(str(item) for item in value) if isinstance(value, tuple) else str(value)
 
 
 def contig_for(handle, contig):  # noqa: E302
@@ -803,10 +943,14 @@ def normalized_base_gt(call):  # noqa: E302
         return (0, 0), None
     if any(allele is not None and allele < 0 for allele in gt):
         return None, 'base_invalid_gt'
-    if not call.phased and (None in gt or gt[0] != gt[1]):
-        # 1/. and unphased heterozygotes have unknown haplotype orientation.
+    if None in gt:
+        # A phased partial call describes only one biological haplotype; do not
+        # fabricate the missing haplotype as reference for diploid phasing.
+        return None, 'base_partial_gt'
+    if not call.phased and gt[0] != gt[1]:
+        # Unphased heterozygotes have unknown haplotype orientation.
         return None, 'base_ambiguous_unphased_gt'
-    return tuple(0 if allele is None else allele for allele in gt), None
+    return tuple(gt), None
 
 
 def reconstruct_haplotypes(base_handle, contig, sample, rec):  # noqa: E302
@@ -849,6 +993,62 @@ def reconstruct_haplotypes(base_handle, contig, sample, rec):  # noqa: E302
             cursor = offset + len(base_rec.ref)
         output[haplotype].append(rec.ref[cursor:])
     return ''.join(output[0]), ''.join(output[1]), 'ok'
+
+
+def reconstruct_available_haploid(base_handle, contig, sample, rec):  # noqa: E302
+    """Reconstruct one fully observed biological base haplotype for a haploid replacement call."""
+    locus_start = rec.pos
+    locus_end = record_end(rec)
+    variants = []
+    viable_haplotypes = {0, 1}
+    for base_rec in base_handle.fetch(contig, rec.start, rec.stop):
+        call = base_rec.samples[sample]
+        gt = call.get('GT')
+        if not gt or len(gt) not in (1, 2):
+            return None, None, 'base_missing_gt'
+        if all(allele is None for allele in gt):
+            # Sparse cohort truth records use fully missing calls for noncarriers.
+            continue
+        if any(allele is not None and allele < 0 for allele in gt):
+            return None, None, 'base_invalid_gt'
+        if len(gt) == 2 and not call.phased and gt[0] != gt[1]:
+            return None, None, 'base_ambiguous_unphased_gt'
+        known = {0: gt[0]}
+        if len(gt) == 2:
+            known[1] = gt[1]
+        viable_haplotypes &= {index for index, allele in known.items() if allele is not None}
+        if not viable_haplotypes:
+            return None, None, 'base_partial_gt_no_complete_haplotype'
+        offset = base_rec.pos - locus_start
+        variants.append((offset, base_rec, known))
+    haplotype = min(viable_haplotypes)
+    sequence = []
+    cursor = 0
+    for offset, base_rec, known in sorted(variants, key=lambda item: item[0]):
+        allele = known.get(haplotype)
+        if allele is None:
+            return None, None, 'base_partial_gt_no_complete_haplotype'
+        if allele == 0:
+            continue
+        base_end = record_end(base_rec)
+        if base_rec.pos < locus_start or base_end > locus_end:
+            return None, None, 'base_boundary_overlapping_variant'
+        if allele > len(base_rec.alts or []):
+            return None, None, 'base_invalid_allele_index'
+        selected_alt = base_rec.alts[allele - 1]
+        if (not selected_alt or selected_alt == '*' or selected_alt.startswith('<')
+                or '[' in selected_alt or ']' in selected_alt):
+            return None, None, 'base_symbolic_allele'
+        offset = base_rec.pos - locus_start
+        if rec.ref[offset:offset + len(base_rec.ref)].upper() != base_rec.ref.upper():
+            return None, None, 'base_reference_mismatch'
+        if offset < cursor:
+            return None, None, 'base_overlapping_variants'
+        sequence.append(rec.ref[cursor:offset])
+        sequence.append(selected_alt)
+        cursor = offset + len(base_rec.ref)
+    sequence.append(rec.ref[cursor:])
+    return ''.join(sequence), haplotype, 'ok'
 
 
 def distance(left, right):  # noqa: E302
@@ -938,7 +1138,7 @@ audit_fields = [
     'base_vcf_haplotype_1_sequence', 'base_vcf_haplotype_2_sequence', 'replacement_input_GT',
     'replacement_vcf_haplotype_1_sequence', 'replacement_vcf_haplotype_2_sequence',
     'direct_edit_distance', 'swapped_edit_distance', 'min_phase_edit_distance_delta',
-    'min_phase_similarity', 'final_replacement_GT',
+    'min_phase_similarity', 'final_replacement_GT', 'phasing_status',
 ]
 output = pysam.VariantFile('~{prefix}.vcf.gz', 'wz', header=header)
 audit = open('~{prefix}.trv_phasing_summary.tsv', 'w')
@@ -970,13 +1170,61 @@ with output, audit:
                 'min_phase_edit_distance_delta': ~{min_phase_edit_distance_delta},
                 'min_phase_similarity': f'{~{min_phase_similarity}:.6f}',
                 'final_replacement_GT': gt_string(gt, False),
+                'phasing_status': 'not_replacement_record' if old_rec is None else 'pending',
             })
-            # Construct both sequences for every complete diploid call; only non-reference
-            # heterozygotes can use those comparisons to receive an orientation.
-            if not gt or len(gt) != 2 or any(allele is None for allele in gt):
+            # Haploid calls stay unphased, but retain their one observed sequence comparison.
+            if not gt:
+                row['phasing_status'] = 'replacement_missing_gt'
+                writer.writerow(row)
+                continue
+            if len(gt) == 1:
+                if gt[0] is None:
+                    row['phasing_status'] = 'replacement_missing_gt'
+                    writer.writerow(row)
+                    continue
+                if gt[0] < 0 or gt[0] > len(rec.alts or []):
+                    row['phasing_status'] = 'replacement_invalid_allele_index'
+                    writer.writerow(row)
+                    continue
+                trgt_hap = rec.ref if gt[0] == 0 else rec.alts[gt[0] - 1]
+                row['replacement_vcf_haplotype_1_sequence'] = trgt_hap
+                assignment = sample_to_base.get(sample)
+                if assignment is None:
+                    row['phasing_status'] = 'base_sample_not_found_haploid_unphased'
+                    writer.writerow(row)
+                    continue
+                base_index, base_sample = assignment
+                base_handle = base_handles[base_index]
+                base_contig = contig_for(base_handle, rec.contig)
+                if base_contig is None:
+                    row['phasing_status'] = 'base_contig_not_found_haploid_unphased'
+                    writer.writerow(row)
+                    continue
+                base_hap, base_haplotype, status = reconstruct_available_haploid(
+                    base_handle, base_contig, base_sample, rec)
+                if status != 'ok':
+                    row['phasing_status'] = f'{status}_haploid_unphased'
+                    writer.writerow(row)
+                    continue
+                if base_haplotype == 1:
+                    row['replacement_vcf_haplotype_1_sequence'] = '.'
+                row[f'replacement_vcf_haplotype_{base_haplotype + 1}_sequence'] = trgt_hap
+                row[f'base_vcf_haplotype_{base_haplotype + 1}_sequence'] = base_hap
+                direct = distance(trgt_hap, base_hap)
+                components = ['.', '.']
+                components[base_haplotype] = str(direct)
+                row['direct_edit_distance'] = f'{direct} ({components[0]}, {components[1]})'
+                row['phasing_status'] = 'haploid_replacement_unphased'
+                writer.writerow(row)
+                continue
+            # Construct both sequences for complete diploid calls; only non-reference
+            # heterozygotes can receive an orientation.
+            if len(gt) != 2 or any(allele is None for allele in gt):
+                row['phasing_status'] = 'replacement_incomplete_or_non_diploid_gt'
                 writer.writerow(row)
                 continue
             if any(allele < 0 or allele > len(rec.alts or []) for allele in gt):
+                row['phasing_status'] = 'replacement_invalid_allele_index'
                 writer.writerow(row)
                 continue
             phase_eligible = gt[0] != gt[1] and any(allele > 0 for allele in gt)
@@ -984,17 +1232,20 @@ with output, audit:
             row['replacement_vcf_haplotype_1_sequence'], row['replacement_vcf_haplotype_2_sequence'] = trgt_haps
             assignment = sample_to_base.get(sample)
             if assignment is None:
+                row['phasing_status'] = 'base_sample_not_found'
                 writer.writerow(row)
                 continue
             base_index, base_sample = assignment
             base_handle = base_handles[base_index]
             base_contig = contig_for(base_handle, rec.contig)
             if base_contig is None:
+                row['phasing_status'] = 'base_contig_not_found'
                 writer.writerow(row)
                 continue
             base_hap_1, base_hap_2, status = reconstruct_haplotypes(
                 base_handle, base_contig, base_sample, rec)
             if status != 'ok':
+                row['phasing_status'] = status
                 writer.writerow(row)
                 continue
             row['base_vcf_haplotype_1_sequence'] = base_hap_1
@@ -1014,19 +1265,28 @@ with output, audit:
                 similarity(swapped_1, trgt_haps[0], base_hap_2) >= ~{min_phase_similarity}
                 and similarity(swapped_2, trgt_haps[1], base_hap_1) >= ~{min_phase_similarity}
             )
-            if phase_eligible and abs(direct - swapped) >= ~{min_phase_edit_distance_delta}:
-                if direct < swapped and direct_passes_similarity:
-                    call['GT'] = gt
-                    call.phased = True
-                    call['PS'] = rec.pos
-                    row['final_replacement_GT'] = gt_string(gt, True)
-                    any_phased = True
-                elif swapped < direct and swapped_passes_similarity:
-                    call['GT'] = (gt[1], gt[0])
-                    call.phased = True
-                    call['PS'] = rec.pos
-                    row['final_replacement_GT'] = gt_string((gt[1], gt[0]), True)
-                    any_phased = True
+            if not phase_eligible:
+                row['phasing_status'] = 'not_nonref_heterozygote'
+            elif direct == swapped:
+                row['phasing_status'] = 'orientation_tie'
+            elif abs(direct - swapped) < ~{min_phase_edit_distance_delta}:
+                row['phasing_status'] = 'insufficient_edit_distance_delta'
+            elif direct < swapped and direct_passes_similarity:
+                call['GT'] = gt
+                call.phased = True
+                call['PS'] = rec.pos
+                row['final_replacement_GT'] = gt_string(gt, True)
+                row['phasing_status'] = 'phased_direct'
+                any_phased = True
+            elif swapped < direct and swapped_passes_similarity:
+                call['GT'] = (gt[1], gt[0])
+                call.phased = True
+                call['PS'] = rec.pos
+                row['final_replacement_GT'] = gt_string((gt[1], gt[0]), True)
+                row['phasing_status'] = 'phased_swapped'
+                any_phased = True
+            else:
+                row['phasing_status'] = 'winning_orientation_similarity_below_threshold'
             writer.writerow(row)
         if any_phased:
             rec.info['POSTHOC_BACKBONE_PHASED'] = True
@@ -1118,7 +1378,7 @@ def inclusive_overlap(rec, start, stop):  # noqa: E302
     return max(0, min(record_end(rec), stop) - max(rec.pos, start) + 1)
 
 def trid_text(rec):  # noqa: E302
-    return '|'.join(vals(rec.info.get('TRID')))
+    return ','.join(vals(rec.info.get('TRID')))
 
 def truth(value):  # noqa: E302
     return value.strip().lower() == 'true'
@@ -1360,7 +1620,7 @@ phase_header = (
     '\tbase_vcf_haplotype_1_sequence\tbase_vcf_haplotype_2_sequence\treplacement_input_GT'
     '\treplacement_vcf_haplotype_1_sequence\treplacement_vcf_haplotype_2_sequence'
     '\tdirect_edit_distance\tswapped_edit_distance\tmin_phase_edit_distance_delta'
-    '\tmin_phase_similarity\tfinal_replacement_GT\n'
+    '\tmin_phase_similarity\tfinal_replacement_GT\tphasing_status\n'
 )
 with open('~{prefix}.trv_phasing_summary.tsv', 'w') as out:
     if phase_audit_path and os.path.exists(phase_audit_path):
