@@ -1063,6 +1063,27 @@ Outputs:
 - `transferred_vcf_idx`: Index for the transferred VCF.
 - `missing_samples`: Samples with no matching base VCF.
 
+### [DeepVariant](../wdl/tools/DeepVariant.wdl)
+This tool calls small variants from region-sharded BAMs with CPU or GPU DeepVariant, then merges the per-shard VCFs and gVCFs. Every non-`alts` shard must have a matching region file. The workflow passes those regions to DeepVariant, so each shard emits only its assigned genomic regions; this prevents the duplicate off-shard zero-depth gVCF blocks produced by whole-reference calling on partial BAMs.
+
+Inputs:
+
+- `Array[Pair[String, Pair[File, File]]] how_to_shard_wg_for_calling`: Shard ID paired with BAM and BAI.
+- `Map[String, File] shard_region_files`: Region file for each non-`alts` shard ID. Each file contains one DeepVariant region literal per line; regions must be disjoint.
+- `File ref_fa` and `File ref_fai`: Reference FASTA and index.
+- `String prefix`: Output-file prefix.
+- `String model_type`: DeepVariant model, such as `PACBIO` or `ONT_R104`.
+- `String? haploid_contigs` and `File? par_regions_bed`: Optional DeepVariant allosome settings.
+- `Int threads` and `Int memory`: DeepVariant task resources.
+- `Boolean use_gpu`: Use GPU DeepVariant tasks (default `false`).
+- `String deepvariant_docker`, `String deepvariant_gpu_docker`, `String utils_docker`, `String resource_visualization_docker`: Container images for the four task types.
+
+Outputs:
+
+- `gvcf` and `gvcf_idx`: Merged gVCF and index.
+- `vcf` and `vcf_idx`: Merged VCF and index.
+- `resource_usage_logs`, `resource_usage_visualizations`, and `visual_reports`: Per-shard diagnostic outputs.
+
 ### [HiFiCNV](../wdl/tools/HiFiCNV.wdl)
 This tool runs PacBio [HiFiCNV](https://github.com/PacificBiosciences/HiFiCNV) on a sample's aligned HiFi BAM to call copy number variants from read depth. It outputs the CNV VCF, a copy-number bedgraph, a depth BigWig track and the tool's log.
 

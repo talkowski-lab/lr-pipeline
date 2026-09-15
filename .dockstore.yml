@@ -541,6 +541,15 @@ workflows:
         - /.*/
 
   - subclass: WDL
+    name: DeepVariant
+    primaryDescriptorPath: /wdl/tools/DeepVariant.wdl
+    filters:
+      branches:
+        - main
+      tags:
+        - /.*/
+
+  - subclass: WDL
     name: HiFiCNV
     primaryDescriptorPath: /wdl/tools/HiFiCNV.wdl
     filters:
