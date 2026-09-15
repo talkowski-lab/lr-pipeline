@@ -191,9 +191,6 @@ def in_subset(record):
 cutoffs = read_cutoffs(CUTOFFS)
 sexes = read_ped_sexes(PED)
 vcf_in = pysam.VariantFile(VCF)
-vcf_in.header.formats.add(
-    "FD", 1, "Integer", "Reassigned to no-call due to low coverage supporting initial genotpye"
-)
 vcf_samples = set(vcf_in.header.samples)
 
 cutoff_samples = set(cutoffs)
@@ -248,7 +245,7 @@ with open(OUTPUT_TSV, "w", newline="") as report_handle:
                     continue
                 filtered_samples.append(sample_id)
                 sample["GT"] = tuple(None for _ in gt)
-                sample["FD"] = 1
+                sample["RNC"] = tuple("D" for _ in gt)
                 sample.phased = False
 
         if filtered_samples:
