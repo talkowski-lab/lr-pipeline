@@ -152,6 +152,7 @@ workflow PostprocessTRLoci {
                     runtime_attr_override = runtime_attr_prepare
             }
 
+            if (PrepareReplacementLoci.retained_count > 0) {
             call PhaseReplacementLoci {
                 input:
                     vcf = PrepareReplacementLoci.prepared_vcf,
@@ -265,6 +266,7 @@ workflow PostprocessTRLoci {
                     docker = utils_docker,
                     runtime_attr_override = runtime_attr_attach_annotations
             }
+            }
         }
     }
 
@@ -286,8 +288,8 @@ workflow PostprocessTRLoci {
     output {
         File trv_postprocessed_vcf = ApplyTRLocusUpdates.trv_postprocessed_vcf
         File trv_postprocessed_vcf_idx = ApplyTRLocusUpdates.trv_postprocessed_vcf_idx
-        File trv_updated_vcf = ApplyTRLocusUpdates.trv_updated_vcf
-        File trv_updated_vcf_idx = ApplyTRLocusUpdates.trv_updated_vcf_idx
+        File trv_subsetted_vcf = ApplyTRLocusUpdates.trv_subsetted_vcf
+        File trv_subsetted_vcf_idx = ApplyTRLocusUpdates.trv_subsetted_vcf_idx
         File trv_catalog_match_tsv = ApplyTRLocusUpdates.trv_catalog_match_tsv
         File trv_phasing_summary_tsv = ApplyTRLocusUpdates.trv_phasing_summary_tsv
     }
@@ -448,7 +450,7 @@ with open('~{prefix}.trv_catalog_match.tsv', 'w') as out:
     out.write(
         'locus_id\tTRExplorerV1\thas_diseases\tinput_overlapping_trids'
         '\tinput_has_TRExplorerV1_substring\ttrgt_overlapping_trids'
-        '\ttrgt_has_TRExplorerV1_substring\ttrgt_matched_ac\n'
+        '\ttrgt_has_TRExplorerV1_substring\ttrgt_matching_allele_count\n'
     )
     for locus in loci:
         explorers = ','.join(value for value, _, _ in locus['explorers'])
@@ -756,6 +758,36 @@ def make_male_hemizygous(gt, phased):  # noqa: E302
     new_gt[-1] = keep_allele
     return right_align_unphased(tuple(new_gt))
 
+def normalize_replacement_genotypes(rec):  # noqa: E302
+    """Apply replacement-only ploidy normalization before recalculating AC."""
+    if not normalize_ploidy:
+        return
+    for sample in samples:
+        sample_data = rec.samples[sample]
+        sample_sex = sex_by_sample.get(sample)
+        if rec.chrom == 'chrY' and sample_sex == 'F':
+            clear_format_fields(sample_data)
+            continue
+        if rec.chrom in {'chrX', 'chrY'} and sample_sex == 'M':
+            sample_data['GT'] = make_male_hemizygous(sample_data.get('GT'), sample_data.phased)
+        current_gt = sample_data.get('GT')
+        if current_gt is None:
+            sample_data['GT'] = (None, None)
+        elif len(current_gt) == 1:
+            sample_data['GT'] = (None, current_gt[0])
+        if not sample_data.phased:
+            sample_data['GT'] = right_align_unphased(sample_data.get('GT'))
+
+def recompute_ac(rec):  # noqa: E302
+    """Derive allele-specific AC from final replacement GTs, never stale INFO."""
+    counts = [0] * len(rec.alts or [])
+    for sample_data in rec.samples.values():
+        for allele in sample_data.get('GT') or ():
+            if allele is not None and 0 < allele <= len(counts):
+                counts[allele - 1] += 1
+    rec.info['AC'] = tuple(counts)
+    return sum(counts)
+
 base = pysam.VariantFile('~{vcf}')  # noqa: E305
 incoming = pysam.VariantFile('replacement.normalized.vcf')
 if 'allele_type' not in incoming.header.info:
@@ -773,6 +805,11 @@ if 'allele_length' not in incoming.header.info:
     incoming.header.add_meta(
         'INFO',
         items=[('ID', 'allele_length'), ('Number', '1'), ('Type', 'Integer'), ('Description', 'Allele length')],
+    )
+if 'AC' not in incoming.header.info:
+    incoming.header.add_meta(
+        'INFO',
+        items=[('ID', 'AC'), ('Number', 'A'), ('Type', 'Integer'), ('Description', 'Number of alleles observed')],
     )
 if 'PS' not in incoming.header.formats:
     incoming.header.add_meta(
@@ -803,11 +840,19 @@ used_old_records = set()
 id_counts = {}
 id_input = pysam.VariantFile('replacement.normalized.vcf')
 for record in id_input:
+    normalize_replacement_genotypes(record)
+    if recompute_ac(record) < 1:
+        continue
     new_id = f'{record.chrom}-{record.pos}-TRV-{len(record.ref) - 1}'
     id_counts[new_id] = id_counts.get(new_id, 0) + 1
 id_input.close()
 id_seen = {}
 for rec in incoming:
+    # Recompute AC after replacement-only FORMAT/ploidy changes. A zero-AC
+    # record must never create a map row or displace an input TRV.
+    normalize_replacement_genotypes(rec)
+    if recompute_ac(rec) < 1:
+        continue
     old_candidates = [
         old.copy()
         for old in base.fetch(rec.contig, max(0, rec.start - 1), record_end(rec) + 1)
@@ -837,23 +882,6 @@ for rec in incoming:
     # Preserve any named filters emitted by TRGT.
     if not tuple(rec.filter.keys()):
         rec.filter.add('PASS')
-    if normalize_ploidy:
-        # Normalize only replacement genotypes; unchanged main-VCF records bypass this task.
-        for sample in samples:
-            sample_data = rec.samples[sample]
-            sample_sex = sex_by_sample.get(sample)
-            if rec.chrom == 'chrY' and sample_sex == 'F':
-                clear_format_fields(sample_data)
-                continue
-            if rec.chrom in {'chrX', 'chrY'} and sample_sex == 'M':
-                sample_data['GT'] = make_male_hemizygous(sample_data.get('GT'), sample_data.phased)
-            current_gt = sample_data.get('GT')
-            if current_gt is None:
-                sample_data['GT'] = (None, None)
-            elif len(current_gt) == 1:
-                sample_data['GT'] = (None, current_gt[0])
-            if not sample_data.phased:
-                sample_data['GT'] = right_align_unphased(sample_data.get('GT'))
     mapping.write(
         f'{record_key(rec)}\t{old_key}\t{best_overlap}\treplace\tsee_trv_phasing_summary_tsv'
         f'\t{best.contig}\t{best.pos}\t{record_end(best)}\n'
@@ -866,11 +894,13 @@ mapping.close()
 PY
         rm -f replacement.header replacement.normalized.vcf
         tabix -f -p vcf ~{prefix}.vcf.gz
+        bcftools view -H ~{prefix}.vcf.gz | wc -l
     >>>
     output {
         File prepared_vcf = "~{prefix}.vcf.gz"
         File prepared_vcf_idx = "~{prefix}.vcf.gz.tbi"
         File replacement_map_tsv = "~{prefix}.map.tsv"
+        Int retained_count = read_int(stdout())
     }
 
     RuntimeAttr default_attr = object {
@@ -1464,7 +1494,7 @@ with open('~{input_trv_catalog_match_tsv}') as handle:
     expected = [
         'locus_id', 'TRExplorerV1', 'has_diseases', 'input_overlapping_trids',
         'input_has_TRExplorerV1_substring', 'trgt_overlapping_trids',
-        'trgt_has_TRExplorerV1_substring', 'trgt_matched_ac',
+        'trgt_has_TRExplorerV1_substring', 'trgt_matching_allele_count',
     ]
     if header != expected:
         raise RuntimeError('Unexpected trv_catalog_match_tsv header')
@@ -1496,17 +1526,48 @@ replacement_path = '~{replacement_vcf}'
 map_path = '~{replacement_map_tsv}'
 replace_gnomad_str = '~{replace_gnomad_str}'.lower() == 'true'
 replacements = []
-replace_old = set()
+
+def recompute_ac(rec):  # noqa: E302
+    """Recalculate allele-specific AC after all replacement transformations."""
+    counts = [0] * len(rec.alts or [])
+    for sample_data in rec.samples.values():
+        for allele in sample_data.get('GT') or ():
+            if allele is not None and 0 < allele <= len(counts):
+                counts[allele - 1] += 1
+    rec.info['AC'] = tuple(counts)
+    return sum(counts)
+
 if replacement_path and os.path.exists(replacement_path):
     with pysam.VariantFile(replacement_path) as handle:
-        replacements = [rec.copy() for rec in handle]
+        if 'AC' not in handle.header.info:
+            handle.header.add_meta(
+                'INFO',
+                items=[('ID', 'AC'), ('Number', 'A'), ('Type', 'Integer'), ('Description', 'Number of alleles observed')],
+            )
+        # Final safety gate: annotations/phasing must not allow an AC=0 call to
+        # remove its mapped input TRV. Keep INFO/AC synchronized with GT.
+        for rec in handle:
+            rec = rec.copy()
+            if recompute_ac(rec) >= 1:
+                replacements.append(rec)
+
+retained_replacement_keys = {record_key(rec) for rec in replacements}
+map_rows_by_new = {}
 if map_path and os.path.exists(map_path):
     with open(map_path) as handle:
         next(handle, None)
         for line in handle:
             fields = line.rstrip('\n').split('\t')
-            if len(fields) >= 4 and fields[3] == 'replace' and fields[1] != '.':
-                replace_old.add(fields[1])
+            if len(fields) >= 4 and fields[3] == 'replace' and fields[0] in retained_replacement_keys:
+                map_rows_by_new.setdefault(fields[0], []).append(fields)
+
+# Every final replacement must map to exactly one original TRV. Map rows for
+# AC=0 records are deliberately ignored, preserving their original input call.
+for new_key in retained_replacement_keys:
+    rows = map_rows_by_new.get(new_key, [])
+    if len(rows) != 1 or rows[0][1] == '.':
+        raise RuntimeError(f'Retained replacement {new_key} requires exactly one map row')
+replace_old = {rows[0][1] for rows in map_rows_by_new.values()}
 
 base = pysam.VariantFile('~{vcf}', index_filename='~{vcf_idx}')
 header = base.header.copy()
@@ -1536,6 +1597,10 @@ if replace_gnomad_str:
             candidates = matching_candidates(replacements, row['explorers'])
             target_kind = 'replacement VCF'
         else:
+            continue
+        # A raw TRGT match can subsequently be dropped by final AC filtering.
+        # In that case no replacement is emitted and its original VCF record stays.
+        if not candidates and target_kind == 'replacement VCF':
             continue
         if not candidates:
             raise RuntimeError(
@@ -1689,14 +1754,14 @@ with open('~{prefix}.trv_phasing_summary.tsv', 'w') as out:
 PY
         rm -f ~{prefix}.pre_envelope.vcf
         tabix -f -p vcf ~{prefix}.trv_postprocessed.vcf.gz
-        bcftools view -i 'INFO/allele_type="trv"' -Oz -o ~{prefix}.trv_updated.vcf.gz ~{prefix}.trv_postprocessed.vcf.gz
-        tabix -f -p vcf ~{prefix}.trv_updated.vcf.gz
+        bcftools view -i 'INFO/allele_type="trv"' -Oz -o ~{prefix}.trv_subsetted.vcf.gz ~{prefix}.trv_postprocessed.vcf.gz
+        tabix -f -p vcf ~{prefix}.trv_subsetted.vcf.gz
     >>>
     output {
         File trv_postprocessed_vcf = "~{prefix}.trv_postprocessed.vcf.gz"
         File trv_postprocessed_vcf_idx = "~{prefix}.trv_postprocessed.vcf.gz.tbi"
-        File trv_updated_vcf = "~{prefix}.trv_updated.vcf.gz"
-        File trv_updated_vcf_idx = "~{prefix}.trv_updated.vcf.gz.tbi"
+        File trv_subsetted_vcf = "~{prefix}.trv_subsetted.vcf.gz"
+        File trv_subsetted_vcf_idx = "~{prefix}.trv_subsetted.vcf.gz.tbi"
         File trv_catalog_match_tsv = "~{prefix}.trv_catalog_match.tsv"
         File trv_phasing_summary_tsv = "~{prefix}.trv_phasing_summary.tsv"
     }
