@@ -5,8 +5,8 @@ import "../utils/Structs.wdl"
 
 workflow ValidateTRGTWithCatalog {
     input {
-        File trgt_full_merged_vcf
-        File trgt_full_merged_vcf_idx
+        File trgt_vcf
+        File trgt_vcf_idx
         Array[String] contigs
         String prefix
 
@@ -29,8 +29,8 @@ workflow ValidateTRGTWithCatalog {
     scatter (contig in contigs) {
         call Helpers.SubsetVcfToContig {
             input:
-                vcf = trgt_full_merged_vcf,
-                vcf_idx = trgt_full_merged_vcf_idx,
+                vcf = trgt_vcf,
+                vcf_idx = trgt_vcf_idx,
                 contig = contig,
                 prefix = "~{prefix}.~{contig}",
                 docker = utils_docker,

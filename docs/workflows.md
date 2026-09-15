@@ -505,8 +505,8 @@ Outputs:
 This utility validates that each TRGT variant's literal `CHROM`, `POS` and `INFO/END` values match columns 1, 2 and 3 of a TRGT catalog BED. It outputs an indexed VCF containing only variants without a matching catalog position, including records with a missing or malformed `END` tag. The VCF and compressed catalog are subset per contig; when `records_per_shard` is set, each contig VCF is additionally sharded by record count and validated in parallel.
 
 Inputs:
-- `File trgt_full_merged_vcf`: TRGT VCF to validate.
-- `File trgt_full_merged_vcf_idx`: Index for `trgt_full_merged_vcf`.
+- `File trgt_vcf`: TRGT VCF to validate.
+- `File trgt_vcf_idx`: Index for `trgt_vcf`.
 - `Array[String] contigs`: Contigs to validate within the input VCF and catalog.
 - `File trgt_catalog_bed_gz`: Gzipped TRGT catalog BED whose first three columns are `CHROM`, `POS` and `END`.
 - `Int? records_per_shard`: Number of variants to keep within a validation shard. When unset, each contig is processed as one shard.
@@ -821,7 +821,7 @@ Outputs:
 ### [PostprocessTRLoci](../wdl/annotation_utils/PostprocessTRLoci.wdl)
 This utility reconciles disease-associated `TRExplorerV1` catalog loci with one integrated contig VCF. Only catalog records whose `Diseases` value is a non-empty array are eligible; records with a missing, non-array, or empty value are ignored. It uses only literal `TRExplorerV1` substring matches against `INFO/TRID`, searches unmatched catalog loci in per-sample TRGT VCFs, merges recovered loci with TRGT, drops merged calls with `AC=0`, and replaces overlapping integrated TRVs. Replacement calls receive VRS, region, and in-silico annotations; these annotations run directly on only recovered calls and are not sharded.
 
-For each replaced, non-reference heterozygous TRGT genotype, it finds sample's matching truth/base VCF, reconstructs reference-relative sequence for both phased base haplotypes across replacement locus, and compares those sequences with both possible TRGT genotype orientations. It applies phase only when winning orientation improves total edit distance over alternative by at least `min_phase_edit_distance_delta` and its mean normalized haplotype similarity reaches `min_phase_similarity`; writes phased GT, sets `PS` to locus `POS`, and flags locus with `POSTHOC_BACKBONE_PHASED`. Reference, homozygous-alt, missing, and unresolved heterozygous calls remain unphased. It clears and reapplies `gnomAD_STR`, refreshes TR envelope tags, assigns replacement IDs exactly as `IntegrateTRs.SetTrVariantIds` (`contig-POS-TRV-(len(REF)-1)`, with `_1`, `_2`, ... on duplicates), and emits catalog-match and per-genotype TRV-phasing audit TSVs.
+For each replaced, non-reference heterozygous TRGT genotype, it finds sample's matching truth/base VCF, reconstructs reference-relative sequence for both phased base haplotypes across replacement locus, and compares those sequences with both possible TRGT genotype orientations. `aligned` compares base haplotype 1 to replacement haplotype 1 and base haplotype 2 to replacement haplotype 2; `unaligned` uses crossed haplotypes. It phases only a unique lower-distance orientation when that orientation's *summed* edit distance is at most `max_phase_edit_distance` and its length-weighted combined edit-distance percentage is at most `max_phase_edit_distance_pct`; equality passes. It writes phased GT, sets `PS` to locus `POS`, and flags locus with `POSTHOC_BACKBONE_PHASED`. Reference, homozygous-alt, missing, and unresolved heterozygous calls remain unphased. It clears and reapplies `gnomAD_STR`, refreshes TR envelope tags, assigns replacement IDs exactly as `IntegrateTRs.SetTrVariantIds` (`contig-POS-TRV-(len(REF)-1)`, with `_1`, `_2`, ... on duplicates), and emits catalog-match and per-genotype TRV-phasing audit TSVs.
 
 Inputs:
 - `File vcf` / `File vcf_idx`: Single-contig integrated cohort VCF and index.
@@ -832,15 +832,15 @@ Inputs:
 - `File? swap_samples_base`: Optional whitespace-delimited raw-to-canonical sample-ID map applied when assigning cohort samples to `base_vcfs`.
 - `File gnomad_tr_json`: TRExplorer catalog JSON.
 - `File ref_fa` / `File ref_fai`: Reference used by `trgt merge`.
-- `Int min_phase_edit_distance_delta`: Minimum total edit-distance improvement required before assigning a TRGT heterozygous genotype to base-VCF haplotype orientation (default `10`).
-- `Float min_phase_similarity`: Minimum mean normalized similarity required for winning orientation (default `0.90`). Each haplotype similarity is `1 - edit_distance / max(len(TRGT_haplotype), len(base_haplotype), 1)`, then the two values are averaged.
+- `Int max_phase_edit_distance`: Maximum allowed summed edit distance across both haplotype pairs in a unique winning orientation (default `10`).
+- `Float max_phase_edit_distance_pct`: Maximum allowed length-weighted combined edit-distance percentage across both haplotype pairs in a unique winning orientation (default `10.0`): `100 * (distance_1 + distance_2) / (max(len(replacement_haplotype_1), len(base_haplotype_1), 1) + max(len(replacement_haplotype_2), len(base_haplotype_2), 1))`.
 - `seqrepo_tar`, regional BEDs, and in-silico Hail table inputs: Resources used to annotate recovered calls.
 
 Outputs:
 - `trv_postprocessed_vcf` / `trv_postprocessed_vcf_idx`: Input-style contig VCF with recovered calls replacing old TRVs where applicable.
 - `trv_updated_vcf` / `trv_updated_vcf_idx`: All final `INFO/allele_type=trv` calls.
-- `trv_catalog_match_tsv`: Catalog-to-main/TRGT match audit, including `AC=0` drops.
-- `trv_phasing_summary_tsv`: One row per replaced non-reference heterozygous genotype, including TRGT and reconstructed base-haplotype sequences, edit distances and similarities for both orientations, threshold values, winning GT, and phase decision.
+- `trv_catalog_match_tsv`: Catalog-to-input/TRGT match audit, including numeric matched TRGT allele count (`0` indicates `AC=0`); rows with an input substring match leave all TRGT columns blank.
+- `trv_phasing_summary_tsv`: One row per replacement record and sample. Columns are `base_trid`, `replace_trid`, `sample_id`, input `base_gt`/`replace_gt`, base and replacement haplotype sequences, `edit_dist_aligned`, `edit_dist_unaligned`, winning-orientation `edit_dist_pct`, configured maxima, final VCF `final_gt`, and concise `status`. Distances are `sum (base_hap1 pair, base_hap2 pair)`.
 
 ### [PreprocessVcfs](../wdl/annotation_utils/PreprocessVcfs.wdl)
 This utility preprocesses and integrates one or more cohort VCFs into a single VCF. It first applies any per-VCF sample-ID swaps, then optionally subsets every VCF to the requested samples, and validates that the resulting sample sets are identical. Each VCF is then optionally normalized, annotated with core variant attributes and an optional source label, and length-filtered. Per-VCF controls are required arrays: an empty array disables that control for every VCF; a non-empty array must align with `vcfs`.

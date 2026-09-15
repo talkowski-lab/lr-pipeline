@@ -26,8 +26,8 @@ workflow PostprocessTRLoci {
         Boolean replace_gnomad_str
         File? ped
         File? swap_samples_base
-        Int min_phase_edit_distance_delta = 10
-        Float min_phase_similarity = 0.90
+        Int max_phase_edit_distance = 10
+        Float max_phase_edit_distance_pct = 10.0
 
         File gnomad_tr_json
         File ref_fa
@@ -162,8 +162,8 @@ workflow PostprocessTRLoci {
                     base_vcfs = base_vcfs,
                     base_vcf_idxs = base_vcf_idxs,
                     swap_samples_base = swap_samples_base,
-                    min_phase_edit_distance_delta = min_phase_edit_distance_delta,
-                    min_phase_similarity = min_phase_similarity,
+                    max_phase_edit_distance = max_phase_edit_distance,
+                    max_phase_edit_distance_pct = max_phase_edit_distance_pct,
                     prefix = "~{prefix}.~{contig}.replacement_seed.trv_phasing",
                     docker = utils_docker,
                     runtime_attr_override = runtime_attr_phase_replacements
@@ -412,6 +412,9 @@ for locus in loci:
     locus['trgt_strict'] = False
     locus['trgt_ac'] = 0
     locus['trgt_seen'] = set()
+    # A record can be returned by multiple TRExplorerV1 windows. Count its
+    # sample's non-reference alleles once, even when those windows overlap.
+    locus['trgt_strict_seen'] = set()
 
 # Open each per-sample VCF once, then query every eligible catalog interval.
 for i, path in enumerate(trgt_paths):
@@ -419,7 +422,9 @@ for i, path in enumerate(trgt_paths):
         if list(trgt.header.samples) != [sample_ids[i]]:
             raise RuntimeError(f'TRGT VCF {path} must contain only sample {sample_ids[i]}')
         for locus in loci:
-            if not locus['disease_eligible']:
+            # A strict input-VCF match takes precedence and needs no raw-TRGT
+            # lookup; leave the three TRGT report cells blank for that row.
+            if not locus['disease_eligible'] or locus['main_strict']:
                 continue
             for explorer, start, stop in locus['explorers']:
                 for rec in trgt.fetch('~{contig}', max(0, start - 1), stop + 1):
@@ -431,27 +436,40 @@ for i, path in enumerate(trgt_paths):
                         locus['trgt_seen'].add(trid)
                     if explorer in trid:
                         locus['trgt_strict'] = True
-                        locus['trgt_ac'] += nonref_allele_count(rec)
+                        record_identity = (
+                            i, rec.contig, rec.pos, record_end(rec), rec.ref,
+                            tuple(rec.alts or ()), trid,
+                        )
+                        if record_identity not in locus['trgt_strict_seen']:
+                            locus['trgt_ac'] += nonref_allele_count(rec)
+                            locus['trgt_strict_seen'].add(record_identity)
 
 with open('~{prefix}.trv_catalog_match.tsv', 'w') as out:
     out.write(
-        'locus_id\tTRExplorerV1\thas_diseases\tmain_overlapping_TRIDs'
-        '\tmain_has_TRExplorerV1_substring\ttrgt_overlapping_TRIDs'
-        '\ttrgt_has_TRExplorerV1_substring\ttrgt_matching_allele_count_ge_1\n'
+        'locus_id\tTRExplorerV1\thas_diseases\tinput_overlapping_trids'
+        '\tinput_has_TRExplorerV1_substring\ttrgt_overlapping_trids'
+        '\ttrgt_has_TRExplorerV1_substring\ttrgt_matched_ac\n'
     )
     for locus in loci:
         explorers = ','.join(value for value, _, _ in locus['explorers'])
         if not locus['disease_eligible']:
             out.write(f'{locus["locus_id"]}\t{explorers}\tfalse\t.\t.\t.\t.\t.\n')
             continue
+        if locus['main_strict']:
+            out.write(
+                f'{locus["locus_id"]}\t{explorers}\ttrue\t'
+                f'{"|".join(locus["main_trids"]) or "."}\ttrue\t\t\t\n'
+            )
+            continue
         out.write(
             f'{locus["locus_id"]}\t{explorers}\ttrue\t'
             f'{"|".join(locus["main_trids"]) or "."}\t{str(locus["main_strict"]).lower()}\t'
             f'{"|".join(locus["trgt_trids"]) or "."}\t{str(locus["trgt_strict"]).lower()}\t'
-            f'{str(locus["trgt_ac"] >= 1).lower()}\n'
+            f'{locus["trgt_ac"]}\n'
         )
 
-# Only true/false/true/true rows feed cohort merging and replacement.
+# Only disease-eligible, input-unmatched, strict TRGT matches with AC >= 1
+# feed cohort merging and replacement.
 with open('~{prefix}.trgt_match_keys.txt', 'w') as out:
     for locus in loci:
         if (locus['disease_eligible'] and not locus['main_strict']
@@ -886,8 +904,8 @@ task PhaseReplacementLoci {
         Array[File] base_vcfs
         Array[File] base_vcf_idxs
         File? swap_samples_base
-        Int min_phase_edit_distance_delta
-        Float min_phase_similarity
+        Int max_phase_edit_distance
+        Float max_phase_edit_distance_pct
         String prefix
         String docker
         RuntimeAttr? runtime_attr_override
@@ -1055,18 +1073,49 @@ def distance(left, right):  # noqa: E302
     return edlib.align(left.upper(), right.upper(), task='distance')['editDistance']
 
 
-def similarity(distance_value, left, right):  # noqa: E302
-    return 1.0 if not left and not right else 1.0 - distance_value / max(len(left), len(right))
+def format_distance(total, first, second):  # noqa: E302
+    return f'{total} ({first}, {second})'
+
+
+def combined_edit_distance_pct(first_distance, second_distance, first_left, first_right, second_left, second_right):  # noqa: E302
+    """Return the length-weighted percentage across both haplotype pairs."""
+    denominator_1 = max(len(first_left), len(first_right), 1)
+    denominator_2 = max(len(second_left), len(second_right), 1)
+    return 100.0 * (first_distance + second_distance) / (denominator_1 + denominator_2)
+
+
+def format_distance_pct(first_distance, second_distance, first_left, first_right, second_left, second_right):  # noqa: E302
+    """Report weighted total percent, followed by per-haplotype percentages."""
+    denominator_1 = max(len(first_left), len(first_right), 1)
+    denominator_2 = max(len(second_left), len(second_right), 1)
+    first_pct = 100.0 * first_distance / denominator_1
+    second_pct = 100.0 * second_distance / denominator_2
+    total = combined_edit_distance_pct(
+        first_distance, second_distance, first_left, first_right, second_left, second_right)
+    return f'{total:.2f}% ({first_pct:.2f}%, {second_pct:.2f}%)'
+
+
+def audit_status(value):  # noqa: E302
+    """Keep reconstruction failures readable in the compact per-call audit."""
+    return {
+        'base_ambiguous_unphased_gt': 'base_unphased_gt',
+        'base_partial_gt_no_complete_haplotype': 'base_partial_gt',
+        'base_boundary_overlapping_variant': 'base_boundary_overlap',
+        'base_invalid_allele_index': 'base_invalid_allele',
+        'base_symbolic_allele': 'base_symbolic',
+        'base_reference_mismatch': 'base_ref_mismatch',
+        'base_overlapping_variants': 'base_overlap',
+    }.get(value, value)
 
 
 base_paths = [line.strip() for line in open('~{write_lines(base_vcfs)}') if line.strip()]
 base_idx_paths = [line.strip() for line in open('~{write_lines(base_vcf_idxs)}') if line.strip()]
 if len(base_paths) != len(base_idx_paths):
     raise RuntimeError('base_vcfs and base_vcf_idxs must have equal lengths')
-if ~{min_phase_edit_distance_delta} < 0:
-    raise RuntimeError('min_phase_edit_distance_delta must be non-negative')
-if not 0.0 <= ~{min_phase_similarity} <= 1.0:
-    raise RuntimeError('min_phase_similarity must be between 0 and 1')
+if ~{max_phase_edit_distance} < 0:
+    raise RuntimeError('max_phase_edit_distance must be non-negative')
+if not 0.0 <= ~{max_phase_edit_distance_pct} <= 100.0:
+    raise RuntimeError('max_phase_edit_distance_pct must be between 0 and 100')
 
 sample_swaps = {}
 swap_path = '~{swap_samples_base}'
@@ -1134,11 +1183,10 @@ if 'PS' not in header.formats:
     )
 
 audit_fields = [
-    'original_TRID', 'replacement_TRID', 'sample_id', 'original_GT',
-    'base_vcf_haplotype_1_sequence', 'base_vcf_haplotype_2_sequence', 'replacement_input_GT',
-    'replacement_vcf_haplotype_1_sequence', 'replacement_vcf_haplotype_2_sequence',
-    'direct_edit_distance', 'swapped_edit_distance', 'min_phase_edit_distance_delta',
-    'min_phase_similarity', 'final_replacement_GT', 'phasing_status',
+    'base_trid', 'replace_trid', 'sample_id', 'base_gt', 'replace_gt',
+    'base_hap1_seq', 'base_hap2_seq', 'replace_hap1_seq', 'replace_hap2_seq',
+    'edit_dist_aligned', 'edit_dist_unaligned', 'edit_dist_pct',
+    'max_edit_dist', 'max_edit_dist_pct', 'final_gt', 'status',
 ]
 output = pysam.VariantFile('~{prefix}.vcf.gz', 'wz', header=header)
 audit = open('~{prefix}.trv_phasing_summary.tsv', 'w')
@@ -1161,132 +1209,141 @@ with output, audit:
                 call['PS'] = None
             row = dict.fromkeys(audit_fields, '.')
             row.update({
-                'original_TRID': original_trid,
-                'replacement_TRID': replacement_trid,
+                'base_trid': original_trid,
+                'replace_trid': replacement_trid,
                 'sample_id': sample,
-                'original_GT': gt_string(old_rec.samples[sample].get('GT'), old_rec.samples[sample].phased)
+                'base_gt': gt_string(old_rec.samples[sample].get('GT'), old_rec.samples[sample].phased)
                     if old_rec is not None else '.',
-                'replacement_input_GT': gt_string(gt, False),
-                'min_phase_edit_distance_delta': ~{min_phase_edit_distance_delta},
-                'min_phase_similarity': f'{~{min_phase_similarity}:.6f}',
-                'final_replacement_GT': gt_string(gt, False),
-                'phasing_status': 'not_replacement_record' if old_rec is None else 'pending',
+                'replace_gt': gt_string(gt, False),
+                'max_edit_dist': ~{max_phase_edit_distance},
+                'max_edit_dist_pct': f'{~{max_phase_edit_distance_pct}:.2f}%',
+                'final_gt': gt_string(gt, False),
+                'status': 'not_replacement' if old_rec is None else 'pending',
             })
             # Haploid calls stay unphased, but retain their one observed sequence comparison.
             if not gt:
-                row['phasing_status'] = 'replacement_missing_gt'
+                row['status'] = 'missing_gt'
                 writer.writerow(row)
                 continue
             if len(gt) == 1:
                 if gt[0] is None:
-                    row['phasing_status'] = 'replacement_missing_gt'
+                    row['status'] = 'missing_gt'
                     writer.writerow(row)
                     continue
                 if gt[0] < 0 or gt[0] > len(rec.alts or []):
-                    row['phasing_status'] = 'replacement_invalid_allele_index'
+                    row['status'] = 'invalid_gt'
                     writer.writerow(row)
                     continue
                 trgt_hap = rec.ref if gt[0] == 0 else rec.alts[gt[0] - 1]
-                row['replacement_vcf_haplotype_1_sequence'] = trgt_hap
+                row['replace_hap1_seq'] = trgt_hap
                 assignment = sample_to_base.get(sample)
                 if assignment is None:
-                    row['phasing_status'] = 'base_sample_not_found_haploid_unphased'
+                    row['status'] = 'base_sample_missing'
                     writer.writerow(row)
                     continue
                 base_index, base_sample = assignment
                 base_handle = base_handles[base_index]
                 base_contig = contig_for(base_handle, rec.contig)
                 if base_contig is None:
-                    row['phasing_status'] = 'base_contig_not_found_haploid_unphased'
+                    row['status'] = 'base_contig_missing'
                     writer.writerow(row)
                     continue
                 base_hap, base_haplotype, status = reconstruct_available_haploid(
                     base_handle, base_contig, base_sample, rec)
                 if status != 'ok':
-                    row['phasing_status'] = f'{status}_haploid_unphased'
+                    row['status'] = audit_status(status)
                     writer.writerow(row)
                     continue
                 if base_haplotype == 1:
-                    row['replacement_vcf_haplotype_1_sequence'] = '.'
-                row[f'replacement_vcf_haplotype_{base_haplotype + 1}_sequence'] = trgt_hap
-                row[f'base_vcf_haplotype_{base_haplotype + 1}_sequence'] = base_hap
+                    row['replace_hap1_seq'] = '.'
+                row[f'replace_hap{base_haplotype + 1}_seq'] = trgt_hap
+                row[f'base_hap{base_haplotype + 1}_seq'] = base_hap
                 direct = distance(trgt_hap, base_hap)
                 components = ['.', '.']
                 components[base_haplotype] = str(direct)
-                row['direct_edit_distance'] = f'{direct} ({components[0]}, {components[1]})'
-                row['phasing_status'] = 'haploid_replacement_unphased'
+                row['edit_dist_aligned'] = f'{direct} ({components[0]}, {components[1]})'
+                row['status'] = 'haploid'
                 writer.writerow(row)
                 continue
             # Construct both sequences for complete diploid calls; only non-reference
             # heterozygotes can receive an orientation.
             if len(gt) != 2 or any(allele is None for allele in gt):
-                row['phasing_status'] = 'replacement_incomplete_or_non_diploid_gt'
+                row['status'] = 'non_diploid_gt'
                 writer.writerow(row)
                 continue
             if any(allele < 0 or allele > len(rec.alts or []) for allele in gt):
-                row['phasing_status'] = 'replacement_invalid_allele_index'
+                row['status'] = 'invalid_gt'
                 writer.writerow(row)
                 continue
             phase_eligible = gt[0] != gt[1] and any(allele > 0 for allele in gt)
             trgt_haps = [rec.ref if allele == 0 else rec.alts[allele - 1] for allele in gt]
-            row['replacement_vcf_haplotype_1_sequence'], row['replacement_vcf_haplotype_2_sequence'] = trgt_haps
+            row['replace_hap1_seq'], row['replace_hap2_seq'] = trgt_haps
             assignment = sample_to_base.get(sample)
             if assignment is None:
-                row['phasing_status'] = 'base_sample_not_found'
+                row['status'] = 'base_sample_missing'
                 writer.writerow(row)
                 continue
             base_index, base_sample = assignment
             base_handle = base_handles[base_index]
             base_contig = contig_for(base_handle, rec.contig)
             if base_contig is None:
-                row['phasing_status'] = 'base_contig_not_found'
+                row['status'] = 'base_contig_missing'
                 writer.writerow(row)
                 continue
             base_hap_1, base_hap_2, status = reconstruct_haplotypes(
                 base_handle, base_contig, base_sample, rec)
             if status != 'ok':
-                row['phasing_status'] = status
+                row['status'] = audit_status(status)
                 writer.writerow(row)
                 continue
-            row['base_vcf_haplotype_1_sequence'] = base_hap_1
-            row['base_vcf_haplotype_2_sequence'] = base_hap_2
-            direct_1, direct_2 = distance(trgt_haps[0], base_hap_1), distance(trgt_haps[1], base_hap_2)
-            swapped_1, swapped_2 = distance(trgt_haps[0], base_hap_2), distance(trgt_haps[1], base_hap_1)
-            direct, swapped = direct_1 + direct_2, swapped_1 + swapped_2
+            row['base_hap1_seq'] = base_hap_1
+            row['base_hap2_seq'] = base_hap_2
+            # Aligned compares same haplotype indices; unaligned compares crossed indices.
+            aligned_1, aligned_2 = distance(base_hap_1, trgt_haps[0]), distance(base_hap_2, trgt_haps[1])
+            unaligned_1, unaligned_2 = distance(base_hap_1, trgt_haps[1]), distance(base_hap_2, trgt_haps[0])
+            aligned, unaligned = aligned_1 + aligned_2, unaligned_1 + unaligned_2
             row.update({
-                'direct_edit_distance': f'{direct} ({direct_1}, {direct_2})',
-                'swapped_edit_distance': f'{swapped} ({swapped_1}, {swapped_2})',
+                'edit_dist_aligned': format_distance(aligned, aligned_1, aligned_2),
+                'edit_dist_unaligned': format_distance(unaligned, unaligned_1, unaligned_2),
             })
-            direct_passes_similarity = (
-                similarity(direct_1, trgt_haps[0], base_hap_1) >= ~{min_phase_similarity}
-                and similarity(direct_2, trgt_haps[1], base_hap_2) >= ~{min_phase_similarity}
-            )
-            swapped_passes_similarity = (
-                similarity(swapped_1, trgt_haps[0], base_hap_2) >= ~{min_phase_similarity}
-                and similarity(swapped_2, trgt_haps[1], base_hap_1) >= ~{min_phase_similarity}
-            )
             if not phase_eligible:
-                row['phasing_status'] = 'not_nonref_heterozygote'
-            elif direct == swapped:
-                row['phasing_status'] = 'orientation_tie'
-            elif abs(direct - swapped) < ~{min_phase_edit_distance_delta}:
-                row['phasing_status'] = 'insufficient_edit_distance_delta'
-            elif direct < swapped and direct_passes_similarity:
-                call['GT'] = gt
-                call.phased = True
-                call['PS'] = rec.pos
-                row['final_replacement_GT'] = gt_string(gt, True)
-                row['phasing_status'] = 'phased_direct'
-                any_phased = True
-            elif swapped < direct and swapped_passes_similarity:
-                call['GT'] = (gt[1], gt[0])
-                call.phased = True
-                call['PS'] = rec.pos
-                row['final_replacement_GT'] = gt_string((gt[1], gt[0]), True)
-                row['phasing_status'] = 'phased_swapped'
-                any_phased = True
+                row['status'] = 'not_het'
+            elif aligned == unaligned:
+                row['status'] = 'tie'
+            elif aligned < unaligned:
+                row['edit_dist_pct'] = format_distance_pct(
+                    aligned_1, aligned_2, base_hap_1, trgt_haps[0], base_hap_2, trgt_haps[1])
+                aligned_pct = combined_edit_distance_pct(
+                    aligned_1, aligned_2, base_hap_1, trgt_haps[0], base_hap_2, trgt_haps[1])
+                # Gate only summed distance and weighted percentage of winning orientation.
+                if aligned > ~{max_phase_edit_distance}:
+                    row['status'] = 'edit_dist_too_high'
+                elif aligned_pct > ~{max_phase_edit_distance_pct}:
+                    row['status'] = 'edit_dist_pct_too_high'
+                else:
+                    call['GT'] = gt
+                    call.phased = True
+                    call['PS'] = rec.pos
+                    row['final_gt'] = gt_string(gt, True)
+                    row['status'] = 'phased_aligned'
+                    any_phased = True
             else:
-                row['phasing_status'] = 'winning_orientation_similarity_below_threshold'
+                row['edit_dist_pct'] = format_distance_pct(
+                    unaligned_1, unaligned_2, base_hap_1, trgt_haps[1], base_hap_2, trgt_haps[0])
+                unaligned_pct = combined_edit_distance_pct(
+                    unaligned_1, unaligned_2, base_hap_1, trgt_haps[1], base_hap_2, trgt_haps[0])
+                # Gate only summed distance and weighted percentage of winning orientation.
+                if unaligned > ~{max_phase_edit_distance}:
+                    row['status'] = 'edit_dist_too_high'
+                elif unaligned_pct > ~{max_phase_edit_distance_pct}:
+                    row['status'] = 'edit_dist_pct_too_high'
+                else:
+                    call['GT'] = (gt[1], gt[0])
+                    call.phased = True
+                    call['PS'] = rec.pos
+                    row['final_gt'] = gt_string((gt[1], gt[0]), True)
+                    row['status'] = 'phased_unaligned'
+                    any_phased = True
             writer.writerow(row)
         if any_phased:
             rec.info['POSTHOC_BACKBONE_PHASED'] = True
@@ -1399,15 +1456,15 @@ def matching_candidates(records, explorers):  # noqa: E302
                 break
     return sorted(candidates, key=lambda item: (-item[0], signature(item[1]), trid_text(item[1])))
 
-# Catalog report controls gnomAD_STR selection. Its boolean columns make the
-# decision reproducible without reinterpreting the JSON during output assembly.
+# Catalog report controls gnomAD_STR selection and keeps the decision
+# reproducible without reinterpreting the JSON during output assembly.
 catalog_rows = []
 with open('~{input_trv_catalog_match_tsv}') as handle:
     header = next(handle, '').rstrip('\n').split('\t')
     expected = [
-        'locus_id', 'TRExplorerV1', 'has_diseases', 'main_overlapping_TRIDs',
-        'main_has_TRExplorerV1_substring', 'trgt_overlapping_TRIDs',
-        'trgt_has_TRExplorerV1_substring', 'trgt_matching_allele_count_ge_1',
+        'locus_id', 'TRExplorerV1', 'has_diseases', 'input_overlapping_trids',
+        'input_has_TRExplorerV1_substring', 'trgt_overlapping_trids',
+        'trgt_has_TRExplorerV1_substring', 'trgt_matched_ac',
     ]
     if header != expected:
         raise RuntimeError('Unexpected trv_catalog_match_tsv header')
@@ -1430,7 +1487,9 @@ with open('~{input_trv_catalog_match_tsv}') as handle:
             'explorers': explorers,
             'main_strict': truth(fields[4]),
             'trgt_strict': truth(fields[6]),
-            'trgt_ac': truth(fields[7]),
+            # Input matches intentionally leave TRGT cells blank. Numeric AC
+            # controls recovery eligibility for rows that require TRGT lookup.
+            'trgt_ac': int(fields[7]) if fields[7] else 0,
         })
 
 replacement_path = '~{replacement_vcf}'
@@ -1616,11 +1675,10 @@ with open('~{prefix}.trv_catalog_match.tsv', 'w') as out, open('~{input_trv_cata
 # Always materialize phase audit so no-replacement contigs have stable workflow output.
 phase_audit_path = '~{input_trv_phasing_summary_tsv}'
 phase_header = (
-    'original_TRID\treplacement_TRID\tsample_id\toriginal_GT'
-    '\tbase_vcf_haplotype_1_sequence\tbase_vcf_haplotype_2_sequence\treplacement_input_GT'
-    '\treplacement_vcf_haplotype_1_sequence\treplacement_vcf_haplotype_2_sequence'
-    '\tdirect_edit_distance\tswapped_edit_distance\tmin_phase_edit_distance_delta'
-    '\tmin_phase_similarity\tfinal_replacement_GT\tphasing_status\n'
+    'base_trid\treplace_trid\tsample_id\tbase_gt\treplace_gt'
+    '\tbase_hap1_seq\tbase_hap2_seq\treplace_hap1_seq\treplace_hap2_seq'
+    '\tedit_dist_aligned\tedit_dist_unaligned\tedit_dist_pct'
+    '\tmax_edit_dist\tmax_edit_dist_pct\tfinal_gt\tstatus\n'
 )
 with open('~{prefix}.trv_phasing_summary.tsv', 'w') as out:
     if phase_audit_path and os.path.exists(phase_audit_path):
