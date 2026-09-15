@@ -501,19 +501,19 @@ Outputs:
 - `mosdepth_per_base_combined`: Combined per-base coverage BED.
 - `mosdepth_per_base_combined_idx`: Index for the combined BED.
 
-### [ValidateTRGTWithCatalog](../wdl/annotation_utils/ValidateTRGTWithCatalog.wdl)
-This utility validates that each TRGT variant's `CHROM`, `POS` and inclusive REF end (`POS + len(REF) - 1`) match columns 1, 2 and 3 of a TRGT catalog BED. It outputs an indexed VCF containing only variants without a matching catalog position. The VCF and compressed catalog are subset per contig; when `records_per_shard` is set, each contig VCF is additionally sharded by record count and validated in parallel.
+### [ExtractDisparateTRLoci](../wdl/annotation_utils/ExtractDisparateTRLoci.wdl)
+This utility subsets two VCFs to tandem-repeat variants (`INFO/allele_type=trv`) on one contig, then compares their loci. It produces one TSV for identities present in only one VCF, where identity is `CHROM`, `POS` and `len(REF)`, and another TSV for positive-base overlaps with distinct identities. Overlaps are identified with `bedtools intersect`; the overlapping TSV includes the `INFO/TRID` value from both VCFs.
 
 Inputs:
-- `File trgt_vcf`: TRGT VCF to validate.
-- `File trgt_vcf_idx`: Index for `trgt_vcf`.
-- `Array[String] contigs`: Contigs to validate within the input VCF and catalog.
-- `File trgt_catalog_bed_gz`: Gzipped TRGT catalog BED whose first three columns are `CHROM`, `POS` and inclusive REF end.
-- `Int? records_per_shard`: Number of variants to keep within a validation shard. When unset, each contig is processed as one shard.
+- `File vcf_a`: First VCF to compare.
+- `File vcf_a_idx`: Index for `vcf_a`.
+- `File vcf_b`: Second VCF to compare.
+- `File vcf_b_idx`: Index for `vcf_b`.
+- `String contig`: Contig to compare within both VCFs.
 
 Outputs:
-- `incongruent_vcf`: Indexed VCF containing variants without a matching catalog position.
-- `incongruent_vcf_idx`: Index for `incongruent_vcf`.
+- `missing_variants_tsv`: Locus identities present in one VCF but missing from the other.
+- `overlapping_variants_tsv`: Overlapping locus pairs with distinct identities and their `TRID` values.
 
 ### [SummarizeAnnotations](../wdl/annotation_utils/SummarizeAnnotations.wdl)
 This utility tallies annotation values across one or more VCFs to produce summary count tables, size-binned by allele class (SNV/DEL/INS/DUP/TRV). It always counts at the site level and can optionally count per sample, per allele, per functional gene consequence (from VEP/SVAnnotate `PREDICTED_*` fields), as raw per-variant value lists, and — when `create_plotting` is enabled — produce a separate set of AF-binned, region-aware Parquet tables for plotting (including a de novo transmission breakdown when a PED file is supplied and trios are found).

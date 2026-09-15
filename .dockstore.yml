@@ -241,8 +241,8 @@ workflows:
         - /.*/
 
   - subclass: WDL
-    name: ValidateTRGTWithCatalog
-    primaryDescriptorPath: /wdl/annotation_utils/ValidateTRGTWithCatalog.wdl
+    name: ExtractDisparateTRLoci
+    primaryDescriptorPath: /wdl/annotation_utils/ExtractDisparateTRLoci.wdl
     filters:
       branches:
         - main
