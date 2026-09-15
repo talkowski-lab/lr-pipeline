@@ -1064,18 +1064,17 @@ Outputs:
 - `missing_samples`: Samples with no matching base VCF.
 
 ### [DeepVariant](../wdl/tools/DeepVariant.wdl)
-This tool calls small variants from region-sharded BAMs with CPU or GPU DeepVariant, then merges the per-shard VCFs and gVCFs. Every non-`alts` shard must have a matching region file. The workflow passes those regions to DeepVariant, so each shard emits only its assigned genomic regions; this prevents the duplicate off-shard zero-depth gVCF blocks produced by whole-reference calling on partial BAMs. It performs no explicit GCS-directory copy; map its declared outputs directly to attributes in the main Terra entity table.
+This tool follows the DeepVariant path of the linked source workflow: it reads the source reference-bundle and small-variant-options JSON files, subsets the input BAM into its size-balanced shards, calls CPU or GPU DeepVariant, then merges the VCFs and gVCFs. The same region list controls BAM subsetting and DeepVariant `--regions`, preventing duplicate off-shard zero-depth gVCF blocks. It performs no explicit GCS-directory copy; map its declared outputs directly to attributes in the main Terra entity table.
 
 Inputs:
 
-- `Array[Pair[String, Pair[File, File]]] how_to_shard_wg_for_calling`: Shard ID paired with BAM and BAI.
-- `Map[String, File] shard_region_files`: Region file for each non-`alts` shard ID. Each file contains one DeepVariant region literal per line; regions must be disjoint.
-- `File ref_fa` and `File ref_fai`: Reference FASTA and index.
+- `File bam` and `File bai`: Aligned whole-genome BAM and index.
+- `String sex`: Biological sex; `M` enables the source reference bundle's haploid-contig and PAR settings.
 - `String prefix`: Output-file prefix.
-- `String model_type`: DeepVariant model, such as `PACBIO` or `ONT_R104`.
-- `String? haploid_contigs` and `File? par_regions_bed`: Optional DeepVariant allosome settings.
-- `Int threads` and `Int memory`: DeepVariant task resources.
-- `Boolean use_gpu`: Use GPU DeepVariant tasks (default `false`).
+- `String model_for_dv_andor_pepper`: DeepVariant model, such as `PACBIO` or `ONT_R104`.
+- `File ref_bundle_json_file`: Source-compatible reference bundle JSON. Its size-balanced shard manifests are required.
+- `File small_variant_calling_options_json`: Source-compatible small-variant options JSON, providing DeepVariant threads, memory, GPU use, and haploid contigs.
+- `Array[String] gcp_zones`: Placement zones (default source list).
 - `String deepvariant_docker`, `String deepvariant_gpu_docker`, `String utils_docker`, `String resource_visualization_docker`: Container images for the four task types.
 
 Outputs:

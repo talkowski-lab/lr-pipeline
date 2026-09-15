@@ -2887,6 +2887,73 @@ task SubsetBamToContig {
     }
 }
 
+task SubsetBamToRegions {
+    meta {
+        description: "Subset a BAM to the regions listed in a file."
+    }
+
+    input {
+        File bam
+        File bai
+        File region_file
+        String prefix
+        String docker
+        RuntimeAttr? runtime_attr_override
+    }
+
+    parameter_meta {
+        bam: { localization_optional: true }
+        bai: { localization_optional: true }
+    }
+
+    Array[String] regions = read_lines(region_file)
+
+    command <<<
+        set -euo pipefail
+
+        export GCS_OAUTH_TOKEN=$(gcloud auth application-default print-access-token)
+
+        samtools view \
+            -@ ~{select_first([runtime_attr.cpu_cores, default_attr.cpu_cores])} \
+            -X \
+            -M \
+            -h \
+            -b \
+            -o ~{prefix}.bam \
+            ~{bam} \
+            ~{bai} \
+            ~{sep=' ' regions}
+
+        samtools index \
+            -@ ~{select_first([runtime_attr.cpu_cores, default_attr.cpu_cores])} \
+            ~{prefix}.bam
+    >>>
+
+    output {
+        File subset_bam = "~{prefix}.bam"
+        File subset_bai = "~{prefix}.bam.bai"
+    }
+
+    RuntimeAttr default_attr = object {
+        cpu_cores: 4,
+        mem_gb: 2,
+        disk_gb: 20,
+        boot_disk_gb: 10,
+        preemptible_tries: 1,
+        max_retries: 0
+    }
+    RuntimeAttr runtime_attr = select_first([runtime_attr_override, default_attr])
+    runtime {
+        cpu: select_first([runtime_attr.cpu_cores, default_attr.cpu_cores])
+        memory: select_first([runtime_attr.mem_gb, default_attr.mem_gb]) + " GiB"
+        disks: "local-disk " + select_first([runtime_attr.disk_gb, default_attr.disk_gb]) + " HDD"
+        bootDiskSizeGb: select_first([runtime_attr.boot_disk_gb, default_attr.boot_disk_gb])
+        docker: docker
+        preemptible: select_first([runtime_attr.preemptible_tries, default_attr.preemptible_tries])
+        maxRetries: select_first([runtime_attr.max_retries, default_attr.max_retries])
+    }
+}
+
 task SubsetTsvToContig {
     input {
         File tsv
@@ -4016,7 +4083,7 @@ task FilterDuplicateZeroDepthReferenceBlocks {
         }
 
         if [[ ~{length(ranges)} -eq 0 ]]; then
-            write_records "" "~{prefix}.cleaned.g.vcf.gz"
+            write_records "" "per_contig/~{prefix}.cleaned.g.vcf.gz"
         else
             index=0
             for range in ~{sep=' ' ranges}; do
@@ -4029,8 +4096,8 @@ task FilterDuplicateZeroDepthReferenceBlocks {
     >>>
 
     output {
-        Array[File] cleaned_gvcfs = if length(ranges) == 0 then ["~{prefix}.cleaned.g.vcf.gz"] else glob("per_contig/*.g.vcf.gz")
-        Array[File] cleaned_gvcf_idxs = if create_indexes then (if length(ranges) == 0 then ["~{prefix}.cleaned.g.vcf.gz.tbi"] else glob("per_contig/*.g.vcf.gz.tbi")) else []
+        Array[File] cleaned_gvcfs = glob("per_contig/*.g.vcf.gz")
+        Array[File] cleaned_gvcf_idxs = glob("per_contig/*.g.vcf.gz.tbi")
     }
 
     RuntimeAttr default_attr = object { cpu_cores: 1, mem_gb: 1, disk_gb: disk_size, boot_disk_gb: 25, preemptible_tries: 1, max_retries: default_max_retries }
