@@ -1017,7 +1017,7 @@ Outputs:
 - `bed`: Combined converted BED/TSV artifact.
 
 ### [FilterDuplicateZeroDepthReferenceBlocks](../wdl/annotation_utils/FilterDuplicateZeroDepthReferenceBlocks.wdl)
-This utility cleans a single-sample gVCF by removing every member of each identical duplicate-record group at a coordinate when its first-sample `MIN_DP=0` and `GT` is non-alt, matching GLNexus with `remove_duplicate_zero_depth_reference_blocks=true`. Singleton records and distinct nonmatching records at the same coordinate are retained, as are records with an alternate `GT` or non-zero/missing `MIN_DP`.
+This utility cleans a single-sample gVCF by removing exact duplicate zero-depth, non-alt records, except that it retains one representative when removal would leave its start uncovered. It preserves gVCF coverage: a retained duplicate block is shortened by updating its `END` to one base before the next non-duplicate record when that record begins inside the block. This prevents cleanup from overlapping a distinct record or creating a coverage gap that GLNexus would genotype as `./.`. Singleton records, distinct records at the same coordinate, alternate genotypes, and records with non-zero or missing `MIN_DP` are retained unchanged.
 
 Inputs:
 - `File gvcf`: Single-sample gVCF to clean.

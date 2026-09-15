@@ -3923,3 +3923,93 @@ task SortReadCounts {
         maxRetries: select_first([runtime_attr.max_retries, default_attr.max_retries])
     }
 }
+
+task FilterDuplicateZeroDepthReferenceBlocks {
+    meta {
+        description: "Collapse duplicate zero-depth non-alt reference blocks while preserving gVCF coverage. Optionally process supplied ranges and create indexes."
+    }
+
+    input {
+        File gvcf
+        File gvcf_idx
+        String prefix
+        Array[String] ranges = []
+        Boolean remove_duplicates = true
+        Boolean create_indexes = false
+        Int default_max_retries = 0
+        String docker
+        RuntimeAttr? runtime_attr_override
+    }
+
+    Int disk_size = 1 + 2 * ceil(size(gvcf, "GB"))
+
+    command <<<
+        set -euo pipefail
+
+        test -s ~{gvcf_idx}
+        mkdir -p per_contig
+
+        filter_records() {
+            awk -F$'\t' '
+                BEGIN { removed_count = 0 }
+                function clear_group(    i) { for (i = 1; i <= row_count; i++) delete rows[i]; for (i in duplicate_count) delete duplicate_count[i]; for (i in removable) delete removable[i]; row_count = 0 }
+                function record_end(line,    fields, info_fields, field_count, info_count, i) { field_count = split(line, fields, "\t"); info_count = split(fields[8], info_fields, ";"); for (i = 1; i <= info_count; i++) if (info_fields[i] ~ /^END=[0-9]+$/) return substr(info_fields[i], 5) + 0; return fields[2] + length(fields[4]) - 1 }
+                function set_end(line, new_end,    fields, info_fields, field_count, info_count, i, output) { field_count = split(line, fields, "\t"); info_count = split(fields[8], info_fields, ";"); output = ""; for (i = 1; i <= info_count; i++) { if (info_fields[i] ~ /^END=[0-9]+$/) info_fields[i] = "END=" new_end; output = output (i == 1 ? "" : ";") info_fields[i] } fields[8] = output; output = fields[1]; for (i = 2; i <= field_count; i++) output = output "\t" fields[i]; return output }
+                function update_coverage(chrom, end) { if (!(chrom in covered_until) || end > covered_until[chrom]) covered_until[chrom] = end }
+                function emit_pending(next_chrom, next_pos,    line, end) { if (pending_line == "") return; line = pending_line; end = pending_end; if (pending_chrom == next_chrom && next_pos <= end) { end = next_pos - 1; line = set_end(line, end) } print line; update_coverage(pending_chrom, end); pending_line = "" }
+                function set_pending(line, chrom, end) { pending_line = line; pending_chrom = chrom; pending_end = end; removed_count-- }
+                function flush_group(    i, line, candidate_line, candidate_end, end, has_kept_row) {
+                    candidate_line = ""; candidate_end = -1; has_kept_row = 0
+                    for (i = 1; i <= row_count; i++) { line = rows[i]; if (removable[line] && duplicate_count[line] > 1) { if (!(line in seen_candidate)) { seen_candidate[line] = 1; end = record_end(line); if (end > candidate_end) { candidate_line = line; candidate_end = end } } removed_count++ } else has_kept_row = 1 }
+                    if (has_kept_row) { emit_pending(current_chrom, current_pos); for (i = 1; i <= row_count; i++) { line = rows[i]; if (!(removable[line] && duplicate_count[line] > 1)) { print line; update_coverage(current_chrom, record_end(line)) } } }
+                    else if (candidate_line != "") { if (pending_line != "") { if (pending_chrom != current_chrom || current_pos > pending_end) emit_pending("", 0); else if (candidate_end > pending_end) emit_pending(current_chrom, current_pos); else { for (i in seen_candidate) delete seen_candidate[i]; return } } if (!(current_chrom in covered_until) || current_pos > covered_until[current_chrom]) set_pending(candidate_line, current_chrom, candidate_end) }
+                    for (i in seen_candidate) delete seen_candidate[i]
+                }
+                function is_removable_record(    format_fields, sample_fields, field_count, sample_count, i, gt_index, min_dp_index, gt) { field_count = split($9, format_fields, ":"); gt_index = 0; min_dp_index = 0; for (i = 1; i <= field_count; i++) { if (format_fields[i] == "GT") gt_index = i; if (format_fields[i] == "MIN_DP") min_dp_index = i } if (gt_index == 0 || min_dp_index == 0 || NF < 10) return 0; sample_count = split($10, sample_fields, ":"); if (sample_count < gt_index || sample_count < min_dp_index) return 0; gt = sample_fields[gt_index]; return sample_fields[min_dp_index] == "0" && gt ~ /^(0|\.)([\/|](0|\.))*$/ }
+                /^#/ { print; next }
+                { coordinate = $1 SUBSEP $2; if (row_count > 0 && coordinate != current_coordinate) { flush_group(); clear_group() } current_coordinate = coordinate; current_chrom = $1; current_pos = $2 + 0; rows[++row_count] = $0; duplicate_count[$0]++; if (is_removable_record()) removable[$0] = 1 }
+                END { if (row_count > 0) flush_group(); emit_pending("", 0); print "Removed " removed_count " duplicate zero-depth non-alt gVCF records" > "/dev/stderr" }
+            '
+        }
+
+        write_records() {
+            local range="$1"
+            local outfile="$2"
+            if [[ "~{remove_duplicates}" == "true" ]]; then
+                if [[ -n "$range" ]]; then bcftools view ~{gvcf} "$range"; else bcftools view ~{gvcf}; fi | filter_records | bgzip > "$outfile"
+            else
+                if [[ -n "$range" ]]; then bcftools view ~{gvcf} "$range"; else bcftools view ~{gvcf}; fi | bgzip > "$outfile"
+            fi
+            if [[ "~{create_indexes}" == "true" ]]; then tabix -p vcf "$outfile"; fi
+        }
+
+        if [[ ~{length(ranges)} -eq 0 ]]; then
+            write_records "" "~{prefix}.cleaned.g.vcf.gz"
+        else
+            index=0
+            for range in ~{sep=' ' ranges}; do
+                pindex=$(printf '%06d' "$index")
+                frange=$(echo "$range" | sed 's/[:-]/___/g')
+                write_records "$range" "per_contig/$pindex.~{basename(gvcf, ".g.vcf.gz")}.locus_$frange.g.vcf.gz"
+                index=$((index + 1))
+            done
+        fi
+    >>>
+
+    output {
+        Array[File] cleaned_gvcfs = if length(ranges) == 0 then ["~{prefix}.cleaned.g.vcf.gz"] else glob("per_contig/*.g.vcf.gz")
+        Array[File] cleaned_gvcf_idxs = if create_indexes then (if length(ranges) == 0 then ["~{prefix}.cleaned.g.vcf.gz.tbi"] else glob("per_contig/*.g.vcf.gz.tbi")) else []
+    }
+
+    RuntimeAttr default_attr = object { cpu_cores: 1, mem_gb: 1, disk_gb: disk_size, boot_disk_gb: 25, preemptible_tries: 1, max_retries: default_max_retries }
+    RuntimeAttr runtime_attr = select_first([runtime_attr_override, default_attr])
+    runtime {
+        cpu: select_first([runtime_attr.cpu_cores, default_attr.cpu_cores])
+        memory: select_first([runtime_attr.mem_gb, default_attr.mem_gb]) + " GiB"
+        disks: "local-disk " + select_first([runtime_attr.disk_gb, default_attr.disk_gb]) + " SSD"
+        bootDiskSizeGb: select_first([runtime_attr.boot_disk_gb, default_attr.boot_disk_gb])
+        preemptible: select_first([runtime_attr.preemptible_tries, default_attr.preemptible_tries])
+        maxRetries: select_first([runtime_attr.max_retries, default_attr.max_retries])
+        docker: docker
+    }
+}

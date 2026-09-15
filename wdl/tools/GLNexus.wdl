@@ -18,7 +18,7 @@ workflow GLNexus {
         background_sample_gvcfs: "Nested arrays of background GVCFs for joint calling."
         background_sample_gvcf_idxs: "Nested arrays of indexes corresponding to background_sample_gvcfs."
         force_add_missing_dp: "Add missing DP fields to gVCFs before joint calling."
-        remove_duplicate_zero_depth_reference_blocks: "Remove exact duplicate input gVCF records with a non-alt GT and MIN_DP=0 from each shard."
+        remove_duplicate_zero_depth_reference_blocks: "Remove excess exact duplicate input gVCF records with a non-alt GT and MIN_DP=0 while preserving gVCF coverage in each shard."
         bed: "Intervals to which joint calling should be restricted."
         config: "GLNexus configuration preset or .yml filename."
         config_file: "Custom GLNexus configuration file; overrides config."
@@ -94,19 +94,22 @@ workflow GLNexus {
     Array[File] final_gvcf_idxs = select_first([gvcf_idxs_and_background_samples, gvcf_idxs])
 
     scatter (p in zip(final_gvcfs, final_gvcf_idxs)) {
-        call ShardVCFByRanges {
+        call Helpers.FilterDuplicateZeroDepthReferenceBlocks as ShardVCFByRanges {
             input:
                 gvcf = p.left,
-                tbi = p.right,
+                gvcf_idx = p.right,
+                prefix = basename(p.left, ".g.vcf.gz"),
                 ranges = GetRanges.ranges,
-                remove_duplicate_zero_depth_reference_blocks = remove_duplicate_zero_depth_reference_blocks,
+                remove_duplicates = remove_duplicate_zero_depth_reference_blocks,
+                create_indexes = false,
+                default_max_retries = 1,
                 docker = glnexus_docker,
                 runtime_attr_override = runtime_attr_shard_vcf_by_ranges
         }
     }
 
-    scatter (i in range(length(ShardVCFByRanges.sharded_gvcfs[0]))) {
-        Array[File] per_contig_gvcfs = transpose(ShardVCFByRanges.sharded_gvcfs)[i]
+    scatter (i in range(length(ShardVCFByRanges.cleaned_gvcfs[0]))) {
+        Array[File] per_contig_gvcfs = transpose(ShardVCFByRanges.cleaned_gvcfs)[i]
 
         call GLNexusJointCall {
             input:
@@ -183,116 +186,6 @@ task GetRanges {
 
     output {
         Array[String] ranges = read_lines("ranges.txt")
-    }
-
-    RuntimeAttr default_attr = object {
-        cpu_cores: 1,
-        mem_gb: 1,
-        disk_gb: disk_size,
-        boot_disk_gb: 25,
-        preemptible_tries: 1,
-        max_retries: 1
-    }
-    RuntimeAttr runtime_attr = select_first([runtime_attr_override, default_attr])
-    runtime {
-        cpu: select_first([runtime_attr.cpu_cores, default_attr.cpu_cores])
-        memory: select_first([runtime_attr.mem_gb, default_attr.mem_gb]) + " GiB"
-        disks: "local-disk " + select_first([runtime_attr.disk_gb, default_attr.disk_gb]) + " SSD"
-        bootDiskSizeGb: select_first([runtime_attr.boot_disk_gb, default_attr.boot_disk_gb])
-        preemptible: select_first([runtime_attr.preemptible_tries, default_attr.preemptible_tries])
-        maxRetries: select_first([runtime_attr.max_retries, default_attr.max_retries])
-        docker: docker
-    }
-}
-
-task ShardVCFByRanges {
-    meta {
-        description: "Split VCF into smaller ranges for parallelization."
-    }
-
-    input {
-        File gvcf
-        File tbi
-        Array[String] ranges
-        Boolean remove_duplicate_zero_depth_reference_blocks = false
-        String docker
-        RuntimeAttr? runtime_attr_override
-    }
-
-    Int disk_size = 1 + 2 * ceil(size(gvcf, "GB"))
-
-    command <<<
-        set -euxo pipefail
-
-        mkdir per_contig
-
-        INDEX=0
-        for RANGE in ~{sep=' ' ranges}
-        do
-            PINDEX=$(printf "%06d" $INDEX)
-            FRANGE=$(echo $RANGE | sed 's/[:-]/___/g')
-            OUTFILE="per_contig/$PINDEX.~{basename(gvcf, ".g.vcf.gz")}.locus_$FRANGE.g.vcf.gz"
-
-            if [[ "~{remove_duplicate_zero_depth_reference_blocks}" == "true" ]]; then
-                bcftools view ~{gvcf} $RANGE | awk -F$'\t' '
-                    BEGIN { removed_count = 0 }
-                    function clear_group(    i) {
-                        for (i = 1; i <= row_count; i++) delete rows[i]
-                        for (i in duplicate_count) delete duplicate_count[i]
-                        for (i in removable) delete removable[i]
-                        row_count = 0
-                    }
-                    function flush_group(    i, line) {
-                        for (i = 1; i <= row_count; i++) {
-                            line = rows[i]
-                            if (removable[line] && duplicate_count[line] > 1) {
-                                removed_count++
-                            } else {
-                                print line
-                            }
-                        }
-                    }
-                    function is_removable_record(    format_fields, sample_fields, field_count, sample_count, i, gt_index, min_dp_index, gt) {
-                        field_count = split($9, format_fields, ":")
-                        gt_index = 0
-                        min_dp_index = 0
-                        for (i = 1; i <= field_count; i++) {
-                            if (format_fields[i] == "GT") gt_index = i
-                            if (format_fields[i] == "MIN_DP") min_dp_index = i
-                        }
-                        if (gt_index == 0 || min_dp_index == 0 || NF < 10) return 0
-                        sample_count = split($10, sample_fields, ":")
-                        if (sample_count < gt_index || sample_count < min_dp_index) return 0
-                        gt = sample_fields[gt_index]
-                        return sample_fields[min_dp_index] == "0" && gt ~ /^(0|\.)([\/|](0|\.))*$/
-                    }
-                    /^#/ { print; next }
-                    {
-                        coordinate = $1 SUBSEP $2
-                        if (row_count > 0 && coordinate != current_coordinate) {
-                            flush_group()
-                            clear_group()
-                        }
-                        current_coordinate = coordinate
-                        rows[++row_count] = $0
-                        duplicate_count[$0]++
-                        if (is_removable_record()) removable[$0] = 1
-                    }
-                    END {
-                        if (row_count > 0) flush_group()
-                        print "Removed " removed_count " duplicate zero-depth non-alt gVCF records" > "/dev/stderr"
-                    }
-                ' | bgzip > $OUTFILE
-            else
-                bcftools view ~{gvcf} $RANGE | bgzip > $OUTFILE
-            fi
-
-            INDEX=$(($INDEX+1))
-        done
-    >>>
-
-    output {
-        Array[File] sharded_gvcfs = glob("per_contig/*")
     }
 
     RuntimeAttr default_attr = object {
