@@ -843,16 +843,17 @@ Outputs:
 - `trv_phasing_summary_tsv`: One row per replacement record and sample. Columns are `base_trid`, `replace_trid`, `sample_id`, input `base_gt`/`replace_gt`, base and replacement haplotype sequences, `edit_dist_aligned`, `edit_dist_unaligned`, winning-orientation `edit_dist_pct`, configured maxima, final VCF `final_gt`, and concise `status`. Distances are `sum (base_hap1 pair, base_hap2 pair)`.
 
 ### [PreprocessVcfs](../wdl/annotation_utils/PreprocessVcfs.wdl)
-This utility preprocesses and integrates one or more cohort VCFs into a single VCF. It first applies any per-VCF sample-ID swaps, then optionally subsets every VCF to the requested samples, and validates that the resulting sample sets are identical. Each VCF is then optionally normalized, annotated with core variant attributes and an optional source label, and length-filtered. Per-VCF controls are required arrays: an empty array disables that control for every VCF; a non-empty array must align with `vcfs`.
+This utility preprocesses and integrates one or more cohort VCFs into a single VCF. It first optionally converts symbolic alleles to sequence alleles, then applies any per-VCF sample-ID swaps, optionally subsets every VCF to the requested samples, and validates that the resulting sample sets are identical. Each VCF is then optionally normalized, annotated with core variant attributes and an optional source label, and length-filtered. Per-VCF controls are required arrays: an empty array disables that control for every VCF; a non-empty array must align with `vcfs`.
 
 Inputs:
 - `Array[File] vcfs`: Cohort VCFs to preprocess and merge.
 - `Array[File] vcf_idxs`: Indexes for `vcfs`.
 - `Array[Boolean] normalize_vcfs`: Per-VCF normalization settings. `[]` disables normalization; otherwise aligned with `vcfs`.
-- `Array[String] source_tags`: Per-VCF `SOURCE` values. `[]` disables source tagging; otherwise aligned with `vcfs`. Required when either length-cutoff array is non-empty.
+- `Array[Boolean] convert_symbolic_to_sequence`: Per-VCF symbolic-allele conversion settings. `[]` disables conversion; otherwise aligned with `vcfs`. For enabled VCFs, `<DEL>` becomes a reference-anchored deletion and `<DUP>` becomes a reference-anchored insertion of the duplicated sequence. `<INV>` remains unchanged. Any other angle-bracket symbolic ALT fails the workflow. `<DEL>` and `<DUP>` require `END` or `SVLEN` and use `ref_fa` to construct their sequence alleles.
+- `Array[String] source_tags`: Per-VCF `SOURCE` values. `[]` disables source tagging; otherwise aligned with `vcfs`. Required when at least one length cutoff is enabled.
 - `Array[File] swap_sample_lists`: Per-VCF sample-ID swap maps, applied before sample subsetting. `[]` disables swapping; otherwise aligned with `vcfs`. A zero-byte map means no swap for that VCF.
-- `Array[Int] min_length_cutoffs`: Per-VCF minimum absolute allele lengths. `[]` disables minimum-length filtering; otherwise aligned with `vcfs`. Calls with `abs(allele_length)` strictly below the corresponding cutoff receive `SMALL_{source_tags[i]}`.
-- `Array[Int] max_length_cutoffs`: Per-VCF maximum absolute allele lengths. `[]` disables maximum-length filtering; otherwise aligned with `vcfs`. Calls with `abs(allele_length)` strictly above the corresponding cutoff receive `LARGE_{source_tags[i]}`.
+- `Array[Int] min_length_cutoffs`: Per-VCF minimum absolute allele lengths. `[]` disables minimum-length filtering; otherwise aligned with `vcfs`. A value of `-1` disables this filter for that VCF. Calls with `abs(allele_length)` strictly below an enabled cutoff receive `SMALL_{source_tags[i]}`.
+- `Array[Int] max_length_cutoffs`: Per-VCF maximum absolute allele lengths. `[]` disables maximum-length filtering; otherwise aligned with `vcfs`. A value of `-1` disables this filter for that VCF. Calls with `abs(allele_length)` strictly above an enabled cutoff receive `LARGE_{source_tags[i]}`.
 - `Array[String] sample_ids`: Samples to retain in every VCF. `[]` skips sample subsetting. After swaps and any subsetting, all input VCFs must contain identical sample sets.
 - `Int? records_per_shard`: Number of variants to keep within a single shard during processing.
 - `File ref_fa`: From [references](references.md).

@@ -192,7 +192,7 @@ cutoffs = read_cutoffs(CUTOFFS)
 sexes = read_ped_sexes(PED)
 vcf_in = pysam.VariantFile(VCF)
 vcf_in.header.formats.add(
-    "FD", 1, "Integer", "Filtered due to depth"
+    "FD", 1, "Integer", "Reassigned to no-call due to low coverage supporting initial genotpye"
 )
 vcf_samples = set(vcf_in.header.samples)
 

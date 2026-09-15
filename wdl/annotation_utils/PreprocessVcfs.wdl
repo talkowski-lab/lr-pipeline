@@ -9,6 +9,7 @@ workflow PreprocessVcfs {
         String prefix
 
         Array[Boolean] normalize_vcfs
+        Array[Boolean] convert_symbolic_to_sequence
         Array[String] source_tags
         Array[File] swap_sample_lists
         Array[Int] min_length_cutoffs
@@ -22,6 +23,7 @@ workflow PreprocessVcfs {
         String utils_docker
 
         RuntimeAttr? runtime_attr_validate_inputs
+        RuntimeAttr? runtime_attr_convert_symbolic_to_sequence
         RuntimeAttr? runtime_attr_swap_samples
         RuntimeAttr? runtime_attr_get_samples
         RuntimeAttr? runtime_attr_check_samples
@@ -41,6 +43,7 @@ workflow PreprocessVcfs {
             vcfs = vcfs,
             vcf_idxs = vcf_idxs,
             normalize_vcfs = normalize_vcfs,
+            convert_symbolic_to_sequence = convert_symbolic_to_sequence,
             source_tags = source_tags,
             swap_sample_lists = swap_sample_lists,
             min_length_cutoffs = min_length_cutoffs,
@@ -52,13 +55,42 @@ workflow PreprocessVcfs {
     Boolean inputs_valid = ValidatePreprocessVcfsInputs.status == "success"
 
     if (inputs_valid) {
+        scatter (vcf_index in range(length(vcfs))) {
+            Boolean convert_vcf = if length(convert_symbolic_to_sequence) > 0 then convert_symbolic_to_sequence[vcf_index] else false
+
+            if (convert_vcf) {
+                call Helpers.ConvertSymbolicAllelesToSequence as ConvertSymbolicAllelesToSequence {
+                    input:
+                        vcf = vcfs[vcf_index],
+                        vcf_idx = vcf_idxs[vcf_index],
+                        ref_fa = ref_fa,
+                        ref_fai = ref_fai,
+                        prefix = "~{prefix}.vcf_~{vcf_index}.symbolic_converted",
+                        docker = utils_docker,
+                        runtime_attr_override = runtime_attr_convert_symbolic_to_sequence
+                }
+            }
+
+            File converted_vcf = select_first([
+                ConvertSymbolicAllelesToSequence.converted_vcf,
+                vcfs[vcf_index]
+            ])
+            File converted_vcf_idx = select_first([
+                ConvertSymbolicAllelesToSequence.converted_vcf_idx,
+                vcf_idxs[vcf_index]
+            ])
+        }
+
+        Array[File] converted_vcfs = select_first([converted_vcf, vcfs])
+        Array[File] converted_vcf_idxs = select_first([converted_vcf_idx, vcf_idxs])
+
         if (length(swap_sample_lists) > 0) {
             scatter (vcf_index in range(length(vcfs))) {
                 if (size(swap_sample_lists[vcf_index], "B") > 0) {
                     call Helpers.SwapSampleIds as SwapSampleIds {
                         input:
-                            vcf = vcfs[vcf_index],
-                            vcf_idx = vcf_idxs[vcf_index],
+                            vcf = converted_vcfs[vcf_index],
+                            vcf_idx = converted_vcf_idxs[vcf_index],
                             sample_swap_list = swap_sample_lists[vcf_index],
                             prefix = "~{prefix}.vcf_~{vcf_index}.swapped",
                             docker = utils_docker,
@@ -68,17 +100,17 @@ workflow PreprocessVcfs {
 
                 File swapped_vcf = select_first([
                     SwapSampleIds.swapped_vcf,
-                    vcfs[vcf_index]
+                    converted_vcfs[vcf_index]
                 ])
                 File swapped_vcf_idx = select_first([
                     SwapSampleIds.swapped_vcf_idx,
-                    vcf_idxs[vcf_index]
+                    converted_vcf_idxs[vcf_index]
                 ])
             }
         }
 
-        Array[File] swapped_vcfs = select_first([swapped_vcf, vcfs])
-        Array[File] swapped_vcf_idxs = select_first([swapped_vcf_idx, vcf_idxs])
+        Array[File] swapped_vcfs = select_first([swapped_vcf, converted_vcfs])
+        Array[File] swapped_vcf_idxs = select_first([swapped_vcf_idx, converted_vcf_idxs])
 
         if (length(sample_ids) > 0) {
             scatter (vcf_index in range(length(vcfs))) {
@@ -125,6 +157,8 @@ workflow PreprocessVcfs {
         if (input_samples_valid) {
             scatter (vcf_index in range(length(final_input_vcfs))) {
                 Boolean normalize_vcf = if length(normalize_vcfs) > 0 then normalize_vcfs[vcf_index] else false
+                Boolean add_min_length_filter = length(min_length_cutoffs) > 0 && min_length_cutoffs[vcf_index] >= 0
+                Boolean add_max_length_filter = length(max_length_cutoffs) > 0 && max_length_cutoffs[vcf_index] >= 0
 
                 if (defined(records_per_shard)) {
                     call Helpers.ShardVcfByRecords as ShardVcf {
@@ -202,7 +236,7 @@ workflow PreprocessVcfs {
                         AnnotateVariantAttributes.annotated_vcf_idx
                     ])
 
-                    if (length(min_length_cutoffs) > 0 && length(max_length_cutoffs) > 0) {
+                    if (add_min_length_filter && add_max_length_filter) {
                         call AddLengthFilters as AddMinAndMaxLengthFilters {
                             input:
                                 vcf = source_annotated_vcf,
@@ -216,7 +250,7 @@ workflow PreprocessVcfs {
                         }
                     }
 
-                    if (length(min_length_cutoffs) > 0 && length(max_length_cutoffs) == 0) {
+                    if (add_min_length_filter && !add_max_length_filter) {
                         call AddLengthFilters as AddMinLengthFilters {
                             input:
                                 vcf = source_annotated_vcf,
@@ -229,7 +263,7 @@ workflow PreprocessVcfs {
                         }
                     }
 
-                    if (length(min_length_cutoffs) == 0 && length(max_length_cutoffs) > 0) {
+                    if (!add_min_length_filter && add_max_length_filter) {
                         call AddLengthFilters as AddMaxLengthFilters {
                             input:
                                 vcf = source_annotated_vcf,
@@ -334,6 +368,7 @@ task ValidatePreprocessVcfsInputs {
         Array[File] vcfs
         Array[File] vcf_idxs
         Array[Boolean] normalize_vcfs
+        Array[Boolean] convert_symbolic_to_sequence
         Array[String] source_tags
         Array[File] swap_sample_lists
         Array[Int] min_length_cutoffs
@@ -353,6 +388,7 @@ inputs = {
     "vcfs": json.load(open("~{write_json(vcfs)}")),
     "vcf_idxs": json.load(open("~{write_json(vcf_idxs)}")),
     "normalize_vcfs": json.load(open("~{write_json(normalize_vcfs)}")),
+    "convert_symbolic_to_sequence": json.load(open("~{write_json(convert_symbolic_to_sequence)}")),
     "source_tags": json.load(open("~{write_json(source_tags)}")),
     "swap_sample_lists": json.load(open("~{write_json(swap_sample_lists)}")),
     "min_length_cutoffs": json.load(open("~{write_json(min_length_cutoffs)}")),
@@ -371,6 +407,7 @@ if len(inputs["vcf_idxs"]) != expected_length:
 
 for name in (
     "normalize_vcfs",
+    "convert_symbolic_to_sequence",
     "source_tags",
     "swap_sample_lists",
     "min_length_cutoffs",
@@ -383,7 +420,11 @@ for name in (
         )
 
 source_tags = inputs["source_tags"]
-cutoffs_enabled = bool(inputs["min_length_cutoffs"] or inputs["max_length_cutoffs"])
+cutoffs_enabled = any(
+    cutoff >= 0
+    for cutoffs in (inputs["min_length_cutoffs"], inputs["max_length_cutoffs"])
+    for cutoff in cutoffs
+)
 if cutoffs_enabled and not source_tags:
     raise ValueError("source_tags must be provided when min_length_cutoffs or max_length_cutoffs is enabled")
 
@@ -396,15 +437,15 @@ if source_tags:
 
 for name in ("min_length_cutoffs", "max_length_cutoffs"):
     for index, cutoff in enumerate(inputs[name]):
-        if cutoff < 0:
-            raise ValueError(f"{name}[{index}] must be nonnegative")
+        if cutoff < -1:
+            raise ValueError(f"{name}[{index}] must be -1 or nonnegative")
 
 if inputs["min_length_cutoffs"] and inputs["max_length_cutoffs"]:
     for index, (min_length, max_length) in enumerate(zip(
         inputs["min_length_cutoffs"],
         inputs["max_length_cutoffs"],
     )):
-        if min_length > max_length:
+        if min_length >= 0 and max_length >= 0 and min_length > max_length:
             raise ValueError(
                 f"min_length_cutoffs[{index}] must be less than or equal to max_length_cutoffs[{index}]"
             )
