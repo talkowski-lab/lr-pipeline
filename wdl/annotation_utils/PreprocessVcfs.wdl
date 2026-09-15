@@ -124,6 +124,8 @@ workflow PreprocessVcfs {
 
         if (input_samples_valid) {
             scatter (vcf_index in range(length(final_input_vcfs))) {
+                Boolean normalize_vcf = if length(normalize_vcfs) > 0 then normalize_vcfs[vcf_index] else false
+
                 if (defined(records_per_shard)) {
                     call Helpers.ShardVcfByRecords as ShardVcf {
                         input:
@@ -146,7 +148,7 @@ workflow PreprocessVcfs {
                 ])
 
                 scatter (shard_index in range(length(shard_vcfs))) {
-                    if (length(normalize_vcfs) > 0 && normalize_vcfs[vcf_index]) {
+                    if (normalize_vcf) {
                         call Helpers.NormalizeVcf {
                             input:
                                 vcf = shard_vcfs[shard_index],
@@ -259,8 +261,9 @@ workflow PreprocessVcfs {
                         input:
                             vcfs = filtered_vcf,
                             vcf_idxs = filtered_vcf_idx,
-                            allow_overlaps = false,
-                            naive = true,
+                            allow_overlaps = normalize_vcf,
+                            naive = !normalize_vcf,
+                            sort_output = normalize_vcf,
                             prefix = "~{prefix}.vcf_~{vcf_index}.concatenated",
                             docker = utils_docker,
                             runtime_attr_override = runtime_attr_concat_shards
