@@ -849,7 +849,7 @@ Inputs:
 - `Array[File] vcfs`: Cohort VCFs to preprocess and merge.
 - `Array[File] vcf_idxs`: Indexes for `vcfs`.
 - `Array[Boolean] normalize_vcfs`: Per-VCF normalization settings. `[]` disables normalization; otherwise aligned with `vcfs`.
-- `Array[Boolean] convert_symbolic_to_sequence`: Per-VCF symbolic-allele conversion settings. `[]` disables conversion; otherwise aligned with `vcfs`. For enabled VCFs, `<DEL>` becomes a reference-anchored deletion and `<DUP>` becomes a reference-anchored insertion of the duplicated sequence. `<INV>` remains unchanged. Any other angle-bracket symbolic ALT fails the workflow. `<DEL>` and `<DUP>` require `END` or `SVLEN` and use `ref_fa` to construct their sequence alleles.
+- `Array[Boolean] convert_symbolic_to_sequence`: Per-VCF symbolic-allele conversion settings. `[]` disables conversion; otherwise aligned with `vcfs`. For enabled VCFs, `<DEL>` becomes a reference-anchored deletion, and `<DUP>` becomes a reference-anchored insertion using `SVLEN` or `END` as a fallback to determine the inserted-reference length. `<INV>` remains symbolic but receives `INFO/allele_type=inv` and an absolute `INFO/allele_length` from `SVLEN` or `END` as a fallback. Any other angle-bracket symbolic ALT fails the workflow.
 - `Array[String] source_tags`: Per-VCF `SOURCE` values. `[]` disables source tagging; otherwise aligned with `vcfs`. Required when at least one length cutoff is enabled.
 - `Array[File] swap_sample_lists`: Per-VCF sample-ID swap maps, applied before sample subsetting. `[]` disables swapping; otherwise aligned with `vcfs`. A zero-byte map means no swap for that VCF.
 - `Array[Int] min_length_cutoffs`: Per-VCF minimum absolute allele lengths. `[]` disables minimum-length filtering; otherwise aligned with `vcfs`. A value of `-1` disables this filter for that VCF. Calls with `abs(allele_length)` strictly below an enabled cutoff receive `SMALL_{source_tags[i]}`.
@@ -1064,7 +1064,7 @@ Outputs:
 - `missing_samples`: Samples with no matching base VCF.
 
 ### [DeepVariant](../wdl/tools/DeepVariant.wdl)
-This tool calls small variants from region-sharded BAMs with CPU or GPU DeepVariant, then merges the per-shard VCFs and gVCFs. Every non-`alts` shard must have a matching region file. The workflow passes those regions to DeepVariant, so each shard emits only its assigned genomic regions; this prevents the duplicate off-shard zero-depth gVCF blocks produced by whole-reference calling on partial BAMs.
+This tool calls small variants from region-sharded BAMs with CPU or GPU DeepVariant, then merges the per-shard VCFs and gVCFs. Every non-`alts` shard must have a matching region file. The workflow passes those regions to DeepVariant, so each shard emits only its assigned genomic regions; this prevents the duplicate off-shard zero-depth gVCF blocks produced by whole-reference calling on partial BAMs. It performs no explicit GCS-directory copy; map its declared outputs directly to attributes in the main Terra entity table.
 
 Inputs:
 

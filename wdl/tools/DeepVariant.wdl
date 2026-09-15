@@ -1,9 +1,10 @@
-# Derived from broadinstitute/long-read-pipelines commit 0c894634a22b296c6bed703be72b0f15328bb0dc:
-# https://github.com/broadinstitute/long-read-pipelines/blob/0c894634a22b296c6bed703be72b0f15328bb0dc/wdl/tasks/VariantCalling/DeepVariant.wdl
+# Derived from broadinstitute/long-read-pipelines:
+# https://github.com/broadinstitute/long-read-pipelines/blob/main/wdl/tasks/VariantCalling/DeepVariant.wdl [source branch: sh_update_wgs_callers_outliers]
 
 version 1.0
 
 import "../utils/Structs.wdl"
+import "../utils/Helpers.wdl"
 
 workflow DeepVariant {
     meta {
@@ -117,7 +118,9 @@ workflow DeepVariant {
             }
 
             File shard_vcf = select_first([RunCpu.vcf, RunGpu.vcf])
+            File shard_vcf_idx = select_first([RunCpu.vcf_idx, RunGpu.vcf_idx])
             File shard_gvcf = select_first([RunCpu.gvcf, RunGpu.gvcf])
+            File shard_gvcf_idx = select_first([RunCpu.gvcf_idx, RunGpu.gvcf_idx])
             File resource_usage_log = select_first([RunCpu.resource_usage_log, RunGpu.resource_usage_log])
             File visual_report = select_first([RunCpu.visual_report, RunGpu.visual_report])
 
@@ -132,29 +135,39 @@ workflow DeepVariant {
         }
     }
 
-    call MergeAndSortVcfs as MergeGvcfs {
+    call Helpers.ConcatVcfs as ConcatGvcfs {
         input:
             vcfs = select_all(shard_gvcf),
-            ref_fai = ref_fai,
+            vcf_idxs = select_all(shard_gvcf_idx),
+            allow_overlaps = true,
+            naive = false,
+            sort_output = true,
+            no_version = false,
+            no_address = false,
             prefix = "~{prefix}.deepvariant.g",
             docker = utils_docker,
             runtime_attr_override = runtime_attr_merge_gvcfs
     }
 
-    call MergeAndSortVcfs as MergeVcfs {
+    call Helpers.ConcatVcfs as ConcatVcfs {
         input:
             vcfs = select_all(shard_vcf),
-            ref_fai = ref_fai,
+            vcf_idxs = select_all(shard_vcf_idx),
+            allow_overlaps = true,
+            naive = false,
+            sort_output = true,
+            no_version = false,
+            no_address = false,
             prefix = "~{prefix}.deepvariant",
             docker = utils_docker,
             runtime_attr_override = runtime_attr_merge_vcfs
     }
 
     output {
-        File gvcf = MergeGvcfs.vcf
-        File gvcf_idx = MergeGvcfs.vcf_idx
-        File vcf = MergeVcfs.vcf
-        File vcf_idx = MergeVcfs.vcf_idx
+        File gvcf = ConcatGvcfs.concat_vcf
+        File gvcf_idx = ConcatGvcfs.concat_vcf_idx
+        File vcf = ConcatVcfs.concat_vcf
+        File vcf_idx = ConcatVcfs.concat_vcf_idx
         Array[File] resource_usage_logs = select_all(resource_usage_log)
         Array[File] resource_usage_visualizations = select_all(VisualizeResourceUsage.plot_pdf)
         Array[File] visual_reports = select_all(visual_report)
@@ -355,55 +368,6 @@ task VisualizeResourceUsage {
         cpu: select_first([runtime_attr.cpu_cores, default_attr.cpu_cores])
         memory: select_first([runtime_attr.mem_gb, default_attr.mem_gb]) + " GiB"
         disks: "local-disk " + select_first([runtime_attr.disk_gb, default_attr.disk_gb]) + " HDD"
-        bootDiskSizeGb: select_first([runtime_attr.boot_disk_gb, default_attr.boot_disk_gb])
-        preemptible: select_first([runtime_attr.preemptible_tries, default_attr.preemptible_tries])
-        maxRetries: select_first([runtime_attr.max_retries, default_attr.max_retries])
-        docker: docker
-    }
-}
-
-task MergeAndSortVcfs {
-    input {
-        Array[File] vcfs
-        File ref_fai
-        String prefix
-        String docker
-        RuntimeAttr? runtime_attr_override
-    }
-
-    Int input_size = ceil(size(vcfs, "GB"))
-    Int disk_size = if (input_size > 100) then 5 * input_size else 375
-    Int cores = 8
-    Int memory = 48
-
-    command <<<
-        set -euxo pipefail
-
-        printf '%s\n' ~{sep=' ' vcfs} > input_vcfs.txt
-        bcftools concat --naive --threads ~{cores - 1} -f input_vcfs.txt --output-type v -o concatenated.vcf.gz
-        bcftools reheader --fai ~{ref_fai} -o reheadered.vcf.gz concatenated.vcf.gz
-        bcftools sort --temp-dir sort_tmp --output-type z -o ~{prefix}.vcf.gz reheadered.vcf.gz
-        bcftools index --tbi --force ~{prefix}.vcf.gz
-    >>>
-
-    output {
-        File vcf = "~{prefix}.vcf.gz"
-        File vcf_idx = "~{prefix}.vcf.gz.tbi"
-    }
-
-    RuntimeAttr default_attr = object {
-        cpu_cores: cores,
-        mem_gb: memory,
-        disk_gb: disk_size,
-        boot_disk_gb: 10,
-        preemptible_tries: 1,
-        max_retries: 0
-    }
-    RuntimeAttr runtime_attr = select_first([runtime_attr_override, default_attr])
-    runtime {
-        cpu: select_first([runtime_attr.cpu_cores, default_attr.cpu_cores])
-        memory: select_first([runtime_attr.mem_gb, default_attr.mem_gb]) + " GiB"
-        disks: "local-disk " + select_first([runtime_attr.disk_gb, default_attr.disk_gb]) + " LOCAL"
         bootDiskSizeGb: select_first([runtime_attr.boot_disk_gb, default_attr.boot_disk_gb])
         preemptible: select_first([runtime_attr.preemptible_tries, default_attr.preemptible_tries])
         maxRetries: select_first([runtime_attr.max_retries, default_attr.max_retries])

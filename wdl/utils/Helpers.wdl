@@ -1062,6 +1062,26 @@ def get_end(record):
     return record.start + 1 + abs(svlen)
 
 
+def get_symbolic_length(record):
+    svlen = record.info.get("SVLEN")
+    if svlen is not None:
+        if isinstance(svlen, (list, tuple)):
+            if len(svlen) != 1:
+                fail(record, "symbolic <INV> or <DUP> requires one SVLEN value")
+            svlen = svlen[0]
+        try:
+            svlen = int(svlen)
+        except (TypeError, ValueError):
+            fail(record, f"invalid SVLEN value {svlen!r}")
+        if svlen != 0:
+            return abs(svlen)
+
+    length = record.stop - record.pos
+    if length > 0:
+        return length
+    fail(record, "symbolic <INV> or <DUP> requires a nonzero SVLEN or END")
+
+
 def clear_symbolic_info(record):
     for field in SYMBOLIC_INFO_FIELDS:
         if field in record.info:
@@ -1069,10 +1089,16 @@ def clear_symbolic_info(record):
 
 
 vcf_in = pysam.VariantFile("split.vcf.gz")
+header = vcf_in.header.copy()
+if "allele_length" not in header.info:
+    header.add_line('##INFO=<ID=allele_length,Number=1,Type=Integer,Description="Allele length">')
+if "allele_type" not in header.info:
+    header.add_line('##INFO=<ID=allele_type,Number=1,Type=String,Description="Allele type">')
 reference = pysam.FastaFile("~{ref_fa}", filepath_index="~{ref_fai}")
-vcf_out = pysam.VariantFile("~{prefix}.vcf.gz", "wz", header=vcf_in.header)
+vcf_out = pysam.VariantFile("~{prefix}.vcf.gz", "wz", header=header)
 
 for record in vcf_in:
+    record.translate(header)
     alt = record.alts[0]
     if not is_symbolic(alt):
         vcf_out.write(record)
@@ -1080,10 +1106,13 @@ for record in vcf_in:
     if alt not in SUPPORTED_SYMBOLIC_ALTS:
         fail(record, f"unsupported symbolic ALT {alt}")
     if alt == "<INV>":
+        record.info["allele_length"] = get_symbolic_length(record)
+        record.info["allele_type"] = "inv"
         vcf_out.write(record)
         continue
 
-    end = get_end(record)
+    symbolic_length = get_symbolic_length(record) if alt == "<DUP>" else None
+    end = record.start + 1 + symbolic_length if alt == "<DUP>" else get_end(record)
     if end <= record.start + 1:
         fail(record, "symbolic <DEL> or <DUP> must span at least one non-anchor base")
     try:
@@ -1103,6 +1132,9 @@ for record in vcf_in:
         record.alleles = (anchor, anchor + sequence[1:])
     record.stop = record.start + len(record.ref)
     clear_symbolic_info(record)
+    if alt == "<DUP>":
+        record.info["allele_length"] = symbolic_length
+        record.info["allele_type"] = "ins"
     vcf_out.write(record)
 
 vcf_in.close()
