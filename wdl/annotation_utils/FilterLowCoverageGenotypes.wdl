@@ -13,7 +13,6 @@ workflow FilterLowCoverageGenotypes {
         File ped
         String? subset_unfilled_vcf_field
         String? subset_unfilled_vcf_value
-        Boolean filter_non_ref
 
         Int? records_per_shard
 
@@ -49,7 +48,6 @@ workflow FilterLowCoverageGenotypes {
                 ped = ped,
                 subset_unfilled_vcf_field = subset_unfilled_vcf_field,
                 subset_unfilled_vcf_value = subset_unfilled_vcf_value,
-                filter_non_ref = filter_non_ref,
                 prefix = "~{prefix}.shard_~{i}",
                 docker = utils_docker,
                 runtime_attr_override = runtime_attr_filter
@@ -94,7 +92,6 @@ task FilterLowCoverageGenotypesShard {
         File ped
         String? subset_unfilled_vcf_field
         String? subset_unfilled_vcf_value
-        Boolean filter_non_ref
         String prefix
         String docker
         RuntimeAttr? runtime_attr_override
@@ -115,7 +112,6 @@ CUTOFFS = "~{sample_cutoffs_tsv}"
 PED = "~{ped}"
 SUBSET_FIELD = ~{if defined(subset_unfilled_vcf_field) then "'" + subset_unfilled_vcf_field + "'" else "None"}
 SUBSET_VALUE = ~{if defined(subset_unfilled_vcf_value) then "'" + subset_unfilled_vcf_value + "'" else "None"}
-FILTER_NON_REF = ~{true="True" false="False" filter_non_ref}
 OUTPUT_VCF = "~{prefix}.vcf.gz"
 OUTPUT_TSV = "~{prefix}.filtered_genotypes.tsv"
 SEX_CHROMS = {"chrX", "chrY"}
@@ -169,10 +165,6 @@ def is_called(gt):
     return gt is not None and any(allele is not None for allele in gt)
 
 
-def is_non_ref(gt):
-    return any(allele is not None and allele > 0 for allele in gt)
-
-
 def allele_counts(record):
     counts = [0] * len(record.alts)
     for sample in record.samples.values():
@@ -199,6 +191,9 @@ def in_subset(record):
 cutoffs = read_cutoffs(CUTOFFS)
 sexes = read_ped_sexes(PED)
 vcf_in = pysam.VariantFile(VCF)
+vcf_in.header.formats.add(
+    "FD", 1, "Integer", "Filtered due to depth"
+)
 vcf_samples = set(vcf_in.header.samples)
 
 cutoff_samples = set(cutoffs)
@@ -248,11 +243,12 @@ with open(OUTPUT_TSV, "w", newline="") as report_handle:
             for sample_id, sample in record.samples.items():
                 gt = sample.get("GT")
                 dp = sample.get("DP")
-                if (not is_called(gt) or (not FILTER_NON_REF and is_non_ref(gt))
-                        or dp is None or dp > sample_cutoff(sample_id, record.chrom)):
+                if (not is_called(gt) or dp is None
+                        or dp > sample_cutoff(sample_id, record.chrom)):
                     continue
                 filtered_samples.append(sample_id)
                 sample["GT"] = tuple(None for _ in gt)
+                sample["FD"] = 1
                 sample.phased = False
 
         if filtered_samples:

@@ -502,13 +502,13 @@ Outputs:
 - `mosdepth_per_base_combined_idx`: Index for the combined BED.
 
 ### [ValidateTRGTWithCatalog](../wdl/annotation_utils/ValidateTRGTWithCatalog.wdl)
-This utility validates that each TRGT variant's literal `CHROM`, `POS` and `INFO/END` values match columns 1, 2 and 3 of a TRGT catalog BED. It outputs an indexed VCF containing only variants without a matching catalog position, including records with a missing or malformed `END` tag. The VCF and compressed catalog are subset per contig; when `records_per_shard` is set, each contig VCF is additionally sharded by record count and validated in parallel.
+This utility validates that each TRGT variant's `CHROM`, `POS` and inclusive REF end (`POS + len(REF) - 1`) match columns 1, 2 and 3 of a TRGT catalog BED. It outputs an indexed VCF containing only variants without a matching catalog position. The VCF and compressed catalog are subset per contig; when `records_per_shard` is set, each contig VCF is additionally sharded by record count and validated in parallel.
 
 Inputs:
 - `File trgt_vcf`: TRGT VCF to validate.
 - `File trgt_vcf_idx`: Index for `trgt_vcf`.
 - `Array[String] contigs`: Contigs to validate within the input VCF and catalog.
-- `File trgt_catalog_bed_gz`: Gzipped TRGT catalog BED whose first three columns are `CHROM`, `POS` and `END`.
+- `File trgt_catalog_bed_gz`: Gzipped TRGT catalog BED whose first three columns are `CHROM`, `POS` and inclusive REF end.
 - `Int? records_per_shard`: Number of variants to keep within a validation shard. When unset, each contig is processed as one shard.
 
 Outputs:

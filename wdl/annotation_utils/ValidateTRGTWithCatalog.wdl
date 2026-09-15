@@ -125,16 +125,6 @@ task FindIncongruentTRGTVariants {
 
         python3 <<'PYCODE'
 import gzip
-import re
-
-def parse_end(info):
-    for entry in info.split(";"):
-        if entry.startswith("END="):
-            value = entry.split("=", 1)[1]
-            if re.fullmatch(r"[0-9]+", value):
-                return int(value)
-    return None
-
 
 catalog_positions = set()
 with open("~{catalog_bed}") as catalog_file:
@@ -149,9 +139,9 @@ with gzip.open("~{vcf}", "rt") as vcf_in, open("incongruent.vcf", "w") as vcf_ou
         if line.startswith("#"):
             vcf_out.write(line)
             continue
-        chrom, pos, _, _, _, _, _, info, *_ = line.rstrip("\n").split("\t")
-        end = parse_end(info)
-        if end is None or (chrom, int(pos), end) not in catalog_positions:
+        chrom, pos, _, ref, *_ = line.rstrip("\n").split("\t")
+        end = int(pos) + len(ref) - 1
+        if (chrom, int(pos), end) not in catalog_positions:
             vcf_out.write(line)
 PYCODE
 
