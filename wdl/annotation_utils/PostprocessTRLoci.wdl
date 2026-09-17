@@ -6,6 +6,7 @@ import "../annotation/AnnotateRegion.wdl"
 import "../annotation/AnnotateSQMetrics.wdl"
 import "../annotation/AnnotateVRS.wdl"
 import "../tools/MergeHiPhaseCallsets.wdl"
+import "../utils/Helpers.wdl"
 import "../utils/Structs.wdl"
 import "AnnotateVcf.wdl"
 
@@ -96,7 +97,7 @@ workflow PostprocessTRLoci {
                     runtime_attr_override = runtime_attr_subset_trgt
             }
 
-            call MergeHiPhaseCallsets.AddTRGTEndTag {
+            call Helpers.AddTREndTag as AddTRGTEndTag {
                 input:
                     vcf = SubsetTRGTForCatalogLoci.subset_vcf,
                     vcf_idx = SubsetTRGTForCatalogLoci.subset_vcf_idx,
