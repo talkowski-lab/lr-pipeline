@@ -34,7 +34,7 @@ def main():
     args = parser.parse_args()
 
     binwise_cn = pd.read_csv(args.binwise_copy_number, sep='\t')
-    estimated_cn = pd.read_csv(args.estimated_copy_number, sep='\t')
+    estimated_cn = pd.read_csv(args.estimated_copy_number, sep='\t', dtype={'sample_id': str})
 
     binwise_melted = pd.melt(
         binwise_cn,

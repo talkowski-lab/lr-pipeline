@@ -1029,7 +1029,7 @@ task ConvertSymbolicAllelesToSequence {
 import pysam
 
 
-SUPPORTED_SYMBOLIC_ALTS = {"<DEL>", "<DUP>", "<INV>"}
+SUPPORTED_SYMBOLIC_ALTS = {"<DEL>", "<DUP>", "<INS>", "<INV>"}
 SYMBOLIC_INFO_FIELDS = ("SVTYPE", "SVLEN", "CIPOS", "CIEND", "IMPRECISE", "STRANDS")
 
 
@@ -1067,7 +1067,7 @@ def get_symbolic_length(record):
     if svlen is not None:
         if isinstance(svlen, (list, tuple)):
             if len(svlen) != 1:
-                fail(record, "symbolic <INV> or <DUP> requires one SVLEN value")
+                fail(record, "symbolic <INS>, <INV>, or <DUP> requires one SVLEN value")
             svlen = svlen[0]
         try:
             svlen = int(svlen)
@@ -1079,7 +1079,7 @@ def get_symbolic_length(record):
     length = record.stop - record.pos
     if length > 0:
         return length
-    fail(record, "symbolic <INV> or <DUP> requires a nonzero SVLEN or END")
+    fail(record, "symbolic <INS>, <INV>, or <DUP> requires a nonzero SVLEN or END")
 
 
 def clear_symbolic_info(record):
@@ -1105,6 +1105,14 @@ for record in vcf_in:
         continue
     if alt not in SUPPORTED_SYMBOLIC_ALTS:
         fail(record, f"unsupported symbolic ALT {alt}")
+    if alt == "<INS>":
+        if "allele_length" not in record.info:
+            record.info["allele_length"] = get_symbolic_length(record)
+        if "allele_type" not in record.info:
+            record.info["allele_type"] = "ins"
+        vcf_out.write(record)
+        continue
+
     if alt == "<INV>":
         record.info["allele_length"] = get_symbolic_length(record)
         record.info["allele_type"] = "inv"

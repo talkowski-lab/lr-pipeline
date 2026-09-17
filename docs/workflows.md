@@ -501,6 +501,21 @@ Outputs:
 - `mosdepth_per_base_combined`: Combined per-base coverage BED.
 - `mosdepth_per_base_combined_idx`: Index for the combined BED.
 
+### [ConcatenateVcfsAcrossContigs](../wdl/annotation_utils/ConcatenateVcfsAcrossContigs.wdl)
+This utility concatenates exactly one VCF per contig into a single VCF, optionally dropping genotypes before concatenation. It validates that the VCF, index, and contig arrays are aligned and that no contig is duplicated.
+
+Inputs:
+- `Array[File] vcfs`: Per-contig VCFs to concatenate.
+- `Array[File] vcf_idxs`: Indexes for `vcfs`.
+- `Array[String] contigs`: Contigs corresponding to `vcfs`.
+- `String prefix`: Prefix for output file names.
+- `Boolean drop_genotypes`: Whether to strip genotypes before concatenation (default `false`).
+
+Outputs:
+- `concat_vcf`: Combined VCF.
+- `concat_vcf_idx`: Index for the combined VCF.
+
+
 ### [ExtractDisparateTRLoci](../wdl/annotation_utils/ExtractDisparateTRLoci.wdl)
 This utility subsets two VCFs to tandem-repeat variants (`INFO/allele_type=trv`) on one contig, then compares their loci. It produces one TSV for identities present in only one VCF, where identity is `CHROM`, `POS` and `len(REF)`, and another TSV for positive-base overlaps with distinct identities. Overlaps are identified with `bedtools intersect`; the overlapping TSV includes the `INFO/TRID` value from both VCFs.
 
@@ -849,7 +864,7 @@ Inputs:
 - `Array[File] vcfs`: Cohort VCFs to preprocess and merge.
 - `Array[File] vcf_idxs`: Indexes for `vcfs`.
 - `Array[Boolean] normalize_vcfs`: Per-VCF normalization settings. `[]` disables normalization; otherwise aligned with `vcfs`.
-- `Array[Boolean] convert_symbolic_to_sequence`: Per-VCF symbolic-allele conversion settings. `[]` disables conversion; otherwise aligned with `vcfs`. For enabled VCFs, `<DEL>` becomes a reference-anchored deletion, and `<DUP>` becomes a reference-anchored insertion using `SVLEN` or `END` as a fallback to determine the inserted-reference length. `<INV>` remains symbolic but receives `INFO/allele_type=inv` and an absolute `INFO/allele_length` from `SVLEN` or `END` as a fallback. Any other angle-bracket symbolic ALT fails the workflow.
+- `Array[Boolean] convert_symbolic_to_sequence`: Per-VCF symbolic-allele conversion settings. `[]` disables conversion; otherwise aligned with `vcfs`. For enabled VCFs, `<DEL>` becomes a reference-anchored deletion, and `<DUP>` becomes a reference-anchored insertion using `SVLEN` or `END` as a fallback to determine the inserted-reference length. `<INS>` remains unchanged; existing `INFO/allele_length` and `INFO/allele_type` values are preserved, while missing values receive an absolute length from `SVLEN` or `END` as a fallback and `allele_type=ins`. `<INV>` remains symbolic but receives `INFO/allele_type=inv` and an absolute `INFO/allele_length` from `SVLEN` or `END` as a fallback. Any other angle-bracket symbolic ALT fails the workflow.
 - `Array[String] source_tags`: Per-VCF `SOURCE` values. `[]` disables source tagging; otherwise aligned with `vcfs`. Required when at least one length cutoff is enabled.
 - `Array[File] swap_sample_lists`: Per-VCF sample-ID swap maps, applied before sample subsetting. `[]` disables swapping; otherwise aligned with `vcfs`. A zero-byte map means no swap for that VCF.
 - `Array[Int] min_length_cutoffs`: Per-VCF minimum absolute allele lengths. `[]` disables minimum-length filtering; otherwise aligned with `vcfs`. A value of `-1` disables this filter for that VCF. Calls with `abs(allele_length)` strictly below an enabled cutoff receive `SMALL_{source_tags[i]}`.
@@ -965,6 +980,27 @@ Outputs:
 - `overlap_resolved_vcf`: VCF with overlapping loser genotypes cleared.
 - `overlap_resolved_vcf_idx`: Index for `overlap_resolved_vcf`.
 - `overlap_tsv`: TSV of all detected overlap pairs, with columns `sample`, `haplotype`, `variant_id_retained`, `var_type_retained`, `size_bin_retained`, `variant_id_cleared`, `var_type_cleared`, `size_bin_cleared`.
+
+### [SplitVcfPerContig](../wdl/annotation_utils/SplitVcfPerContig.wdl)
+This utility splits a VCF into one VCF per requested contig. It can add missing INFO-header lines, create genotype-free copies, rewrite SNV IDs, and rename source contigs to dbSNP or dbVar naming.
+
+Inputs:
+- `File vcf`: VCF to split.
+- `File vcf_idx`: Index for `vcf`.
+- `Array[String] contigs`: Contigs to extract.
+- `String prefix`: Prefix for output file names.
+- `Boolean create_no_geno`: Whether to also produce genotype-free VCFs (default `false`).
+- `Boolean modify_snv_ids`: Whether to rewrite SNV IDs (default `false`).
+- `Boolean rename_dbsnp_contigs`: Whether to rename source contigs from dbSNP naming (default `false`).
+- `Boolean rename_dbvar_contigs`: Whether to rename source contigs from dbVar naming (default `false`).
+- `Array[String]? missing_info_header_fields`: INFO-header lines to add if missing.
+
+Outputs:
+- `contig_vcfs`: Per-contig VCFs.
+- `contig_vcf_idxs`: Indexes for `contig_vcfs`.
+- `contig_no_geno_vcfs`: Per-contig genotype-free VCFs when requested.
+- `contig_no_geno_vcf_idxs`: Indexes for `contig_no_geno_vcfs` when requested.
+
 
 ### [SubsetTsvToColumns](../wdl/annotation_utils/SubsetTsvToColumns.wdl)
 This utility subsets an annotation TSV to a chosen set of columns, optionally filtering rows to those whose columns match specified values. It outputs the subset TSV.

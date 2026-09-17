@@ -4,20 +4,6 @@
 
 > Archived workflows are retained as historical reference only. They are not active pipeline entry points and are excluded from active WDL validation and Dockstore registration.
 
-### [CombineVcfsAcrossContigs](../wdl/annotation_utils/CombineVcfsAcrossContigs.wdl)
-This utility concatenates a set of per-contig VCFs into a single VCF, optionally dropping genotypes in the process. It outputs the combined VCF.
-
-Inputs:
-- `Array[File] vcfs`: Per-contig VCFs to concatenate.
-- `Array[File] vcf_idxs`: Indexes for `vcfs`.
-- `Array[String] contigs`: Contigs corresponding to `vcfs`.
-- `Boolean drop_genotypes`: Whether to strip genotypes from the combined VCF (default `false`).
-
-Outputs:
-- `concat_vcf`: Combined VCF.
-- `concat_vcf_idx`: Index for the combined VCF.
-
-
 ### [CompareBams](../wdl/annotation_utils/CompareBams.wdl)
 This utility compares two unaligned BAMs by read identity, sequence length, and sequence content. It reports total read counts, the number of reads whose IDs match across BAMs, the number of matched-ID pairs with identical sequence lengths, and the number with identical sequences (compared via MD5). It also emits a per-read TSV covering all reads from both files.
 
@@ -231,26 +217,6 @@ Inputs:
 Outputs:
 - `replaced_vcf`: Cohort VCF with replaced sample calls.
 - `replaced_vcf_idx`: Index for the updated VCF.
-
-
-### [SplitVcfPerContig](../wdl/annotation_utils/SplitVcfPerContig.wdl)
-This utility splits a VCF into per-contig VCFs, optionally also producing genotype-free copies and applying fixups such as adding missing INFO header lines, modifying SNV IDs and renaming dbSNP/dbVar contigs. It outputs the per-contig VCFs and their no-genotype counterparts.
-
-Inputs:
-- `File vcf`: VCF to split.
-- `File vcf_idx`: Index for VCF.
-- `Array[String] contigs`: Contigs to split the VCF into.
-- `Boolean create_no_geno`: Whether to also produce genotype-free copies (default `false`).
-- `Boolean modify_snv_ids`: Whether to rewrite SNV variant IDs (default `false`).
-- `Boolean rename_dbsnp_contigs`: Whether to rename contigs to dbSNP naming (default `false`).
-- `Boolean rename_dbvar_contigs`: Whether to rename contigs to dbVar naming (default `false`).
-- `Array[String]? missing_info_header_fields`: INFO header lines to add if missing.
-
-Outputs:
-- `contig_vcfs`: Per-contig VCFs.
-- `contig_vcf_idxs`: Indexes for the per-contig VCFs.
-- `contig_no_geno_vcfs`: Per-contig genotype-free VCFs.
-- `contig_no_geno_vcf_idxs`: Indexes for the genotype-free VCFs.
 
 
 ### [SubsetTRGTToCatalog](../wdl/annotation_utils/SubsetTRGTToCatalog.wdl)

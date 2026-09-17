@@ -7,15 +7,9 @@ workflow CreateTRGTHistograms {
     input {
         File lps_tsv
         File metadata_tsv
+        Array[File] vcf_trid_metadata_tsvs
         Array[String] contigs
         String prefix
-
-        # Per-contig TRID metadata from TRGTLPS.vcf_trid_metadata_tsvs, index-aligned with the
-        # `contigs` input array. Without it the converter cannot resolve a compound TRID (a variation cluster
-        # record whose INFO/TRID lists several LocusIds) and fails on the first one it sees, so it
-        # is required for any callset genotyped against a catalog containing variation clusters.
-        # Left empty for a catalog of isolated repeats only.
-        Array[File] vcf_trid_metadata_tsvs = []
 
         String stranalysis_docker
         String utils_docker
@@ -27,14 +21,9 @@ workflow CreateTRGTHistograms {
 
     Boolean single_contig = length(contigs) == 1
 
-    # Scatter by index rather than over `contigs` directly so each shard can pick the TRID
-    # metadata TSV belonging to its own contig. The converter rejects metadata rows that no LPS
-    # row claims, so a whole-genome metadata file paired with one contig's LPS rows would fail.
     scatter (i in range(length(contigs))) {
         String contig = contigs[i]
 
-        # Declared inside the conditional so it is File? outside it, matching the task's optional
-        # input. Indexing here is what requires the two arrays to be the same length and order.
         if (length(vcf_trid_metadata_tsvs) > 0) {
             File contig_trid_metadata_tsv = vcf_trid_metadata_tsvs[i]
         }
