@@ -9,10 +9,6 @@ import "../utils/Structs.wdl"
 import "AnnotateVcf.wdl"
 import "PostProcessTRLociHPRCHGSVC.wdl" as TRShared
 
-# AoU variant of PostProcessTRLoci. Unlike the HPRC/HGSVC workflow there are no per-sample
-# TRGT VCFs or haplotype-resolved base VCFs, so no sequence-agreement phasing is possible.
-# A single joint-genotyped TRGT VCF and a TRGT catalog BED drive recovery of disease-associated
-# catalog loci that are missing from the integrated cohort VCF.
 workflow PostProcessTRLociAoU {
     input {
         File vcf
