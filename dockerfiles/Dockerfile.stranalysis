@@ -67,9 +67,12 @@ RUN python3 -m pip install --no-cache-dir git+https://github.com/bw2/trviz@9068d
 
 
 ENV HTSLIB_CONFIGURE_OPTIONS="--enable-s3 --enable-gcs --enable-libcurl --with-libdeflate"
-ARG STR_ANALYSIS_COMMIT
-RUN python3 -m pip install --upgrade --no-cache-dir \
-    configargparse \
-    git+https://github.com/broadinstitute/str-analysis@${STR_ANALYSIS_COMMIT}
+ADD https://api.github.com/repos/broadinstitute/str-analysis/commits/main /opt/str-analysis-main.json
+RUN str_analysis_commit="$(python3 -c 'import json; print(json.load(open("/opt/str-analysis-main.json"))["sha"])')" \
+    && test -n "${str_analysis_commit}" \
+    && python3 -m pip install --upgrade --no-cache-dir \
+        configargparse \
+        git+https://github.com/broadinstitute/str-analysis@${str_analysis_commit} \
+    && printf '%s\n' "${str_analysis_commit}" > /opt/str-analysis-commit
 
 ENV PYTHONPATH=/:.:$PYTHONPATH

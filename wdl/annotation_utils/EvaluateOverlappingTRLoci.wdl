@@ -75,7 +75,7 @@ CIGAR_RE = re.compile(r'(\d+)([=XIDM])')
 EMPTY_SEQ = '-'
 ABSENT_HAP = '.'
 HEADER = [
-    'trid_a', 'trid_b', 'chrom', 'overlap_start', 'overlap_end', 'overlap_length',
+    'trid_a', 'trid_b', 'motifs_a', 'motifs_b', 'chrom', 'overlap_start', 'overlap_end', 'overlap_length',
     'hap1_seq_a', 'hap2_seq_a', 'hap1_seq_b', 'hap2_seq_b',
     'min_edit_distance', 'max_similarity',
 ]
@@ -131,15 +131,20 @@ def min_edit_distance(seqs_a, seqs_b):
     return min(edit_distance(seq_a, seq_b) for seq_a in seqs_a for seq_b in seqs_b), 1
 
 
+def info_text(rec, key):
+    """Render a comma-separated INFO field exactly as written in the VCF, whichever way pysam splits it."""
+    value = rec.info[key]
+    return value if isinstance(value, str) else ','.join(value)
+
+
 def load_record(rec):
-    """Collect the reference span, genotyped haplotype sequences and TRID of a TRGT record."""
+    """Collect the reference span, genotyped haplotype sequences, TRID and motifs of a TRGT record."""
     genotype = rec.samples[0]['GT']
     if not genotype or any(allele is None for allele in genotype):
         return None
 
     ref = rec.ref.upper()
     alleles = [ref] + [alt.upper() for alt in (rec.alts or [])]
-    trid = rec.info['TRID']
     return {
         'chrom': rec.chrom,
         'start': rec.pos,
@@ -147,7 +152,8 @@ def load_record(rec):
         'ref': ref,
         'haps': [alleles[allele] for allele in genotype],
         'nonref': any(allele > 0 for allele in genotype),
-        'trid': trid if isinstance(trid, str) else ','.join(trid),
+        'trid': info_text(rec, 'TRID'),
+        'motifs': info_text(rec, 'MOTIFS'),
         'cuts': None,
     }
 
@@ -195,7 +201,8 @@ with pysam.VariantFile("~{vcf}") as vcf_in, open("~{prefix}.overlapping_tr_loci.
             distance, ploidy = min_edit_distance(seqs_a, seqs_b)
             similarity = 1 - distance / (ploidy * overlap_length)
             tsv_out.write('\t'.join(str(field) for field in [
-                held['trid'], record['trid'], record['chrom'], overlap_start, overlap_end, overlap_length,
+                held['trid'], record['trid'], held['motifs'], record['motifs'],
+                record['chrom'], overlap_start, overlap_end, overlap_length,
                 *format_haps(seqs_a), *format_haps(seqs_b), distance, f'{similarity:.4f}',
             ]) + '\n')
             pairs += 1
