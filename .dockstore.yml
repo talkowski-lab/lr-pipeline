@@ -475,6 +475,15 @@ workflows:
         - /.*/
 
   - subclass: WDL
+    name: EvaluateOverlappingTRLoci
+    primaryDescriptorPath: /wdl/annotation_utils/EvaluateOverlappingTRLoci.wdl
+    filters:
+      branches:
+        - main
+      tags:
+        - /.*/
+
+  - subclass: WDL
     name: PostprocessCallset
     primaryDescriptorPath: /wdl/annotation_utils/PostprocessCallset.wdl
     filters:

@@ -932,6 +932,17 @@ Outputs:
 - `missing_samples`: Samples with no matching base VCF.
 - `vcf_tables`: Per-VCF variant-status tables.
 
+### [EvaluateOverlappingTRLoci](../wdl/annotation_utils/EvaluateOverlappingTRLoci.wdl)
+This utility evaluates how consistently TRGT genotypes the same reference bases when the repeat catalog defines overlapping loci. It takes a single-sample TRGT VCF, pairs every two records whose `POS`-to-`INFO/END` reference spans intersect and, for each pair, projects both haplotype sequences onto the shared reference interval and scores their agreement. Only pairs where at least one locus carries a non-reference call are evaluated, since two reference calls agree on the shared bases by construction. Each TRGT record is a full-locus replacement - `REF` is the reference sequence spanning the locus and each `ALT` is a complete haplotype sequence - so no reference FASTA or prior `bcftools norm` is needed. The projection aligns each haplotype to its own `REF` with `edlib` and assigns inserted bases to the reference base they follow, which means the projected sequence of a haplotype carrying a length change inherits the aligner's placement of that change; when a length change is placed at the edge of the shared interval its whole length is charged to that interval, so `max_similarity` can fall below `0`. Genotypes are unphased, so both haplotype assignments are scored and the one with the lower summed edit distance is reported. Haploid records are scored on their single haplotype and report `.` for the absent haplotype, and records with a missing genotype are skipped.
+
+Inputs:
+- `File vcf`: Single-sample TRGT VCF to evaluate.
+- `File vcf_idx`: Index for `vcf`.
+- `Array[String] contigs`: Contigs to process.
+
+Outputs:
+- `overlapping_loci_tsv`: One row per evaluated locus pair, with the `INFO/TRID` of both records, the shared reference interval and its length, the projected haplotype sequences of both records (`-` where the interval is deleted on that haplotype, `.` where the record is haploid), `min_edit_distance` - the edit distance summed over both haplotype pairs under the better of the two assignments - and `max_similarity`, that distance divided by the shared interval length times the number of compared haplotypes and subtracted from `1`, so `1` means the records agree exactly.
+
 ### [PostprocessCallset](../wdl/annotation_utils/PostprocessCallset.wdl)
 This utility bundles every genotype-update and post-processing step applied to a near-final callset into one workflow, with a required `run_` Boolean guarding each step so that the input VCF is left untouched when all are set to `false`. The per-record steps are applied in a single pass over the VCF: each variant is first matched against `transfer_vcf` and has its genotypes transferred (when `run_transfer_genotypes` is set) using its unmodified properties, after which the remaining steps - unphasing, ploidy normalization, TR-ID decrementing, MEI pruning, homopolymer flagging, singleton filtering and same-coordinate sorting - run in order. Some steps require an accompanying field - `run_transfer_genotypes` needs `transfer_vcf`, `run_unphase_samples` needs `unphase_samples`, and `run_normalize_ploidy` needs `ped`. The per-record pass can optionally be region-sharded via `shard_bin_size`.
 
