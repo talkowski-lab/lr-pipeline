@@ -15,6 +15,7 @@ workflow TRGTLPS {
         String stranalysis_docker
 
         RuntimeAttr? runtime_attr_subset_vcf
+        RuntimeAttr? runtime_attr_add_end
         RuntimeAttr? runtime_attr_trgt_lps
         RuntimeAttr? runtime_attr_extract_trid_metadata
         RuntimeAttr? runtime_attr_concat
@@ -41,10 +42,19 @@ workflow TRGTLPS {
                 runtime_attr_override = runtime_attr_trgt_lps
         }
 
-        call ExtractTridMetadata {
+        call Helpers.AddTREndTag {
             input:
                 vcf = SubsetVcfToContig.subset_vcf,
                 vcf_idx = SubsetVcfToContig.subset_vcf_idx,
+                prefix = "~{prefix}.~{contig}.with_end",
+                docker = utils_docker,
+                runtime_attr_override = runtime_attr_add_end
+        }
+        
+        call ExtractTridMetadata {
+            input:
+                vcf = AddTREndTag.vcf_with_end,
+                vcf_idx = AddTREndTag.vcf_with_end_idx,
                 contig = contig,
                 prefix = "~{prefix}.~{contig}.trid_metadata",
                 docker = stranalysis_docker,
@@ -64,7 +74,6 @@ workflow TRGTLPS {
 
     output {
         File trgt_lps_tsv = ConcatTsvs.concatenated_tsv
-        # Index-aligned with the "contigs" input array.
         Array[File] vcf_trid_metadata_tsvs = ExtractTridMetadata.trid_metadata_tsv
     }
 }

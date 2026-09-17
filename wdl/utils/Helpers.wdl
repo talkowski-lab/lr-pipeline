@@ -109,6 +109,89 @@ task AddFilter {
     }
 }
 
+task AddTREndTag {
+    input {
+        File vcf
+        File vcf_idx
+        String prefix
+        String docker
+        RuntimeAttr? runtime_attr_override
+    }
+
+    command <<<
+        set -euo pipefail
+
+        bcftools view ~{vcf} \
+            | awk 'BEGIN{FS=OFS="\t"; has_end_header=0}
+
+                /^##INFO=<ID=END,/ {
+                    has_end_header=1
+                    print
+                    next
+                }
+                /^#CHROM/ {
+                    if (!has_end_header) {
+                        print "##INFO=<ID=END,Number=1,Type=Integer,Description=\"End position of the variant described in this record\">"
+                    }
+                    print
+                    next
+                }
+                /^#/ {
+                    print
+                    next
+                }
+                {
+                    end_val=$2 + length($4) - 1
+
+                    if ($8=="." || $8=="") {
+                        $8="END=" end_val
+                    } else if ($8 ~ /(^|;)END=/) {
+                        n=split($8, info_parts, ";")
+                        for (i=1; i<=n; i++) {
+                            if (info_parts[i] ~ /^END=/) {
+                                info_parts[i]="END=" end_val
+                            }
+                        }
+                        $8=info_parts[1]
+                        for (i=2; i<=n; i++) {
+                            $8=$8 ";" info_parts[i]
+                        }
+                    } else {
+                        $8=$8 ";END=" end_val
+                    }
+
+                    print
+                }' \
+            | bgzip -c > ~{prefix}.vcf.gz
+
+        tabix -f -p vcf ~{prefix}.vcf.gz
+    >>>
+
+    output {
+        File vcf_with_end = "~{prefix}.vcf.gz"
+        File vcf_with_end_idx = "~{prefix}.vcf.gz.tbi"
+    }
+
+    RuntimeAttr default_attr = object {
+        cpu_cores: 1,
+        mem_gb: 4,
+        disk_gb: 3 * ceil(size([vcf, vcf_idx], "GB")) + 5,
+        boot_disk_gb: 10,
+        preemptible_tries: 1,
+        max_retries: 0
+    }
+    RuntimeAttr runtime_attr = select_first([runtime_attr_override, default_attr])
+    runtime {
+        cpu: select_first([runtime_attr.cpu_cores, default_attr.cpu_cores])
+        memory: select_first([runtime_attr.mem_gb, default_attr.mem_gb]) + " GiB"
+        disks: "local-disk " + select_first([runtime_attr.disk_gb, default_attr.disk_gb]) + " HDD"
+        bootDiskSizeGb: select_first([runtime_attr.boot_disk_gb, default_attr.boot_disk_gb])
+        docker: docker
+        preemptible: select_first([runtime_attr.preemptible_tries, default_attr.preemptible_tries])
+        maxRetries: select_first([runtime_attr.max_retries, default_attr.max_retries])
+    }
+}
+
 task AddInfo {
     input {
         File vcf
