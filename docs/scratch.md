@@ -46,7 +46,8 @@ This document tracks ad hoc processing notes across generated callsets.
 - _FilterLowCoverageRegions_ --> hprc_hgsvc_vcf_V3, aou_vcf_V2.
 - _AnnotateCallsetOverlap_.
 - _AnnotateVcfCallsetOverlap_ --> hprc_hgsvc_vcf_V4, aou_vcf_V3.
-- _PostprocessTRLoci_ --> hprc_hgsvc_vcf_V5, aou_vcf_V4.
+- (HPRC/HGSVC Only) _PostProcessTRLociHPRCHGSVC_ --> hprc_hgsvc_vcf_V5.
+- (AoU Only) _PostProcessTRLociAoU_ --> aou_vcf_V4.
 - (AoU Only) _StripGenotypes_ --> aou_sites_vcf.
 - (HPRC/HGSVC Only) _FillFormatFields_ --> hprc_hgsvc_vcf_V6.
 - (HPRC/HGSVC Only) _FilterLowCoverageGenotypes_ --> hprc_hgsvc_vcf_V7.

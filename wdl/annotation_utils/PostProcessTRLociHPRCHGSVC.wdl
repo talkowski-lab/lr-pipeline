@@ -10,7 +10,7 @@ import "../utils/Helpers.wdl"
 import "../utils/Structs.wdl"
 import "AnnotateVcf.wdl"
 
-workflow PostprocessTRLoci {
+workflow PostProcessTRLociHPRCHGSVC {
     input {
         File vcf
         File vcf_idx
@@ -70,8 +70,6 @@ workflow PostprocessTRLoci {
     }
 
     Boolean do_normalize_ploidy = run_normalize_ploidy && defined(ped)
-    # With no base VCFs there is nothing to phase against; skip phasing and annotate the prepared VCF directly.
-    Boolean run_phasing = length(base_vcfs) > 0
 
     call DiscoverTRLoci {
         input:
@@ -156,32 +154,27 @@ workflow PostprocessTRLoci {
             }
 
             if (PrepareReplacementLoci.retained_count > 0) {
-            if (run_phasing) {
-                call PhaseReplacementLoci {
-                    input:
-                        vcf = PrepareReplacementLoci.prepared_vcf,
-                        vcf_idx = PrepareReplacementLoci.prepared_vcf_idx,
-                        original_vcf = vcf,
-                        original_vcf_idx = vcf_idx,
-                        replacement_map_tsv = PrepareReplacementLoci.replacement_map_tsv,
-                        base_vcfs = base_vcfs,
-                        base_vcf_idxs = base_vcf_idxs,
-                        swap_samples_base = swap_samples_base,
-                        max_phase_edit_distance = max_phase_edit_distance,
-                        max_phase_edit_distance_pct = max_phase_edit_distance_pct,
-                        prefix = "~{prefix}.~{contig}.replacement_seed.trv_phasing",
-                        docker = utils_docker,
-                        runtime_attr_override = runtime_attr_phase_replacements
-                }
+            call PhaseReplacementLoci {
+                input:
+                    vcf = PrepareReplacementLoci.prepared_vcf,
+                    vcf_idx = PrepareReplacementLoci.prepared_vcf_idx,
+                    original_vcf = vcf,
+                    original_vcf_idx = vcf_idx,
+                    replacement_map_tsv = PrepareReplacementLoci.replacement_map_tsv,
+                    base_vcfs = base_vcfs,
+                    base_vcf_idxs = base_vcf_idxs,
+                    swap_samples_base = swap_samples_base,
+                    max_phase_edit_distance = max_phase_edit_distance,
+                    max_phase_edit_distance_pct = max_phase_edit_distance_pct,
+                    prefix = "~{prefix}.~{contig}.replacement_seed.trv_phasing",
+                    docker = utils_docker,
+                    runtime_attr_override = runtime_attr_phase_replacements
             }
-
-            File replacement_annotation_vcf = select_first([PhaseReplacementLoci.phased_vcf, PrepareReplacementLoci.prepared_vcf])
-            File replacement_annotation_vcf_idx = select_first([PhaseReplacementLoci.phased_vcf_idx, PrepareReplacementLoci.prepared_vcf_idx])
 
             call AnnotateSQMetrics.CalculateSiteMetrics as CalculateReplacementSQMetrics {
                 input:
-                    vcf = replacement_annotation_vcf,
-                    vcf_idx = replacement_annotation_vcf_idx,
+                    vcf = PhaseReplacementLoci.phased_vcf,
+                    vcf_idx = PhaseReplacementLoci.phased_vcf_idx,
                     prefix = "~{prefix}.~{contig}.replacement.sq_metrics",
                     docker = utils_docker,
                     runtime_attr_override = runtime_attr_replacement_sq_metrics
@@ -189,8 +182,8 @@ workflow PostprocessTRLoci {
 
             call AnnotateGQMetrics.GenerateGQAnnotationTsv as CalculateReplacementSDMetrics {
                 input:
-                    vcf = replacement_annotation_vcf,
-                    vcf_idx = replacement_annotation_vcf_idx,
+                    vcf = PhaseReplacementLoci.phased_vcf,
+                    vcf_idx = PhaseReplacementLoci.phased_vcf_idx,
                     gq_field = "SD",
                     gq_bins = [0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70, 75, 80, 85, 90, 95, 100],
                     gq_variant_filter = ".",
@@ -202,8 +195,8 @@ workflow PostprocessTRLoci {
 
             call AnnotateGQMetrics.GenerateABAnnotationTsv as CalculateReplacementABMetrics {
                 input:
-                    vcf = replacement_annotation_vcf,
-                    vcf_idx = replacement_annotation_vcf_idx,
+                    vcf = PhaseReplacementLoci.phased_vcf,
+                    vcf_idx = PhaseReplacementLoci.phased_vcf_idx,
                     ab_bins = [0.00, 0.05, 0.10, 0.15, 0.20, 0.25, 0.30, 0.35, 0.40, 0.45, 0.50, 0.55, 0.60, 0.65, 0.70, 0.75, 0.80, 0.85, 0.90, 0.95, 1.00],
                     prefix = "~{prefix}.~{contig}.replacement.ab_metrics",
                     docker = utils_docker,
@@ -212,8 +205,8 @@ workflow PostprocessTRLoci {
 
             call AnnotateVRS.AnnotateVcfWithVRS as AnnotateReplacementVRS {
                 input:
-                    vcf = replacement_annotation_vcf,
-                    vcf_idx = replacement_annotation_vcf_idx,
+                    vcf = PhaseReplacementLoci.phased_vcf,
+                    vcf_idx = PhaseReplacementLoci.phased_vcf_idx,
                     prefix = "~{prefix}.~{contig}.replacement.vrs",
                     seqrepo_tar = seqrepo_tar,
                     docker = vrs_docker,
@@ -231,8 +224,8 @@ workflow PostprocessTRLoci {
 
             call AnnotateRegion.AnnotateGenomicContext as AnnotateReplacementRegion {
                 input:
-                    vcf = replacement_annotation_vcf,
-                    vcf_idx = replacement_annotation_vcf_idx,
+                    vcf = PhaseReplacementLoci.phased_vcf,
+                    vcf_idx = PhaseReplacementLoci.phased_vcf_idx,
                     simple_repeats_bed = simple_repeats_bed,
                     seg_dup_bed = seg_dup_bed,
                     repeat_masked_bed = repeat_masked_bed,
@@ -243,8 +236,8 @@ workflow PostprocessTRLoci {
 
             call AnnotateInSilicoPredictors.AnnotateInSilicoPredictorsTask as AnnotateReplacementInSilico {
                 input:
-                    vcf = replacement_annotation_vcf,
-                    vcf_idx = replacement_annotation_vcf_idx,
+                    vcf = PhaseReplacementLoci.phased_vcf,
+                    vcf_idx = PhaseReplacementLoci.phased_vcf_idx,
                     cadd_ht = cadd_ht,
                     pangolin_ht = pangolin_ht,
                     phylop_ht = phylop_ht,
@@ -259,8 +252,8 @@ workflow PostprocessTRLoci {
 
             call AnnotateVcf.AnnotateSequentially as AttachReplacementAnnotations {
                 input:
-                    vcf = replacement_annotation_vcf,
-                    vcf_idx = replacement_annotation_vcf_idx,
+                    vcf = PhaseReplacementLoci.phased_vcf,
+                    vcf_idx = PhaseReplacementLoci.phased_vcf_idx,
                     annotations_tsvs = [AnnotateReplacementRegion.annotations_tsv, AnnotateReplacementInSilico.annotations_tsv, ExtractReplacementVRS.annotations_tsv, CalculateReplacementSQMetrics.annotations_tsv, CalculateReplacementSDMetrics.annotation_tsv, CalculateReplacementABMetrics.annotation_tsv],
                     prefix = "~{prefix}.~{contig}.replacement_annotated",
                     info_names = [["REGION"], ["cadd_raw_score", "cadd_phred", "pangolin_largest", "revel_max", "phylop", "spliceai_ds_max"], ["VRS_Allele_IDs", "VRS_Error", "VRS_Starts", "VRS_Ends", "VRS_States", "VRS_Lengths", "VRS_RepeatSubunitLengths"], ["inbreeding_coeff", "AS_pab_max", "AS_QUALapprox", "AS_QD", "AS_VarDP", "HWE"], ["sd_hist_all_bin_freq", "sd_hist_alt_bin_freq"], ["ab_hist_alt_bin_freq"]],
@@ -1504,11 +1497,13 @@ with open('~{input_trv_catalog_match_tsv}') as handle:
         'input_has_TRExplorerV1_substring', 'trgt_overlapping_trids',
         'trgt_has_TRExplorerV1_substring', 'trgt_matching_allele_count',
     ]
-    if header != expected:
+    # Accept the canonical columns as a prefix so cohort variants (e.g. AoU) may
+    # append extra trailing columns such as a per-locus status without breaking reuse.
+    if header[:len(expected)] != expected:
         raise RuntimeError('Unexpected trv_catalog_match_tsv header')
     for line_number, line in enumerate(handle, start=2):
         fields = line.rstrip('\n').split('\t')
-        if len(fields) != len(expected):
+        if len(fields) < len(expected):
             raise RuntimeError(f'Malformed catalog report row {line_number}')
         if not truth(fields[2]):
             continue
@@ -1527,7 +1522,7 @@ with open('~{input_trv_catalog_match_tsv}') as handle:
             'trgt_strict': truth(fields[6]),
             # Input matches intentionally leave TRGT cells blank. Numeric AC
             # controls recovery eligibility for rows that require TRGT lookup.
-            'trgt_ac': int(fields[7]) if fields[7] else 0,
+            'trgt_ac': int(fields[7]) if fields[7] not in ('', '.') else 0,
         })
 
 replacement_path = '~{replacement_vcf}'
@@ -1566,16 +1561,22 @@ if map_path and os.path.exists(map_path):
         next(handle, None)
         for line in handle:
             fields = line.rstrip('\n').split('\t')
-            if len(fields) >= 4 and fields[3] == 'replace' and fields[0] in retained_replacement_keys:
+            if len(fields) >= 4 and fields[3] in ('replace', 'add') and fields[0] in retained_replacement_keys:
                 map_rows_by_new.setdefault(fields[0], []).append(fields)
 
-# Every final replacement must map to exactly one original TRV. Map rows for
-# AC=0 records are deliberately ignored, preserving their original input call.
+# Every final replacement maps to exactly one map row. A 'replace' row displaces
+# one original TRV; an 'add' row inserts a novel locus with no displaced TRV (old='.').
+# Map rows for AC=0 records are deliberately ignored, preserving the original call.
 for new_key in retained_replacement_keys:
     rows = map_rows_by_new.get(new_key, [])
-    if len(rows) != 1 or rows[0][1] == '.':
+    if len(rows) != 1:
         raise RuntimeError(f'Retained replacement {new_key} requires exactly one map row')
-replace_old = {rows[0][1] for rows in map_rows_by_new.values()}
+    status_field, old_field = rows[0][3], rows[0][1]
+    if status_field == 'replace' and old_field == '.':
+        raise RuntimeError(f'Replacement {new_key} status=replace requires a displaced TRV')
+    if status_field == 'add' and old_field != '.':
+        raise RuntimeError(f'Insertion {new_key} status=add must not displace a TRV')
+replace_old = {rows[0][1] for rows in map_rows_by_new.values() if rows[0][3] == 'replace'}
 
 base = pysam.VariantFile('~{vcf}', index_filename='~{vcf_idx}')
 header = base.header.copy()

@@ -833,7 +833,7 @@ Outputs:
 - `tr_annotated_vcf`: Base VCF annotated with integrated TR calls.
 - `tr_annotated_vcf_idx`: Index for the annotated VCF.
 
-### [PostprocessTRLoci](../wdl/annotation_utils/PostprocessTRLoci.wdl)
+### [PostProcessTRLociHPRCHGSVC](../wdl/annotation_utils/PostProcessTRLociHPRCHGSVC.wdl)
 This utility reconciles disease-associated `TRExplorerV1` catalog loci with one integrated contig VCF. Only catalog records whose `Diseases` value is a non-empty array are eligible; records with a missing, non-array, or empty value are ignored. It uses only literal `TRExplorerV1` substring matches against `INFO/TRID`, searches unmatched catalog loci in per-sample TRGT VCFs, merges recovered loci with TRGT, drops merged calls with `AC=0`, and replaces overlapping integrated TRVs. It recomputes allele-specific `INFO/AC` after replacement ploidy normalization and again before output; a zero-AC replacement never removes its overlapping input TRV. Replacement calls receive VRS, region, and in-silico annotations; these annotations run directly on only recovered calls and are not sharded.
 
 For each replaced, non-reference heterozygous TRGT genotype, it finds sample's matching truth/base VCF, reconstructs reference-relative sequence for both phased base haplotypes across replacement locus, and compares those sequences with both possible TRGT genotype orientations. `aligned` compares base haplotype 1 to replacement haplotype 1 and base haplotype 2 to replacement haplotype 2; `unaligned` uses crossed haplotypes. It phases only a unique lower-distance orientation when that orientation's *summed* edit distance is at most `max_phase_edit_distance` and its length-weighted combined edit-distance percentage is at most `max_phase_edit_distance_pct`; equality passes. It writes phased GT, sets `PS` to locus `POS`, and flags locus with `POSTHOC_BACKBONE_PHASED`. Reference, homozygous-alt, missing, and unresolved heterozygous calls remain unphased. It clears and reapplies `gnomAD_STR`, refreshes TR envelope tags, assigns replacement IDs exactly as `IntegrateTRs.SetTrVariantIds` (`contig-POS-TRV-(len(REF)-1)`, with `_1`, `_2`, ... on duplicates), and emits catalog-match and per-genotype TRV-phasing audit TSVs.
@@ -856,6 +856,25 @@ Outputs:
 - `trv_subsetted_vcf` / `trv_subsetted_vcf_idx`: All final `INFO/allele_type=trv` calls.
 - `trv_catalog_match_tsv`: Catalog-to-input/TRGT match audit, including numeric matched TRGT allele count (`0` indicates `AC=0`); rows with an input substring match leave all TRGT columns blank.
 - `trv_phasing_summary_tsv`: One row per replacement record and sample. Columns are `base_trid`, `replace_trid`, `sample_id`, input `base_gt`/`replace_gt`, base and replacement haplotype sequences, `edit_dist_aligned`, `edit_dist_unaligned`, winning-orientation `edit_dist_pct`, configured maxima, final VCF `final_gt`, and concise `status`. Distances are `sum (base_hap1 pair, base_hap2 pair)`.
+
+### [PostProcessTRLociAoU](../wdl/annotation_utils/PostProcessTRLociAoU.wdl)
+The AoU counterpart of `PostProcessTRLociHPRCHGSVC` for cohorts that have a single joint-genotyped TRGT VCF and no haplotype-resolved base VCFs, so no sequence-agreement phasing is performed. For each disease-associated `TRExplorerV1` (JSON `Diseases` a non-empty array), it locates the matching entry in `trgt_catalog_bed_gz` (`TRExplorerV1` as a substring of the BED `ID=`), then uses that entry's coordinates to check the input VCF: a TRV whose `POS`/`POS+len(REF)-1` equal the BED start+1/end is treated as already present and left untouched. Otherwise it recovers the matching `trgt_vcf` record (subset and reordered to the main-VCF sample set), keeps it only when its recomputed `INFO/AC>0`, and either replaces the best-overlapping `INFO/allele_type=trv` record or, when nothing overlaps, inserts it as a new locus. Recovered records receive canonical `IntegrateTRs` IDs, `SOURCE=TRExplorer`, optional `HOMOPOLYMER_TRV`, VRS/region/in-silico/metric annotations, and flow through the shared `ApplyTRLocusUpdates` (extended to accept insert map rows) for envelope and `gnomAD_STR` assembly. Genotypes are emitted unphased and `POSTHOC_BACKBONE_PHASED` is never set.
+
+Inputs:
+- `File vcf` / `File vcf_idx`: Single-contig integrated cohort VCF and index.
+- `String contig`: Contig represented by `vcf`.
+- `File trgt_vcf` / `File trgt_vcf_idx`: Single joint-genotyped TRGT VCF and index; must contain every main-VCF sample.
+- `File trgt_catalog_bed_gz`: TRGT catalog BED (gzipped) whose column-4 `ID=` values bridge each `TRExplorerV1` to canonical coordinates.
+- `File gnomad_tr_json`: TRExplorer catalog JSON; only entries with a non-empty `Diseases` array are eligible.
+- `Boolean run_flag_homopolymer_trvs`: Flag recovered TRVs whose shortest `MOTIFS` element has length one.
+- `Boolean replace_gnomad_str`: Assemble `INFO/gnomAD_STR` from the catalog-match report.
+- `seqrepo_tar`, regional BEDs, and in-silico Hail table inputs: Resources used to annotate recovered calls.
+
+Outputs:
+- `trv_postprocessed_vcf` / `trv_postprocessed_vcf_idx`: Input-style contig VCF with recovered calls replacing or inserted alongside existing TRVs.
+- `trv_subsetted_vcf` / `trv_subsetted_vcf_idx`: All final `INFO/allele_type=trv` calls.
+- `trv_catalog_match_tsv`: One row per contig-relevant catalog entry, sharing the HPRC/HGSVC columns plus a trailing `status` (`already_in_input_vcf`, `replaced_from_trgt`, `added_from_trgt`, `trgt_ac0_skipped`, `no_trgt_match`, `no_catalog_bed_match`, `not_eligible`).
+- `trv_phasing_summary_tsv`: Header-only stub (no phasing in the AoU path), preserved for output-shape parity.
 
 ### [PreprocessVcfs](../wdl/annotation_utils/PreprocessVcfs.wdl)
 This utility preprocesses and integrates one or more cohort VCFs into a single VCF. It first optionally converts symbolic alleles to sequence alleles, then applies any per-VCF sample-ID swaps, optionally subsets every VCF to the requested samples, and validates that the resulting sample sets are identical. Each VCF is then optionally normalized, annotated with core variant attributes and an optional source label, and length-filtered. Per-VCF controls are required arrays: an empty array disables that control for every VCF; a non-empty array must align with `vcfs`.

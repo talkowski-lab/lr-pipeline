@@ -430,8 +430,17 @@ workflows:
         - /.*/
 
   - subclass: WDL
-    name: PostprocessTRLoci
-    primaryDescriptorPath: /wdl/annotation_utils/PostprocessTRLoci.wdl
+    name: PostProcessTRLociHPRCHGSVC
+    primaryDescriptorPath: /wdl/annotation_utils/PostProcessTRLociHPRCHGSVC.wdl
+    filters:
+      branches:
+        - main
+      tags:
+        - /.*/
+
+  - subclass: WDL
+    name: PostProcessTRLociAoU
+    primaryDescriptorPath: /wdl/annotation_utils/PostProcessTRLociAoU.wdl
     filters:
       branches:
         - main
