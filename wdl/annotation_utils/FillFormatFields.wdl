@@ -50,8 +50,7 @@ workflow FillFormatFields {
         RuntimeAttr? runtime_attr_concat
     }
 
-    # Optionally normalize the unfilled VCF, sharded by record count so normalization
-    # never has to run over a whole-contig VCF at once.
+    # Optionally normalize the unfilled VCF, sharded by record count to avoid normalizing a whole contig at once
     if (normalize_unfilled_vcf) {
         if (defined(records_per_shard_normalize)) {
             call Helpers.ShardVcfByRecords as ShardUnfilledForNormalize {
@@ -81,8 +80,7 @@ workflow FillFormatFields {
             }
         }
 
-        # Normalization can shift a variant's position (e.g. splitting a multiallelic),
-        # so shards must be re-concatenated with sorting before being re-binned for matching.
+        # Sort on concatenation because normalization can shift a variant's position
         call Helpers.ConcatVcfs as ConcatNormalizedUnfilled {
             input:
                 vcfs = NormalizeUnfilled.normalized_vcf,
@@ -99,7 +97,7 @@ workflow FillFormatFields {
     File final_unfilled_vcf = select_first([ConcatNormalizedUnfilled.concat_vcf, unfilled_vcf])
     File final_unfilled_vcf_idx = select_first([ConcatNormalizedUnfilled.concat_vcf_idx, unfilled_vcf_idx])
 
-    # Same optional, sharded normalization for the filled VCF.
+    # Apply the same optional sharded normalization to the filled VCF
     if (normalize_filled_vcf) {
         if (defined(records_per_shard_normalize)) {
             call Helpers.ShardVcfByRecords as ShardFilledForNormalize {

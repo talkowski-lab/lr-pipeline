@@ -1432,8 +1432,9 @@ task ApplyTRLocusUpdates {
     command <<<
         set -euo pipefail
 
-        # Stream the full contig while rebuilding TR envelope annotations. When requested,
-        # derive gnomAD_STR assignments solely from the catalog match report.
+        # Stream the contig twice while rebuilding TR envelope annotations: once to collect the
+        # final TRV intervals, once to merge, annotate, and write. No merged intermediate is
+        # materialized. When requested, derive gnomAD_STR assignments solely from the catalog report.
         python3 <<'PY'
 import os
 import pysam
@@ -1619,7 +1620,22 @@ if replace_gnomad_str:
         gnomad_assignments.setdefault(target, set()).add(row['locus_id'])
 base.close()
 
-base = pysam.VariantFile('~{vcf}')
+# Pass A: the final TRV interval set is exactly the non-displaced input TRVs plus the
+# retained replacements, so it needs no merged intermediate. Collecting it up front is
+# required: a non-TRV can be enveloped by a TRV at the same POS that streams in later.
+intervals = []
+with pysam.VariantFile('~{vcf}') as base_scan:
+    for rec in base_scan:
+        if rec.info.get('allele_type') == 'trv' and record_key(rec) not in replace_old:
+            intervals.append((rec.contig, rec.pos, record_end(rec), record_key(rec)))
+for rec in replacements:
+    if rec.info.get('allele_type') == 'trv':
+        intervals.append((rec.contig, rec.pos, record_end(rec), record_key(rec)))
+intervals.sort()
+by_contig = {}
+for interval in intervals:
+    by_contig.setdefault(interval[0], []).append(interval)
+
 if replacements:
     # Preserve all annotations generated on the small replacement VCF.
     with pysam.VariantFile(replacement_path) as repl_header_source:
@@ -1665,50 +1681,38 @@ if 'PS' not in header.formats:
 
 contig_order = {name: i for i, name in enumerate(header.contigs)}
 replacements.sort(key=lambda rec: (contig_order[rec.contig], rec.pos, record_end(rec)))
-replacement_index = 0
-with pysam.VariantFile('~{prefix}.pre_envelope.vcf', 'w', header=header) as out:
-    for rec in base:
-        while replacement_index < len(replacements) and (
-            contig_order[replacements[replacement_index].contig] < contig_order[rec.contig]
-            or (
-                replacements[replacement_index].contig == rec.contig
-                and replacements[replacement_index].pos <= rec.pos
-            )
-        ):
-            replacement = replacements[replacement_index].copy()
-            replacement.translate(header)
-            out.write(replacement)
-            replacement_index += 1
-        if record_key(rec) not in replace_old:
-            rec.translate(header)
-            out.write(rec)
+
+
+def merged_records():  # noqa: E302
+    """Yield final records in output order: input records minus displaced TRVs,
+    interleaved with the position-sorted replacements."""
+    replacement_index = 0
+    with pysam.VariantFile('~{vcf}') as base_stream:
+        for rec in base_stream:
+            while replacement_index < len(replacements) and (
+                contig_order[replacements[replacement_index].contig] < contig_order[rec.contig]
+                or (
+                    replacements[replacement_index].contig == rec.contig
+                    and replacements[replacement_index].pos <= rec.pos
+                )
+            ):
+                yield replacements[replacement_index].copy()
+                replacement_index += 1
+            if record_key(rec) not in replace_old:
+                yield rec
     while replacement_index < len(replacements):
-        replacement = replacements[replacement_index].copy()
-        replacement.translate(header)
-        out.write(replacement)
+        yield replacements[replacement_index].copy()
         replacement_index += 1
-base.close()
 
-pre = pysam.VariantFile('~{prefix}.pre_envelope.vcf')
-intervals = []
-for rec in pre:
-    if rec.info.get('allele_type') == 'trv':
-        intervals.append((rec.contig, rec.pos, record_end(rec), record_key(rec)))
-pre.close()
-intervals.sort()
-by_contig = {}
-for interval in intervals:
-    by_contig.setdefault(interval[0], []).append(interval)
 
-src = pysam.VariantFile('~{prefix}.pre_envelope.vcf')
 out = pysam.VariantFile('~{prefix}.trv_postprocessed.vcf.gz', 'wz', header=header)
 emitted_gnomad_targets = set()
-with src, out:
+with out:
     current_contig = None
     contig_intervals = []
     interval_index = 0
     active = []
-    for rec in src:
+    for rec in merged_records():
         rec.translate(header)
         if rec.contig != current_contig:
             current_contig = rec.contig
@@ -1761,7 +1765,6 @@ with open('~{prefix}.trv_phasing_summary.tsv', 'w') as out:
     else:
         out.write(phase_header)
 PY
-        rm -f ~{prefix}.pre_envelope.vcf
         tabix -f -p vcf ~{prefix}.trv_postprocessed.vcf.gz
         bcftools view -i 'INFO/allele_type="trv"' -Oz -o ~{prefix}.trv_subsetted.vcf.gz ~{prefix}.trv_postprocessed.vcf.gz
         tabix -f -p vcf ~{prefix}.trv_subsetted.vcf.gz
@@ -1778,7 +1781,7 @@ PY
     RuntimeAttr default_attr = object {
         cpu_cores: 2,
         mem_gb: 12,
-        disk_gb: 5 * ceil(size(vcf, "GB")) + 20,
+        disk_gb: 3 * ceil(size(vcf, "GB")) + 20,
         boot_disk_gb: 10,
         preemptible_tries: 1,
         max_retries: 0

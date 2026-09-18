@@ -144,8 +144,7 @@ task SampleShardCalls {
         MAX_ALLELE_LENGTH="~{default='' max_allele_length}"
         [ -n "$MAX_ALLELE_LENGTH" ] && EXPR_PARTS+=("abs(INFO/allele_length)<=$MAX_ALLELE_LENGTH")
 
-        # push every site-level filter down to bcftools (compiled C, single streaming pass)
-        # so pysam below only has to walk the pre-shrunk set to do the per-sample GT check
+        # Push every site-level filter down to bcftools so the pysam pass below only walks the pre-filtered set
         if [ ${#EXPR_PARTS[@]} -gt 0 ]; then
             bcftools view -i "$(join_by '&&' "${EXPR_PARTS[@]}")" -Ob -o filtered.bcf ~{vcf}
         else
@@ -174,13 +173,8 @@ if SINGLETON:
     min_ac = max_ac = 1
 
 def allele_passes(idx, ac_field, af_field):
-    # AC/AF are Number=A (one value per ALT, e.g. multiallelic VAMOS/TR sites) on some
-    # callsets, plain scalars on others. The bcftools prefilter above only checked whether
-    # ANY element of the vector satisfied the bound, which is correct for keeping the
-    # record but wrong for attributing a hit to a specific sample: a sample carrying a
-    # common allele (e.g. AC=29) at a site that also has an unrelated true singleton ALT
-    # must not be reported as a singleton carrier. Index into the vector by the sample's
-    # actual ALT index (1-based in GT, so idx-1 into the tuple); a scalar applies as-is.
+    # AC/AF may be Number=A vectors, so index by the sample's own ALT index; the bcftools prefilter
+    # only matched any element, which would report a common-allele carrier as a singleton carrier
     ac = ac_field[idx - 1] if isinstance(ac_field, tuple) else ac_field
     af = af_field[idx - 1] if isinstance(af_field, tuple) else af_field
     if min_ac is not None and (ac is None or ac < min_ac):
@@ -225,8 +219,7 @@ for record in vcf_in:
         pair = (chrom, start, end, vid, allele_type, sample)
         if len(reservoir) < COUNT:
             reservoir.append(pair)
-            # htslib reuses the record buffer on the next iteration, so a bare reference
-            # would silently turn into whichever record was read last -- copy() detaches it
+            # Copy the record because htslib reuses its buffer on the next iteration
             record_cache.setdefault(key, record.copy())
         else:
             j = rng.randint(0, n_seen - 1)
@@ -329,9 +322,7 @@ with open("~{prefix}.candidate_summary.txt", "w") as out:
     out.write(f"total_candidates_found\t{sum(COUNTS)}\n")
     out.write(f"pairs_written\t{len(selected)}\n")
 
-# candidate_vcfs holds every site any shard's reservoir ever touched, a superset of the
-# final draw (shard-level sampling caps at COUNT, but the global draw above trims that
-# pool down to COUNT again) -- key on (chrom, start, end) to pull out exactly the winners
+# Key on (chrom, start, end) to pull the final draw out of the pooled candidate superset
 final_keys = {(line.split("\t")[0], int(line.split("\t")[1]), int(line.split("\t")[2])) for line in selected}
 pooled = pysam.VariantFile("pooled.vcf.gz")
 written = set()

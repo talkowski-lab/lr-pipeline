@@ -436,10 +436,7 @@ task MedianCov {
     command <<<
         set -euo pipefail
 
-        # Reservoir-sample bins down to max_bins before loading into R so peak
-        # memory stays bounded regardless of matrix size. Per-sample median
-        # coverage is unchanged because medianCoverage.R already downsamples to
-        # this many bins internally after reading the full matrix.
+        # Reservoir-sample bins down to max_bins to bound peak memory; medianCoverage.R downsamples to the same count anyway
         zcat ~{bincov_matrix} \
             | awk -v N=~{max_bins} -v SEED=~{random_seed} '
                 BEGIN { srand(SEED) }
