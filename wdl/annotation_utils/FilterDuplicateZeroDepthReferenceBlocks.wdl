@@ -9,8 +9,8 @@ workflow FilterDuplicateZeroDepthReferenceBlocks {
     }
 
     parameter_meta {
-        gvcf: "Input gVCF to clean."
-        gvcf_idx: "Index corresponding to input gVCF."
+        gvcf: "gVCF to clean."
+        gvcf_idx: "Index for gvcf."
         prefix: "Prefix for cleaned gVCF and index."
         utils_docker: "Docker image containing bcftools, bgzip, and tabix."
         runtime_attr_filter: "Override runtime attributes for duplicate reference block filtering."

@@ -299,9 +299,7 @@ breakpoint_window = int(~{del_breakpoint_window})
 annotations = []
 
 for _, row in bed.iterrows():
-    # bedtools intersect -wa -wb outputs:
-    # A (del.bed): 0=chrom, 1=pos, 2=end, 3=ref, 4=alt, 5=id
-    # B (MED): 6=chrom, 7=start, 8=end, 9=ID, 10=seq, 11=designation, 12=sub_family
+    # bedtools intersect emits the 6 deletion BED columns followed by the 7 MED catalog columns
     del_chrom = row[0]
     del_start = int(row[1])
     del_end = int(row[2])
@@ -315,7 +313,7 @@ for _, row in bed.iterrows():
     designation = row[11]
     sub_family = row[12]
 
-    # strip VCF anchor base; empty for symbolic deletions (REF = "N")
+    # Strip the VCF anchor base, which is empty for symbolic deletions
     del_seq = del_ref[1:] if len(del_ref) > 1 else ""
 
     me_type = get_me_type(designation)

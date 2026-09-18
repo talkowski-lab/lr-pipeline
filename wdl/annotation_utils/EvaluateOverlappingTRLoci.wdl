@@ -170,7 +170,7 @@ reference_pairs = 0
 with pysam.VariantFile("~{vcf}") as vcf_in, open("~{prefix}.overlapping_tr_loci.tsv", 'w') as tsv_out:
     tsv_out.write('\t'.join(HEADER) + '\n')
 
-    # Records arrive position-sorted, so every retained record still spanning the current position overlaps it.
+    # Records arrive position-sorted, so every retained record still spanning the current position overlaps it
     active = []
     for rec in vcf_in:
         record = load_record(rec)

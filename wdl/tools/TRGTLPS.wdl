@@ -10,19 +10,23 @@ workflow TRGTLPS {
         Array[String] contigs
         String prefix
 
-        String trgt_lps_docker
-        String utils_docker
-        String stranalysis_docker
+    String trgt_lps_docker
+    String utils_docker
+    String stranalysis_docker
+    Boolean normalize_chry_haploid_genotypes = false
 
-        RuntimeAttr? runtime_attr_subset_vcf
-        RuntimeAttr? runtime_attr_add_end
+    RuntimeAttr? runtime_attr_subset_vcf
+    RuntimeAttr? runtime_attr_normalize_chry_haploid_genotypes
+    RuntimeAttr? runtime_attr_add_end
         RuntimeAttr? runtime_attr_trgt_lps
         RuntimeAttr? runtime_attr_extract_trid_metadata
         RuntimeAttr? runtime_attr_concat
         RuntimeAttr? runtime_attr_finalize
     }
 
-    scatter (contig in contigs) {
+  scatter (contig in contigs) {
+    Boolean normalize_chry_haploid_genotypes_for_contig = normalize_chry_haploid_genotypes && contig == "chrY"
+
         call Helpers.SubsetVcfToContig {
             input:
                 vcf = vcf,
@@ -33,10 +37,24 @@ workflow TRGTLPS {
                 runtime_attr_override = runtime_attr_subset_vcf
         }
 
-        call RunTRGTLPS {
-            input:
-                vcf = SubsetVcfToContig.subset_vcf,
-                vcf_idx = SubsetVcfToContig.subset_vcf_idx,
+    if (normalize_chry_haploid_genotypes_for_contig) {
+      call Helpers.NormalizeTRGTHaploidGenotypes {
+        input:
+          vcf = SubsetVcfToContig.subset_vcf,
+          vcf_idx = SubsetVcfToContig.subset_vcf_idx,
+          prefix = "~{prefix}.~{contig}.haploid_genotypes",
+          docker = utils_docker,
+          runtime_attr_override = runtime_attr_normalize_chry_haploid_genotypes
+      }
+    }
+
+    File trgt_lps_vcf = select_first([NormalizeTRGTHaploidGenotypes.normalized_vcf, SubsetVcfToContig.subset_vcf])
+    File trgt_lps_vcf_idx = select_first([NormalizeTRGTHaploidGenotypes.normalized_vcf_idx, SubsetVcfToContig.subset_vcf_idx])
+
+    call RunTRGTLPS {
+      input:
+        vcf = trgt_lps_vcf,
+        vcf_idx = trgt_lps_vcf_idx,
                 prefix = "~{prefix}.~{contig}.lps",
                 docker = trgt_lps_docker,
                 runtime_attr_override = runtime_attr_trgt_lps

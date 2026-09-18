@@ -1,5 +1,20 @@
 # Conventions
-This document defines the WDL and Python style conventions to follow when writing or editing code in this repository.
+This document defines the comment, WDL and Python style conventions to follow when writing or editing code in this repository.
+
+
+## Comments
+These rules apply to WDL, Python, R and Bash alike, including code embedded in a WDL `command` block.
+- Comments should mark key sections of code and explain at a high level what that section does. They should never restate what a line of code already says, nor annotate individual lines.
+- A comment should be a single line. Use a second line only for a genuine gotcha that cannot be compressed without losing the reason it exists - for example an upstream tool quirk or a correctness constraint that is not visible in the code.
+- Comments should be imperative and verb-first - e.g. `# Concatenate the TSVs, keeping a single header when requested`, not `# Concatenation` or `# This concatenates the TSVs`.
+- Comments should start with a capital letter and should not end with a period. Multi-sentence comments should be rewritten as a single statement.
+- Avoid vague verbs such as `Handle`, `Process` and `Run script to`, matching the workflow naming rules below. Name the actual operation.
+- Comments should not exceed 120 characters, should be ASCII only, and should never use decorative characters such as `->`, `→` or ` -- `. Prefer `and`, `so`, `because` or a semicolon.
+- Comments should be placed on their own line directly above the code they describe, never trailing at the end of a line of code. The exception is a machine-read directive such as `# noqa: E302`.
+- Commented-out code should be deleted rather than left in place.
+- Comments inside a WDL `command` block must never contain `~{`, `${` or backticks. Cromwell and Bash expand these even within a comment.
+- License, copyright and upstream-provenance headers are exempt from all of the above and must be preserved verbatim. Provenance headers use the form `# Derived from <repo> <path or URL>`.
+- Terminology should be used consistently: `gVCF` (not `GVCF`), `GLNexus`, `contig` (not `chr` or `chrom`), `locus`/`loci`, `FORMAT`/`INFO` field names in uppercase, and `chrX`/`chrY` rather than `chrX/Y`.
 
 
 ## WDL

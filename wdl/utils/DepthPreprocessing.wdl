@@ -4,7 +4,6 @@ import "Structs.wdl"
 import "Helpers.wdl"
 
 # Defragment GATK-gCNV CNVs per sample and merge
-
 workflow DepthPreprocessing {
     input {
         Array[String]+ sample_ids
@@ -183,9 +182,7 @@ task GcnvVcfToBed {
         set -euo pipefail
 
         tar xzf ~{contig_ploidy_calls_tar}
-        # The tar file contains one directory per sample given to GATK DetermineGermlineContigPloidy,
-        # with the naming scheme SAMPLE_0 to SAMPLE_N-1, presumably in the order the samples were given
-        # to the tool.
+        # The tar holds one directory per sample, named SAMPLE_0 to SAMPLE_N-1 in the order given to the tool
         calls_dir='~{"SAMPLE_" + sample_index}'
         expected_sample_id='~{sample_id}'
         actual_sample_id="$(cat "${calls_dir}/sample_name.txt")"

@@ -191,8 +191,8 @@ workflow PostProcessTRLociAoU {
     }
 }
 
-# Recover disease-associated catalog loci missing from the integrated VCF using a single joint
-# TRGT VCF, bridged through the TRGT catalog BED. No phasing; genotypes are taken as TRGT gives them.
+# Recover disease-associated catalog loci missing from the integrated VCF using a joint TRGT VCF and catalog BED
+# Genotypes are taken unphased, exactly as TRGT reports them
 task PhaseReplacementLociAoU {
     input {
         File vcf
@@ -211,8 +211,7 @@ task PhaseReplacementLociAoU {
     command <<<
         set -euo pipefail
 
-        # Force the TRGT VCF onto the main VCF sample set and order (fails loudly if a sample is absent),
-        # then match FORMAT/AL to the main VCF so records translate cleanly downstream.
+        # Force the TRGT VCF onto the main VCF sample set, order, and FORMAT/AL so records translate cleanly downstream
         SAMPLES=$(bcftools query -l ~{vcf} | paste -sd, -)
         bcftools view -s "$SAMPLES" -Oz -o trgt.reordered.vcf.gz ~{trgt_vcf}
         tabix -f -p vcf trgt.reordered.vcf.gz
@@ -232,8 +231,7 @@ PY
         bcftools reheader -h trgt.header trgt.reordered.vcf.gz -o trgt.fixed.vcf.gz
         tabix -f -p vcf trgt.fixed.vcf.gz
 
-        # One report row per contig-relevant catalog entry: track whether the disease locus was already
-        # in the input VCF, recovered from TRGT (replacing an overlap or inserted new), or dropped at AC=0.
+        # Emit one report row per contig-relevant catalog entry recording how the disease locus was resolved
         python3 <<'PY'
 import gzip
 import json
@@ -302,7 +300,7 @@ def recompute_ac(rec):  # noqa: E302
     return sum(counts)
 
 
-# Catalog BED for this contig only: canonical coordinates keyed by embedded ID.
+# Build a contig-local catalog BED of canonical coordinates keyed by embedded ID
 bed_entries = []
 with gzip.open('~{trgt_catalog_bed_gz}', 'rt') as handle:
     for line in handle:
@@ -321,7 +319,7 @@ with gzip.open('~{trgt_catalog_bed_gz}', 'rt') as handle:
 
 
 def find_bed(explorer):  # noqa: E302
-    # Prefer an exact ID; otherwise treat TRExplorerV1 as a substring of the catalog TRID.
+    # Prefer an exact ID match, otherwise treat TRExplorerV1 as a substring of the catalog TRID
     for bed_id, _, start0, end in bed_entries:
         if bed_id == explorer:
             return start0, end
@@ -347,7 +345,7 @@ if list(trgt.header.samples) != main_samples:
 for name, number, type_, description in [
     ('allele_type', '1', 'String', 'Allele type'),
     ('SOURCE', '1', 'String', 'Source of variant call'),
-    # AnnotateRegion requires declaration, then derives TRV length from REF.
+    # Declare allele_length because AnnotateRegion requires it before deriving TRV length from REF
     ('allele_length', '1', 'Integer', 'Allele length'),
     ('AC', 'A', 'Integer', 'Number of alleles observed'),
 ]:
@@ -424,8 +422,8 @@ for entry in catalog:
                 input_overlaps.append(rec.copy())
     row['input_overlapping_trids'] = '|'.join(sorted({trid_text(r) for r in input_overlaps if trid_text(r)})) or '.'
     coord_matches = [r for r in input_overlaps if r.pos == locus_pos and record_end(r) == bed_end]
-    # gnomAD_STR reuse matches the enveloping TRV by TRExplorerV1 substring, so only claim a strict
-    # input hit when the coordinate-matched record also carries the explorer in its TRID.
+    # gnomAD_STR reuse matches the enveloping TRV by TRExplorerV1 substring, so claim a strict input
+    # hit only when the coordinate-matched record also carries the explorer in its TRID
     row['input_has_TRExplorerV1_substring'] = 'true' if any(matched_explorer in trid_text(r) for r in coord_matches) else 'false'
     if coord_matches:
         row['status'] = 'already_in_input_vcf'
@@ -459,7 +457,7 @@ for entry in catalog:
     selected.append({'trec': trec, 'old': old})
     tsv_rows.append(row)
 
-# Assign IDs exactly as IntegrateTRs.SetTrVariantIds (contig-POS-TRV-(len(REF)-1), _1/_2 on duplicates).
+# Assign IDs exactly as IntegrateTRs.SetTrVariantIds does, including the _1/_2 suffixes on duplicates
 id_counts = {}
 for item in selected:
     item['base_id'] = f"{item['trec'].chrom}-{item['trec'].pos}-TRV-{len(item['trec'].ref) - 1}"
@@ -481,7 +479,7 @@ for item in selected:
     rec.info['SOURCE'] = 'TRExplorer'
     if RUN_HOMOPOLYMER and shortest_motif_length(rec) == 1:
         rec.info['HOMOPOLYMER_TRV'] = True
-    # TRGT uses an unset FILTER; normalize only recovered records to PASS, preserve named filters.
+    # Normalize only recovered records to PASS because TRGT leaves FILTER unset, preserving named filters
     if not tuple(rec.filter.keys()):
         rec.filter.add('PASS')
     new_key = record_key(rec)

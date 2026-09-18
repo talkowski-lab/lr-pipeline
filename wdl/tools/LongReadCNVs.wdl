@@ -9,7 +9,7 @@ import "../utils/Structs.wdl"
 
 workflow LongReadCNVs {
     meta {
-        description: "Workflow to run GATK-gCNV on long-read samples, cluster the calls and then genotype them in all samples."
+        description: "Run GATK-gCNV on long-read samples, cluster the calls and genotype them in all samples."
     }
 
     input {

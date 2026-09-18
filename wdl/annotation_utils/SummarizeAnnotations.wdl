@@ -501,7 +501,7 @@ PREDICTED_FIELDS = [
 ]
 
 
-# Helper Functions
+# Helper functions
 def init_table(column_buckets):
     cols = list(column_buckets)
     return defaultdict(lambda: {col: 0.0 for col in cols})
@@ -1469,7 +1469,8 @@ for path in COUNT_FILES:
     with open(path, "r", newline="") as handle:
         reader = csv.reader(handle, delimiter="\t")
         try:
-            next(reader) # skip header
+            # Skip the header row
+            next(reader)
         except StopIteration:
             pass
         for row in reader:

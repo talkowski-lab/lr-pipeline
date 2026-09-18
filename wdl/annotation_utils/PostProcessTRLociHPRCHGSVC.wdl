@@ -296,7 +296,7 @@ workflow PostProcessTRLociHPRCHGSVC {
     }
 }
 
-# Build one contig-level catalog report, then select eligible unmatched TRGT loci for replacement.
+# Build one contig-level catalog report, then select eligible unmatched TRGT loci for replacement
 task DiscoverTRLoci {
     input {
         File vcf
@@ -314,7 +314,7 @@ task DiscoverTRLoci {
     command <<<
         set -euo pipefail
 
-        # Validate sample/file alignment before using indexed windows for strict TRID matching.
+        # Validate sample/file alignment before using indexed windows for strict TRID matching
         python3 <<'PY'
 import json
 import os
@@ -354,7 +354,7 @@ def overlaps(rec, start, stop):  # noqa: E302
     return rec.pos <= stop and record_end(rec) >= start
 
 def trid_text(rec):  # noqa: E302
-    # Preserve VCF comma separation within one INFO/TRID field.
+    # Preserve VCF comma separation within one INFO/TRID field
     return ','.join(values(rec.info.get('TRID')))
 
 def nonref_allele_count(rec):  # noqa: E302
@@ -368,8 +368,7 @@ def nonref_allele_count(rec):  # noqa: E302
 with open('~{gnomad_tr_json}') as handle:
     catalog = json.load(handle)
 
-# One report row represents one contig-relevant catalog entry. Multiple
-# TRExplorerV1 values from one entry are shown together and match independently.
+# Emit one report row per contig-relevant catalog entry, showing its TRExplorerV1 values together but matching each
 loci = []
 for entry in catalog:
     if not entry or not entry.get('LocusId'):
@@ -386,7 +385,7 @@ for entry in catalog:
         loci.append({
             'locus_id': str(entry['LocusId']),
             'explorers': explorers,
-            # Only catalog loci with one or more associated diseases are eligible.
+            # Only catalog loci with one or more associated diseases are eligible
             'disease_eligible': isinstance(diseases, list) and len(diseases) > 0,
         })
 
@@ -415,18 +414,16 @@ for locus in loci:
     locus['trgt_strict'] = False
     locus['trgt_ac'] = 0
     locus['trgt_seen'] = set()
-    # A record can be returned by multiple TRExplorerV1 windows. Count its
-    # sample's non-reference alleles once, even when those windows overlap.
+    # Count a sample's non-reference alleles once even when overlapping TRExplorerV1 windows return the same record
     locus['trgt_strict_seen'] = set()
 
-# Open each per-sample VCF once, then query every eligible catalog interval.
+# Open each per-sample VCF once, then query every eligible catalog interval
 for i, path in enumerate(trgt_paths):
     with pysam.VariantFile(path) as trgt:
         if list(trgt.header.samples) != [sample_ids[i]]:
             raise RuntimeError(f'TRGT VCF {path} must contain only sample {sample_ids[i]}')
         for locus in loci:
-            # A strict input-VCF match takes precedence and needs no raw-TRGT
-            # lookup; leave the three TRGT report cells blank for that row.
+            # A strict input-VCF match takes precedence, so blank the TRGT report cells and skip the raw-TRGT lookup
             if not locus['disease_eligible'] or locus['main_strict']:
                 continue
             for explorer, start, stop in locus['explorers']:
@@ -471,8 +468,7 @@ with open('~{prefix}.trv_catalog_match.tsv', 'w') as out:
             f'{locus["trgt_ac"]}\n'
         )
 
-# Only disease-eligible, input-unmatched, strict TRGT matches with AC >= 1
-# feed cohort merging and replacement.
+# Only disease-eligible, input-unmatched, strict TRGT matches with AC >= 1 feed cohort merging and replacement
 with open('~{prefix}.trgt_match_keys.txt', 'w') as out:
     for locus in loci:
         if (locus['disease_eligible'] and not locus['main_strict']
@@ -509,7 +505,7 @@ PY
     }
 }
 
-# Retain only disease-associated fallback loci selected during discovery from one sample VCF.
+# Retain only disease-associated fallback loci selected during discovery from one sample VCF
 task SubsetTRGTForCatalogLoci {
     input {
         File vcf
@@ -523,7 +519,7 @@ task SubsetTRGTForCatalogLoci {
     command <<<
         set -euo pipefail
 
-        # Fetch narrow catalog intervals and confirm strict TRID matches before writing records.
+        # Fetch narrow catalog intervals and confirm strict TRID matches before writing records
         python3 <<'PY'
 import pysam
 
@@ -578,7 +574,7 @@ PY
     }
 }
 
-# Recompute cohort allele counts and retain AC-positive merged loci.
+# Recompute cohort allele counts and retain AC-positive merged loci
 task KeepMergedTRGTWithAC {
     input {
         File vcf
@@ -591,7 +587,7 @@ task KeepMergedTRGTWithAC {
     command <<<
         set -euo pipefail
 
-        # Calculate AC directly from merged genotypes rather than trusting upstream INFO/AC.
+        # Calculate AC directly from merged genotypes rather than trusting upstream INFO/AC
         python3 <<'PY'
 import pysam
 
@@ -648,7 +644,7 @@ PY
     }
 }
 
-# Reconcile replacement headers and select old TRVs by positive overlap.
+# Reconcile replacement headers and select old TRVs by positive overlap
 task PrepareReplacementLoci {
     input {
         File vcf
@@ -667,7 +663,7 @@ task PrepareReplacementLoci {
     command <<<
         set -euo pipefail
 
-        # Match FORMAT/AL to the main VCF before records move between pysam headers.
+        # Match FORMAT/AL to the main VCF before records move between pysam headers
         python3 <<'PY'
 import subprocess
 
@@ -683,7 +679,7 @@ PY
         bcftools reheader -h replacement.header ~{replacement_vcf} \
             | bcftools view -Ov -o replacement.normalized.vcf
 
-        # Require unique positive-overlap replacements; phase after all replacements are prepared.
+        # Require unique positive-overlap replacements; phase after all replacements are prepared
         python3 <<'PY'
 import pysam
 
@@ -802,7 +798,7 @@ if 'SOURCE' not in incoming.header.info:
         items=[('ID', 'SOURCE'), ('Number', '1'), ('Type', 'String'), ('Description', 'Source of variant call')],
     )
 if 'allele_length' not in incoming.header.info:
-    # AnnotateRegion requires declaration, then derives TRV length from REF.
+    # Declare allele_length because AnnotateRegion requires it before deriving TRV length from REF
     incoming.header.add_meta(
         'INFO',
         items=[('ID', 'allele_length'), ('Number', '1'), ('Type', 'Integer'), ('Description', 'Allele length')],
@@ -836,8 +832,7 @@ samples = [line.rstrip('\n') for line in open('~{write_lines(sample_ids)}') if l
 if list(base.header.samples) != samples or list(header.samples) != samples:
     raise RuntimeError('Main, merged TRGT, and sample_ids sample order must match exactly')
 used_old_records = set()
-# Match IntegrateTRs.SetTrVariantIds exactly: count canonical IDs first, then
-# suffix every duplicated ID in input order (_1, _2, ...).
+# Match IntegrateTRs.SetTrVariantIds exactly by counting canonical IDs first, then suffixing duplicates in input order
 id_counts = {}
 id_input = pysam.VariantFile('replacement.normalized.vcf')
 for record in id_input:
@@ -849,8 +844,7 @@ for record in id_input:
 id_input.close()
 id_seen = {}
 for rec in incoming:
-    # Recompute AC after replacement-only FORMAT/ploidy changes. A zero-AC
-    # record must never create a map row or displace an input TRV.
+    # Recompute AC after replacement-only FORMAT and ploidy changes so a zero-AC record cannot displace an input TRV
     normalize_replacement_genotypes(rec)
     if recompute_ac(rec) < 1:
         continue
@@ -867,7 +861,7 @@ for rec in incoming:
     if old_key in used_old_records:
         raise RuntimeError(f'Multiple replacement records selected main VCF TRV {old_key}')
     used_old_records.add(old_key)
-    # Match IntegrateTRs.SetTrVariantIds naming so envelope links use canonical IDs.
+    # Match IntegrateTRs.SetTrVariantIds naming so envelope links use canonical IDs
     new_id = f'{rec.chrom}-{rec.pos}-TRV-{len(rec.ref) - 1}'
     if id_counts[new_id] > 1:
         id_seen[new_id] = id_seen.get(new_id, 0) + 1
@@ -876,11 +870,10 @@ for rec in incoming:
         rec.id = new_id
     rec.info['allele_type'] = 'trv'
     rec.info['SOURCE'] = 'TRExplorer'
-    # Flag only replacement records; original main-VCF records never enter this task.
+    # Flag only replacement records; original main-VCF records never enter this task
     if run_flag_homopolymer_trvs and shortest_motif_length(rec) == 1:
         rec.info['HOMOPOLYMER_TRV'] = True
-    # TRGT uses an unset FILTER; normalize only those replacements to PASS.
-    # Preserve any named filters emitted by TRGT.
+    # Normalize only replacements to PASS because TRGT leaves FILTER unset, preserving any named filters
     if not tuple(rec.filter.keys()):
         rec.filter.add('PASS')
     mapping.write(
@@ -924,7 +917,7 @@ PY
     }
 }
 
-# Phase eligible replacement calls by sequence agreement with matching base-VCF haplotypes.
+# Phase eligible replacement calls by sequence agreement with matching base-VCF haplotypes
 task PhaseReplacementLoci {
     input {
         File vcf
@@ -945,7 +938,7 @@ task PhaseReplacementLoci {
     command <<<
         set -euo pipefail
 
-        # Fetch only each replacement interval from indexed base VCFs; swap map uses BackbonePhase raw-to-canonical format.
+        # Fetch each replacement interval from indexed base VCFs; swap map uses BackbonePhase raw-to-canonical form
         python3 <<'PY'
 import csv
 import os
@@ -988,16 +981,15 @@ def normalized_base_gt(call):  # noqa: E302
     if not gt or len(gt) != 2:
         return None, 'base_missing_gt'
     if gt == (None, None):
-        # Sparse truth records encode no call at this site; reconstruct both haplotypes as REF.
+        # Sparse truth records encode no call at this site; reconstruct both haplotypes as REF
         return (0, 0), None
     if any(allele is not None and allele < 0 for allele in gt):
         return None, 'base_invalid_gt'
     if None in gt:
-        # A phased partial call describes only one biological haplotype; do not
-        # fabricate the missing haplotype as reference for diploid phasing.
+        # Do not fabricate the missing haplotype as reference, since a phased partial call describes only one haplotype
         return None, 'base_partial_gt'
     if not call.phased and gt[0] != gt[1]:
-        # Unphased heterozygotes have unknown haplotype orientation.
+        # Unphased heterozygotes have unknown haplotype orientation
         return None, 'base_ambiguous_unphased_gt'
     return tuple(gt), None
 
@@ -1012,7 +1004,7 @@ def reconstruct_haplotypes(base_handle, contig, sample, rec):  # noqa: E302
         gt, status = normalized_base_gt(call)
         if status:
             return None, None, status
-        # Cohort VCFs contain many overlapping records carried as reference for this sample.
+        # Cohort VCFs contain many overlapping records carried as reference for this sample
         if gt == (0, 0):
             continue
         base_end = record_end(base_rec)
@@ -1056,7 +1048,7 @@ def reconstruct_available_haploid(base_handle, contig, sample, rec):  # noqa: E3
         if not gt or len(gt) not in (1, 2):
             return None, None, 'base_missing_gt'
         if all(allele is None for allele in gt):
-            # Sparse cohort truth records use fully missing calls for noncarriers.
+            # Sparse cohort truth records use fully missing calls for noncarriers
             continue
         if any(allele is not None and allele < 0 for allele in gt):
             return None, None, 'base_invalid_gt'
@@ -1160,11 +1152,11 @@ if swap_path and os.path.exists(swap_path):
                 raise RuntimeError('swap_samples_base must contain raw and canonical sample IDs in columns 1 and 2')
             sample_swaps[fields[0]] = fields[1]
 
-# First matching base VCF wins, mirroring BackbonePhase sample assignment.
+# First matching base VCF wins, mirroring BackbonePhase sample assignment
 sample_to_base = {}
 base_handles = []
 for index, path in enumerate(base_paths):
-    # Use explicit localized index path; Cromwell need not preserve sibling filenames.
+    # Use explicit localized index path; Cromwell need not preserve sibling filenames
     handle = pysam.VariantFile(path, index_filename=base_idx_paths[index])
     base_handles.append(handle)
     canonical_seen = set()
@@ -1180,7 +1172,7 @@ original = pysam.VariantFile('~{original_vcf}', index_filename='~{original_vcf_i
 if list(original.header.samples) != list(source.header.samples):
     raise RuntimeError('Original main VCF and replacement VCF sample order must match exactly')
 
-# The preparation map links each normalized replacement to its displaced main-VCF TRV.
+# The preparation map links each normalized replacement to its displaced main-VCF TRV
 replacement_to_old = {}
 with open('~{replacement_map_tsv}') as mapping:
     next(mapping, None)
@@ -1189,7 +1181,7 @@ with open('~{replacement_map_tsv}') as mapping:
         if len(fields) >= 8 and fields[3] == 'replace':
             replacement_to_old[fields[0]] = (fields[1], fields[5], int(fields[6]), int(fields[7]))
 
-# Indexed lookups avoid scanning a multi-million-record cohort VCF for a handful of displaced TRVs.
+# Indexed lookups avoid scanning a multi-million-record cohort VCF for a handful of displaced TRVs
 old_records = {}
 for old_key, old_contig, old_pos, old_end in set(replacement_to_old.values()):
     for old_rec in original.fetch(old_contig, max(0, old_pos - 1), old_end):
@@ -1234,7 +1226,7 @@ with output, audit:
         for sample in header.samples:
             call = rec.samples[sample]
             gt = call.get('GT')
-            # Replacement calls must be unphased unless sequence evidence below selects an orientation.
+            # Replacement calls must be unphased unless sequence evidence below selects an orientation
             call.phased = False
             if call.get('PS') is not None:
                 call['PS'] = None
@@ -1251,7 +1243,7 @@ with output, audit:
                 'final_gt': gt_string(gt, False),
                 'status': 'not_replacement' if old_rec is None else 'pending',
             })
-            # Haploid calls stay unphased, but retain their one observed sequence comparison.
+            # Haploid calls stay unphased, but retain their one observed sequence comparison
             if not gt:
                 row['status'] = 'missing_gt'
                 writer.writerow(row)
@@ -1296,8 +1288,7 @@ with output, audit:
                 row['status'] = 'haploid'
                 writer.writerow(row)
                 continue
-            # Construct both sequences for complete diploid calls; only non-reference
-            # heterozygotes can receive an orientation.
+            # Construct both sequences for complete diploid calls; only non-ref heterozygotes get an orientation
             if len(gt) != 2 or any(allele is None for allele in gt):
                 row['status'] = 'non_diploid_gt'
                 writer.writerow(row)
@@ -1329,7 +1320,7 @@ with output, audit:
                 continue
             row['base_hap1_seq'] = base_hap_1
             row['base_hap2_seq'] = base_hap_2
-            # Aligned compares same haplotype indices; unaligned compares crossed indices.
+            # Aligned compares same haplotype indices; unaligned compares crossed indices
             aligned_1, aligned_2 = distance(base_hap_1, trgt_haps[0]), distance(base_hap_2, trgt_haps[1])
             unaligned_1, unaligned_2 = distance(base_hap_1, trgt_haps[1]), distance(base_hap_2, trgt_haps[0])
             aligned, unaligned = aligned_1 + aligned_2, unaligned_1 + unaligned_2
@@ -1346,7 +1337,7 @@ with output, audit:
                     aligned_1, aligned_2, base_hap_1, trgt_haps[0], base_hap_2, trgt_haps[1])
                 aligned_pct = combined_edit_distance_pct(
                     aligned_1, aligned_2, base_hap_1, trgt_haps[0], base_hap_2, trgt_haps[1])
-                # Gate only summed distance and weighted percentage of winning orientation.
+                # Gate only summed distance and weighted percentage of winning orientation
                 if aligned > ~{max_phase_edit_distance}:
                     row['status'] = 'edit_dist_too_high'
                 elif aligned_pct > ~{max_phase_edit_distance_pct}:
@@ -1363,7 +1354,7 @@ with output, audit:
                     unaligned_1, unaligned_2, base_hap_1, trgt_haps[1], base_hap_2, trgt_haps[0])
                 unaligned_pct = combined_edit_distance_pct(
                     unaligned_1, unaligned_2, base_hap_1, trgt_haps[1], base_hap_2, trgt_haps[0])
-                # Gate only summed distance and weighted percentage of winning orientation.
+                # Gate only summed distance and weighted percentage of winning orientation
                 if unaligned > ~{max_phase_edit_distance}:
                     row['status'] = 'edit_dist_too_high'
                 elif unaligned_pct > ~{max_phase_edit_distance_pct}:
@@ -1413,7 +1404,7 @@ PY
     }
 }
 
-# Replace selected TRVs, rebuild envelope relationships, and produce final VCFs and audit.
+# Replace selected TRVs, rebuild envelope relationships, and produce final VCFs and audit
 task ApplyTRLocusUpdates {
     input {
         File vcf
@@ -1432,9 +1423,8 @@ task ApplyTRLocusUpdates {
     command <<<
         set -euo pipefail
 
-        # Stream the contig twice while rebuilding TR envelope annotations: once to collect the
-        # final TRV intervals, once to merge, annotate, and write. No merged intermediate is
-        # materialized. When requested, derive gnomAD_STR assignments solely from the catalog report.
+        # Stream the contig twice to rebuild TR envelope annotations: collect final TRV intervals, then merge and write
+        # When requested, derive gnomAD_STR assignments solely from the catalog report
         python3 <<'PY'
 import os
 import pysam
@@ -1488,8 +1478,7 @@ def matching_candidates(records, explorers):  # noqa: E302
                 break
     return sorted(candidates, key=lambda item: (-item[0], signature(item[1]), trid_text(item[1])))
 
-# Catalog report controls gnomAD_STR selection and keeps the decision
-# reproducible without reinterpreting the JSON during output assembly.
+# Drive gnomAD_STR selection from the catalog report to avoid reinterpreting the JSON during output assembly
 catalog_rows = []
 with open('~{input_trv_catalog_match_tsv}') as handle:
     header = next(handle, '').rstrip('\n').split('\t')
@@ -1498,8 +1487,7 @@ with open('~{input_trv_catalog_match_tsv}') as handle:
         'input_has_TRExplorerV1_substring', 'trgt_overlapping_trids',
         'trgt_has_TRExplorerV1_substring', 'trgt_matching_allele_count',
     ]
-    # Accept the canonical columns as a prefix so cohort variants (e.g. AoU) may
-    # append extra trailing columns such as a per-locus status without breaking reuse.
+    # Accept the canonical columns as a prefix so cohort variants may append extra trailing columns
     if header[:len(expected)] != expected:
         raise RuntimeError('Unexpected trv_catalog_match_tsv header')
     for line_number, line in enumerate(handle, start=2):
@@ -1521,8 +1509,7 @@ with open('~{input_trv_catalog_match_tsv}') as handle:
             'explorers': explorers,
             'main_strict': truth(fields[4]),
             'trgt_strict': truth(fields[6]),
-            # Input matches intentionally leave TRGT cells blank. Numeric AC
-            # controls recovery eligibility for rows that require TRGT lookup.
+            # Input matches leave TRGT cells blank; numeric AC gates recovery for rows needing a TRGT lookup
             'trgt_ac': int(fields[7]) if fields[7] not in ('', '.') else 0,
         })
 
@@ -1548,8 +1535,7 @@ if replacement_path and os.path.exists(replacement_path):
                 'INFO',
                 items=[('ID', 'AC'), ('Number', 'A'), ('Type', 'Integer'), ('Description', 'Number of alleles observed')],
             )
-        # Final safety gate: annotations/phasing must not allow an AC=0 call to
-        # remove its mapped input TRV. Keep INFO/AC synchronized with GT.
+        # Final safety gate: keep INFO/AC synchronized with GT so an AC=0 call cannot remove its mapped input TRV
         for rec in handle:
             rec = rec.copy()
             if recompute_ac(rec) >= 1:
@@ -1565,9 +1551,8 @@ if map_path and os.path.exists(map_path):
             if len(fields) >= 4 and fields[3] in ('replace', 'add') and fields[0] in retained_replacement_keys:
                 map_rows_by_new.setdefault(fields[0], []).append(fields)
 
-# Every final replacement maps to exactly one map row. A 'replace' row displaces
-# one original TRV; an 'add' row inserts a novel locus with no displaced TRV (old='.').
-# Map rows for AC=0 records are deliberately ignored, preserving the original call.
+# Every final replacement maps to exactly one map row: 'replace' displaces an original TRV, 'add' inserts a novel locus
+# Map rows for AC=0 records are deliberately ignored, preserving the original call
 for new_key in retained_replacement_keys:
     rows = map_rows_by_new.get(new_key, [])
     if len(rows) != 1:
@@ -1588,8 +1573,7 @@ def vcf_contig_for(header, catalog_contig):  # noqa: E302
             return name
     raise RuntimeError(f'Catalog contig {catalog_contig} absent from input VCF')
 
-# Select exactly one output target for every catalog row that can be assigned.
-# Main-VCF rows take precedence; raw-TRGT rows select only retained replacements.
+# Select exactly one output target per assignable catalog row, with main-VCF rows taking precedence over raw-TRGT rows
 gnomad_assignments = {}
 if replace_gnomad_str:
     for row in catalog_rows:
@@ -1608,8 +1592,7 @@ if replace_gnomad_str:
             target_kind = 'replacement VCF'
         else:
             continue
-        # A raw TRGT match can subsequently be dropped by final AC filtering.
-        # In that case no replacement is emitted and its original VCF record stays.
+        # A raw TRGT match dropped by final AC filtering emits no replacement, leaving its original VCF record in place
         if not candidates and target_kind == 'replacement VCF':
             continue
         if not candidates:
@@ -1620,9 +1603,8 @@ if replace_gnomad_str:
         gnomad_assignments.setdefault(target, set()).add(row['locus_id'])
 base.close()
 
-# Pass A: the final TRV interval set is exactly the non-displaced input TRVs plus the
-# retained replacements, so it needs no merged intermediate. Collecting it up front is
-# required: a non-TRV can be enveloped by a TRV at the same POS that streams in later.
+# Pass A: the final TRV interval set is the non-displaced input TRVs plus the retained replacements
+# Collect it up front because a non-TRV can be enveloped by a TRV at the same POS that streams in later
 intervals = []
 with pysam.VariantFile('~{vcf}') as base_scan:
     for rec in base_scan:
@@ -1637,7 +1619,7 @@ for interval in intervals:
     by_contig.setdefault(interval[0], []).append(interval)
 
 if replacements:
-    # Preserve all annotations generated on the small replacement VCF.
+    # Preserve all annotations generated on the small replacement VCF
     with pysam.VariantFile(replacement_path) as repl_header_source:
         header.merge(repl_header_source.header)
 for name, number, type_, description in [
@@ -1654,9 +1636,8 @@ for name, number, type_, description in [
             items=[('ID', name), ('Number', number), ('Type', type_), ('Description', description)],
         )
 if replace_gnomad_str:
-    # Multiple disease-associated catalog loci can intentionally select one TRV.
-    # Rebuild instead of mutating in place: htslib numeric field IDs can shift when
-    # an existing definition is removed, corrupting translated INFO/FORMAT fields.
+    # Multiple disease-associated catalog loci can intentionally select one TRV
+    # Rebuild rather than mutate in place: removing a definition shifts htslib field IDs and corrupts translated fields
     rebuilt_header = pysam.VariantHeader()
     for line in str(header).splitlines():
         if not line.startswith('##'):
@@ -1750,7 +1731,7 @@ if replace_gnomad_str and emitted_gnomad_targets != set(gnomad_assignments):
 with open('~{prefix}.trv_catalog_match.tsv', 'w') as out, open('~{input_trv_catalog_match_tsv}') as source:
     out.write(source.read())
 
-# Always materialize phase audit so no-replacement contigs have stable workflow output.
+# Always materialize phase audit so no-replacement contigs have stable workflow output
 phase_audit_path = '~{input_trv_phasing_summary_tsv}'
 phase_header = (
     'base_trid\treplace_trid\tsample_id\tbase_gt\treplace_gt'

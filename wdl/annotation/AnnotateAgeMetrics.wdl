@@ -129,7 +129,7 @@ with open("~{write_json(age_bins)}") as f:
 ref_date = datetime.strptime("~{reference_date}", "%Y-%m-%d")
 prefix = "~{prefix}"
 
-# Build age map: person_id -> age (float, in years)
+# Build a map of person_id to age in years
 age_map = {}
 with open("~{age_data}") as f:
     reader = csv.DictReader(f)

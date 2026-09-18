@@ -38,7 +38,7 @@ workflow PALMERAssembly {
         String mei_type = mei_types[idx]
         String collapse_params = if defined(truvari_collapse_params) then select_first([truvari_collapse_params])[idx] else "--pctsize 0.9 --pctovl 0.9 --pctseq 0.9 --refdist 500"
 
-        # Paternal haplotype
+        # Call MEIs on the paternal haplotype
         if (!defined(override_palmer_calls_pat)) {
             call Helpers.SplitBam as SplitBamPat {
                 input:
@@ -92,7 +92,7 @@ workflow PALMERAssembly {
                 runtime_attr_override = runtime_attr_palmer_to_vcf
         }
 
-        # Maternal haplotype
+        # Call MEIs on the maternal haplotype
         if (!defined(override_palmer_calls_mat)) {
             call Helpers.SplitBam as SplitBamMat {
                 input:
@@ -146,7 +146,7 @@ workflow PALMERAssembly {
                 runtime_attr_override = runtime_attr_palmer_to_vcf
         }
 
-        # Merge haplotypes
+        # Collapse the two haplotype callsets into a diploid callset
         call TruvariCollapse {
             input:
                 vcf_pat = ConvertPALMERToVcfPat.vcf,

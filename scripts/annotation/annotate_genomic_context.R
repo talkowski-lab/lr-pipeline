@@ -1,4 +1,6 @@
-#!R
+#!/usr/bin/env Rscript
+
+# Assign genomic context labels to variants from breakpoint and CNV body coverage tables
 library("optparse")
 
 option_list = list(

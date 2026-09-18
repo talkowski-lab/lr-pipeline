@@ -333,13 +333,13 @@ task PriorityMergeTRVcfs {
         tabix -p vcf merged.vcf.gz
 
         for vcf_file in "${VCF_FILES[@]:1}"; do
-            # BED of variants currently in the merged set
+            # Write a BED of variants currently in the merged set
             bcftools query \
                 -f '%CHROM\t%POS\t%ID\t%REF\t%ALT\n' \
                 merged.vcf.gz \
                 | awk 'BEGIN{OFS="\t"} {print $1, $2, $2+length($4)}' > merged.bed
 
-            # BED of candidate variants
+            # Write a BED of candidate variants
             bcftools query \
                 -f '%CHROM\t%POS\t%ID\t%REF\t%ALT\n' \
                 "$vcf_file" \

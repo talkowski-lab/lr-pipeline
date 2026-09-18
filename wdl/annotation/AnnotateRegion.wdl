@@ -119,8 +119,7 @@ task AnnotateGenomicContext {
 
         TMPPATH=$(mktemp -d)
 
-        # Extract variant sites: CHROM, POS0, END, ID, allele_type, allele_length, POS, REF, ALT
-        # Normalize type and length to match GATK-SV representation
+        # Extract variant sites, normalizing type and length to the GATK-SV representation
         bcftools query \
             -f '%CHROM\t%POS0\t%END\t%ID\t%INFO/allele_type\t%INFO/allele_length\t%POS\t%REF\t%ALT\n' \
             ~{vcf} \
@@ -169,7 +168,7 @@ task AnnotateGenomicContext {
             bedtools coverage -a ${TMPPATH}/lg_cnv -b ~{repeat_masked_bed}  > ${TMPPATH}/lg_cnv.vs.RM
         fi
 
-        # Run script to assign genomic context
+        # Assign genomic context from the coverage tables
         Rscript /opt/scripts/annotation/annotate_genomic_context.R \
             -i ${TMPPATH}/tmp.sites \
             -o ${TMPPATH}/annotations.unsorted.tsv \

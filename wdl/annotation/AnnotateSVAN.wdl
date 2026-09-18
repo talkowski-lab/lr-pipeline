@@ -55,7 +55,7 @@ workflow AnnotateSVAN {
     Boolean single_contig = length(contigs) == 1
 
     scatter (contig in contigs) {
-        # Preprocessing
+        # Subset the input VCF to the contig
         if (!single_contig) {
             call Helpers.SubsetVcfToContig {
                 input:
@@ -71,7 +71,7 @@ workflow AnnotateSVAN {
         File contig_vcf = select_first([SubsetVcfToContig.subset_vcf, vcf])
         File contig_vcf_idx = select_first([SubsetVcfToContig.subset_vcf_idx, vcf_idx])
 
-        # Insertions
+        # Annotate insertions
         if (annotate_ins) {
             call Helpers.SubsetVcfByArgs as SubsetIns {
                 input:
@@ -182,7 +182,7 @@ workflow AnnotateSVAN {
             File final_ins_annotations = select_first([ConcatInsShards.concatenated_tsv, ExtractIns.annotations_tsv[0]])
         }
 
-        # Deletions
+        # Annotate deletions
         if (annotate_del) {
             call Helpers.SubsetVcfByArgs as SubsetDel {
                 input:
@@ -285,7 +285,7 @@ workflow AnnotateSVAN {
         }
     }
 
-    # Postprocessing
+    # Concatenate the insertion and deletion annotations across contigs
     call Helpers.ConcatAlignedTsvs {
         input:
             tsvs = flatten([select_all(final_ins_annotations), select_all(final_del_annotations)]),

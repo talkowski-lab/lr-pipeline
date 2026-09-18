@@ -264,7 +264,7 @@ query = pysam.VariantFile("~{vcf}")
 
 with open("~{prefix}.annotations.unsorted.tsv", 'w') as out:
     for rec in query:
-        # Structure search criteria
+        # Resolve the per-SVTYPE search criteria for this record
         svtype = rec.info.get('SVTYPE')
         if svtype not in PARAMS:
             continue

@@ -1,14 +1,8 @@
 #!/usr/bin/env Rscript
 
-# Script to calculate median bin coverage per sample for all samples in a bincov
-# matrix
+# Calculate median bin coverage per sample for all samples in a bincov matrix
+# Loads the entire matrix into memory, so split the input by contig for large matrices or small-memory machines
 
-# Note: loads entire coverage matrix into memory. This may pose a problem for
-# large matrices or on small-memory machines. Other workarounds exist from the
-# command line, but most are slower. One suggested alternative is to split
-# the input coverage matrices by chromosome prior to computing medians.
-
-# Load library
 require(optparse)
 
 # Define options
@@ -26,7 +20,7 @@ args <- parse_args(OptionParser(usage="%prog [options] covMatrix.bed OUTFILE",
                    positional_arguments=TRUE)
 opts <- args$options
 
-# Checks for appropriate positional arguments
+# Check for appropriate positional arguments
 if(length(args$args) != 2)
 {cat("Incorrect number of required positional arguments\n\n")
   stop()}
@@ -38,7 +32,7 @@ if(opts$header==T){
   cov <- read.table(args$args[1], header=F, comment.char="#", check.names=F)
 }
 
-# Function to compute medians per sample
+# Compute medians per sample
 covPerSample <- function(cov,downsample=1000000,mad=F){
   # Downsample to 1M random rows if nrows > 1M (for computational efficiency)
   if(nrow(cov)>1000000){
@@ -48,7 +42,7 @@ covPerSample <- function(cov,downsample=1000000,mad=F){
   zerobins <- which(as.integer(apply(as.data.frame(cov[,-c(1:3)]), 1, median, na.rm=T)) == 0)
   withzeros <- as.numeric(apply(as.data.frame(cov[,-c(1:3)]), 2, median, na.rm=T))
   withoutzeros <- as.numeric(apply(as.data.frame(cov[-zerobins,-c(1:3)]), 2, median, na.rm=T))
-  #Get SDs with and without zero-cov bins (if optioned)
+  # Get SDs with and without zero-cov bins (if optioned)
   if(mad==T){
     withzeros.mad <- as.numeric(apply(as.data.frame(cov[,-c(1:3)]), 2, mad, na.rm=T))
     withoutzeros.mad <- as.numeric(apply(as.data.frame(cov[-zerobins,-c(1:3)]), 2, mad, na.rm=T))
@@ -69,11 +63,10 @@ covPerSample <- function(cov,downsample=1000000,mad=F){
   if(opts$header==T){
     res$ID <- names(cov[, -c(1:3), drop = FALSE])
   }
-  # Return output df
   return(res)
 }
 
-# Function to compute medians per bin
+# Compute medians per bin
 covPerBin <- function(cov,downsample=500,mad=F){
   # Downsample to 500 random samples if nsamples > 500 (for computational efficiency)
   if(ncol(cov)>503){
@@ -99,7 +92,7 @@ covPerBin <- function(cov,downsample=500,mad=F){
     }
     return(c(withzeros,withoutzeros))
   }))
-  # compile results df to return
+  # Compile results df to return
   if(mad==T){
     res <- data.frame("#chr"=cov[,1],"start"=cov[,2],"end"=cov[,3],
                       "Med_withZeros"=meds[,1],
@@ -111,11 +104,10 @@ covPerBin <- function(cov,downsample=500,mad=F){
                       "Med_withZeros"=meds[,1],
                       "Med_withoutZeros"=meds[,2])
   }
-  # Return output df
   return(res)
 }
 
-# Compute appropriate medians & write out
+# Compute the appropriate medians and write them out
 if(opts$binwise==TRUE){
   res <- covPerBin(cov,mad=opts$mad)
   names(res)[1] <- "#chr"

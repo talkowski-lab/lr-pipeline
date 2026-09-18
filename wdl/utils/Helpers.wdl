@@ -610,14 +610,14 @@ task ConcatTsvs {
     command <<<
         set -euo pipefail
 
-        # Handle input compression state
+        # Select the decompression command for the input TSVs
         if [ "~{compressed_tsvs}" == "true" ]; then
             CAT_CMD="gunzip -c"
         else
             CAT_CMD="cat"
         fi
 
-        # Handle concatenation
+        # Concatenate the TSVs, keeping a single header when requested
         if [ "~{preserve_header}" == "true" ]; then
             $CAT_CMD ~{tsvs[0]} | head -n 1 > combined_raw.tsv || true
             for file in ~{sep=' ' tsvs}; do
@@ -627,7 +627,7 @@ task ConcatTsvs {
             $CAT_CMD ~{sep=' ' tsvs} > combined_raw.tsv
         fi
 
-        # Handle sorting
+        # Sort by coordinate when requested
         if [ "~{sort_output}" == "true" ]; then
             if [ "~{preserve_header}" == "true" ]; then
                 head -n 1 combined_raw.tsv > ~{prefix}.tsv
@@ -639,7 +639,7 @@ task ConcatTsvs {
             mv combined_raw.tsv ~{prefix}.tsv
         fi
 
-        # Handle output compression state
+        # Compress the output when requested
         if [ "~{compressed_output}" == "true" ]; then
             gzip -1 "~{prefix}.tsv"
         fi
@@ -1009,14 +1009,14 @@ task ConvertToHailMT {
     }
 
     parameter_meta {
-        gvcf: "The input .vcf.bgz file."
-        tbi: "The input .vcf.bgz.tbi file."
-        reference: "The reference genome to use. Currently only GRCh38 is supported."
-        ref_fa: "The reference genome FASTA file. If not specified, the reference genome will be downloaded from the Hail website."
-        ref_fai: "The reference genome FASTA index file. If not specified, the reference genome will be downloaded from the Hail website."
-        prefix: "The prefix to use for the output MatrixTable."
+        gvcf: "VCF to convert to a MatrixTable."
+        tbi: "Index for gvcf."
+        reference: "Reference assembly label; only GRCh38 is supported."
+        ref_fa: "Reference sequences FASTA file; downloaded from Hail if not provided."
+        ref_fai: "Index for ref_fa; downloaded from Hail if not provided."
+        prefix: "Prefix for the output MatrixTable."
         docker: "Docker image for Hail."
-        runtime_attr_override: "Override the default runtime attributes for this task."
+        runtime_attr_override: "Override runtime attributes for this task."
     }
 
     input {
@@ -1316,7 +1316,7 @@ def extract_origin_info(origin):
                 best = (chrom, start, end)
     return best if best is not None else (None, None, None)
 
-# Map allele_type values
+# Collect the mapped allele_type values present in the VCF
 with open("raw_types.txt") as f:
     present_types = {map_type(line.strip()) for line in f if line.strip()}
 
@@ -1355,28 +1355,25 @@ for allele_type in present_types:
     if allele_type not in header.alts:
         header.add_line(f'##ALT=<ID={allele_type},Description="{allele_type} variant">')
 
-# Convert records
+# Convert each record to a symbolic-allele representation
 vcf_out = pysam.VariantFile("unsorted.vcf.gz", 'w', header=header)
 for record in vcf_in:
-    # Map type
     raw = record.info["~{type_field}"]
     if isinstance(raw, (list, tuple)):
         raw = raw[0]
     allele_type = map_type(raw)
 
-    # Set REF/ALT/SVTYPE
     record.ref = 'N'
     record.alts = (f'<{allele_type}>',)
     record.info['SVTYPE'] = allele_type
 
-    # Set SVLEN
     allele_length = record.info["~{length_field}"]
     if isinstance(allele_length, (list, tuple)):
         allele_length = allele_length[0]
     svlen = abs(allele_length)
     record.info['SVLEN'] = svlen
 
-    # Set END
+    # Set END, repositioning DUPs to their source coordinate
     if allele_type == 'DUP':
         origin_chrom, origin_pos, origin_end = extract_origin_info(record.info.get('ORIGIN', None))
         if origin_chrom is None or origin_pos is None or origin_end is None:
@@ -2193,7 +2190,8 @@ for f, col_map in zip(input_files, file_col_maps):
     if not col_map:
         continue
     with open(f, 'r') as fh:
-        fh.readline()  # skip header
+        # Skip the header row
+        fh.readline()
         for line in fh:
             parts = line.rstrip('\n').split('\t')
             if len(parts) < 5:
@@ -2467,6 +2465,67 @@ task NormalizeVcf {
         preemptible: select_first([runtime_attr.preemptible_tries, default_attr.preemptible_tries])
         maxRetries: select_first([runtime_attr.max_retries, default_attr.max_retries])
     }
+}
+
+task NormalizeTRGTHaploidGenotypes {
+  input {
+    File vcf
+    File vcf_idx
+    String prefix
+    String docker
+    RuntimeAttr? runtime_attr_override
+  }
+
+  command <<<
+    set -euo pipefail
+
+    python3 <<'CODE'
+import pysam
+
+with pysam.VariantFile("~{vcf}") as vcf_in, pysam.VariantFile("~{prefix}.vcf.gz", "wz", header=vcf_in.header) as vcf_out:
+    for record in vcf_in:
+        for sample in record.samples.values():
+            genotype = sample.get("GT")
+            if genotype is None or len(genotype) != 2:
+                continue
+
+            first_allele, second_allele = genotype
+            if first_allele is None:
+                sample["GT"] = (second_allele,)
+            elif second_allele is None:
+                sample["GT"] = (first_allele,)
+
+        vcf_out.write(record)
+CODE
+
+    tabix -f -p vcf ~{prefix}.vcf.gz
+  >>>
+
+  output {
+    File normalized_vcf = "~{prefix}.vcf.gz"
+    File normalized_vcf_idx = "~{prefix}.vcf.gz.tbi"
+  }
+
+  RuntimeAttr default_attr = object {
+    cpu_cores: 1,
+    mem_gb: 4,
+    disk_gb: 3 * ceil(size([vcf, vcf_idx], "GB")) + 5,
+    boot_disk_gb: 10,
+    preemptible_tries: 1,
+    max_retries: 0
+  }
+
+  RuntimeAttr runtime_attr = select_first([runtime_attr_override, default_attr])
+
+  runtime {
+    cpu: select_first([runtime_attr.cpu_cores, default_attr.cpu_cores])
+    memory: select_first([runtime_attr.mem_gb, default_attr.mem_gb]) + " GiB"
+    disks: "local-disk " + select_first([runtime_attr.disk_gb, default_attr.disk_gb]) + " HDD"
+    bootDiskSizeGb: select_first([runtime_attr.boot_disk_gb, default_attr.boot_disk_gb])
+    docker: docker
+    preemptible: select_first([runtime_attr.preemptible_tries, default_attr.preemptible_tries])
+    maxRetries: select_first([runtime_attr.max_retries, default_attr.max_retries])
+  }
 }
 
 task RenameVariantIds {

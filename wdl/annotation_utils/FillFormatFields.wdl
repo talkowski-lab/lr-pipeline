@@ -334,13 +334,13 @@ def ad_is_populated(ad):
 
 def reshape_transfer_value(field, value, unfilled_rec):
     if field == "AD" and expand_ad_across_alleles and value == (None,):
-        # GLnexus writes a fully-missing AD (Number=R) as bare "." instead of ".,."
+        # GLNexus writes a fully-missing AD (Number=R) as a bare "." rather than ".,."
         expected_len = len(unfilled_rec.alleles)
         if expected_len > 1:
             return (None,) * expected_len
     elif (field == "RNC" and split_rnc_across_alleles and isinstance(value, tuple)
             and len(value) == 1 and isinstance(value[0], str) and len(value[0]) > 1):
-        # GLnexus merges RNC's per-allele-copy codes, e.g. "MI" instead of "M,I"
+        # GLNexus merges RNC's per-allele-copy codes, e.g. "MI" rather than "M,I"
         return tuple(value[0])
     return value
 
@@ -365,7 +365,7 @@ def alleles_key(rec):
     return (rec.chrom, rec.pos, ref, alts)
 
 for unfilled_rec in unfilled_in:
-    # Find matching variant
+    # Find the matching record in the filled VCF
     unfilled_rec.translate(out_header)
     match = None
     if in_subset(unfilled_rec):
@@ -377,7 +377,7 @@ for unfilled_rec in unfilled_in:
 
     if match:
         for sample in common_samples:
-            # Set GT field
+            # Transfer GT from the filled record
             if fill_alt_gts or fill_ref_gts:
                 src_gt = match.samples[sample].get("GT")
                 cur_gt = unfilled_rec.samples[sample].get("GT")
@@ -387,7 +387,7 @@ for unfilled_rec in unfilled_in:
                         unfilled_rec.samples[sample]["GT"] = src_gt
                         unfilled_rec.samples[sample].phased = match.samples[sample].phased
 
-            # Copy over values for other FORMAT fields
+            # Transfer the remaining FORMAT fields
             for field in transfer_format_fields:
                 if field not in match.format:
                     continue
@@ -398,7 +398,7 @@ for unfilled_rec in unfilled_in:
                 except Exception as e:
                     raise RuntimeError(f"{field} for {sample} at {unfilled_rec.id}) - {e}") from e
 
-    # Unphase genotypes if unphase_gts = true
+    # Unphase genotypes when requested
     if unphase_gts:
         for sample in all_samples:
             current_gt = unfilled_rec.samples[sample].get("GT")
@@ -406,7 +406,7 @@ for unfilled_rec in unfilled_in:
                 unfilled_rec.samples[sample]["GT"] = unphase_gt(current_gt)
                 unfilled_rec.samples[sample].phased = False
 
-    # Set PL if add_missing_pl_via_ad = true
+    # Derive PL from AD when requested
     if add_missing_pl_via_ad and "PL" not in unfilled_rec.format and "AD" in unfilled_rec.format:
         for sample in all_samples:
             ad = unfilled_rec.samples[sample].get("AD")

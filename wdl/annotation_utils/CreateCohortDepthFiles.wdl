@@ -436,7 +436,7 @@ task MedianCov {
     command <<<
         set -euo pipefail
 
-        # Reservoir-sample bins down to max_bins to bound peak memory; medianCoverage.R downsamples to the same count anyway
+        # Reservoir-sample bins down to max_bins to bound peak memory, which medianCoverage.R does internally anyway
         zcat ~{bincov_matrix} \
             | awk -v N=~{max_bins} -v SEED=~{random_seed} '
                 BEGIN { srand(SEED) }

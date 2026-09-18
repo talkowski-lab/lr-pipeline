@@ -89,7 +89,7 @@ workflow PostprocessCallset {
                     runtime_attr_override = runtime_attr_create_shards
             }
 
-            # Non-optional File so the value can cross into the shard scatter; the base placeholder is unused unless transferring
+            # Declare as non-optional File so the value can cross into the shard scatter
             File shard_transfer_vcf = select_first([transfer_source_vcf, contig_base_vcf])
             File shard_transfer_vcf_idx = select_first([transfer_source_vcf_idx, contig_base_vcf_idx])
 
@@ -649,12 +649,12 @@ for record in base_reader:
             if normalize_ploidy:
                 sample_sex = sex_by_sample.get(sample)
 
-                # Clear format fields for females on chrY
+                # Clear FORMAT fields for females on chrY
                 if record.chrom == "chrY" and sample_sex == "F":
                     clear_format_fields(sample_data)
                     continue
 
-                # Make male calls hemizygous on chrX & chrY
+                # Make male calls hemizygous on chrX and chrY
                 if record.chrom in {"chrX", "chrY"} and sample_sex == "M":
                     sample_data["GT"] = make_male_hemizygous(sample_data.get("GT"), sample_data.phased)
 

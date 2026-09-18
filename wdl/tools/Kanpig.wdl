@@ -274,10 +274,10 @@ for rec in base_vcf:
     # Case 1: Ref/missing in base and ref in Kanpig
     if not is_called(base_gt) and not is_called(kp_gt) and not is_missing(kp_gt):
         if is_female_y:
-            # Case 1a: Female on chrY → clear everything
+            # Case 1a: Female on chrY, so clear everything
             clear_format_fields(rec, sample, n_alleles)
         else:
-            # Case 1b: Autosome, male on chrX/Y and female on chrX → set AD/DP/PL/GQ from Kanpig 
+            # Case 1b: Autosome, male on chrX/chrY and female on chrX, so set AD/DP/PL/GQ from Kanpig
             rec.samples[sample]['DP'] = kp_rec.samples[sample]['DP']
             
             if kp_rec.samples[sample]['AD'] is not None and len(kp_rec.samples[sample]['AD']) == n_alleles:
@@ -288,13 +288,13 @@ for rec in base_vcf:
                 rec.samples[sample]['GQ'] = calculate_gq(pls)
             
             if is_hemi:
-                # Case 1b_i: Male on chrX/Y → GT of 0/.
+                # Case 1b_i: Male on chrX/chrY, so set GT to 0/.
                 rec.samples[sample]['GT'] = (0, None)
             else:
-                # Case 1b_ii: Autosome or female on chrX → GT of 0/0
+                # Case 1b_ii: Autosome or female on chrX, so set GT to 0/0
                 rec.samples[sample]['GT'] = tuple(0 for _ in range(n_alleles))
 
-    # Case 2: Ref/missing in base and missing/alt in Kanpig → clear FORMAT fields
+    # Case 2: Ref/missing in base and missing/alt in Kanpig, so clear FORMAT fields
     if (not is_called(base_gt) and is_missing(kp_gt)) or (not is_called(base_gt) and is_called(kp_gt)):
         clear_format_fields(rec, sample, n_alleles)
     

@@ -100,7 +100,7 @@ task FilterLowCoverageGenotypesShard {
     command <<<
         set -euo pipefail
 
-        # Set selected low-coverage GTs to missing while preserving all other FORMAT values.
+        # Set selected low-coverage GTs to missing while preserving all other FORMAT values
         python3 <<'PYCODE'
 import csv
 

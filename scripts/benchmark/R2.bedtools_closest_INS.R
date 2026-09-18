@@ -1,6 +1,6 @@
-#!R
-## Compare CNVs
 #!/usr/bin/env Rscript
+
+# Compare insertions against their closest reference callset records
 library("optparse")
 
 option_list = list(
@@ -77,7 +77,6 @@ AF_cor_vs_RO_and_bp<-function(out){
 	rec=0
 	for(i in RO_range){
 		for(j in bp_range){
-			#print(c(i,j))
 			rec=rec+1
 			tmp = out[!out$RO<i & !out$max_bp_dis>j,]
 			af_cor = cor(tmp[,9],tmp[,21])
@@ -109,7 +108,7 @@ if (!is.null(pop_file)) {
 out_columns <- c(out_columns, 'INS_dis', 'INS_ratio')
 
 dat=read.table(input_bed,sep='\t', header=T)
-# if there's no data write an empty table and exit
+# Write an empty table and exit when there is no data
 if (nrow(dat) == 0) {
 	out_columns[c(1,2)]=c('query_svid','ref_svid')
 	out2 <- data.frame(matrix(ncol = length(out_columns), nrow = 0))
@@ -120,16 +119,17 @@ if (nrow(dat) == 0) {
 
 dat[,ncol(dat)+1] =abs(dat[,8]-dat[,2])
 colnames(dat)[ncol(dat)]='INS_dis'
-dat[,ncol(dat)+1] = dat[,12]/dat[,6] # TODO: Modified from before
+# TODO: Modified from before
+dat[,ncol(dat)+1] = dat[,12]/dat[,6]
 colnames(dat)[ncol(dat)]='INS_ratio'
 
 svid_stat=data.frame(table(dat[,4]))
 out = dat[dat[,4]%in%svid_stat[svid_stat[,2]==1,][,1],]
 for(j in sort(unique(svid_stat[,2]))){
 	if(j>1){
-		#print(j)
 		tmp = dat[dat[,4]%in%svid_stat[svid_stat[,2]==j,][,1],]
-		tmp = tmp[order(tmp$INS_dis, decreasing=T),] # TODO: Modified from before
+		# TODO: Modified from before
+		tmp = tmp[order(tmp$INS_dis, decreasing=T),]
 		tmp = tmp[order(tmp[,4]),]
 		out=rbind(out, tmp[j*c(1:(length(unique(tmp[,4])))),])
 	}

@@ -90,7 +90,7 @@ task SubsetLpsTsvToContig {
 
                 {
                     split($1, arr, ",")
-                    # Variation cluster TRIDs carry their contig in the second colon-delimited field, not before the first dash
+                    # Variation cluster TRIDs carry their contig in the second colon-delimited field, not the first
                     if (arr[1] ~ /^VC:/) {
                         split(arr[1], vcparts, ":")
                         chr = vcparts[2]

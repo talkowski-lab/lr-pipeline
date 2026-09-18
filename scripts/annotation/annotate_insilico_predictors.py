@@ -20,24 +20,24 @@ parser.add_argument('--output_tsv', required=True, help='Output annotations TSV 
 args = parser.parse_args()
 
 
-# Helper to format output
+# Format a predictor score for TSV output
 def fmt(val):
     return hl.if_else(hl.is_defined(val), hl.format('%.6g', val), '.')
 
 
-# Reference genome
+# Resolve the reference build and Spark resource settings
 build = args.build
 cores = args.cores
 mem = int(np.floor(float(args.mem)))
 
-# Annotation HT paths
+# Resolve the predictor Hail Table paths
 cadd_ht_uri = args.cadd_ht
 pangolin_ht_uri = args.pangolin_ht
 phylop_ht_uri = args.phylop_ht
 revel_ht_uri = args.revel_ht
 spliceai_ht_uri = args.spliceai_ht
 
-# VCF paths
+# Resolve the input VCF and output TSV paths
 vcf_uri = args.vcf
 output_tsv_uri = args.output_tsv
 

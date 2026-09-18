@@ -38,10 +38,10 @@ workflow LRCNVs {
         sample_ids: "Identifier for each sample."
         depth_profiles: "Median depth at each interval, rounded to an integer. One file per sample. See the TSV format here https://gatk.broadinstitute.org/hc/en-us/articles/35967568802843-CollectReadCounts."
         cohort_id: "Identifier for the cohort used for denoising model generation."
-        contig_ploidy_priors: "File containing contig ploidy priors. See input comment."
+        contig_ploidy_priors: "File containing contig ploidy priors."
         num_intervals_per_scatter: "Number of intervals to process in each scatter."
         ref_fa: "Reference sequences FASTA file."
-        ref_fai: "Reference sequences FASTA file index."
+        ref_fai: "Index for ref_fa."
         ref_dict: "Reference sequences dictionary."
         gatk_docker: "Docker image for the GATK tool."
     }
@@ -334,7 +334,6 @@ task AnnotateIntervals {
 
     Int command_mem_mb = ceil(select_first([runtime_attr.mem_gb, default_attr.mem_gb]) * 0.8 * 1024)
 
-    # Determine output filename
     command <<<
         set -euo pipefail
 
@@ -394,7 +393,6 @@ task FilterIntervals {
 
     Int command_mem_mb = ceil(select_first([runtime_attr.mem_gb, default_attr.mem_gb]) * 0.8 * 1024)
 
-    # Determine output filename
     command <<<
         set -euo pipefail
 
@@ -451,26 +449,22 @@ task ScatterIntervals {
 
     Int command_mem_mb = ceil(select_first([runtime_attr.mem_gb, default_attr.mem_gb]) * 0.8 * 1024)
 
-    # If optional output_dir not specified, use the task prefix.
+    # Default the output directory to the task prefix
     String output_dir_ = select_first([output_dir, prefix + ".scattered_intervals"])
 
     command <<<
         set -euo pipefail
 
-        # IntervalListTools will fail if the output directory does not exist, so we create it
+        # Create the output directory because IntervalListTools fails if it does not exist
         mkdir ~{output_dir_}
         export GATK_LOCAL_JAR=~{default="/root/gatk.jar" gatk4_jar_override}
 
-        # IntervalListTools behaves differently when scattering to a single or multiple shards, so we do some handling in bash
-
-        # IntervalListTools tries to equally divide intervals across shards to give at least INTERVAL_COUNT in each and
-        # puts remainder intervals in the last shard, so integer division gives the number of shards
-        # (unless NUM_INTERVALS < num_intervals_per_scatter and NUM_SCATTERS = 0, in which case we still want a single shard)
+        # Integer division gives the shard count because IntervalListTools puts remainder intervals in the last shard
         NUM_INTERVALS=$(grep -v '@' ~{interval_list} | wc -l)
         NUM_SCATTERS=$(echo $((NUM_INTERVALS / ~{num_intervals_per_scatter})))
 
         if [ $NUM_SCATTERS -le 1 ]; then
-            # if only a single shard is required, then we can just rename the original interval list
+            # Copy the original interval list when only a single shard is required
             >&2 echo "Not running IntervalListTools because only a single shard is required. Copying original interval list..."
             cp ~{interval_list} ~{output_dir_}/~{prefix}.scattered.0001.interval_list
         else
@@ -480,8 +474,7 @@ task ScatterIntervals {
                 --SCATTER_CONTENT ~{num_intervals_per_scatter} \
                 --OUTPUT ~{output_dir_}
 
-            # output files are named output_dir_/temp_0001_of_N/scattered.interval_list, etc. (N = number of scatters);
-            # we rename them with the task prefix.
+            # Rename the per-shard interval lists from the IntervalListTools temp directory layout to the task prefix
             ls -v ~{output_dir_}/*/scattered.interval_list | \
                 cat -n | \
                 while read n filename; do mv $filename ~{output_dir_}/~{prefix}.scattered.$(printf "%04d" $n).interval_list; done
@@ -546,8 +539,7 @@ task PostprocessGermlineCNVCalls {
 
         sharded_interval_lists_array=(~{sep=" " sharded_interval_lists})
 
-        # untar calls to CALLS_0, CALLS_1, etc directories and build the command line
-        # also copy over shard config and interval files
+        # Untar calls into CALLS_0, CALLS_1, etc. directories with their shard config and interval files
         gcnv_calls_tar_array=(~{sep=" " gcnv_calls_tars})
         calling_configs_array=(~{sep=" " calling_configs})
         denoising_configs_array=(~{sep=" " denoising_configs})
@@ -565,7 +557,7 @@ task PostprocessGermlineCNVCalls {
             calls_args="$calls_args --calls-shard-path CALLS_$index"
         done
 
-        # untar models to MODEL_0, MODEL_1, etc directories and build the command line
+        # Untar models into MODEL_0, MODEL_1, etc. directories and build the command line
         gcnv_model_tar_array=(~{sep=" " gcnv_model_tars})
         model_args=""
         for index in ${!gcnv_model_tar_array[@]}; do
@@ -686,7 +678,7 @@ task CollectModelQualityMetrics {
             tar xzf $gcnv_model_tar -C MODEL_$index
             ard_file="MODEL_$index/mu_ard_u_interval__.tsv"
 
-            # Check whether all ARD values are less than or equal to one.
+            # Check whether all ARD values are less than or equal to one
             NUM_ARD_VALUES_ABOVE_ONE=$(awk '!/^@/ && $1 != "VALUE_0" { ard = 1e10 / (1 + exp(-$1)); if (ard > 1.0) count++ } END { print count + 0 }' "$ard_file")
             if [ $NUM_ARD_VALUES_ABOVE_ONE -eq 0 ]; then
                 qc_status="ALL_PRINCIPAL_COMPONENTS_USED"
@@ -738,11 +730,11 @@ task DetermineGermlineContigPloidyCohortMode {
         RuntimeAttr? runtime_attr_override
     }
 
-    # We do not expose Hybrid ADVI parameters -- the default values are decent
+    # Hybrid ADVI parameters are not exposed because the defaults are adequate
 
     Int command_mem_mb = ceil(select_first([runtime_attr.mem_gb, default_attr.mem_gb]) * 0.8 * 1024)
 
-    # If optional output_dir not specified, use "out"
+    # Default the output directory to "out"
     String output_dir_ = select_first([output_dir, "out"])
 
     command <<<
@@ -848,7 +840,7 @@ task GermlineCNVCallerCohortMode {
 
     Int command_mem_mb = ceil(select_first([runtime_attr.mem_gb, default_attr.mem_gb]) * 0.8 * 1024)
 
-    # If optional output_dir not specified, use "out"
+    # Default the output directory to "out"
     String output_dir_ = select_first([output_dir, "out"])
     Int num_samples = length(read_count_files)
 

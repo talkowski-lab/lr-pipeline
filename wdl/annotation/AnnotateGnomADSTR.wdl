@@ -154,7 +154,7 @@ PYCODE
             ~{vcf} \
         | sort -k1,1 -k2,2n > variants.bed
 
-        # Condition 1: variant fully enveloped within a reference region (-f 1.0 = 100% of variant covered)
+        # Condition 1: variant fully enveloped within a reference region
         bedtools intersect \
             -a variants.bed \
             -b catalog.sorted.bed \
@@ -163,7 +163,7 @@ PYCODE
         | awk 'BEGIN{OFS="\t"} {print $4, $9}' \
             > cond1_matches.tsv
 
-        # Condition 2: reciprocal overlap >= threshold AND at least one matching motif
+        # Condition 2: reciprocal overlap meets the threshold and at least one motif matches
         bedtools intersect \
             -a variants.bed \
             -b catalog.sorted.bed \
@@ -181,7 +181,7 @@ PYCODE
         }' \
         > cond2_matches.tsv
 
-        # Merge: condition 1 takes priority (first occurrence per variant ID wins)
+        # Merge the two condition sets, giving condition 1 priority per variant ID
         cat cond1_matches.tsv cond2_matches.tsv \
             | sort -k1,1 -u \
             > all_matches.tsv

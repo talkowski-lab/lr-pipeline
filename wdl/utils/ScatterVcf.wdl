@@ -60,7 +60,7 @@ workflow ScatterVcf {
 
             if (!localize_vcf) {
                 String vcf_uri = file
-                # chrom_length * ceil(n_samples*0.001) / 1000000
+                # Estimate remote input size from contig length scaled by sample count
                 Float input_size_ = if (get_chromosome_sizes) then select_first([GetChromosomeSizes.contig_lengths])[chromosome] * ceil(select_first([GetChromosomeSizes.n_samples])*0.001) / 1000000 else size(vcf_uri, 'GB')
                 call SplitByChromosomeRemote {
                     input:
@@ -221,7 +221,7 @@ task SplitByChromosomeRemote {
         HTS_AUTH_LOCATION=/tmp/token_fifo tabix --verbosity 3 -h ~{vcf_file} ~{chromosome} | bgzip -c > ~{prefix}."~{chromosome}".vcf.gz
         
         tabix -p vcf ~{prefix}."~{chromosome}".vcf.gz
-        # get number of records in chr
+        # Count records in the contig
         HTS_AUTH_LOCATION=/tmp/token_fifo bcftools index -n ~{prefix}."~{chromosome}".vcf.gz > contig_length.txt
     >>>
 
@@ -273,7 +273,7 @@ task SplitByChromosome {
         
         tabix -p vcf ~{prefix}."~{chromosome}".vcf.gz
         
-        # get number of records in chr
+        # Count records in the contig
         HTS_AUTH_LOCATION=/tmp/token_fifo bcftools index -n ~{prefix}."~{chromosome}".vcf.gz > contig_length.txt
     >>>
 

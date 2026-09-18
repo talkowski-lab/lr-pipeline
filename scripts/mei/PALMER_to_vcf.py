@@ -73,7 +73,7 @@ def parse_palmer_calls(callfile_path, insertion_seqs, ref_fasta, min_conf=1):
             if conf < min_conf:
                 continue
 
-            # Create unique key from columns 2-10 and 14 (0-indexed: 2-10 and 14)
+            # Create a unique key from columns 2-10 and 14
             unique_key = tuple(fields[2:11] + [fields[14]])
             if unique_key in seen_records:
                 continue
@@ -161,7 +161,6 @@ def main():
     write_vcf_header(args.ref_fai, args.sample)
     write_vcf_records(calls, args.mei_type, args.haplotype)
 
-    # Close reference
     ref_fasta.close()
 
 
