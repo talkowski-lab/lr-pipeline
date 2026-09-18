@@ -66,69 +66,71 @@ task EvaluateOverlappingTRLociForContig {
         set -euo pipefail
 
         python3 <<'CODE'
-import re
-
 import edlib
 import pysam
 
-CIGAR_RE = re.compile(r'(\d+)([=XIDM])')
 EMPTY_SEQ = '-'
 ABSENT_HAP = '.'
 HEADER = [
-    'trid_a', 'trid_b', 'motifs_a', 'motifs_b', 'chrom', 'overlap_start', 'overlap_end', 'overlap_length',
+    'trid_a', 'trid_b', 'motifs_a', 'motifs_b', 'chrom',
+    'locus_start_a', 'locus_end_a', 'locus_start_b', 'locus_end_b',
+    'union_start', 'union_end', 'union_length', 'overlap_start', 'overlap_end', 'overlap_length',
     'hap1_seq_a', 'hap2_seq_a', 'hap1_seq_b', 'hap2_seq_b',
     'min_edit_distance', 'max_similarity',
 ]
 
 
-def build_ref_cuts(ref, hap):
-    """Map every reference base boundary of a TR record onto an offset in one of its haplotype sequences.
+def reference_slice(record, start, end):
+    """Reference bases of an interval contained in a record's own span, read off its REF allele."""
+    if start > end:
+        return ''
+    return record['ref'][start - record['start']:end - record['start'] + 1]
 
-    Returns cuts[0..len(ref)], where hap[cuts[i]:cuts[j]] is the haplotype sequence spanning reference
-    bases i through j - 1. Inserted bases are assigned to the reference base they follow, with a leading
-    insertion assigned to the first reference base, so the per-base spans tile the haplotype exactly.
+
+def union_sequences(record, other, union_start, union_end):
+    """Haplotype sequences of a record extended to the union span of the two loci.
+
+    Bases of the union outside the record's own span are filled with reference, taken from the other
+    record's REF allele. Because the two spans overlap, the union is always covered by the two spans
+    together, so every padded base is available without a reference FASTA. Both sequences of a pair then
+    describe the same interval and can be compared directly, with no alignment of a haplotype back onto
+    reference coordinates.
     """
-    if hap == ref:
-        return list(range(len(ref) + 1))
-
-    cuts = [0] * (len(ref) + 1)
-    ref_offset = 0
-    hap_offset = 0
-    for count, op in CIGAR_RE.findall(edlib.align(hap, ref, task='path')['cigar']):
-        count = int(count)
-        if op == 'I':
-            hap_offset += count
-            if ref_offset > 0:
-                cuts[ref_offset] = hap_offset
-        elif op == 'D':
-            for _ in range(count):
-                ref_offset += 1
-                cuts[ref_offset] = hap_offset
-        else:
-            for _ in range(count):
-                hap_offset += 1
-                ref_offset += 1
-                cuts[ref_offset] = hap_offset
-
-    return cuts
+    left = reference_slice(other, union_start, record['start'] - 1)
+    right = reference_slice(other, record['end'] + 1, union_end)
+    return [left + hap + right for hap in record['haps']]
 
 
 def edit_distance(seq_a, seq_b):
     if seq_a == seq_b:
         return 0
+    if not seq_a or not seq_b:
+        return max(len(seq_a), len(seq_b))
     return edlib.align(seq_a, seq_b, task='distance')['editDistance']
 
 
-def min_edit_distance(seqs_a, seqs_b):
-    """Total edit distance summed over both haplotype pairs, minimized over the two unphased assignments.
+def compare_loci(seqs_a, seqs_b):
+    """Total edit distance over the best unphased haplotype pairing, and a length-normalized similarity.
 
-    Also returns the number of haplotype pairs compared, which scales the similarity denominator.
+    Normalizing by the compared sequence lengths rather than by the reference span keeps the similarity
+    within [0, 1] however far a haplotype has expanded.
     """
     if len(seqs_a) == 2 and len(seqs_b) == 2:
-        as_called = edit_distance(seqs_a[0], seqs_b[0]) + edit_distance(seqs_a[1], seqs_b[1])
-        swapped = edit_distance(seqs_a[0], seqs_b[1]) + edit_distance(seqs_a[1], seqs_b[0])
-        return min(as_called, swapped), 2
-    return min(edit_distance(seq_a, seq_b) for seq_a in seqs_a for seq_b in seqs_b), 1
+        pairings = [((0, 0), (1, 1)), ((0, 1), (1, 0))]
+    else:
+        pairings = [((i, j),) for i in range(len(seqs_a)) for j in range(len(seqs_b))]
+
+    distance = None
+    denominator = 0
+    for pairing in pairings:
+        pairs = [(seqs_a[i], seqs_b[j]) for i, j in pairing]
+        total = sum(edit_distance(seq_a, seq_b) for seq_a, seq_b in pairs)
+        if distance is None or total < distance:
+            distance = total
+            denominator = sum(max(len(seq_a), len(seq_b)) for seq_a, seq_b in pairs)
+
+    similarity = 1.0 if denominator == 0 else 1 - distance / denominator
+    return distance, similarity
 
 
 def info_text(rec, key):
@@ -154,18 +156,7 @@ def load_record(rec):
         'nonref': any(allele > 0 for allele in genotype),
         'trid': info_text(rec, 'TRID'),
         'motifs': info_text(rec, 'MOTIFS'),
-        'cuts': None,
     }
-
-
-def hap_sequences(record, overlap_start, overlap_end):
-    """Slice out the haplotype sequences of a record spanning an overlapping reference interval."""
-    if record['cuts'] is None:
-        record['cuts'] = [build_ref_cuts(record['ref'], hap) for hap in record['haps']]
-
-    start_offset = overlap_start - record['start']
-    end_offset = overlap_end - record['start'] + 1
-    return [hap[cuts[start_offset]:cuts[end_offset]] for hap, cuts in zip(record['haps'], record['cuts'])]
 
 
 def format_haps(seqs):
@@ -195,14 +186,16 @@ with pysam.VariantFile("~{vcf}") as vcf_in, open("~{prefix}.overlapping_tr_loci.
 
             overlap_start = max(held['start'], record['start'])
             overlap_end = min(held['end'], record['end'])
-            overlap_length = overlap_end - overlap_start + 1
-            seqs_a = hap_sequences(held, overlap_start, overlap_end)
-            seqs_b = hap_sequences(record, overlap_start, overlap_end)
-            distance, ploidy = min_edit_distance(seqs_a, seqs_b)
-            similarity = 1 - distance / (ploidy * overlap_length)
+            union_start = min(held['start'], record['start'])
+            union_end = max(held['end'], record['end'])
+            seqs_a = union_sequences(held, record, union_start, union_end)
+            seqs_b = union_sequences(record, held, union_start, union_end)
+            distance, similarity = compare_loci(seqs_a, seqs_b)
             tsv_out.write('\t'.join(str(field) for field in [
-                held['trid'], record['trid'], held['motifs'], record['motifs'],
-                record['chrom'], overlap_start, overlap_end, overlap_length,
+                held['trid'], record['trid'], held['motifs'], record['motifs'], record['chrom'],
+                held['start'], held['end'], record['start'], record['end'],
+                union_start, union_end, union_end - union_start + 1,
+                overlap_start, overlap_end, overlap_end - overlap_start + 1,
                 *format_haps(seqs_a), *format_haps(seqs_b), distance, f'{similarity:.4f}',
             ]) + '\n')
             pairs += 1
