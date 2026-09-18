@@ -23,7 +23,6 @@ workflow AnnotateSVAnnotate {
         RuntimeAttr? runtime_attr_shard
         RuntimeAttr? runtime_attr_convert_symbolic
         RuntimeAttr? runtime_attr_annotate_func
-        RuntimeAttr? runtime_attr_concat_unannotated
         RuntimeAttr? runtime_attr_concat_shards
         RuntimeAttr? runtime_attr_concat_annotated
         RuntimeAttr? runtime_attr_merge
@@ -64,7 +63,7 @@ workflow AnnotateSVAnnotate {
                 input:
                     vcf = vcfs_to_process[i],
                     vcf_idx = vcf_idxs_to_process[i],
-                    move_all_dups = true,
+                    move_all_dups = false,
                     prefix = "~{prefix}.~{contig}.converted.shard_~{i}",
                     docker = utils_docker,
                     runtime_attr_override = runtime_attr_convert_symbolic
