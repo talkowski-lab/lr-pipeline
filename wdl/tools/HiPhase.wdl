@@ -108,7 +108,7 @@ workflow HiPhase {
             }
         }
 
-        call HiPhase {
+        call RunHiPhase {
             input:
                 bam = bam,
                 bai = bai,
@@ -129,8 +129,8 @@ workflow HiPhase {
 
         call Helpers.ConcatVcfsLR as ConcatPerContig {
             input:
-                vcfs = select_all([HiPhase.phased_snp_vcf, HiPhase.phased_sv_vcf, HiPhase.phased_trgt_vcf]),
-                vcf_idxs = select_all([HiPhase.phased_snp_vcf_idx, HiPhase.phased_sv_vcf_idx, HiPhase.phased_trgt_vcf_idx]),
+                vcfs = select_all([RunHiPhase.phased_snp_vcf, RunHiPhase.phased_sv_vcf, RunHiPhase.phased_trgt_vcf]),
+                vcf_idxs = select_all([RunHiPhase.phased_snp_vcf_idx, RunHiPhase.phased_sv_vcf_idx, RunHiPhase.phased_trgt_vcf_idx]),
                 prefix = "~{prefix}.~{contig}.concat",
                 docker = utils_docker,
                 runtime_attr_override = runtime_attr_concat_per_contig
@@ -149,8 +149,8 @@ workflow HiPhase {
     if (run_haplotagging) {
         call Helpers.MergeBams {
             input:
-                bams = select_all(HiPhase.haplotagged_bam),
-                bais = select_all(HiPhase.haplotagged_bam_idx),
+                bams = select_all(RunHiPhase.haplotagged_bam),
+                bais = select_all(RunHiPhase.haplotagged_bam_idx),
                 prefix = "~{prefix}.haplotagged",
                 docker = utils_docker,
                 runtime_attr_override = runtime_attr_merge_bams
@@ -160,10 +160,10 @@ workflow HiPhase {
     output {
         File hiphase_vcf = ConcatVcfsLR.concat_vcf
         File hiphase_vcf_idx = ConcatVcfsLR.concat_vcf_idx
-        Array[File] hiphase_haplotag_files = HiPhase.haplotag_file
-        Array[File] hiphase_stats = HiPhase.hiphase_stats
-        Array[File] hiphase_blocks = HiPhase.hiphase_blocks
-        Array[File] hiphase_summary = HiPhase.hiphase_summary
+        Array[File] hiphase_haplotag_files = RunHiPhase.haplotag_file
+        Array[File] hiphase_stats = RunHiPhase.hiphase_stats
+        Array[File] hiphase_blocks = RunHiPhase.hiphase_blocks
+        Array[File] hiphase_summary = RunHiPhase.hiphase_summary
         File? hiphase_haplotagged_bam = MergeBams.merged_bam
         File? hiphase_haplotagged_bam_idx = MergeBams.merged_bam_idx
     }
@@ -268,7 +268,7 @@ task SyncContigs {
     }
 }
 
-task HiPhase {
+task RunHiPhase {
     input {
         File bam
         File bai

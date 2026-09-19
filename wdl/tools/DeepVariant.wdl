@@ -210,7 +210,7 @@ task RunDeepVariant {
     Boolean use_par_regions_bed = sex == "M" && defined(par_regions_bed)
 
     command <<<
-        set -euxo pipefail
+        set -euo pipefail
 
         num_core=$(grep -c '^processor' /proc/cpuinfo)
         mkdir -p "~{output_root}"
@@ -292,7 +292,7 @@ task RunDeepVariantGpu {
     Boolean use_par_regions_bed = sex == "M" && defined(par_regions_bed)
 
     command <<<
-        set -euxo pipefail
+        set -euo pipefail
 
         num_core=$(grep -c '^processor' /proc/cpuinfo)
         mkdir -p "~{output_root}"
@@ -361,7 +361,7 @@ task VisualizeResourceUsage {
     }
 
     command <<<
-        set -euxo pipefail
+        set -euo pipefail
 
         /opt/plot.resources.R "~{resource_log}" "~{output_pdf_name}" "~{plot_title}"
     >>>
@@ -428,7 +428,7 @@ task MergeAndSortVcfs {
     Int memory = 48
 
     command <<<
-        set -euxo pipefail
+        set -euo pipefail
 
         printf '%s\n' ~{sep=' ' vcfs} > input_vcfs.txt
         bcftools concat --naive --threads ~{cores - 1} -f input_vcfs.txt --output-type v -o concatenated.vcf.gz

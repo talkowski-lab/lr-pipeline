@@ -42,7 +42,7 @@ workflow PostProcessTRLociHPRCHGSVC {
         String phylop_ht
         String revel_ht
         String spliceai_ht
-        String annotate_in_silico_predictors_script = "https://raw.githubusercontent.com/talkowski-lab/lr-annotation/main/scripts/annotation/annotate_insilico_predictors.py"
+        String annotate_in_silico_predictors_script = "https://raw.githubusercontent.com/talkowski-lab/lr-pipeline/main/scripts/annotation/annotate_insilico_predictors.py"
         String genome_build = "GRCh38"
 
         String utils_docker
@@ -549,6 +549,7 @@ out.close()
 PY
         tabix -f -p vcf ~{prefix}.vcf.gz
     >>>
+
     output {
         File subset_vcf = "~{prefix}.vcf.gz"
         File subset_vcf_idx = "~{prefix}.vcf.gz.tbi"
@@ -618,6 +619,7 @@ PY
         tabix -f -p vcf ~{prefix}.vcf.gz
         bcftools view -H ~{prefix}.vcf.gz | wc -l
     >>>
+
     output {
         File retained_vcf = "~{prefix}.vcf.gz"
         File retained_vcf_idx = "~{prefix}.vcf.gz.tbi"
@@ -890,6 +892,7 @@ PY
         tabix -f -p vcf ~{prefix}.vcf.gz
         bcftools view -H ~{prefix}.vcf.gz | wc -l
     >>>
+
     output {
         File prepared_vcf = "~{prefix}.vcf.gz"
         File prepared_vcf_idx = "~{prefix}.vcf.gz.tbi"
@@ -1750,6 +1753,7 @@ PY
         bcftools view -i 'INFO/allele_type="trv"' -Oz -o ~{prefix}.trv_subsetted.vcf.gz ~{prefix}.trv_postprocessed.vcf.gz
         tabix -f -p vcf ~{prefix}.trv_subsetted.vcf.gz
     >>>
+
     output {
         File trv_postprocessed_vcf = "~{prefix}.trv_postprocessed.vcf.gz"
         File trv_postprocessed_vcf_idx = "~{prefix}.trv_postprocessed.vcf.gz.tbi"

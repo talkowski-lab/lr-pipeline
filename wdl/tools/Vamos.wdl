@@ -78,7 +78,7 @@ task RunVamos {
 
     command <<<
         set -euo pipefail
-        
+
         samtools quickcheck ~{bam}
 
         if [[ "~{repeat_catalog_vamos}" == *.gz ]]; then

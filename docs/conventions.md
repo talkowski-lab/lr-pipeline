@@ -18,50 +18,61 @@ These rules apply to WDL, Python, R and Bash alike, including code embedded in a
 
 
 ## WDL
+- Every file should be indented with 4 spaces per level of nesting, from the `workflow` or `task` declaration down through every nested block. Tabs should never be used, and a file should never mix indentation widths.
+- Every file should begin with `version 1.0` followed by a blank line, preceded only by an exempt provenance or license header.
+- Every file should end with exactly one newline, and no line should carry trailing whitespace - including blank lines inside a `command` block.
+- Each task should contain exactly one `input`, `command`, `output` and `runtime` block.
 - Workflows should be structured in the following order, with each of the below separated by a blank line:
-	1. Imports.
-	2. Inputs.
-	3. Definition of variables dynamically generated in the workflow itself.
-	4. Calls to tasks.
-	5. Outputs.
+  1. Imports.
+  2. Inputs.
+  3. Definition of variables dynamically generated in the workflow itself.
+  4. Calls to tasks.
+  5. Outputs.
 - Tasks should be structured in the following order, with each of the below separated by a blank line:
-	1. Inputs.
-	2. Definition of variables dynamically generated in the task itself.
-	3. Command.
-	4. Outputs.
-	5. Runtime settings - default parameters, followed by a select first with the runtime override, then the actual runtime block.
+  1. Inputs.
+  2. Definition of variables dynamically generated in the task itself.
+  3. Command.
+  4. Outputs.
+  5. Runtime settings - default parameters, followed by a select first with the runtime override, then the actual runtime block. The `RuntimeAttr runtime_attr = select_first(...)` line should be followed immediately by `runtime {`, with no blank line between them.
 - Inputs should be structured in the following order, with each of the below separated by a blank line:
-	1. Core input files that will be run through the workflow - e.g. VCFs being annotated, BAMs being analyzed etc (as well as their indexes if applicable). Also the contigs to be run on as well as the prefix.
-	2. Parameters that govern how the file will be processed - e.g. prefixes, modes, input arguments to tools being called, PEDs, metadata files etc.
-	3. Reference files - e.g. reference fasta, their indexes, catalogs used for annotations, etc.
-	4. Runtime-related information that are not of type RuntimeAttr - e.g. docker paths, cores if applicable, sharding information if applicable.
-	5. All RuntimeAttr? inputs - there should be one per task called, with its name reflective of the task's function.
+  1. Core input files that will be run through the workflow - e.g. VCFs being annotated, BAMs being analyzed etc (as well as their indexes if applicable). Also the contigs to be run on as well as the prefix.
+  2. Parameters that govern how the file will be processed - e.g. prefixes, modes, input arguments to tools being called, PEDs, metadata files etc.
+  3. Reference files - e.g. reference fasta, their indexes, catalogs used for annotations, etc.
+  4. Runtime-related information that are not of type RuntimeAttr - e.g. docker paths, cores if applicable, sharding information if applicable.
+  5. All RuntimeAttr? inputs - there should be one per task called, with its name reflective of the task's function.
 - Workflows should take in an input `prefix` that is passed to every task that creates output files, which should be used in conjunction with a descriptive suffix when creating outputs.
-- Workflow imports should not be renamed using the `as` operator.
+- Workflow imports should not be renamed using the `as` operator. A `call Namespace.Workflow` therefore produces a call whose name matches the namespace; this is expected for sub-workflow calls and should not be worked around.
+- Call aliases introduced with `as` should be in Pascal case, matching the task and workflow naming rules - e.g. `as RunTruvari09`, not `as RunTruvari_09` or `as run_truvari_09`. Do not alias a call to the name it already has.
+- A task should not declare an input it never references, except for index and companion files - e.g. `vcf_idxs` alongside `vcfs`, or `ref_fai` alongside `ref_fa`. Those inputs exist so Cromwell localizes the index next to the file it belongs to, which tools such as `bcftools concat --allow-overlaps`, `bcftools merge` and `tabix` require. They are load-bearing and must not be removed as unused.
+- A workflow should not declare an input or variable it never references. Every `RuntimeAttr?` input should be passed as the `runtime_attr_override` of a call.
+- A call whose outputs nothing references is acceptable only when the call exists for its failure behavior - e.g. `CheckSampleConsistency` and `ValidateContigOrder`, which gate the workflow by exiting non-zero.
 - Workflows should never contain any blank comments - e.g. `#########################`.
-- Workflows should never contain any consecutive blank lines - i.e. they should have a maximum of one blank line at a time.
+- Workflows should never contain any consecutive blank lines outside a `command` block - i.e. they should have a maximum of one blank line at a time. Embedded Python inside a `command` block follows PEP 8 instead, so two blank lines between definitions are expected there.
 - Inputs passed to a task should not have blank lines between inputs.
 - The order of inputs passed to a task should reflect their order in the inputs on the workflow level.
 - Inputs passed to a task should have a space on either side of the `=` character.
 - The inputs section of a task should not have blank lines between inputs.
 - Tasks should always have input fields `docker` and `runtime_attr_override` defined, though what is passed to each one of these when calling the task should be explicitly named - e.g. `docker = utils_docker` and `runtime_attr_override = runtime_attr_annotate_svan` respectively.
 - Tasks should also have a prefix input defined, which is passed and set at the workflow level - the outputs from the task should simply use the prefix along with the file type.
-- Every command block within a task should begin with `set -euo pipefail` followed by a blank line.
+- Every command block within a task should begin with `set -euo pipefail` followed by a blank line, using exactly those flags in that order. Tracing variants such as `set -euxo pipefail` and bare `set -x` should not be used.
+- Every command block should use the `command <<< ... >>>` heredoc form, with the `command <<<` and `>>>` delimiters at the task's indentation, a blank line before `command <<<` and a blank line after `>>>`.
+- The Bash body of a command block should be indented 4 spaces past `command <<<`. The payload of a nested heredoc such as `python3 <<'CODE'` should start at column 0, and is exempt from the indentation rules since it is Python rather than WDL.
 - The default `disk_gb` for a task should be calculated dynamically based on the largest sized input file - or multiple if there are several large inputs, like multiple reference fastas or input catalogs. It should be defined in-line in the default runtime attributes section, unless it is a complicated function in which it can have a dedicated variable `disk_gb`.
 - The default `mem_gb`, `boot_disk_gb` and `cpu_cores` for a task should be explicitly defined rather than based on an input file - it should be set based on the intensity of compute needed by that task.
 - The default `preemptible_tries` for a task should always be 1.
 - The default `max_retries` for a task should always be 0.
 - The names of workflows and tasks should never include a `_` character within them - rather, they should always be in Pascal case.
+- A task should not share its name with the workflow in the same file. Where a thin wrapper workflow and its task would collide, prefix the task with `Run` - e.g. workflow `TRGTLPS` with task `RunTRGTLPS`.
 - Top-level workflow names should describe their primary operation using consistent action verbs:
-	- `Annotate` adds fields or tags to existing records.
-	- `Create` derives a new artifact, such as a matrix, metadata table, interval file, plot set or summary.
-	- `Convert` changes the representation or file format of existing data.
-	- `Extract` emits selected records separately, while `Subset` retains the same representation with fewer records or columns.
-	- `Concatenate` joins ordered, non-overlapping shards or contigs.
-	- `Merge` reconciles files, records or sample sets of the same kind.
-	- `Combine` applies domain-specific logic across caller-specific or type-specific inputs.
-	- `Integrate` combines different variant classes into a unified callset.
-	- `Normalize`, `Resolve`, `Filter`, `Summarize` and `Evaluate` should be used when they accurately describe the primary operation.
+  - `Annotate` adds fields or tags to existing records.
+  - `Create` derives a new artifact, such as a matrix, metadata table, interval file, plot set or summary.
+  - `Convert` changes the representation or file format of existing data.
+  - `Extract` emits selected records separately, while `Subset` retains the same representation with fewer records or columns.
+  - `Concatenate` joins ordered, non-overlapping shards or contigs.
+  - `Merge` reconciles files, records or sample sets of the same kind.
+  - `Combine` applies domain-specific logic across caller-specific or type-specific inputs.
+  - `Integrate` combines different variant classes into a unified callset.
+  - `Normalize`, `Resolve`, `Filter`, `Summarize` and `Evaluate` should be used when they accurately describe the primary operation.
 - Do not use `Create` merely because a workflow produces an output; choose the verb that describes its primary operation.
 - Thin tool wrappers should use the underlying tool name. Add a purpose suffix when multiple wrappers or orchestration variants exist, such as `PALMERAssembly` and `PALMERDiploid`.
 - Avoid vague verbs such as `Generate`, `Process` and `Plot` when a more specific operation or output can be named.
@@ -72,10 +83,13 @@ These rules apply to WDL, Python, R and Bash alike, including code embedded in a
 - All mentions of `vcf_index` or `vcf_tbi` should instead use `vcf_idx`.
 - All VCFs should have suffix `_vcf`, and be coupled with a VCF index file that has a suffix `_vcf_idx`.
 - Reusable tasks should live in `Helpers.wdl` and be imported rather than duplicated across workflows.
+- In a task library - a file that defines tasks but no workflow, such as `Helpers.wdl` - tasks should be declared in alphabetical order, so a task can be located without searching. A provenance or license comment directly above a task belongs to that task and moves with it. Tasks in a workflow file should instead follow the order in which the workflow calls them.
 - Before adding a reusable task, check existing helper modules for equivalent behavior. Generalize an existing task only when current callers' interfaces, commands, runtime behavior and outputs can be preserved or explicitly migrated.
 - Do not extract inline WDL command logic into a repository script without explicit approval. Such extraction changes Docker image dependencies and deployment requirements and must be disclosed before implementation.
 - Workflow file names must always match the workflow defined within them.
 - Annotation workflows should always output a TSV file rather than a VCF, unless its annotations are done for every single variant in the input VCF or if the underlying workflow is designed to annotate variants in a VCF.
+- The mechanically checkable rules above are enforced by `.github/scripts/check_wdl_style.py`, which should be run after editing any file under `wdl/`. The rules it cannot check - input grouping, naming verbs, runtime sizing, comment wording - still apply and are left to review.
+- `miniwdl check --strict wdl/<file>.wdl` is a useful deeper audit for unused declarations and name collisions, but it is not part of CI: it also flags the index localization inputs and the sub-workflow namespace collisions described above, both of which are intentional here.
 
 
 ## Python
@@ -94,6 +108,9 @@ These rules apply to WDL, Python, R and Bash alike, including code embedded in a
 - Use two blank lines before every `##` heading and before the first `###` heading in a `##` section.
 - Use one blank line between subsequent `###` sections.
 - Do not use thematic section dividers such as `---`.
+- Indent a nested list item to its parent's content column - two spaces under a `-` parent, three under a `1.` parent - never with tabs. This is what CommonMark requires for the item to nest, and four or more spaces past the content column would turn it into a code block instead.
+- Every file should end with exactly one newline, and no line should carry trailing whitespace.
+- The rules above are enforced by `.github/scripts/check_markdown_style.py`, which should be run after editing any Markdown file. Fenced code blocks are exempt from the heading and list rules, since they hold code rather than Markdown.
 
 
 ## Workspace

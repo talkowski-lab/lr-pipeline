@@ -52,9 +52,10 @@ RUN wget -q https://github.com/shenwei356/seqkit/releases/download/v${SEQKIT_VER
 RUN pip3 install awscli
 
 # Install python
+ARG TRUVARI_VERSION
 RUN python3 -m pip install --upgrade pip && \
     python3 -m pip install --no-cache-dir \
-        "truvari>=5.0.0" \
+        "truvari==${TRUVARI_VERSION}" \
         pysam \
         edlib \
         scipy \

@@ -70,7 +70,6 @@ workflow AnnotateMEDs {
         }
 
         Array[File] vcfs_to_process = select_first([ShardVcfByRecords.shards, [SubsetDeletions.subset_vcf]])
-        Array[File] vcf_idxs_to_process = select_first([ShardVcfByRecords.shard_idxs, [SubsetDeletions.subset_vcf_idx]])
 
         scatter (i in range(length(vcfs_to_process))) {
             call ExtractDeletionsToBed {

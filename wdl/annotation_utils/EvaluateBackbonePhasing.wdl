@@ -340,7 +340,7 @@ def summarize(points):
         return 0, 0, 0, {}
     if sum(states) < matched_count / 2.0:
         states = [1 - state for state in states]
-    
+
     status_priority = {"XC": 0, "CN": 1, "FL": 2, "SW": 3}
     record_statuses = {}
     switch_error_count = 0
@@ -369,7 +369,7 @@ def summarize(points):
         current = record_statuses.get(record_key)
         if current is None or status_priority[status] > status_priority.get(current, -1):
             record_statuses[record_key] = status
-        
+
     return matched_count, switch_error_count, flip_error_count, record_statuses
 
 

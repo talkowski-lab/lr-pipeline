@@ -30,6 +30,7 @@ workflow BedtoolsClosestSV {
         RuntimeAttr? runtime_attr_merge_comparisons
     }
 
+    # Subset the callset to variants at or above the minimum SV length
     call Helpers.SubsetVcfByLength as SubsetEval {
         input:
             vcf = vcf,
@@ -39,6 +40,19 @@ workflow BedtoolsClosestSV {
             prefix = "~{prefix}.subset_eval",
             docker = utils_docker,
             runtime_attr_override = runtime_attr_subset_vcf
+    }
+
+    # Convert the callset to symbolic alleles and split it by type, repositioning DUPs onto their ORIGIN coordinates
+    call Helpers.ConvertToSymbolic as ConvertEvalMoved {
+        input:
+            vcf = SubsetEval.subset_vcf,
+            vcf_idx = SubsetEval.subset_vcf_idx,
+            move_dup_to_origin = true,
+            type_field = type_field,
+            length_field = length_field,
+            prefix = "~{prefix}.eval.symbolic.moved",
+            docker = utils_docker,
+            runtime_attr_override = runtime_attr_convert_to_symbolic
     }
 
     call SplitVcf as SplitEvalMoved {
@@ -51,23 +65,12 @@ workflow BedtoolsClosestSV {
             runtime_attr_override = runtime_attr_split_vcf
     }
 
-    call Helpers.ConvertToSymbolic as ConvertEvalMoved {
-        input:
-            vcf = SubsetEval.subset_vcf,
-            vcf_idx = SubsetEval.subset_vcf_idx,
-            move_all_dups = false,
-            type_field = type_field,
-            length_field = length_field,
-            prefix = "~{prefix}.eval.symbolic.moved",
-            docker = utils_docker,
-            runtime_attr_override = runtime_attr_convert_to_symbolic
-    }
-
+    # Convert and split the callset again with DUPs left at their own insertion site, for the DUP against INS comparison
     call Helpers.ConvertToSymbolic as ConvertEvalUnmoved {
         input:
             vcf = SubsetEval.subset_vcf,
             vcf_idx = SubsetEval.subset_vcf_idx,
-            move_all_dups = false,
+            move_dup_to_origin = false,
             type_field = type_field,
             length_field = length_field,
             prefix = "~{prefix}.eval.symbolic.unmoved",
@@ -85,6 +88,7 @@ workflow BedtoolsClosestSV {
             runtime_attr_override = runtime_attr_split_vcf
     }
 
+    # Subset the truth callset to variants at or above its own minimum SV length
     call Helpers.SubsetVcfByLength as SubsetTruth {
         input:
             vcf = truth_sv_vcf,
@@ -96,6 +100,7 @@ workflow BedtoolsClosestSV {
             runtime_attr_override = runtime_attr_subset_truth
     }
 
+    # Split the truth callset by type, breaking complex records into their constituent intervals
     call SplitVcf as SplitTruth {
         input:
             vcf = SubsetTruth.subset_vcf,
@@ -106,6 +111,7 @@ workflow BedtoolsClosestSV {
             runtime_attr_override = runtime_attr_split_truth
     }
 
+    # Compare DEL in the callset to DEL in the truth callset by reciprocal overlap
     call Helpers.BedtoolsClosest as CompareDEL {
         input:
             bed_a = SplitEvalMoved.del_bed,
@@ -123,6 +129,7 @@ workflow BedtoolsClosestSV {
             runtime_attr_override = runtime_attr_calculate
     }
 
+    # Compare INS in the callset to INS in the truth callset by breakpoint proximity and length ratio
     call Helpers.BedtoolsClosest as CompareINS {
         input:
             bed_a = SplitEvalMoved.ins_bed,
@@ -140,6 +147,7 @@ workflow BedtoolsClosestSV {
             runtime_attr_override = runtime_attr_calculate
     }
 
+    # Compare DUP in the callset to DUP in the truth callset by reciprocal overlap, both on ORIGIN coordinates
     call Helpers.BedtoolsClosest as CompareDUP {
         input:
             bed_a = SplitEvalMoved.dup_bed,
@@ -157,6 +165,7 @@ workflow BedtoolsClosestSV {
             runtime_attr_override = runtime_attr_calculate
     }
 
+    # Compare INS in the callset to truth DUP collapsed to a point, catching insertions the truth callset typed as DUP
     call CollapseRangedToPoint as CollapseTruthDUP {
         input:
             bed = SplitTruth.dup_bed,
@@ -165,7 +174,7 @@ workflow BedtoolsClosestSV {
             runtime_attr_override = runtime_attr_calculate
     }
 
-    call Helpers.BedtoolsClosest as CompareINS_DUP {
+    call Helpers.BedtoolsClosest as CompareINSDUP {
         input:
             bed_a = SplitEvalMoved.ins_bed,
             bed_b = CollapseTruthDUP.point_bed,
@@ -174,14 +183,15 @@ workflow BedtoolsClosestSV {
             runtime_attr_override = runtime_attr_compare
     }
 
-    call SelectMatchedINSs as CalcuINS_DUP {
+    call SelectMatchedINSs as CalcuINSDUP {
         input:
-            input_bed = CompareINS_DUP.output_bed,
+            input_bed = CompareINSDUP.output_bed,
             prefix = "~{prefix}.INS_DUP",
             docker = utils_docker,
             runtime_attr_override = runtime_attr_calculate
     }
 
+    # Compare callset DUP collapsed to a point at its insertion site to INS in the truth callset
     call CollapseRangedToPoint as CollapseEvalDUP {
         input:
             bed = SplitEvalUnmoved.dup_bed,
@@ -190,7 +200,7 @@ workflow BedtoolsClosestSV {
             runtime_attr_override = runtime_attr_calculate
     }
 
-    call Helpers.BedtoolsClosest as CompareDUP_INS {
+    call Helpers.BedtoolsClosest as CompareDUPINS {
         input:
             bed_a = CollapseEvalDUP.point_bed,
             bed_b = SplitTruth.ins_bed,
@@ -199,23 +209,25 @@ workflow BedtoolsClosestSV {
             runtime_attr_override = runtime_attr_compare
     }
 
-    call SelectMatchedINSs as CalcuDUP_INS {
+    call SelectMatchedINSs as CalcuDUPINS {
         input:
-            input_bed = CompareDUP_INS.output_bed,
+            input_bed = CompareDUPINS.output_bed,
             prefix = "~{prefix}.DUP_INS",
             docker = utils_docker,
             runtime_attr_override = runtime_attr_calculate
     }
 
+    # Merge the comparisons, keeping same-type matches ahead of the cross-type fallbacks
     call PrioritizedConcatComparisons {
         input:
             primary_tsvs = [CalcuDEL.output_comp, CalcuINS.output_comp, CalcuDUP.output_comp],
-            secondary_tsvs = [CalcuINS_DUP.output_comp, CalcuDUP_INS.output_comp],
+            secondary_tsvs = [CalcuINSDUP.output_comp, CalcuDUPINS.output_comp],
             prefix = "~{prefix}.comparison",
             docker = utils_docker,
             runtime_attr_override = runtime_attr_merge_comparisons
     }
 
+    # Join the retained matches back to the callset and truth records to emit the annotation TSV
     call CreateBedtoolsAnnotationTsv {
         input:
             truvari_unmatched_vcf = SubsetEval.subset_vcf,

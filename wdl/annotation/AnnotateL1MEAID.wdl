@@ -27,10 +27,8 @@ workflow AnnotateL1MEAID {
         RuntimeAttr? runtime_attr_limeaid
         RuntimeAttr? runtime_attr_filter
         RuntimeAttr? runtime_attr_annotate
-        RuntimeAttr? runtime_attr_concat_shards_intactmei
         RuntimeAttr? runtime_attr_concat_shards_annotations
         RuntimeAttr? runtime_attr_concat_contigs
-        RuntimeAttr? runtime_attr_concat_intactmei
     }
 
     Boolean single_contig = length(contigs) == 1

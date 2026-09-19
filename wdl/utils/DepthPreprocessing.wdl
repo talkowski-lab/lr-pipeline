@@ -49,7 +49,7 @@ workflow DepthPreprocessing {
     }
 
     scatter (i in range(length(sample_ids))) {
-        call MergeSample as merge_sample_del {
+        call MergeSample as MergeSampleDel {
             input:
                 gcnv = GcnvVcfToBed.del_bed[i],
                 prefix = prefix + "." + sample_ids[i] + ".del",
@@ -60,7 +60,7 @@ workflow DepthPreprocessing {
     }
 
     scatter (i in range(length(sample_ids))) {
-        call MergeSample as merge_sample_dup {
+        call MergeSample as MergeSampleDup {
             input:
                 gcnv = GcnvVcfToBed.dup_bed[i],
                 prefix = prefix + "." + sample_ids[i] + ".dup",
@@ -70,9 +70,9 @@ workflow DepthPreprocessing {
         }
     }
 
-    call MergeSet as merge_set_del {
+    call MergeSet as MergeSetDel {
         input:
-            beds = merge_sample_del.sample_bed,
+            beds = MergeSampleDel.sample_bed,
             svtype = "DEL",
             batch_id = batch_id,
             prefix = prefix + ".del",
@@ -80,9 +80,9 @@ workflow DepthPreprocessing {
             runtime_attr_override = runtime_attr_merge_set
     }
 
-    call MergeSet as merge_set_dup {
+    call MergeSet as MergeSetDup {
         input:
-            beds = merge_sample_dup.sample_bed,
+            beds = MergeSampleDup.sample_bed,
             svtype = "DUP",
             batch_id = batch_id,
             prefix = prefix + ".dup",
@@ -101,9 +101,9 @@ workflow DepthPreprocessing {
             runtime_attr_override = runtime_attr_make_ploidy_table
     }
 
-    call CNVBEDToVCF as make_del_vcf {
+    call CNVBEDToVCF as MakeDelVcf {
         input:
-            bed = merge_set_del.out,
+            bed = MergeSetDel.out,
             sample_list = write_lines(sample_ids),
             contig_list = primary_contigs_list,
             ploidy_table = MakePloidyTable.ploidy_table,
@@ -114,9 +114,9 @@ workflow DepthPreprocessing {
             runtime_attr_override = runtime_attr_cnv_bed_to_vcf
     }
 
-    call CNVBEDToVCF as make_dup_vcf {
+    call CNVBEDToVCF as MakeDupVcf {
         input:
-            bed = merge_set_dup.out,
+            bed = MergeSetDup.out,
             sample_list = write_lines(sample_ids),
             contig_list = primary_contigs_list,
             ploidy_table = MakePloidyTable.ploidy_table,
@@ -127,7 +127,7 @@ workflow DepthPreprocessing {
             runtime_attr_override = runtime_attr_cnv_bed_to_vcf
     }
 
-    Array[File] concat_vcfs = [make_del_vcf.vcf, make_dup_vcf.vcf]
+    Array[File] concat_vcfs = [MakeDelVcf.vcf, MakeDupVcf.vcf]
     RuntimeAttr default_attr_concat_vcfs = object {
         cpu_cores: 2,
         mem_gb: 8,
@@ -142,7 +142,7 @@ workflow DepthPreprocessing {
     call Helpers.ConcatVcfs as ConcatVCFs {
         input:
             vcfs = concat_vcfs,
-            vcf_idxs = [make_del_vcf.vcf_idx, make_dup_vcf.vcf_idx],
+            vcf_idxs = [MakeDelVcf.vcf_idx, MakeDupVcf.vcf_idx],
             allow_overlaps = true,
             naive = false,
             sort_output = true,
@@ -155,10 +155,10 @@ workflow DepthPreprocessing {
     }
 
     output {
-        File del_bed = merge_set_del.out
-        File del_bed_idx = merge_set_del.out_idx
-        File dup_bed = merge_set_dup.out
-        File dup_bed_idx = merge_set_dup.out_idx
+        File del_bed = MergeSetDel.out
+        File del_bed_idx = MergeSetDel.out_idx
+        File dup_bed = MergeSetDup.out
+        File dup_bed_idx = MergeSetDup.out_idx
         File merged_vcf = ConcatVCFs.concat_vcf
         File merged_vcf_idx = ConcatVCFs.concat_vcf_idx
         File ploidy_table = MakePloidyTable.ploidy_table

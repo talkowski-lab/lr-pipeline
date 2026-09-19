@@ -2,49 +2,6 @@ version 1.0
 
 import "Structs.wdl"
 
-task SubsetBedToContig {
-    input {
-        File bed
-        String contig
-        String prefix
-        String docker
-        RuntimeAttr? runtime_attr_override
-    }
-
-    command <<<
-        set -euo pipefail
-
-        if gzip -t "~{bed}" 2>/dev/null; then
-            gzip -cd "~{bed}" | awk -v contig="~{contig}" '$1 == contig' > "~{prefix}.bed"
-        else
-            awk -v contig="~{contig}" '$1 == contig' "~{bed}" > "~{prefix}.bed"
-        fi
-    >>>
-
-    output {
-        File subset_bed = "~{prefix}.bed"
-    }
-
-    RuntimeAttr default_attr = object {
-        cpu_cores: 1,
-        mem_gb: 2,
-        disk_gb: 2 * ceil(size(bed, "GB")) + 5,
-        boot_disk_gb: 10,
-        preemptible_tries: 1,
-        max_retries: 0
-    }
-    RuntimeAttr runtime_attr = select_first([runtime_attr_override, default_attr])
-    runtime {
-        cpu: select_first([runtime_attr.cpu_cores, default_attr.cpu_cores])
-        memory: select_first([runtime_attr.mem_gb, default_attr.mem_gb]) + " GiB"
-        disks: "local-disk " + select_first([runtime_attr.disk_gb, default_attr.disk_gb]) + " HDD"
-        bootDiskSizeGb: select_first([runtime_attr.boot_disk_gb, default_attr.boot_disk_gb])
-        docker: docker
-        preemptible: select_first([runtime_attr.preemptible_tries, default_attr.preemptible_tries])
-        maxRetries: select_first([runtime_attr.max_retries, default_attr.max_retries])
-    }
-}
-
 task AddFilter {
     input {
         File vcf
@@ -64,14 +21,14 @@ task AddFilter {
             -h \
             ~{vcf} \
         | grep "^##" > header.txt
-        
+
         echo '##FILTER=<ID=~{filter_name},Description="~{filter_description}">' >> header.txt
-        
+
         bcftools view \
             -h \
             ~{vcf} \
         | grep "^#CHROM" >> header.txt
-        
+
         bcftools reheader \
             -h header.txt \
             ~{vcf} \
@@ -87,6 +44,114 @@ task AddFilter {
     output {
         File flagged_vcf = "~{prefix}.vcf.gz"
         File flagged_vcf_idx = "~{prefix}.vcf.gz.tbi"
+    }
+
+    RuntimeAttr default_attr = object {
+        cpu_cores: 1,
+        mem_gb: 4,
+        disk_gb: 2 * ceil(size(vcf, "GB")) + 5,
+        boot_disk_gb: 10,
+        preemptible_tries: 1,
+        max_retries: 0
+    }
+    RuntimeAttr runtime_attr = select_first([runtime_attr_override, default_attr])
+    runtime {
+        cpu: select_first([runtime_attr.cpu_cores, default_attr.cpu_cores])
+        memory: select_first([runtime_attr.mem_gb, default_attr.mem_gb]) + " GiB"
+        disks: "local-disk " + select_first([runtime_attr.disk_gb, default_attr.disk_gb]) + " HDD"
+        bootDiskSizeGb: select_first([runtime_attr.boot_disk_gb, default_attr.boot_disk_gb])
+        docker: docker
+        preemptible: select_first([runtime_attr.preemptible_tries, default_attr.preemptible_tries])
+        maxRetries: select_first([runtime_attr.max_retries, default_attr.max_retries])
+    }
+}
+
+task AddInfo {
+    input {
+        File vcf
+        File vcf_idx
+        String tag_id
+        String tag_value
+        String tag_description
+        String prefix
+        String docker
+        RuntimeAttr? runtime_attr_override
+    }
+
+    command <<<
+        set -euo pipefail
+
+        echo '##INFO=<ID=~{tag_id},Number=1,Type=String,Description="~{tag_description}">' > header.lines
+
+        bcftools query \
+            -f '%CHROM\t%POS\t%REF\t%ALT\t%ID\t~{tag_value}\n' \
+            ~{vcf} \
+        | bgzip -c > annotations.txt.gz
+
+        tabix -s1 -b2 -e2 annotations.txt.gz
+
+        bcftools annotate -h header.lines -a annotations.txt.gz \
+            -c CHROM,POS,REF,ALT,~ID,INFO/~{tag_id} \
+            ~{vcf} \
+            -Oz -o ~{prefix}.vcf.gz
+
+        tabix -p vcf ~{prefix}.vcf.gz
+    >>>
+
+    output {
+        File annotated_vcf = "~{prefix}.vcf.gz"
+        File annotated_vcf_idx = "~{prefix}.vcf.gz.tbi"
+    }
+
+    RuntimeAttr default_attr = object {
+        cpu_cores: 1,
+        mem_gb: 4,
+        disk_gb: 2 * ceil(size(vcf, "GB")) + 5,
+        boot_disk_gb: 10,
+        preemptible_tries: 1,
+        max_retries: 0
+    }
+    RuntimeAttr runtime_attr = select_first([runtime_attr_override, default_attr])
+    runtime {
+        cpu: select_first([runtime_attr.cpu_cores, default_attr.cpu_cores])
+        memory: select_first([runtime_attr.mem_gb, default_attr.mem_gb]) + " GiB"
+        disks: "local-disk " + select_first([runtime_attr.disk_gb, default_attr.disk_gb]) + " HDD"
+        bootDiskSizeGb: select_first([runtime_attr.boot_disk_gb, default_attr.boot_disk_gb])
+        docker: docker
+        preemptible: select_first([runtime_attr.preemptible_tries, default_attr.preemptible_tries])
+        maxRetries: select_first([runtime_attr.max_retries, default_attr.max_retries])
+    }
+}
+
+task AddMissingInfoHeaderLines {
+    input {
+        File vcf
+        File vcf_idx
+        Array[String] info_fields
+        String prefix
+        String docker
+        RuntimeAttr? runtime_attr_override
+    }
+
+    command <<<
+        set -euo pipefail
+
+        : > hdr_lines.txt
+        while IFS= read -r field; do
+            printf '##INFO=<ID=%s,Number=.,Type=String,Description="Auto-added missing header line">\n' "${field}" >> hdr_lines.txt
+        done < ~{write_lines(info_fields)}
+
+        bcftools annotate \
+            -h hdr_lines.txt \
+            -Oz -o ~{prefix}.vcf.gz \
+            ~{vcf}
+
+        tabix -p vcf ~{prefix}.vcf.gz
+    >>>
+
+    output {
+        File annotated_vcf = "~{prefix}.vcf.gz"
+        File annotated_vcf_idx = "~{prefix}.vcf.gz.tbi"
     }
 
     RuntimeAttr default_attr = object {
@@ -192,13 +257,10 @@ task AddTREndTag {
     }
 }
 
-task AddInfo {
+task AnnotateVariantAttributes {
     input {
         File vcf
         File vcf_idx
-        String tag_id
-        String tag_value
-        String tag_description
         String prefix
         String docker
         RuntimeAttr? runtime_attr_override
@@ -207,19 +269,50 @@ task AddInfo {
     command <<<
         set -euo pipefail
 
-        echo '##INFO=<ID=~{tag_id},Number=1,Type=String,Description="~{tag_description}">' > header.lines
+        touch new_headers.txt
+        if ! bcftools view -h ~{vcf} | grep -q '##INFO=<ID=allele_length'; then
+            echo '##INFO=<ID=allele_length,Number=1,Type=Integer,Description="Allele length">' >> new_headers.txt
+        fi
+        if ! bcftools view -h ~{vcf} | grep -q '##INFO=<ID=allele_type'; then
+            echo '##INFO=<ID=allele_type,Number=1,Type=String,Description="Allele type">' >> new_headers.txt
+        fi
+
+        bcftools annotate \
+            -h new_headers.txt \
+            -Oz -o temp.vcf.gz \
+            ~{vcf}
+
+        tabix -p vcf temp.vcf.gz
 
         bcftools query \
-            -f '%CHROM\t%POS\t%REF\t%ALT\t%ID\t~{tag_value}\n' \
-            ~{vcf} \
-        | bgzip -c > annotations.txt.gz
-        
-        tabix -s1 -b2 -e2 annotations.txt.gz
+            -f '%CHROM\t%POS\t%REF\t%ALT\t%ID\t%INFO/allele_length\t%INFO/allele_type\n' \
+            temp.vcf.gz \
+        | awk -F'\t' '{
+            ref_length = length($3)
+            alt_len = length($4)
+            calc_length = alt_len - ref_length
+            calc_type = "snv"
 
-        bcftools annotate -h header.lines -a annotations.txt.gz \
-            -c CHROM,POS,REF,ALT,~ID,INFO/~{tag_id} \
-            ~{vcf} \
-            -Oz -o ~{prefix}.vcf.gz
+            if (alt_len > ref_length) {
+                calc_type = "ins"
+            } else if (alt_len < ref_length) {
+                calc_type = "del"
+            }
+
+            allele_length = ($6 == ".") ? calc_length : $6
+            allele_type = ($7 == ".") ? calc_type : $7
+
+            print $1"\t"$2"\t"$3"\t"$4"\t"$5"\t"allele_length"\t"allele_type
+        }' \
+            | bgzip -c > annot.txt.gz
+
+        tabix -s1 -b2 -e2 annot.txt.gz
+
+        bcftools annotate \
+            -a annot.txt.gz \
+            -c CHROM,POS,REF,ALT,~ID,INFO/allele_length,INFO/allele_type \
+            -Oz -o ~{prefix}.vcf.gz \
+            temp.vcf.gz
 
         tabix -p vcf ~{prefix}.vcf.gz
     >>>
@@ -232,7 +325,128 @@ task AddInfo {
     RuntimeAttr default_attr = object {
         cpu_cores: 1,
         mem_gb: 4,
-        disk_gb: 2 * ceil(size(vcf, "GB")) + 5,
+        disk_gb: 2 * ceil(size([vcf, vcf_idx], "GB")) + 5,
+        boot_disk_gb: 10,
+        preemptible_tries: 1,
+        max_retries: 0
+    }
+    RuntimeAttr runtime_attr = select_first([runtime_attr_override, default_attr])
+    runtime {
+        cpu: select_first([runtime_attr.cpu_cores, default_attr.cpu_cores])
+        memory: select_first([runtime_attr.mem_gb, default_attr.mem_gb]) + " GiB"
+        disks: "local-disk " + select_first([runtime_attr.disk_gb, default_attr.disk_gb]) + " HDD"
+        bootDiskSizeGb: select_first([runtime_attr.boot_disk_gb, default_attr.boot_disk_gb])
+        docker: docker
+        preemptible: select_first([runtime_attr.preemptible_tries, default_attr.preemptible_tries])
+        maxRetries: select_first([runtime_attr.max_retries, default_attr.max_retries])
+    }
+}
+
+task AppendAnnotationsFromVcf {
+    input {
+        File annotation_tsv
+        File truth_vcf
+        File truth_vcf_idx
+        Boolean is_sv_truth
+        String prefix
+        String docker
+        RuntimeAttr? runtime_attr_override
+    }
+
+    command <<<
+        set -euo pipefail
+
+        python3 <<'EOF'
+import subprocess
+import re
+
+annotation_tsv = "~{annotation_tsv}"
+truth_vcf = "~{truth_vcf}"
+is_sv_truth = ~{true="True" false="False" is_sv_truth}
+prefix = "~{prefix}"
+
+def get_ac_af_an_fields(vcf_path):
+    cmd = f"bcftools view -h {vcf_path}"
+    proc = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, text=True)
+    fields = {'AC': {}, 'AF': {}, 'AN': {}}
+    for line in proc.stdout:
+        m = re.match(r'##INFO=<ID=([^,]+)', line)
+        if m:
+            fid = m.group(1)
+            norm_id = fid.upper().replace('_REMAINING', '_RMI')
+            for p in ['AC', 'AF', 'AN']:
+                if norm_id == p or norm_id.startswith(p + '_'):
+                    fields[p][norm_id] = fid
+    proc.wait()
+    return fields
+
+vcf_fields = get_ac_af_an_fields(truth_vcf)
+dyn_cols = sorted(vcf_fields['AC']) + sorted(vcf_fields['AF']) + sorted(vcf_fields['AN'])
+norm_to_orig = {**vcf_fields['AC'], **vcf_fields['AF'], **vcf_fields['AN']}
+
+if is_sv_truth:
+    extra_fields = ['N_HOMREF', 'N_HET', 'N_HOMALT']
+else:
+    extra_fields = ['nhomalt']
+
+query_field_pairs = [(c, norm_to_orig[c]) for c in dyn_cols] + [(f, f) for f in extra_fields]
+fmt = '%ID\\t' + '\\t'.join(f'%INFO/{orig}' for _, orig in query_field_pairs) + '\\n'
+
+# Collect the truth IDs the annotations actually reference so only those rows are retained below
+wanted_ids = set()
+with open(annotation_tsv) as fin:
+    for line in fin:
+        fields = line.rstrip('\n').split('\t')
+        if len(fields) > 6:
+            wanted_ids.add(fields[6])
+
+cmd = f"bcftools query -f '{fmt}' {truth_vcf}"
+proc = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, text=True)
+truth_info = {}
+for line in proc.stdout:
+    parts = line.rstrip('\n').split('\t')
+    if len(parts) == len(query_field_pairs) + 1 and parts[0] in wanted_ids:
+        truth_info[parts[0]] = {query_field_pairs[i][0]: parts[i + 1] for i in range(len(query_field_pairs))}
+proc.wait()
+
+def to_num(val):
+    try:
+        return float(val) if val and val != '.' else 0
+    except Exception:
+        return 0
+
+def compute_genotype_counts(info):
+    if is_sv_truth:
+        return info.get('N_HOMREF', '.'), info.get('N_HET', '.'), info.get('N_HOMALT', '.')
+    homalt = to_num(info.get('nhomalt', '.'))
+    het = to_num(info.get('AC', '.')) - 2 * homalt
+    homref = to_num(info.get('AN', '.')) / 2 - homalt - het
+    return str(int(homref)), str(int(het)), info.get('nhomalt', '.')
+
+extra_cols = ['match_type', 'truth_ID', 'source_tag', 'filter'] + dyn_cols + ['N_HOMREF', 'N_HET', 'N_HOMALT']
+header_row = '\t'.join(['#CHROM', 'POS', 'REF', 'ALT', 'ID'] + extra_cols)
+
+with open(annotation_tsv) as fin, open(f"{prefix}.tsv", 'w') as fout:
+    fout.write(header_row + '\n')
+    for line in fin:
+        fields = line.rstrip('\n').split('\t')
+        truth_id = fields[6]
+        info = truth_info.get(truth_id, {})
+        dyn_vals = [info.get(f, '.') for f in dyn_cols]
+        homref, het, homalt = compute_genotype_counts(info)
+        fout.write('\t'.join(fields + dyn_vals + [homref, het, homalt]) + '\n')
+
+EOF
+    >>>
+
+    output {
+        File annotated_tsv = "~{prefix}.tsv"
+    }
+
+    RuntimeAttr default_attr = object {
+        cpu_cores: 1,
+        mem_gb: 6,
+        disk_gb: 2 * ceil(size(annotation_tsv, "GB") + size(truth_vcf, "GB")) + 10,
         boot_disk_gb: 10,
         preemptible_tries: 1,
         max_retries: 0
@@ -260,7 +474,7 @@ task BedtoolsClosest {
 
     command <<<
         set -euo pipefail
-        
+
         paste <(head -1 ~{bed_a}) <(head -1 ~{bed_b}) \
             | sed -e "s/#//g" \
             > ~{prefix}.bed
@@ -312,21 +526,21 @@ task CheckSampleConsistency {
         printf '%s\n' ~{sep=' ' sample_ids} | sort > requested_samples.txt
 
         vcfs_array=(~{sep=' ' vcfs})
-        
-        for vcf in "${vcfs_array[@]}"; do            
+
+        for vcf in "${vcfs_array[@]}"; do
             bcftools query -l "$vcf" | sort > vcf_samples.txt
-            
+
             comm -3 requested_samples.txt vcf_samples.txt > differences.txt
-            
+
             if [ -s differences.txt ]; then
                 echo "ERROR: Sample mismatch in $vcf"
 
                 echo "--- Missing from VCF ---"
                 comm -23 requested_samples.txt vcf_samples.txt
-                
+
                 echo "--- Extra in VCF (not requested) ---"
                 comm -13 requested_samples.txt vcf_samples.txt
-                
+
                 exit 1
             fi
         done
@@ -454,20 +668,20 @@ with open(header_filename, 'w') as hout:
 
 with open(output_filename, 'w') as out:
     out.write("\t".join(master_header) + "\n")
-    
+
     for f in input_files:
         with open(f, 'r') as fh:
             header_line = fh.readline().strip()
-            if not header_line: 
+            if not header_line:
                 continue
-            
+
             file_cols = header_line.split('\t')
             col_map = {name: i for i, name in enumerate(file_cols)}
-            
+
             for line in fh:
                 parts = line.strip().split('\t')
                 if not parts: continue
-                
+
                 out_row = []
                 for target_col in master_header:
                     if target_col in col_map:
@@ -478,10 +692,10 @@ with open(output_filename, 'w') as out:
                             out_row.append(".")
                     else:
                         out_row.append(".")
-                
+
                 out.write("\t".join(out_row) + "\n")
 CODE
-    
+
         tail -n +2 aligned_unsorted.tsv | sort -k1,1 -k2,2n > ~{prefix}.tsv
     >>>
 
@@ -494,91 +708,6 @@ CODE
         cpu_cores: 1,
         mem_gb: 4,
         disk_gb: 2 * ceil(size(tsvs, "GB")) + 10,
-        boot_disk_gb: 10,
-        preemptible_tries: 1,
-        max_retries: 0
-    }
-    RuntimeAttr runtime_attr = select_first([runtime_attr_override, default_attr])
-    runtime {
-        cpu: select_first([runtime_attr.cpu_cores, default_attr.cpu_cores])
-        memory: select_first([runtime_attr.mem_gb, default_attr.mem_gb]) + " GiB"
-        disks: "local-disk " + select_first([runtime_attr.disk_gb, default_attr.disk_gb]) + " HDD"
-        bootDiskSizeGb: select_first([runtime_attr.boot_disk_gb, default_attr.boot_disk_gb])
-        docker: docker
-        preemptible: select_first([runtime_attr.preemptible_tries, default_attr.preemptible_tries])
-        maxRetries: select_first([runtime_attr.max_retries, default_attr.max_retries])
-    }
-}
-
-task AnnotateVariantAttributes {
-    input {
-        File vcf
-        File vcf_idx
-        String prefix
-        String docker
-        RuntimeAttr? runtime_attr_override
-    }
-
-    command <<<
-        set -euo pipefail
-
-        touch new_headers.txt
-        if ! bcftools view -h ~{vcf} | grep -q '##INFO=<ID=allele_length'; then
-            echo '##INFO=<ID=allele_length,Number=1,Type=Integer,Description="Allele length">' >> new_headers.txt
-        fi
-        if ! bcftools view -h ~{vcf} | grep -q '##INFO=<ID=allele_type'; then
-            echo '##INFO=<ID=allele_type,Number=1,Type=String,Description="Allele type">' >> new_headers.txt
-        fi
-
-        bcftools annotate \
-            -h new_headers.txt \
-            -Oz -o temp.vcf.gz \
-            ~{vcf}
-
-        tabix -p vcf temp.vcf.gz
-
-        bcftools query \
-            -f '%CHROM\t%POS\t%REF\t%ALT\t%ID\t%INFO/allele_length\t%INFO/allele_type\n' \
-            temp.vcf.gz \
-        | awk -F'\t' '{
-            ref_length = length($3)
-            alt_len = length($4)
-            calc_length = alt_len - ref_length
-            calc_type = "snv"
-
-            if (alt_len > ref_length) {
-                calc_type = "ins"
-            } else if (alt_len < ref_length) {
-                calc_type = "del"
-            }
-
-            allele_length = ($6 == ".") ? calc_length : $6
-            allele_type = ($7 == ".") ? calc_type : $7
-
-            print $1"\t"$2"\t"$3"\t"$4"\t"$5"\t"allele_length"\t"allele_type
-        }' \
-            | bgzip -c > annot.txt.gz
-
-        tabix -s1 -b2 -e2 annot.txt.gz
-
-        bcftools annotate \
-            -a annot.txt.gz \
-            -c CHROM,POS,REF,ALT,~ID,INFO/allele_length,INFO/allele_type \
-            -Oz -o ~{prefix}.vcf.gz \
-            temp.vcf.gz
-
-        tabix -p vcf ~{prefix}.vcf.gz
-    >>>
-
-    output {
-        File annotated_vcf = "~{prefix}.vcf.gz"
-        File annotated_vcf_idx = "~{prefix}.vcf.gz.tbi"
-    }
-
-    RuntimeAttr default_attr = object {
-        cpu_cores: 1,
-        mem_gb: 4,
-        disk_gb: 2 * ceil(size([vcf, vcf_idx], "GB")) + 5,
         boot_disk_gb: 10,
         preemptible_tries: 1,
         max_retries: 0
@@ -686,7 +815,7 @@ task ConcatVcfs {
 
     command <<<
         set -euo pipefail
-        
+
         VCFS_FILE="~{write_lines(vcfs)}"
 
         if [[ "~{sort_output}" == "true" ]]; then
@@ -707,7 +836,7 @@ task ConcatVcfs {
                 --file-list ${VCFS_FILE} \
                 -Oz -o "~{prefix}.vcf.gz"
         fi
-        
+
         tabix -p vcf -f "~{prefix}.vcf.gz"
     >>>
 
@@ -846,9 +975,9 @@ task ConsolidateCollapsedSites {
             --refdist ~{breakpoint_window} \
             --sizemin ~{size_min} \
             --sizemax ~{size_max}
-        
+
         bgzip -f collapsed.vcf
-        
+
         bgzip -f removed.vcf
 
         # Consolidate INFO and GT from the removed variants into retained records
@@ -1002,86 +1131,57 @@ CODE
     }
 }
 
-# Derived from broadinstitute/long-read-pipelines ConvertToHailMT.wdl.
-task ConvertToHailMT {
-    meta {
-        description: "Convert a .vcf.bgz file to a Hail MatrixTable."
-    }
-
-    parameter_meta {
-        gvcf: "VCF to convert to a MatrixTable."
-        tbi: "Index for gvcf."
-        reference: "Reference assembly label; only GRCh38 is supported."
-        ref_fa: "Reference sequences FASTA file; downloaded from Hail if not provided."
-        ref_fai: "Index for ref_fa; downloaded from Hail if not provided."
-        prefix: "Prefix for the output MatrixTable."
-        docker: "Docker image for Hail."
-        runtime_attr_override: "Override runtime attributes for this task."
-    }
-
+task ConvertPALMERToVcf {
     input {
-        File gvcf
-        File tbi
-        String prefix = "out"
-
-        String reference = "GRCh38"
-        String? ref_fa
-        String? ref_fai
-
+        File palmer_calls
+        File palmer_tsd_reads
+        String mei_type
+        String sample
+        File ref_fa
+        File ref_fai
+        String haplotype
+        String prefix
         String docker
-
         RuntimeAttr? runtime_attr_override
     }
 
-    Int disk_size = 1 + 6 * ceil(size(gvcf, "GB"))
-
     command <<<
-        set -x
+        set -euo pipefail
 
-        python3 <<EOF
+        python /opt/scripts/mei/PALMER_to_vcf.py \
+            --palmer_calls ~{palmer_calls} \
+            --palmer_tsd_reads ~{palmer_tsd_reads} \
+            --mei_type ~{mei_type} \
+            --sample ~{sample} \
+            --ref_fa ~{ref_fa} \
+            --ref_fai ~{ref_fai} \
+            --haplotype "~{haplotype}" \
+        | bcftools sort \
+            --max-mem ~{select_first([runtime_attr.mem_gb, default_attr.mem_gb]) - 1}G \
+            -T . \
+            -Oz -o ~{prefix}.palmer_calls.vcf.gz
 
-        import hail as hl
-        hl.init(default_reference='GRCh38')
-
-        if '~{defined(ref_fa)}' == 'true' and '~{defined(ref_fai)}' == 'true':
-            ref = hl.ReferenceGenome.from_fasta_file('~{reference}', '~{ref_fa}', '~{ref_fai}')
-
-        callset = hl.import_vcf(
-            '~{gvcf}',
-            array_elements_required=False,
-            force_bgz=True,
-            reference_genome='~{reference}'
-        )
-
-        callset.write('~{prefix}.mt')
-
-        EOF
-
-        echo "Created matrix table."
-        echo "Tarring file now."
-        tar -cf ~{prefix}.mt.tar ~{prefix}.mt
-
-        touch completion_key_file
+        tabix -p vcf ~{prefix}.palmer_calls.vcf.gz
     >>>
 
     output {
-        File mt_tar = "~{prefix}.mt.tar"
-        File completion_file = "completion_key_file"
+        File vcf = "~{prefix}.palmer_calls.vcf.gz"
+        File vcf_idx = "~{prefix}.palmer_calls.vcf.gz.tbi"
     }
 
     RuntimeAttr default_attr = object {
-        cpu_cores: 4,
-        mem_gb: 64,
-        disk_gb: disk_size,
-        boot_disk_gb: 25,
-        preemptible_tries: 0,
+        cpu_cores: 1,
+        mem_gb: 4,
+        disk_gb: 5 * ceil(size(palmer_calls, "GB") + size(palmer_tsd_reads, "GB") + size(ref_fa, "GB")) + 10,
+        boot_disk_gb: 10,
+        preemptible_tries: 1,
         max_retries: 0
     }
     RuntimeAttr runtime_attr = select_first([runtime_attr_override, default_attr])
     runtime {
         cpu: select_first([runtime_attr.cpu_cores, default_attr.cpu_cores])
         memory: select_first([runtime_attr.mem_gb, default_attr.mem_gb]) + " GiB"
-        disks: "local-disk " + select_first([runtime_attr.disk_gb, default_attr.disk_gb]) + " SSD"
+        disks: "local-disk " + select_first([runtime_attr.disk_gb, default_attr.disk_gb]) + " HDD"
         bootDiskSizeGb: select_first([runtime_attr.boot_disk_gb, default_attr.boot_disk_gb])
         docker: docker
         preemptible: select_first([runtime_attr.preemptible_tries, default_attr.preemptible_tries])
@@ -1261,11 +1361,98 @@ CODE
     }
 }
 
+# Derived from broadinstitute/long-read-pipelines ConvertToHailMT.wdl.
+task ConvertToHailMT {
+    meta {
+        description: "Convert a .vcf.bgz file to a Hail MatrixTable."
+    }
+
+    parameter_meta {
+        gvcf: "VCF to convert to a MatrixTable."
+        tbi: "Index for gvcf."
+        reference: "Reference assembly label; only GRCh38 is supported."
+        ref_fa: "Reference sequences FASTA file; downloaded from Hail if not provided."
+        ref_fai: "Index for ref_fa; downloaded from Hail if not provided."
+        prefix: "Prefix for the output MatrixTable."
+        docker: "Docker image for Hail."
+        runtime_attr_override: "Override runtime attributes for this task."
+    }
+
+    input {
+        File gvcf
+        File tbi
+        String prefix = "out"
+
+        String reference = "GRCh38"
+        String? ref_fa
+        String? ref_fai
+
+        String docker
+
+        RuntimeAttr? runtime_attr_override
+    }
+
+    Int disk_size = 1 + 6 * ceil(size(gvcf, "GB"))
+
+    command <<<
+        set -euo pipefail
+
+        python3 <<EOF
+
+        import hail as hl
+        hl.init(default_reference='GRCh38')
+
+        if '~{defined(ref_fa)}' == 'true' and '~{defined(ref_fai)}' == 'true':
+            ref = hl.ReferenceGenome.from_fasta_file('~{reference}', '~{ref_fa}', '~{ref_fai}')
+
+        callset = hl.import_vcf(
+            '~{gvcf}',
+            array_elements_required=False,
+            force_bgz=True,
+            reference_genome='~{reference}'
+        )
+
+        callset.write('~{prefix}.mt')
+
+        EOF
+
+        echo "Created matrix table."
+        echo "Tarring file now."
+        tar -cf ~{prefix}.mt.tar ~{prefix}.mt
+
+        touch completion_key_file
+    >>>
+
+    output {
+        File mt_tar = "~{prefix}.mt.tar"
+        File completion_file = "completion_key_file"
+    }
+
+    RuntimeAttr default_attr = object {
+        cpu_cores: 4,
+        mem_gb: 64,
+        disk_gb: disk_size,
+        boot_disk_gb: 25,
+        preemptible_tries: 0,
+        max_retries: 0
+    }
+    RuntimeAttr runtime_attr = select_first([runtime_attr_override, default_attr])
+    runtime {
+        cpu: select_first([runtime_attr.cpu_cores, default_attr.cpu_cores])
+        memory: select_first([runtime_attr.mem_gb, default_attr.mem_gb]) + " GiB"
+        disks: "local-disk " + select_first([runtime_attr.disk_gb, default_attr.disk_gb]) + " SSD"
+        bootDiskSizeGb: select_first([runtime_attr.boot_disk_gb, default_attr.boot_disk_gb])
+        docker: docker
+        preemptible: select_first([runtime_attr.preemptible_tries, default_attr.preemptible_tries])
+        maxRetries: select_first([runtime_attr.max_retries, default_attr.max_retries])
+    }
+}
+
 task ConvertToSymbolic {
     input {
         File vcf
         File vcf_idx
-        Boolean move_all_dups
+        Boolean move_dup_to_origin
         String type_field = "allele_type"
         String length_field = "allele_length"
         String prefix
@@ -1276,21 +1463,25 @@ task ConvertToSymbolic {
     command <<<
         set -euo pipefail
 
+        # Collect the distinct allele types and the ORIGIN contigs in one pass, so the records are only decoded once
         bcftools query \
-            -f '%INFO/~{type_field}\n' \
+            -f '%INFO/~{type_field}\t%INFO/ORIGIN\n' \
             ~{vcf} \
-        | sort -u > raw_types.txt
+        | sort -u > raw_types_origins.txt
+
+        cut -f1 raw_types_origins.txt | sort -u > raw_types.txt
 
         python3 <<CODE
 import pysam
 import re
 import sys
 
-move_all_dups = ~{true="True" false="False" move_all_dups}
+move_dup = ~{true="True" false="False" move_dup_to_origin}
 
+# Treat only an exact DUP as a duplication
 def map_type(raw):
     t = raw.upper()
-    if (move_all_dups and 'DUP' in t) or (not move_all_dups and t == 'DUP'):
+    if t == 'DUP':
         return 'DUP'
     elif 'DEL' in t:
         return 'DEL'
@@ -1322,13 +1513,14 @@ with open("raw_types.txt") as f:
 
 # Collect origin contigs needed for DUP records
 origin_contigs = set()
-with pysam.VariantFile("~{vcf}") as vcf_scan:
-    for record in vcf_scan:
-        raw = record.info["~{type_field}"]
-        if isinstance(raw, (list, tuple)):
-            raw = raw[0]
-        if map_type(raw) == 'DUP':
-            origin_chrom, _, _ = extract_origin_info(record.info.get('ORIGIN', None))
+if move_dup:
+    with open("raw_types_origins.txt") as f:
+        for line in f:
+            raw, _, origin = line.rstrip('\n').partition('\t')
+            raw = raw.split(',')[0]
+            if not raw or map_type(raw) != 'DUP':
+                continue
+            origin_chrom, _, _ = extract_origin_info(origin if origin != '.' else None)
             if origin_chrom is not None:
                 origin_contigs.add(origin_chrom)
 
@@ -1346,9 +1538,9 @@ if 'SVTYPE' not in header.info:
     header.add_line('##INFO=<ID=SVTYPE,Number=1,Type=String,Description="Variant type">')
 if 'SVLEN' not in header.info:
     header.add_line('##INFO=<ID=SVLEN,Number=1,Type=Integer,Description="Variant length">')
-if 'ORIGINAL_POS' not in header.info:
+if move_dup and 'ORIGINAL_POS' not in header.info:
     header.add_line('##INFO=<ID=ORIGINAL_POS,Number=1,Type=Integer,Description="POS prior to DUP being repositioned to its source coordinate">')
-if 'ORIGINAL_CHROM' not in header.info:
+if move_dup and 'ORIGINAL_CHROM' not in header.info:
     header.add_line('##INFO=<ID=ORIGINAL_CHROM,Number=1,Type=String,Description="CHROM prior to DUP being repositioned to its source coordinate">')
 header.add_line('##ALT=<ID=N,Description="Baseline reference">')
 for allele_type in present_types:
@@ -1373,8 +1565,9 @@ for record in vcf_in:
     svlen = abs(allele_length)
     record.info['SVLEN'] = svlen
 
-    # Set END, repositioning DUPs to their source coordinate
-    if allele_type == 'DUP':
+    # Set END, repositioning DUPs onto their source coordinate only when asked; left in place a DUP stays a point
+    # insertion at its own breakpoint, which is what comparing it against truth insertions needs
+    if move_dup and allele_type == 'DUP':
         origin_chrom, origin_pos, origin_end = extract_origin_info(record.info.get('ORIGIN', None))
         if origin_chrom is None or origin_pos is None or origin_end is None:
             print(f"Error: cannot extract ORIGIN for DUP {record.id} at {record.chrom}:{record.pos} (ORIGIN={record.info.get('ORIGIN')})", file=sys.stderr)
@@ -1385,7 +1578,7 @@ for record in vcf_in:
         record.pos = origin_pos
         record.stop = origin_end
         record.info['SVLEN'] = origin_end - origin_pos
-    elif allele_type == 'INS':
+    elif allele_type == 'INS' or allele_type == 'DUP':
         record.stop = record.pos + 1
     else:
         record.stop = record.pos + svlen
@@ -1427,7 +1620,7 @@ CODE
         docker: docker
         preemptible: select_first([runtime_attr.preemptible_tries, default_attr.preemptible_tries])
         maxRetries: select_first([runtime_attr.max_retries, default_attr.max_retries])
-  }
+    }
 }
 
 task ConvertTsvToParquet {
@@ -1546,11 +1739,13 @@ CODE
     }
 }
 
-task AddMissingInfoHeaderLines {
+task CreateGapAwareShards {
     input {
-        File vcf
-        File vcf_idx
-        Array[String] info_fields
+        Array[File] vcfs
+        Array[File] vcf_idxs
+        String contig
+        Int shard_bin_size
+        Int min_gap = 10000
         String prefix
         String docker
         RuntimeAttr? runtime_attr_override
@@ -1559,28 +1754,76 @@ task AddMissingInfoHeaderLines {
     command <<<
         set -euo pipefail
 
-        : > hdr_lines.txt
-        while IFS= read -r field; do
-            printf '##INFO=<ID=%s,Number=.,Type=String,Description="Auto-added missing header line">\n' "${field}" >> hdr_lines.txt
-        done < ~{write_lines(info_fields)}
+        vcfs_file="~{write_lines(vcfs)}"
+        vcf_idxs_file="~{write_lines(vcf_idxs)}"
+        paste "$vcfs_file" "$vcf_idxs_file" > vcf_pairs.tsv
+        : > record_spans.txt
+        while IFS=$'\t' read -r vcf vcf_idx; do
+            if [[ "$vcf_idx" != "$vcf.tbi" ]]; then
+                ln -sf "$vcf_idx" "$vcf.tbi"
+            fi
+            bcftools query -r ~{contig} -f '%POS\t%REF\n' "$vcf" \
+                | awk 'BEGIN{OFS="\t"} {print $1, $1 + length($2) - 1}' \
+                >> record_spans.txt
+        done < vcf_pairs.tsv
 
-        bcftools annotate \
-            -h hdr_lines.txt \
-            -Oz -o ~{prefix}.vcf.gz \
-            ~{vcf}
+        LC_ALL=C sort -k1,1n record_spans.txt > record_spans.sorted.txt
 
-        tabix -p vcf ~{prefix}.vcf.gz
+        python3 - <<CODE
+contig = "~{contig}"
+shard_bin_size = ~{shard_bin_size}
+min_gap = ~{min_gap}
+
+spans = []
+with open("record_spans.sorted.txt") as f:
+    for line in f:
+        start, end = line.split()
+        spans.append((int(start), int(end)))
+
+# Record every gap wider than min_gap, which are the only positions a boundary may fall on; truvari groups records
+# into a new chunk only once the next start clears the running maximum end by more than its chunksize
+cut_points = []
+max_end = spans[0][1] if spans else 0
+for index in range(1, len(spans)):
+    if spans[index][0] - max_end > min_gap:
+        cut_points.append((max_end, spans[index][0]))
+    max_end = max(max_end, spans[index][1])
+
+# Grow each shard to at least shard_bin_size before snapping its end forward to the next safe gap
+regions = []
+start = 1
+cut_index = 0
+while spans and start <= max_end:
+    target = start + shard_bin_size - 1
+    if target >= max_end:
+        regions.append((start, max_end))
+        break
+    while cut_index < len(cut_points) and cut_points[cut_index][0] < target:
+        cut_index += 1
+    if cut_index >= len(cut_points):
+        regions.append((start, max_end))
+        break
+    regions.append((start, cut_points[cut_index][0]))
+    start = cut_points[cut_index][1]
+    cut_index += 1
+
+with open("~{prefix}.txt", "w") as out:
+    if not regions:
+        out.write(f"{contig}\n")
+    else:
+        for region_start, region_end in regions:
+            out.write(f"{contig}:{region_start}-{region_end}\n")
+CODE
     >>>
 
     output {
-        File annotated_vcf = "~{prefix}.vcf.gz"
-        File annotated_vcf_idx = "~{prefix}.vcf.gz.tbi"
+        Array[String] shard_regions = read_lines("~{prefix}.txt")
     }
 
     RuntimeAttr default_attr = object {
         cpu_cores: 1,
-        mem_gb: 4,
-        disk_gb: 2 * ceil(size(vcf, "GB")) + 5,
+        mem_gb: 8,
+        disk_gb: ceil(2 * size(vcfs, "GB")) + 10,
         boot_disk_gb: 10,
         preemptible_tries: 1,
         max_retries: 0
@@ -1627,6 +1870,98 @@ task DropVcfFields {
         cpu_cores: 1,
         mem_gb: 4,
         disk_gb: 2 * ceil(size(vcf, "GB")) + 5,
+        boot_disk_gb: 10,
+        preemptible_tries: 1,
+        max_retries: 0
+    }
+    RuntimeAttr runtime_attr = select_first([runtime_attr_override, default_attr])
+    runtime {
+        cpu: select_first([runtime_attr.cpu_cores, default_attr.cpu_cores])
+        memory: select_first([runtime_attr.mem_gb, default_attr.mem_gb]) + " GiB"
+        disks: "local-disk " + select_first([runtime_attr.disk_gb, default_attr.disk_gb]) + " HDD"
+        bootDiskSizeGb: select_first([runtime_attr.boot_disk_gb, default_attr.boot_disk_gb])
+        docker: docker
+        preemptible: select_first([runtime_attr.preemptible_tries, default_attr.preemptible_tries])
+        maxRetries: select_first([runtime_attr.max_retries, default_attr.max_retries])
+    }
+}
+
+task ExactMatch {
+    input {
+        File vcf
+        File vcf_idx
+        File truth_snv_indel_vcf
+        File truth_snv_indel_vcf_idx
+        String source_tag
+        String prefix
+        String docker
+        RuntimeAttr? runtime_attr_override
+    }
+
+    command <<<
+        set -euo pipefail
+
+        # Intersect once without -n or -C; 0000 is private to the callset, 0002 and 0003 are the shared records from
+        # each input, so a single pass yields both the matched and unmatched sets the two earlier passes produced
+        bcftools isec \
+            -c none \
+            -p isec \
+            -Oz \
+            ~{vcf} \
+            ~{truth_snv_indel_vcf}
+
+        mv isec/0003.vcf.gz ~{prefix}.matched_truth.vcf.gz
+        tabix -p vcf -f ~{prefix}.matched_truth.vcf.gz
+
+        bcftools query \
+            -f '%CHROM\t%POS\t%REF\t%ALT\t%ID\n' \
+            isec/0002.vcf.gz \
+            > eval_matched.tsv
+
+        bcftools query \
+            -f '%ID\t%FILTER\n' \
+            ~{prefix}.matched_truth.vcf.gz \
+            | awk -F'\t' 'BEGIN{OFS="\t"} {
+                n = split($2, parts, ";")
+                out = ""
+                for (i = 1; i <= n; i++) {
+                    if (parts[i] != "." && parts[i] != "PASS") {
+                        out = (out == "" ? parts[i] : out "," parts[i])
+                    }
+                }
+                if (out == "") out = "."
+                print $1, out
+            }' > truth_matched.tsv
+
+        # Fail loudly rather than silently shifting every row, because the paste below pairs the two shared record
+        # sets positionally and one callset record matching several truth records would desynchronise them
+        eval_count=$(wc -l < eval_matched.tsv)
+        truth_count=$(wc -l < truth_matched.tsv)
+        if [[ "${eval_count}" -ne "${truth_count}" ]]; then
+            echo "Shared record counts differ: ${eval_count} callset vs ${truth_count} truth" >&2
+            exit 1
+        fi
+
+        paste eval_matched.tsv truth_matched.tsv \
+            | awk -v src="~{source_tag}" 'BEGIN{OFS="\t"} {print $1,$2,$3,$4,$5,"EXACT",$6,src,$7}' \
+            > ~{prefix}.tsv
+
+        mv isec/0000.vcf.gz ~{prefix}.vcf.gz
+        tabix -p vcf -f ~{prefix}.vcf.gz
+    >>>
+
+    output {
+        File annotation_tsv = "~{prefix}.tsv"
+        File matched_truth_vcf = "~{prefix}.matched_truth.vcf.gz"
+        File matched_truth_vcf_idx = "~{prefix}.matched_truth.vcf.gz.tbi"
+        File unmatched_vcf = "~{prefix}.vcf.gz"
+        File unmatched_vcf_idx = "~{prefix}.vcf.gz.tbi"
+    }
+
+    RuntimeAttr default_attr = object {
+        cpu_cores: 1,
+        mem_gb: 4,
+        disk_gb: 5 * ceil(size(vcf, "GB") + size(truth_snv_indel_vcf, "GB")) + 5,
         boot_disk_gb: 10,
         preemptible_tries: 1,
         max_retries: 0
@@ -1743,7 +2078,7 @@ with open("~{prefix}.annotations.tsv", "w") as out:
                     row.append(str(val))
             else:
                 row.append(".")
-        
+
         out.write("\t".join(row) + "\n")
 CODE
     >>>
@@ -1784,6 +2119,7 @@ task ExtractVcfCoords {
 
     command <<<
         set -euo pipefail
+
         bcftools query \
             -f '%CHROM\t%POS\t%REF\t%ALT\t%ID\n' \
             ~{vcf} \
@@ -1814,44 +2150,93 @@ task ExtractVcfCoords {
     }
 }
 
-task IndexVcf {
+task FilterDuplicateZeroDepthReferenceBlocks {
+    meta {
+        description: "Collapse duplicate zero-depth non-alt reference blocks while preserving gVCF coverage. Optionally process supplied ranges and create indexes."
+    }
+
     input {
-        File vcf
+        File gvcf
+        File gvcf_idx
+        String prefix
+        Array[String] ranges = []
+        Boolean remove_duplicates = true
+        Boolean create_indexes = false
+        Int default_max_retries = 0
         String docker
         RuntimeAttr? runtime_attr_override
     }
 
-    String filename = basename(vcf)
+    Int disk_size = 1 + 2 * ceil(size(gvcf, "GB"))
 
     command <<<
         set -euo pipefail
 
-        cp ~{vcf} ~{filename}
-        
-        tabix -p vcf ~{filename}
+        test -s ~{gvcf_idx}
+        mkdir -p per_contig
+
+        filter_records() {
+            awk -F$'\t' '
+                BEGIN { removed_count = 0 }
+                function clear_group(    i) { for (i = 1; i <= row_count; i++) delete rows[i]; for (i in duplicate_count) delete duplicate_count[i]; for (i in removable) delete removable[i]; row_count = 0 }
+                function record_end(line,    fields, info_fields, field_count, info_count, i) { field_count = split(line, fields, "\t"); info_count = split(fields[8], info_fields, ";"); for (i = 1; i <= info_count; i++) if (info_fields[i] ~ /^END=[0-9]+$/) return substr(info_fields[i], 5) + 0; return fields[2] + length(fields[4]) - 1 }
+                function set_end(line, new_end,    fields, info_fields, field_count, info_count, i, output) { field_count = split(line, fields, "\t"); info_count = split(fields[8], info_fields, ";"); output = ""; for (i = 1; i <= info_count; i++) { if (info_fields[i] ~ /^END=[0-9]+$/) info_fields[i] = "END=" new_end; output = output (i == 1 ? "" : ";") info_fields[i] } fields[8] = output; output = fields[1]; for (i = 2; i <= field_count; i++) output = output "\t" fields[i]; return output }
+                function update_coverage(chrom, end) { if (!(chrom in covered_until) || end > covered_until[chrom]) covered_until[chrom] = end }
+                function emit_pending(next_chrom, next_pos,    line, end) { if (pending_line == "") return; line = pending_line; end = pending_end; if (pending_chrom == next_chrom && next_pos <= end) { end = next_pos - 1; line = set_end(line, end) } print line; update_coverage(pending_chrom, end); pending_line = "" }
+                function set_pending(line, chrom, end) { pending_line = line; pending_chrom = chrom; pending_end = end; removed_count-- }
+                function flush_group(    i, line, candidate_line, candidate_end, end, has_kept_row) {
+                    candidate_line = ""; candidate_end = -1; has_kept_row = 0
+                    for (i = 1; i <= row_count; i++) { line = rows[i]; if (removable[line] && duplicate_count[line] > 1) { if (!(line in seen_candidate)) { seen_candidate[line] = 1; end = record_end(line); if (end > candidate_end) { candidate_line = line; candidate_end = end } } removed_count++ } else has_kept_row = 1 }
+                    if (has_kept_row) { emit_pending(current_chrom, current_pos); for (i = 1; i <= row_count; i++) { line = rows[i]; if (!(removable[line] && duplicate_count[line] > 1)) { print line; update_coverage(current_chrom, record_end(line)) } } }
+                    else if (candidate_line != "") { if (pending_line != "") { if (pending_chrom != current_chrom || current_pos > pending_end) emit_pending("", 0); else if (candidate_end > pending_end) emit_pending(current_chrom, current_pos); else { for (i in seen_candidate) delete seen_candidate[i]; return } } if (!(current_chrom in covered_until) || current_pos > covered_until[current_chrom]) set_pending(candidate_line, current_chrom, candidate_end) }
+                    for (i in seen_candidate) delete seen_candidate[i]
+                }
+                function is_removable_record(    format_fields, sample_fields, field_count, sample_count, i, gt_index, min_dp_index, gt) { field_count = split($9, format_fields, ":"); gt_index = 0; min_dp_index = 0; for (i = 1; i <= field_count; i++) { if (format_fields[i] == "GT") gt_index = i; if (format_fields[i] == "MIN_DP") min_dp_index = i } if (gt_index == 0 || min_dp_index == 0 || NF < 10) return 0; sample_count = split($10, sample_fields, ":"); if (sample_count < gt_index || sample_count < min_dp_index) return 0; gt = sample_fields[gt_index]; return sample_fields[min_dp_index] == "0" && gt ~ /^(0|\.)([\/|](0|\.))*$/ }
+                /^#/ { print; next }
+                { coordinate = $1 SUBSEP $2; if (row_count > 0 && coordinate != current_coordinate) { flush_group(); clear_group() } current_coordinate = coordinate; current_chrom = $1; current_pos = $2 + 0; rows[++row_count] = $0; duplicate_count[$0]++; if (is_removable_record()) removable[$0] = 1 }
+                END { if (row_count > 0) flush_group(); emit_pending("", 0); print "Removed " removed_count " duplicate zero-depth non-alt gVCF records" > "/dev/stderr" }
+            '
+        }
+
+        write_records() {
+            local range="$1"
+            local outfile="$2"
+            if [[ "~{remove_duplicates}" == "true" ]]; then
+                if [[ -n "$range" ]]; then bcftools view ~{gvcf} "$range"; else bcftools view ~{gvcf}; fi | filter_records | bgzip > "$outfile"
+            else
+                if [[ -n "$range" ]]; then bcftools view ~{gvcf} "$range"; else bcftools view ~{gvcf}; fi | bgzip > "$outfile"
+            fi
+            if [[ "~{create_indexes}" == "true" ]]; then tabix -p vcf "$outfile"; fi
+        }
+
+        if [[ ~{length(ranges)} -eq 0 ]]; then
+            write_records "" "per_contig/~{prefix}.cleaned.g.vcf.gz"
+        else
+            index=0
+            for range in ~{sep=' ' ranges}; do
+                pindex=$(printf '%06d' "$index")
+                frange=$(echo "$range" | sed 's/[:-]/___/g')
+                write_records "$range" "per_contig/$pindex.~{basename(gvcf, ".g.vcf.gz")}.locus_$frange.g.vcf.gz"
+                index=$((index + 1))
+            done
+        fi
     >>>
 
     output {
-        File vcf_idx = "~{filename}.tbi"
+        Array[File] cleaned_gvcfs = glob("per_contig/*.g.vcf.gz")
+        Array[File] cleaned_gvcf_idxs = glob("per_contig/*.g.vcf.gz.tbi")
     }
 
-    RuntimeAttr default_attr = object {
-        cpu_cores: 1,
-        mem_gb: 4,
-        disk_gb: 2 * ceil(size(vcf, "GB")) + 5,
-        boot_disk_gb: 10,
-        preemptible_tries: 1,
-        max_retries: 0
-    }
+    RuntimeAttr default_attr = object { cpu_cores: 1, mem_gb: 1, disk_gb: disk_size, boot_disk_gb: 25, preemptible_tries: 1, max_retries: default_max_retries }
     RuntimeAttr runtime_attr = select_first([runtime_attr_override, default_attr])
     runtime {
         cpu: select_first([runtime_attr.cpu_cores, default_attr.cpu_cores])
         memory: select_first([runtime_attr.mem_gb, default_attr.mem_gb]) + " GiB"
-        disks: "local-disk " + select_first([runtime_attr.disk_gb, default_attr.disk_gb]) + " HDD"
+        disks: "local-disk " + select_first([runtime_attr.disk_gb, default_attr.disk_gb]) + " SSD"
         bootDiskSizeGb: select_first([runtime_attr.boot_disk_gb, default_attr.boot_disk_gb])
-        docker: docker
         preemptible: select_first([runtime_attr.preemptible_tries, default_attr.preemptible_tries])
         maxRetries: select_first([runtime_attr.max_retries, default_attr.max_retries])
+        docker: docker
     }
 }
 
@@ -1971,6 +2356,76 @@ CODE
     }
 }
 
+task FindTrios {
+    input {
+        File vcf
+        File vcf_idx
+        File ped
+        String prefix
+        String docker
+        RuntimeAttr? runtime_attr_override
+    }
+
+    command <<<
+        set -euo pipefail
+
+        python3 <<'PYCODE'
+import pysam
+
+vcf = pysam.VariantFile("~{vcf}")
+vcf_samples = set(vcf.header.samples)
+vcf.close()
+
+trios = []
+with open("~{ped}") as f:
+    for line in f:
+        if line.startswith("#"):
+            continue
+        fields = line.strip().split("\t")
+        sample, father, mother = fields[1], fields[2], fields[3]
+        if father != "0" and mother != "0":
+            if sample in vcf_samples and father in vcf_samples and mother in vcf_samples:
+                trios.append((sample, father, mother))
+
+with open("~{prefix}.trio_definitions.tsv", "w") as out:
+    for child, father, mother in trios:
+        out.write(f"{child}\t{father}\t{mother}\n")
+
+all_samples = set()
+for child, father, mother in trios:
+    all_samples.update([child, father, mother])
+
+with open("~{prefix}.trio_sample_ids.txt", "w") as out:
+    for sample in sorted(all_samples):
+        out.write(sample + "\n")
+PYCODE
+    >>>
+
+    output {
+        File trio_definitions = "~{prefix}.trio_definitions.tsv"
+        File trio_sample_ids_file = "~{prefix}.trio_sample_ids.txt"
+    }
+
+    RuntimeAttr default_attr = object {
+        cpu_cores: 1,
+        mem_gb: 4,
+        disk_gb: ceil(size([vcf, ped], "GB")) + 10,
+        boot_disk_gb: 10,
+        preemptible_tries: 1,
+        max_retries: 0
+    }
+    RuntimeAttr runtime_attr = select_first([runtime_attr_override, default_attr])
+    runtime {
+        cpu: select_first([runtime_attr.cpu_cores, default_attr.cpu_cores])
+        memory: select_first([runtime_attr.mem_gb, default_attr.mem_gb]) + " GiB"
+        disks: "local-disk " + select_first([runtime_attr.disk_gb, default_attr.disk_gb]) + " HDD"
+        bootDiskSizeGb: select_first([runtime_attr.boot_disk_gb, default_attr.boot_disk_gb])
+        docker: docker
+        preemptible: select_first([runtime_attr.preemptible_tries, default_attr.preemptible_tries])
+        maxRetries: select_first([runtime_attr.max_retries, default_attr.max_retries])
+    }
+}
+
 task GetContigsFromTsv {
     input {
         File tsv
@@ -1992,6 +2447,57 @@ task GetContigsFromTsv {
         cpu_cores: 1,
         mem_gb: 4,
         disk_gb: 2 * ceil(size(tsv, "GB")) + 5,
+        boot_disk_gb: 10,
+        preemptible_tries: 1,
+        max_retries: 0
+    }
+    RuntimeAttr runtime_attr = select_first([runtime_attr_override, default_attr])
+    runtime {
+        cpu: select_first([runtime_attr.cpu_cores, default_attr.cpu_cores])
+        memory: select_first([runtime_attr.mem_gb, default_attr.mem_gb]) + " GiB"
+        disks: "local-disk " + select_first([runtime_attr.disk_gb, default_attr.disk_gb]) + " HDD"
+        bootDiskSizeGb: select_first([runtime_attr.boot_disk_gb, default_attr.boot_disk_gb])
+        docker: docker
+        preemptible: select_first([runtime_attr.preemptible_tries, default_attr.preemptible_tries])
+        maxRetries: select_first([runtime_attr.max_retries, default_attr.max_retries])
+    }
+}
+
+task GetHailMTSize {
+    input {
+        String mt_uri
+        String docker
+        RuntimeAttr? runtime_attr_override
+    }
+
+    command <<<
+        set -euo pipefail
+
+        tot_size=$(gsutil -m du -sh ~{mt_uri} | awk -F '    ' '{ print $1 }')
+
+        python3 <<CODE > mt_size.txt
+import sys
+
+size = "$tot_size".split()[0]
+unit = "$tot_size".split()[1]
+
+def convert_to_gib(size, unit):
+    size_dict = {"KiB": 2**10, "MiB": 2**20, "GB": 2**30, "TiB": 2**40}
+    return float(size) * size_dict[unit] / size_dict["GB"]
+
+size_in_gib = convert_to_gib(size, unit)
+print(size_in_gib)
+CODE
+    >>>
+
+    output {
+        Float mt_size = read_lines('mt_size.txt')[0]
+    }
+
+    RuntimeAttr default_attr = object {
+        cpu_cores: 1,
+        mem_gb: 4,
+        disk_gb: 25,
         boot_disk_gb: 10,
         preemptible_tries: 1,
         max_retries: 0
@@ -2046,41 +2552,31 @@ task GetSamplesFromVcf {
     }
 }
 
-task GetHailMTSize {
+task IndexVcf {
     input {
-        String mt_uri
+        File vcf
         String docker
         RuntimeAttr? runtime_attr_override
     }
 
+    String filename = basename(vcf)
+
     command <<<
         set -euo pipefail
-        
-        tot_size=$(gsutil -m du -sh ~{mt_uri} | awk -F '    ' '{ print $1 }')
 
-        python3 <<CODE > mt_size.txt
-import sys
+        cp ~{vcf} ~{filename}
 
-size = "$tot_size".split()[0]
-unit = "$tot_size".split()[1]
-
-def convert_to_gib(size, unit):
-    size_dict = {"KiB": 2**10, "MiB": 2**20, "GB": 2**30, "TiB": 2**40}
-    return float(size) * size_dict[unit] / size_dict["GB"]
-
-size_in_gib = convert_to_gib(size, unit)
-print(size_in_gib)
-CODE
+        tabix -p vcf ~{filename}
     >>>
 
     output {
-        Float mt_size = read_lines('mt_size.txt')[0]
+        File vcf_idx = "~{filename}.tbi"
     }
 
     RuntimeAttr default_attr = object {
         cpu_cores: 1,
         mem_gb: 4,
-        disk_gb: 25,
+        disk_gb: 2 * ceil(size(vcf, "GB")) + 5,
         boot_disk_gb: 10,
         preemptible_tries: 1,
         max_retries: 0
@@ -2108,14 +2604,14 @@ task MakeWindows {
 
     command <<<
         set -euo pipefail
-        
+
         awk -v contigs="~{sep=',' contigs}" 'BEGIN {split(contigs, c, ","); for(i in c) req[c[i]]=1} {if(req[$1]) print $1 "\t" $2}' ~{ref_fai} > genome.txt
-        
+
         bedtools makewindows \
             -g genome.txt \
             -w ~{window_size} \
             > windows.bed
-        
+
         awk '{print $1":"$2"-"$3}' windows.bed > regions.txt
     >>>
 
@@ -2255,7 +2751,7 @@ task MergeBams {
             -f \
             -o ~{prefix}.bam \
             ~{sep=' ' bams}
-        
+
         samtools index \
             -@ ~{select_first([runtime_attr.cpu_cores, default_attr.cpu_cores])} \
             ~{prefix}.bam
@@ -2363,6 +2859,55 @@ task MergeHeaderLines {
     }
 }
 
+task MergePALMEROutputs {
+    input {
+        Array[File] calls_shards
+        Array[File] tsd_reads_shards
+        String mei_type
+        String prefix
+        String docker
+        RuntimeAttr? runtime_attr_override
+    }
+
+    command <<<
+        set -euo pipefail
+
+        head -n1 ~{calls_shards[0]} > ~{prefix}_~{mei_type}_calls.txt
+        for f in ~{sep=' ' calls_shards}; do
+            grep -v '^cluster_id' $f >> ~{prefix}_~{mei_type}_calls.txt || true
+        done
+
+        head -n1 ~{tsd_reads_shards[0]} > ~{prefix}_~{mei_type}_tsd_reads.txt
+        for f in ~{sep=' ' tsd_reads_shards}; do
+            grep -v '^cluster_id' $f >> ~{prefix}_~{mei_type}_tsd_reads.txt || true
+        done
+    >>>
+
+    output {
+        File calls = "~{prefix}_~{mei_type}_calls.txt"
+        File tsd_reads = "~{prefix}_~{mei_type}_tsd_reads.txt"
+    }
+
+    RuntimeAttr default_attr = object {
+        cpu_cores: 1,
+        mem_gb: 4,
+        disk_gb: 2 * ceil(size(calls_shards, "GB") + size(tsd_reads_shards, "GB")) + 10,
+        boot_disk_gb: 10,
+        preemptible_tries: 1,
+        max_retries: 0
+    }
+    RuntimeAttr runtime_attr = select_first([runtime_attr_override, default_attr])
+    runtime {
+        cpu: select_first([runtime_attr.cpu_cores, default_attr.cpu_cores])
+        memory: select_first([runtime_attr.mem_gb, default_attr.mem_gb]) + " GiB"
+        disks: "local-disk " + select_first([runtime_attr.disk_gb, default_attr.disk_gb]) + " HDD"
+        bootDiskSizeGb: select_first([runtime_attr.boot_disk_gb, default_attr.boot_disk_gb])
+        docker: docker
+        preemptible: select_first([runtime_attr.preemptible_tries, default_attr.preemptible_tries])
+        maxRetries: select_first([runtime_attr.max_retries, default_attr.max_retries])
+    }
+}
+
 task MergeVcfs {
     input {
         Array[File] vcfs
@@ -2411,6 +2956,65 @@ task MergeVcfs {
     }
 }
 
+task NormalizeTRGTHaploidGenotypes {
+    input {
+        File vcf
+        File vcf_idx
+        String prefix
+        String docker
+        RuntimeAttr? runtime_attr_override
+    }
+
+    command <<<
+        set -euo pipefail
+
+        python3 <<'CODE'
+import pysam
+
+with pysam.VariantFile("~{vcf}") as vcf_in, pysam.VariantFile("~{prefix}.vcf.gz", "wz", header=vcf_in.header) as vcf_out:
+    for record in vcf_in:
+        for sample in record.samples.values():
+            genotype = sample.get("GT")
+            if genotype is None or len(genotype) != 2:
+                continue
+
+            first_allele, second_allele = genotype
+            if first_allele is None:
+                sample["GT"] = (second_allele,)
+            elif second_allele is None:
+                sample["GT"] = (first_allele,)
+
+        vcf_out.write(record)
+CODE
+
+        tabix -f -p vcf ~{prefix}.vcf.gz
+    >>>
+
+    output {
+        File normalized_vcf = "~{prefix}.vcf.gz"
+        File normalized_vcf_idx = "~{prefix}.vcf.gz.tbi"
+    }
+
+    RuntimeAttr default_attr = object {
+        cpu_cores: 1,
+        mem_gb: 4,
+        disk_gb: 3 * ceil(size([vcf, vcf_idx], "GB")) + 5,
+        boot_disk_gb: 10,
+        preemptible_tries: 1,
+        max_retries: 0
+    }
+    RuntimeAttr runtime_attr = select_first([runtime_attr_override, default_attr])
+    runtime {
+        cpu: select_first([runtime_attr.cpu_cores, default_attr.cpu_cores])
+        memory: select_first([runtime_attr.mem_gb, default_attr.mem_gb]) + " GiB"
+        disks: "local-disk " + select_first([runtime_attr.disk_gb, default_attr.disk_gb]) + " HDD"
+        bootDiskSizeGb: select_first([runtime_attr.boot_disk_gb, default_attr.boot_disk_gb])
+        docker: docker
+        preemptible: select_first([runtime_attr.preemptible_tries, default_attr.preemptible_tries])
+        maxRetries: select_first([runtime_attr.max_retries, default_attr.max_retries])
+    }
+}
+
 task NormalizeVcf {
     input {
         File vcf
@@ -2432,7 +3036,7 @@ task NormalizeVcf {
             ~{if defined(check_ref) then "-c " + check_ref else ""} \
             -Oz -o unsorted.vcf.gz \
             ~{vcf}
-        
+
         bcftools sort \
             --max-mem ~{select_first([runtime_attr.mem_gb, default_attr.mem_gb]) - 1}G \
             -T . \
@@ -2467,67 +3071,6 @@ task NormalizeVcf {
     }
 }
 
-task NormalizeTRGTHaploidGenotypes {
-  input {
-    File vcf
-    File vcf_idx
-    String prefix
-    String docker
-    RuntimeAttr? runtime_attr_override
-  }
-
-  command <<<
-    set -euo pipefail
-
-    python3 <<'CODE'
-import pysam
-
-with pysam.VariantFile("~{vcf}") as vcf_in, pysam.VariantFile("~{prefix}.vcf.gz", "wz", header=vcf_in.header) as vcf_out:
-    for record in vcf_in:
-        for sample in record.samples.values():
-            genotype = sample.get("GT")
-            if genotype is None or len(genotype) != 2:
-                continue
-
-            first_allele, second_allele = genotype
-            if first_allele is None:
-                sample["GT"] = (second_allele,)
-            elif second_allele is None:
-                sample["GT"] = (first_allele,)
-
-        vcf_out.write(record)
-CODE
-
-    tabix -f -p vcf ~{prefix}.vcf.gz
-  >>>
-
-  output {
-    File normalized_vcf = "~{prefix}.vcf.gz"
-    File normalized_vcf_idx = "~{prefix}.vcf.gz.tbi"
-  }
-
-  RuntimeAttr default_attr = object {
-    cpu_cores: 1,
-    mem_gb: 4,
-    disk_gb: 3 * ceil(size([vcf, vcf_idx], "GB")) + 5,
-    boot_disk_gb: 10,
-    preemptible_tries: 1,
-    max_retries: 0
-  }
-
-  RuntimeAttr runtime_attr = select_first([runtime_attr_override, default_attr])
-
-  runtime {
-    cpu: select_first([runtime_attr.cpu_cores, default_attr.cpu_cores])
-    memory: select_first([runtime_attr.mem_gb, default_attr.mem_gb]) + " GiB"
-    disks: "local-disk " + select_first([runtime_attr.disk_gb, default_attr.disk_gb]) + " HDD"
-    bootDiskSizeGb: select_first([runtime_attr.boot_disk_gb, default_attr.boot_disk_gb])
-    docker: docker
-    preemptible: select_first([runtime_attr.preemptible_tries, default_attr.preemptible_tries])
-    maxRetries: select_first([runtime_attr.max_retries, default_attr.max_retries])
-  }
-}
-
 task RenameVariantIds {
     input {
         File vcf
@@ -2541,12 +3084,12 @@ task RenameVariantIds {
 
     command <<<
         set -euo pipefail
-        
+
         bcftools annotate \
             --set-id '~{id_format}' \
             -Oz -o temp_renamed.vcf.gz \
             ~{vcf}
-        
+
         if [ "~{strip_chr}" == "true" ]; then
             bcftools view -h temp_renamed.vcf.gz > header.txt
             bcftools view -H temp_renamed.vcf.gz \
@@ -2557,7 +3100,7 @@ task RenameVariantIds {
         else
             mv temp_renamed.vcf.gz ~{prefix}.vcf.gz
         fi
-        
+
         tabix -p vcf ~{prefix}.vcf.gz
     >>>
 
@@ -2602,7 +3145,7 @@ task ResetVcfFilters {
             -x FILTER \
             -Oz -o ~{prefix}.vcf.gz \
             ~{vcf}
-        
+
         tabix -p vcf ~{prefix}.vcf.gz
     >>>
 
@@ -2615,6 +3158,64 @@ task ResetVcfFilters {
         cpu_cores: 1,
         mem_gb: 4,
         disk_gb: 2 * ceil(size(vcf, "GB")) + 5,
+        boot_disk_gb: 10,
+        preemptible_tries: 1,
+        max_retries: 0
+    }
+    RuntimeAttr runtime_attr = select_first([runtime_attr_override, default_attr])
+    runtime {
+        cpu: select_first([runtime_attr.cpu_cores, default_attr.cpu_cores])
+        memory: select_first([runtime_attr.mem_gb, default_attr.mem_gb]) + " GiB"
+        disks: "local-disk " + select_first([runtime_attr.disk_gb, default_attr.disk_gb]) + " HDD"
+        bootDiskSizeGb: select_first([runtime_attr.boot_disk_gb, default_attr.boot_disk_gb])
+        docker: docker
+        preemptible: select_first([runtime_attr.preemptible_tries, default_attr.preemptible_tries])
+        maxRetries: select_first([runtime_attr.max_retries, default_attr.max_retries])
+    }
+}
+
+task RestoreOriginalAlleles {
+    input {
+        File tsv
+        File coords_tsv
+        String prefix
+        String docker
+        RuntimeAttr? runtime_attr_override
+    }
+
+    command <<<
+        set -euo pipefail
+
+        python3 <<CODE
+orig = {}
+with open('~{coords_tsv}', 'r') as f:
+    for line in f:
+        fields = line.rstrip('\n').split('\t')
+        vid = fields[4]
+        if vid != '.':
+            orig[vid] = fields
+
+with open('~{tsv}', 'r') as f, open('~{prefix}.tsv', 'w') as out:
+    for line in f:
+        fields = line.rstrip('\n').split('\t')
+        vid = fields[4]
+        if vid in orig:
+            fields[0] = orig[vid][0]
+            fields[1] = orig[vid][1]
+            fields[2] = orig[vid][2]
+            fields[3] = orig[vid][3]
+        out.write('\t'.join(fields) + '\n')
+CODE
+    >>>
+
+    output {
+        File restored_tsv = "~{prefix}.tsv"
+    }
+
+    RuntimeAttr default_attr = object {
+        cpu_cores: 1,
+        mem_gb: 4,
+        disk_gb: 2 * ceil(size(tsv, "GB") + size(coords_tsv, "GB")) + 5,
         boot_disk_gb: 10,
         preemptible_tries: 1,
         max_retries: 0
@@ -2733,10 +3334,13 @@ CODE
     }
 }
 
-task RestoreOriginalAlleles {
+task RunPALMERShard {
     input {
-        File tsv
-        File coords_tsv
+        File bam
+        File bai
+        String mode
+        String mei_type
+        File ref_fa
         String prefix
         String docker
         RuntimeAttr? runtime_attr_override
@@ -2745,36 +3349,39 @@ task RestoreOriginalAlleles {
     command <<<
         set -euo pipefail
 
-        python3 <<CODE
-orig = {}
-with open('~{coords_tsv}', 'r') as f:
-    for line in f:
-        fields = line.rstrip('\n').split('\t')
-        vid = fields[4]
-        if vid != '.':
-            orig[vid] = fields
+        dir=$(pwd)
 
-with open('~{tsv}', 'r') as f, open('~{prefix}.tsv', 'w') as out:
-    for line in f:
-        fields = line.rstrip('\n').split('\t')
-        vid = fields[4]
-        if vid in orig:
-            fields[0] = orig[vid][0]
-            fields[1] = orig[vid][1]
-            fields[2] = orig[vid][2]
-            fields[3] = orig[vid][3]
-        out.write('\t'.join(fields) + '\n')
-CODE
+        mv ~{bam} ./
+        mv ~{bai} ./
+        bam_base=$(basename ~{bam})
+        chrom=$(echo $bam_base | sed 's/\.bam$//' | rev | cut -f1 -d '_' | rev)
+
+        mkdir -p "${chrom}"
+        /PALMER/PALMER \
+            --input ${bam_base} \
+            --ref_fa ~{ref_fa} \
+            --ref_ver GRCh38 \
+            --type ~{mei_type} \
+            --mode ~{mode} \
+            --output "~{prefix}" \
+            --chr $chrom \
+            --workdir "${dir}/${chrom}/"
+
+        sed -i "s/$/\t~{mei_type}/" ${chrom}/~{prefix}_calls.txt
+        sed -i "s/$/\t~{mei_type}/" ${chrom}/~{prefix}_TSD_reads.txt
+        mv ${chrom}/~{prefix}_calls.txt ~{prefix}_calls_shard.txt
+        mv ${chrom}/~{prefix}_TSD_reads.txt ~{prefix}_tsd_reads_shard.txt
     >>>
 
     output {
-        File restored_tsv = "~{prefix}.tsv"
+        File calls_shard = "~{prefix}_calls_shard.txt"
+        File tsd_reads_shard = "~{prefix}_tsd_reads_shard.txt"
     }
 
     RuntimeAttr default_attr = object {
         cpu_cores: 1,
         mem_gb: 4,
-        disk_gb: 2 * ceil(size(tsv, "GB") + size(coords_tsv, "GB")) + 5,
+        disk_gb: 4,
         boot_disk_gb: 10,
         preemptible_tries: 1,
         max_retries: 0
@@ -2806,7 +3413,7 @@ task SetMissingFiltersToPass {
         bcftools view ~{vcf} \
             | awk 'BEGIN{OFS="\t"} /^#/ {print; next} $7=="." {$7="PASS"} {print}' \
             | bgzip -c > ~{prefix}.vcf.gz
-        
+
         tabix -p vcf ~{prefix}.vcf.gz
     >>>
 
@@ -2819,6 +3426,117 @@ task SetMissingFiltersToPass {
         cpu_cores: 1,
         mem_gb: 4,
         disk_gb: 2 * ceil(size(vcf, "GB")) + 5,
+        boot_disk_gb: 10,
+        preemptible_tries: 1,
+        max_retries: 0
+    }
+    RuntimeAttr runtime_attr = select_first([runtime_attr_override, default_attr])
+    runtime {
+        cpu: select_first([runtime_attr.cpu_cores, default_attr.cpu_cores])
+        memory: select_first([runtime_attr.mem_gb, default_attr.mem_gb]) + " GiB"
+        disks: "local-disk " + select_first([runtime_attr.disk_gb, default_attr.disk_gb]) + " HDD"
+        bootDiskSizeGb: select_first([runtime_attr.boot_disk_gb, default_attr.boot_disk_gb])
+        docker: docker
+        preemptible: select_first([runtime_attr.preemptible_tries, default_attr.preemptible_tries])
+        maxRetries: select_first([runtime_attr.max_retries, default_attr.max_retries])
+    }
+}
+
+task ShardVcfByRecords {
+    input {
+        File vcf
+        File vcf_idx
+        Int records_per_shard
+        Boolean use_ssd = false
+        String prefix
+        String docker
+        RuntimeAttr? runtime_attr_override
+    }
+
+    command <<<
+        set -euo pipefail
+
+        mkdir scatter_output
+
+        bcftools +scatter \
+            --threads ~{select_first([runtime_attr.cpu_cores, default_attr.cpu_cores])} \
+            -n ~{records_per_shard} \
+            --prefix ~{prefix}. \
+            -Oz -o scatter_output \
+            ~{vcf}
+
+        mkdir shards
+
+        find scatter_output -maxdepth 1 -name "*.vcf.gz" | sort -k1,1V > vcfs.list
+
+        i=0
+        while read VCF; do
+            if [[ -z "$VCF" ]]; then continue; fi
+            shard_no=$(printf %06d $i)
+            mv "$VCF" "shards/shard_${shard_no}.vcf.gz"
+            tabix -p vcf "shards/shard_${shard_no}.vcf.gz"
+            i=$((i+1))
+        done < vcfs.list
+    >>>
+
+    output {
+        Array[File] shards = glob("shards/shard_*.vcf.gz")
+        Array[File] shard_idxs = glob("shards/shard_*.vcf.gz.tbi")
+    }
+
+    RuntimeAttr default_attr = object {
+        cpu_cores: 1,
+        mem_gb: 4,
+        disk_gb: 5 * ceil(size(vcf, "GB")) + 25,
+        boot_disk_gb: 10,
+        preemptible_tries: 1,
+        max_retries: 0
+    }
+    RuntimeAttr runtime_attr = select_first([runtime_attr_override, default_attr])
+    runtime {
+        cpu: select_first([runtime_attr.cpu_cores, default_attr.cpu_cores])
+        memory: select_first([runtime_attr.mem_gb, default_attr.mem_gb]) + " GiB"
+        disks: "local-disk " + select_first([runtime_attr.disk_gb, default_attr.disk_gb]) + if use_ssd then " SSD" else " HDD"
+        bootDiskSizeGb: select_first([runtime_attr.boot_disk_gb, default_attr.boot_disk_gb])
+        docker: docker
+        preemptible: select_first([runtime_attr.preemptible_tries, default_attr.preemptible_tries])
+        maxRetries: select_first([runtime_attr.max_retries, default_attr.max_retries])
+    }
+}
+
+task SortReadCounts {
+    input {
+        File read_counts
+        String prefix
+        String docker
+        RuntimeAttr? runtime_attr_override
+    }
+
+    command <<<
+        set -euo pipefail
+
+        export LC_ALL=C
+
+        zcat ~{read_counts} > counts.tsv
+        grep "^@" counts.tsv > ~{prefix}.tsv
+        grep -v -m 1 "^@" counts.tsv >> ~{prefix}.tsv
+        grep "^@SQ" counts.tsv | sed -E 's/^@SQ\tSN:([^\t]+).*/\1/' > contig_order.txt
+        grep -v "^@" counts.tsv | tail -n +2 \
+            | awk -F'\t' 'NR==FNR{rank[$1]=NR; next} {print rank[$1]"\t"$0}' contig_order.txt - \
+            | sort -s -k1,1n \
+            | cut -f2- >> ~{prefix}.tsv
+
+        bgzip ~{prefix}.tsv
+    >>>
+
+    output {
+        File sorted_read_counts = "~{prefix}.tsv.gz"
+    }
+
+    RuntimeAttr default_attr = object {
+        cpu_cores: 1,
+        mem_gb: 4,
+        disk_gb: 3 * ceil(size(read_counts, "GB")) + 10,
         boot_disk_gb: 10,
         preemptible_tries: 1,
         max_retries: 0
@@ -2950,8 +3668,53 @@ task StripGenotypes {
             -G \
             -Oz -o ~{prefix}.vcf.gz \
             ~{vcf}
-        
+
         tabix -p vcf -f ~{prefix}.vcf.gz
+    >>>
+
+    output {
+        File stripped_vcf = "~{prefix}.vcf.gz"
+        File stripped_vcf_idx = "~{prefix}.vcf.gz.tbi"
+    }
+
+    RuntimeAttr default_attr = object {
+        cpu_cores: 1,
+        mem_gb: 4,
+        disk_gb: 2 * ceil(size(vcf, "GB")) + 5,
+        boot_disk_gb: 10,
+        preemptible_tries: 1,
+        max_retries: 0
+    }
+    RuntimeAttr runtime_attr = select_first([runtime_attr_override, default_attr])
+    runtime {
+        cpu: select_first([runtime_attr.cpu_cores, default_attr.cpu_cores])
+        memory: select_first([runtime_attr.mem_gb, default_attr.mem_gb]) + " GiB"
+        disks: "local-disk " + select_first([runtime_attr.disk_gb, default_attr.disk_gb]) + " HDD"
+        bootDiskSizeGb: select_first([runtime_attr.boot_disk_gb, default_attr.boot_disk_gb])
+        docker: docker
+        preemptible: select_first([runtime_attr.preemptible_tries, default_attr.preemptible_tries])
+        maxRetries: select_first([runtime_attr.max_retries, default_attr.max_retries])
+    }
+}
+
+task StripInfoFields {
+    input {
+        File vcf
+        File vcf_idx
+        Array[String] info_fields
+        String prefix
+        String docker
+        RuntimeAttr? runtime_attr_override
+    }
+
+    command <<<
+        set -euo pipefail
+
+        bcftools annotate \
+            -x INFO/~{sep=",INFO/" info_fields} \
+            -Oz -o ~{prefix}.vcf.gz \
+            ~{vcf}
+        tabix -p vcf ~{prefix}.vcf.gz
     >>>
 
     output {
@@ -3104,6 +3867,49 @@ task SubsetBamToRegions {
     }
 }
 
+task SubsetBedToContig {
+    input {
+        File bed
+        String contig
+        String prefix
+        String docker
+        RuntimeAttr? runtime_attr_override
+    }
+
+    command <<<
+        set -euo pipefail
+
+        if gzip -t "~{bed}" 2>/dev/null; then
+            gzip -cd "~{bed}" | awk -v contig="~{contig}" '$1 == contig' > "~{prefix}.bed"
+        else
+            awk -v contig="~{contig}" '$1 == contig' "~{bed}" > "~{prefix}.bed"
+        fi
+    >>>
+
+    output {
+        File subset_bed = "~{prefix}.bed"
+    }
+
+    RuntimeAttr default_attr = object {
+        cpu_cores: 1,
+        mem_gb: 2,
+        disk_gb: 2 * ceil(size(bed, "GB")) + 5,
+        boot_disk_gb: 10,
+        preemptible_tries: 1,
+        max_retries: 0
+    }
+    RuntimeAttr runtime_attr = select_first([runtime_attr_override, default_attr])
+    runtime {
+        cpu: select_first([runtime_attr.cpu_cores, default_attr.cpu_cores])
+        memory: select_first([runtime_attr.mem_gb, default_attr.mem_gb]) + " GiB"
+        disks: "local-disk " + select_first([runtime_attr.disk_gb, default_attr.disk_gb]) + " HDD"
+        bootDiskSizeGb: select_first([runtime_attr.boot_disk_gb, default_attr.boot_disk_gb])
+        docker: docker
+        preemptible: select_first([runtime_attr.preemptible_tries, default_attr.preemptible_tries])
+        maxRetries: select_first([runtime_attr.max_retries, default_attr.max_retries])
+    }
+}
+
 task SubsetTsvToContig {
     input {
         File tsv
@@ -3225,7 +4031,7 @@ task SubsetVcfByLength {
             --include "~{size_filter}" \
             ~{if defined(extra_args) then extra_args else ""} \
             -Oz -o ~{prefix}.vcf.gz
-                
+
         tabix -p vcf "~{prefix}.vcf.gz"
     >>>
 
@@ -3307,48 +4113,6 @@ task SubsetVcfToContig {
     }
 }
 
-task TransferAWSToGCS {
-    input {
-        String aws_path
-        String output_gcs_path
-        String docker
-        RuntimeAttr? runtime_attr_override
-    }
-
-    command <<<
-        set -euo pipefail
-
-        filename=$(basename "~{aws_path}")
-
-        aws s3 cp --no-sign-request "~{aws_path}" "$filename"
-
-        gsutil cp "$filename" "~{output_gcs_path}"
-    >>>
-
-    output {
-        String gcs_path = output_gcs_path
-    }
-
-    RuntimeAttr default_attr = object {
-        cpu_cores: 2,
-        mem_gb: 4,
-        disk_gb: 600,
-        boot_disk_gb: 10,
-        preemptible_tries: 1,
-        max_retries: 0
-    }
-    RuntimeAttr runtime_attr = select_first([runtime_attr_override, default_attr])
-    runtime {
-        cpu: select_first([runtime_attr.cpu_cores, default_attr.cpu_cores])
-        memory: select_first([runtime_attr.mem_gb, default_attr.mem_gb]) + " GiB"
-        disks: "local-disk " + select_first([runtime_attr.disk_gb, default_attr.disk_gb]) + " HDD"
-        bootDiskSizeGb: select_first([runtime_attr.boot_disk_gb, default_attr.boot_disk_gb])
-        docker: docker
-        preemptible: select_first([runtime_attr.preemptible_tries, default_attr.preemptible_tries])
-        maxRetries: select_first([runtime_attr.max_retries, default_attr.max_retries])
-    }
-}
-
 task SubsetVcfToRegion {
     input {
         File vcf
@@ -3368,6 +4132,7 @@ task SubsetVcfToRegion {
         fi
 
         bcftools view \
+            -r ~{region} \
             -t ~{region} \
             --threads $(nproc) \
             ~{vcf} \
@@ -3406,6 +4171,8 @@ task SubsetVcfToRegionStreaming {
         File vcf
         File vcf_idx
         String region
+        String? include_args
+        Boolean drop_genotypes = false
         Boolean use_ssd = false
         String prefix
         String docker
@@ -3423,8 +4190,13 @@ task SubsetVcfToRegionStreaming {
         for attempt in 1 2 3; do
             export GCS_OAUTH_TOKEN=$(gcloud auth application-default print-access-token)
 
+            # Pair -r with -t so records are selected by POS alone while still seeking via the index; -r on its own also
+            # returns records whose REF span reaches into the region, which would duplicate them across adjacent shards
             if bcftools view \
                     -r ~{region} \
+                    -t ~{region} \
+                    ~{if defined(include_args) then "-i '~{include_args}'" else ""} \
+                    ~{if drop_genotypes then "-G" else ""} \
                     --threads $(nproc) \
                     ~{vcf} \
                     -Oz -o ~{prefix}.vcf.gz; then
@@ -3448,9 +4220,9 @@ task SubsetVcfToRegionStreaming {
     }
 
     RuntimeAttr default_attr = object {
-        cpu_cores: 1,
+        cpu_cores: 2,
         mem_gb: 6,
-        disk_gb: 15,
+        disk_gb: ceil(size(vcf, "GB") / 5) + 20,
         boot_disk_gb: 10,
         preemptible_tries: 1,
         max_retries: 0
@@ -3459,7 +4231,7 @@ task SubsetVcfToRegionStreaming {
     runtime {
         cpu: select_first([runtime_attr.cpu_cores, default_attr.cpu_cores])
         memory: select_first([runtime_attr.mem_gb, default_attr.mem_gb]) + " GiB"
-        disks: "local-disk " + select_first([runtime_attr.disk_gb, default_attr.disk_gb]) + " HDD"
+        disks: "local-disk " + select_first([runtime_attr.disk_gb, default_attr.disk_gb]) + if use_ssd then " SSD" else " HDD"
         bootDiskSizeGb: select_first([runtime_attr.boot_disk_gb, default_attr.boot_disk_gb])
         docker: docker
         preemptible: select_first([runtime_attr.preemptible_tries, default_attr.preemptible_tries])
@@ -3495,7 +4267,7 @@ EOF
             ~{if filter_to_sample then "--min-ac 1" else ""} \
             ~{if defined(extra_args) then extra_args else ""} \
             -Oz -o ~{prefix}.vcf.gz
-        
+
         tabix -p vcf ~{prefix}.vcf.gz
     >>>
 
@@ -3546,7 +4318,7 @@ task SwapSampleIds {
             --samples new_samples.txt \
             ~{vcf} \
         > ~{prefix}.vcf.gz
-        
+
         tabix -p vcf ~{prefix}.vcf.gz
     >>>
 
@@ -3575,13 +4347,10 @@ task SwapSampleIds {
     }
 }
 
-task ShardVcfByRecords {
+task TransferAWSToGCS {
     input {
-        File vcf
-        File vcf_idx
-        Int records_per_shard
-        Boolean use_ssd = false
-        String prefix
+        String aws_path
+        String output_gcs_path
         String docker
         RuntimeAttr? runtime_attr_override
     }
@@ -3589,83 +4358,21 @@ task ShardVcfByRecords {
     command <<<
         set -euo pipefail
 
-        mkdir scatter_output
+        filename=$(basename "~{aws_path}")
 
-        bcftools +scatter \
-            --threads ~{select_first([runtime_attr.cpu_cores, default_attr.cpu_cores])} \
-            -n ~{records_per_shard} \
-            --prefix ~{prefix}. \
-            -Oz -o scatter_output \
-            ~{vcf}
+        aws s3 cp --no-sign-request "~{aws_path}" "$filename"
 
-        mkdir shards
-        
-        find scatter_output -maxdepth 1 -name "*.vcf.gz" | sort -k1,1V > vcfs.list
-        
-        i=0
-        while read VCF; do
-            if [[ -z "$VCF" ]]; then continue; fi
-            shard_no=$(printf %06d $i)
-            mv "$VCF" "shards/shard_${shard_no}.vcf.gz"
-            tabix -p vcf "shards/shard_${shard_no}.vcf.gz"
-            i=$((i+1))
-        done < vcfs.list
+        gsutil cp "$filename" "~{output_gcs_path}"
     >>>
 
     output {
-        Array[File] shards = glob("shards/shard_*.vcf.gz")
-        Array[File] shard_idxs = glob("shards/shard_*.vcf.gz.tbi")
+        String gcs_path = output_gcs_path
     }
 
     RuntimeAttr default_attr = object {
-        cpu_cores: 1,
+        cpu_cores: 2,
         mem_gb: 4,
-        disk_gb: 5 * ceil(size(vcf, "GB")) + 25,
-        boot_disk_gb: 10,
-        preemptible_tries: 1,
-        max_retries: 0
-    }
-    RuntimeAttr runtime_attr = select_first([runtime_attr_override, default_attr])
-    runtime {
-        cpu: select_first([runtime_attr.cpu_cores, default_attr.cpu_cores])
-        memory: select_first([runtime_attr.mem_gb, default_attr.mem_gb]) + " GiB"
-        disks: "local-disk " + select_first([runtime_attr.disk_gb, default_attr.disk_gb]) + if use_ssd then " SSD" else " HDD"
-        bootDiskSizeGb: select_first([runtime_attr.boot_disk_gb, default_attr.boot_disk_gb])
-        docker: docker
-        preemptible: select_first([runtime_attr.preemptible_tries, default_attr.preemptible_tries])
-        maxRetries: select_first([runtime_attr.max_retries, default_attr.max_retries])
-    }
-}
-
-task StripInfoFields {
-    input {
-        File vcf
-        File vcf_idx
-        Array[String] info_fields
-        String prefix
-        String docker
-        RuntimeAttr? runtime_attr_override
-    }
-
-    command <<<
-        set -euo pipefail
-
-        bcftools annotate \
-            -x INFO/~{sep=",INFO/" info_fields} \
-            -Oz -o ~{prefix}.vcf.gz \
-            ~{vcf}
-        tabix -p vcf ~{prefix}.vcf.gz
-    >>>
-
-    output {
-        File stripped_vcf = "~{prefix}.vcf.gz"
-        File stripped_vcf_idx = "~{prefix}.vcf.gz.tbi"
-    }
-
-    RuntimeAttr default_attr = object {
-        cpu_cores: 1,
-        mem_gb: 4,
-        disk_gb: 2 * ceil(size(vcf, "GB")) + 5,
+        disk_gb: 600,
         boot_disk_gb: 10,
         preemptible_tries: 1,
         max_retries: 0
@@ -3679,586 +4386,5 @@ task StripInfoFields {
         docker: docker
         preemptible: select_first([runtime_attr.preemptible_tries, default_attr.preemptible_tries])
         maxRetries: select_first([runtime_attr.max_retries, default_attr.max_retries])
-    }
-}
-
-task FindTrios {
-    input {
-        File vcf
-        File vcf_idx
-        File ped
-        String prefix
-        String docker
-        RuntimeAttr? runtime_attr_override
-    }
-
-    command <<<
-        set -euo pipefail
-
-        python3 <<'PYCODE'
-import pysam
-
-vcf = pysam.VariantFile("~{vcf}")
-vcf_samples = set(vcf.header.samples)
-vcf.close()
-
-trios = []
-with open("~{ped}") as f:
-    for line in f:
-        if line.startswith("#"):
-            continue
-        fields = line.strip().split("\t")
-        sample, father, mother = fields[1], fields[2], fields[3]
-        if father != "0" and mother != "0":
-            if sample in vcf_samples and father in vcf_samples and mother in vcf_samples:
-                trios.append((sample, father, mother))
-
-with open("~{prefix}.trio_definitions.tsv", "w") as out:
-    for child, father, mother in trios:
-        out.write(f"{child}\t{father}\t{mother}\n")
-
-all_samples = set()
-for child, father, mother in trios:
-    all_samples.update([child, father, mother])
-
-with open("~{prefix}.trio_sample_ids.txt", "w") as out:
-    for sample in sorted(all_samples):
-        out.write(sample + "\n")
-PYCODE
-    >>>
-
-    output {
-        File trio_definitions = "~{prefix}.trio_definitions.tsv"
-        File trio_sample_ids_file = "~{prefix}.trio_sample_ids.txt"
-    }
-
-    RuntimeAttr default_attr = object {
-        cpu_cores: 1,
-        mem_gb: 4,
-        disk_gb: ceil(size([vcf, ped], "GB")) + 10,
-        boot_disk_gb: 10,
-        preemptible_tries: 1,
-        max_retries: 0
-    }
-    RuntimeAttr runtime_attr = select_first([runtime_attr_override, default_attr])
-    runtime {
-        cpu: select_first([runtime_attr.cpu_cores, default_attr.cpu_cores])
-        memory: select_first([runtime_attr.mem_gb, default_attr.mem_gb]) + " GiB"
-        disks: "local-disk " + select_first([runtime_attr.disk_gb, default_attr.disk_gb]) + " HDD"
-        bootDiskSizeGb: select_first([runtime_attr.boot_disk_gb, default_attr.boot_disk_gb])
-        docker: docker
-        preemptible: select_first([runtime_attr.preemptible_tries, default_attr.preemptible_tries])
-        maxRetries: select_first([runtime_attr.max_retries, default_attr.max_retries])
-    }
-}
-
-task ExactMatch {
-    input {
-        File vcf
-        File vcf_idx
-        File truth_snv_indel_vcf
-        File truth_snv_indel_vcf_idx
-        String source_tag
-        String prefix
-        String docker
-        RuntimeAttr? runtime_attr_override
-    }
-
-    command <<<
-        set -euo pipefail
-
-        bcftools isec \
-            -c none \
-            -n=2 \
-            -p isec_matched \
-            ~{vcf} \
-            ~{truth_snv_indel_vcf}
-
-        bgzip -c isec_matched/0001.vcf > ~{prefix}.matched_truth.vcf.gz
-        tabix -p vcf ~{prefix}.matched_truth.vcf.gz
-
-        bcftools query \
-            -f '%CHROM\t%POS\t%REF\t%ALT\t%ID\n' \
-            isec_matched/0000.vcf \
-            > eval_matched.tsv
-
-        bcftools query \
-            -f '%ID\t%FILTER\n' \
-            isec_matched/0001.vcf \
-            | awk -F'\t' 'BEGIN{OFS="\t"} {
-                n = split($2, parts, ";")
-                out = ""
-                for (i = 1; i <= n; i++) {
-                    if (parts[i] != "." && parts[i] != "PASS") {
-                        out = (out == "" ? parts[i] : out "," parts[i])
-                    }
-                }
-                if (out == "") out = "."
-                print $1, out
-            }' > truth_matched.tsv
-
-        paste eval_matched.tsv truth_matched.tsv \
-            | awk -v src="~{source_tag}" 'BEGIN{OFS="\t"} {print $1,$2,$3,$4,$5,"EXACT",$6,src,$7}' \
-            > ~{prefix}.tsv
-
-        bcftools isec \
-            -C \
-            -c none \
-            -p isec_unmatched \
-            ~{vcf} \
-            ~{truth_snv_indel_vcf}
-
-        bgzip -c isec_unmatched/0000.vcf > ~{prefix}.vcf.gz
-
-        tabix -p vcf ~{prefix}.vcf.gz
-    >>>
-
-    output {
-        File annotation_tsv = "~{prefix}.tsv"
-        File matched_truth_vcf = "~{prefix}.matched_truth.vcf.gz"
-        File matched_truth_vcf_idx = "~{prefix}.matched_truth.vcf.gz.tbi"
-        File unmatched_vcf = "~{prefix}.vcf.gz"
-        File unmatched_vcf_idx = "~{prefix}.vcf.gz.tbi"
-    }
-
-    RuntimeAttr default_attr = object {
-        cpu_cores: 1,
-        mem_gb: 4,
-        disk_gb: 5 * ceil(size(vcf, "GB") + size(truth_snv_indel_vcf, "GB")) + 5,
-        boot_disk_gb: 10,
-        preemptible_tries: 1,
-        max_retries: 0
-    }
-    RuntimeAttr runtime_attr = select_first([runtime_attr_override, default_attr])
-    runtime {
-        cpu: select_first([runtime_attr.cpu_cores, default_attr.cpu_cores])
-        memory: select_first([runtime_attr.mem_gb, default_attr.mem_gb]) + " GiB"
-        disks: "local-disk " + select_first([runtime_attr.disk_gb, default_attr.disk_gb]) + " HDD"
-        bootDiskSizeGb: select_first([runtime_attr.boot_disk_gb, default_attr.boot_disk_gb])
-        docker: docker
-        preemptible: select_first([runtime_attr.preemptible_tries, default_attr.preemptible_tries])
-        maxRetries: select_first([runtime_attr.max_retries, default_attr.max_retries])
-    }
-}
-
-task RunPALMERShard {
-    input {
-        File bam
-        File bai
-        String mode
-        String mei_type
-        File ref_fa
-        String prefix
-        String docker
-        RuntimeAttr? runtime_attr_override
-    }
-
-    command <<<
-        set -euo pipefail
-
-        dir=$(pwd)
-
-        mv ~{bam} ./
-        mv ~{bai} ./
-        bam_base=$(basename ~{bam})
-        chrom=$(echo $bam_base | sed 's/\.bam$//' | rev | cut -f1 -d '_' | rev)
-
-        mkdir -p "${chrom}"
-        /PALMER/PALMER \
-            --input ${bam_base} \
-            --ref_fa ~{ref_fa} \
-            --ref_ver GRCh38 \
-            --type ~{mei_type} \
-            --mode ~{mode} \
-            --output "~{prefix}" \
-            --chr $chrom \
-            --workdir "${dir}/${chrom}/"
-
-        sed -i "s/$/\t~{mei_type}/" ${chrom}/~{prefix}_calls.txt
-        sed -i "s/$/\t~{mei_type}/" ${chrom}/~{prefix}_TSD_reads.txt
-        mv ${chrom}/~{prefix}_calls.txt ~{prefix}_calls_shard.txt
-        mv ${chrom}/~{prefix}_TSD_reads.txt ~{prefix}_tsd_reads_shard.txt
-    >>>
-
-    output {
-        File calls_shard = "~{prefix}_calls_shard.txt"
-        File tsd_reads_shard = "~{prefix}_tsd_reads_shard.txt"
-    }
-
-    RuntimeAttr default_attr = object {
-        cpu_cores: 1,
-        mem_gb: 4,
-        disk_gb: 4,
-        boot_disk_gb: 10,
-        preemptible_tries: 1,
-        max_retries: 0
-    }
-    RuntimeAttr runtime_attr = select_first([runtime_attr_override, default_attr])
-    runtime {
-        cpu: select_first([runtime_attr.cpu_cores, default_attr.cpu_cores])
-        memory: select_first([runtime_attr.mem_gb, default_attr.mem_gb]) + " GiB"
-        disks: "local-disk " + select_first([runtime_attr.disk_gb, default_attr.disk_gb]) + " HDD"
-        bootDiskSizeGb: select_first([runtime_attr.boot_disk_gb, default_attr.boot_disk_gb])
-        docker: docker
-        preemptible: select_first([runtime_attr.preemptible_tries, default_attr.preemptible_tries])
-        maxRetries: select_first([runtime_attr.max_retries, default_attr.max_retries])
-    }
-}
-
-task MergePALMEROutputs {
-    input {
-        Array[File] calls_shards
-        Array[File] tsd_reads_shards
-        String mei_type
-        String prefix
-        String docker
-        RuntimeAttr? runtime_attr_override
-    }
-
-    command <<<
-        set -euo pipefail
-
-        head -n1 ~{calls_shards[0]} > ~{prefix}_~{mei_type}_calls.txt
-        for f in ~{sep=' ' calls_shards}; do
-            grep -v '^cluster_id' $f >> ~{prefix}_~{mei_type}_calls.txt || true
-        done
-
-        head -n1 ~{tsd_reads_shards[0]} > ~{prefix}_~{mei_type}_tsd_reads.txt
-        for f in ~{sep=' ' tsd_reads_shards}; do
-            grep -v '^cluster_id' $f >> ~{prefix}_~{mei_type}_tsd_reads.txt || true
-        done
-    >>>
-
-    output {
-        File calls = "~{prefix}_~{mei_type}_calls.txt"
-        File tsd_reads = "~{prefix}_~{mei_type}_tsd_reads.txt"
-    }
-
-    RuntimeAttr default_attr = object {
-        cpu_cores: 1,
-        mem_gb: 4,
-        disk_gb: 2 * ceil(size(calls_shards, "GB") + size(tsd_reads_shards, "GB")) + 10,
-        boot_disk_gb: 10,
-        preemptible_tries: 1,
-        max_retries: 0
-    }
-    RuntimeAttr runtime_attr = select_first([runtime_attr_override, default_attr])
-    runtime {
-        cpu: select_first([runtime_attr.cpu_cores, default_attr.cpu_cores])
-        memory: select_first([runtime_attr.mem_gb, default_attr.mem_gb]) + " GiB"
-        disks: "local-disk " + select_first([runtime_attr.disk_gb, default_attr.disk_gb]) + " HDD"
-        bootDiskSizeGb: select_first([runtime_attr.boot_disk_gb, default_attr.boot_disk_gb])
-        docker: docker
-        preemptible: select_first([runtime_attr.preemptible_tries, default_attr.preemptible_tries])
-        maxRetries: select_first([runtime_attr.max_retries, default_attr.max_retries])
-    }
-}
-
-task ConvertPALMERToVcf {
-    input {
-        File palmer_calls
-        File palmer_tsd_reads
-        String mei_type
-        String sample
-        File ref_fa
-        File ref_fai
-        String haplotype
-        String prefix
-        String docker
-        RuntimeAttr? runtime_attr_override
-    }
-
-    command <<<
-        set -euo pipefail
-
-        python /opt/scripts/mei/PALMER_to_vcf.py \
-            --palmer_calls ~{palmer_calls} \
-            --palmer_tsd_reads ~{palmer_tsd_reads} \
-            --mei_type ~{mei_type} \
-            --sample ~{sample} \
-            --ref_fa ~{ref_fa} \
-            --ref_fai ~{ref_fai} \
-            --haplotype "~{haplotype}" \
-        | bcftools sort \
-            --max-mem ~{select_first([runtime_attr.mem_gb, default_attr.mem_gb]) - 1}G \
-            -T . \
-            -Oz -o ~{prefix}.palmer_calls.vcf.gz
-
-        tabix -p vcf ~{prefix}.palmer_calls.vcf.gz
-    >>>
-
-    output {
-        File vcf = "~{prefix}.palmer_calls.vcf.gz"
-        File vcf_idx = "~{prefix}.palmer_calls.vcf.gz.tbi"
-    }
-
-    RuntimeAttr default_attr = object {
-        cpu_cores: 1,
-        mem_gb: 4,
-        disk_gb: 5 * ceil(size(palmer_calls, "GB") + size(palmer_tsd_reads, "GB") + size(ref_fa, "GB")) + 10,
-        boot_disk_gb: 10,
-        preemptible_tries: 1,
-        max_retries: 0
-    }
-    RuntimeAttr runtime_attr = select_first([runtime_attr_override, default_attr])
-    runtime {
-        cpu: select_first([runtime_attr.cpu_cores, default_attr.cpu_cores])
-        memory: select_first([runtime_attr.mem_gb, default_attr.mem_gb]) + " GiB"
-        disks: "local-disk " + select_first([runtime_attr.disk_gb, default_attr.disk_gb]) + " HDD"
-        bootDiskSizeGb: select_first([runtime_attr.boot_disk_gb, default_attr.boot_disk_gb])
-        docker: docker
-        preemptible: select_first([runtime_attr.preemptible_tries, default_attr.preemptible_tries])
-        maxRetries: select_first([runtime_attr.max_retries, default_attr.max_retries])
-    }
-}
-
-task AppendAnnotationsFromVcf {
-    input {
-        File annotation_tsv
-        File truth_vcf
-        File truth_vcf_idx
-        Boolean is_sv_truth
-        String prefix
-        String docker
-        RuntimeAttr? runtime_attr_override
-    }
-
-    command <<<
-        set -euo pipefail
-
-        python3 <<'EOF'
-import subprocess
-import re
-
-annotation_tsv = "~{annotation_tsv}"
-truth_vcf = "~{truth_vcf}"
-is_sv_truth = ~{true="True" false="False" is_sv_truth}
-prefix = "~{prefix}"
-
-def get_ac_af_an_fields(vcf_path):
-    cmd = f"bcftools view -h {vcf_path}"
-    proc = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, text=True)
-    fields = {'AC': {}, 'AF': {}, 'AN': {}}
-    for line in proc.stdout:
-        m = re.match(r'##INFO=<ID=([^,]+)', line)
-        if m:
-            fid = m.group(1)
-            norm_id = fid.upper().replace('_REMAINING', '_RMI')
-            for p in ['AC', 'AF', 'AN']:
-                if norm_id == p or norm_id.startswith(p + '_'):
-                    fields[p][norm_id] = fid
-    proc.wait()
-    return fields
-
-vcf_fields = get_ac_af_an_fields(truth_vcf)
-dyn_cols = sorted(vcf_fields['AC']) + sorted(vcf_fields['AF']) + sorted(vcf_fields['AN'])
-norm_to_orig = {**vcf_fields['AC'], **vcf_fields['AF'], **vcf_fields['AN']}
-
-if is_sv_truth:
-    extra_fields = ['N_HOMREF', 'N_HET', 'N_HOMALT']
-else:
-    extra_fields = ['nhomalt']
-
-query_field_pairs = [(c, norm_to_orig[c]) for c in dyn_cols] + [(f, f) for f in extra_fields]
-fmt = '%ID\\t' + '\\t'.join(f'%INFO/{orig}' for _, orig in query_field_pairs) + '\\n'
-cmd = f"bcftools query -f '{fmt}' {truth_vcf}"
-proc = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, text=True)
-truth_info = {}
-for line in proc.stdout:
-    parts = line.rstrip('\n').split('\t')
-    if len(parts) == len(query_field_pairs) + 1:
-        truth_info[parts[0]] = {query_field_pairs[i][0]: parts[i + 1] for i in range(len(query_field_pairs))}
-proc.wait()
-
-def to_num(val):
-    try:
-        return float(val) if val and val != '.' else 0
-    except Exception:
-        return 0
-
-def compute_genotype_counts(info):
-    if is_sv_truth:
-        return info.get('N_HOMREF', '.'), info.get('N_HET', '.'), info.get('N_HOMALT', '.')
-    homalt = to_num(info.get('nhomalt', '.'))
-    het = to_num(info.get('AC', '.')) - 2 * homalt
-    homref = to_num(info.get('AN', '.')) / 2 - homalt - het
-    return str(int(homref)), str(int(het)), info.get('nhomalt', '.')
-
-extra_cols = ['match_type', 'truth_ID', 'source_tag', 'filter'] + dyn_cols + ['N_HOMREF', 'N_HET', 'N_HOMALT']
-header_row = '\t'.join(['#CHROM', 'POS', 'REF', 'ALT', 'ID'] + extra_cols)
-
-with open(annotation_tsv) as fin, open(f"{prefix}.tsv", 'w') as fout:
-    fout.write(header_row + '\n')
-    for line in fin:
-        fields = line.rstrip('\n').split('\t')
-        truth_id = fields[6]
-        info = truth_info.get(truth_id, {})
-        dyn_vals = [info.get(f, '.') for f in dyn_cols]
-        homref, het, homalt = compute_genotype_counts(info)
-        fout.write('\t'.join(fields + dyn_vals + [homref, het, homalt]) + '\n')
-
-EOF
-    >>>
-
-    output {
-        File annotated_tsv = "~{prefix}.tsv"
-    }
-
-    RuntimeAttr default_attr = object {
-        cpu_cores: 1,
-        mem_gb: 25,
-        disk_gb: 2 * ceil(size(annotation_tsv, "GB") + size(truth_vcf, "GB")) + 10,
-        boot_disk_gb: 10,
-        preemptible_tries: 1,
-        max_retries: 0
-    }
-    RuntimeAttr runtime_attr = select_first([runtime_attr_override, default_attr])
-    runtime {
-        cpu: select_first([runtime_attr.cpu_cores, default_attr.cpu_cores])
-        memory: select_first([runtime_attr.mem_gb, default_attr.mem_gb]) + " GiB"
-        disks: "local-disk " + select_first([runtime_attr.disk_gb, default_attr.disk_gb]) + " HDD"
-        bootDiskSizeGb: select_first([runtime_attr.boot_disk_gb, default_attr.boot_disk_gb])
-        docker: docker
-        preemptible: select_first([runtime_attr.preemptible_tries, default_attr.preemptible_tries])
-        maxRetries: select_first([runtime_attr.max_retries, default_attr.max_retries])
-    }
-}
-
-task SortReadCounts {
-    input {
-        File read_counts
-        String prefix
-        String docker
-        RuntimeAttr? runtime_attr_override
-    }
-
-    command <<<
-        set -euo pipefail
-
-        export LC_ALL=C
-
-        zcat ~{read_counts} > counts.tsv
-        grep "^@" counts.tsv > ~{prefix}.tsv
-        grep -v -m 1 "^@" counts.tsv >> ~{prefix}.tsv
-        grep "^@SQ" counts.tsv | sed -E 's/^@SQ\tSN:([^\t]+).*/\1/' > contig_order.txt
-        grep -v "^@" counts.tsv | tail -n +2 \
-            | awk -F'\t' 'NR==FNR{rank[$1]=NR; next} {print rank[$1]"\t"$0}' contig_order.txt - \
-            | sort -s -k1,1n \
-            | cut -f2- >> ~{prefix}.tsv
-
-        bgzip ~{prefix}.tsv
-    >>>
-
-    output {
-        File sorted_read_counts = "~{prefix}.tsv.gz"
-    }
-
-    RuntimeAttr default_attr = object {
-        cpu_cores: 1,
-        mem_gb: 4,
-        disk_gb: 3 * ceil(size(read_counts, "GB")) + 10,
-        boot_disk_gb: 10,
-        preemptible_tries: 1,
-        max_retries: 0
-    }
-    RuntimeAttr runtime_attr = select_first([runtime_attr_override, default_attr])
-    runtime {
-        cpu: select_first([runtime_attr.cpu_cores, default_attr.cpu_cores])
-        memory: select_first([runtime_attr.mem_gb, default_attr.mem_gb]) + " GiB"
-        disks: "local-disk " + select_first([runtime_attr.disk_gb, default_attr.disk_gb]) + " HDD"
-        bootDiskSizeGb: select_first([runtime_attr.boot_disk_gb, default_attr.boot_disk_gb])
-        docker: docker
-        preemptible: select_first([runtime_attr.preemptible_tries, default_attr.preemptible_tries])
-        maxRetries: select_first([runtime_attr.max_retries, default_attr.max_retries])
-    }
-}
-
-task FilterDuplicateZeroDepthReferenceBlocks {
-    meta {
-        description: "Collapse duplicate zero-depth non-alt reference blocks while preserving gVCF coverage. Optionally process supplied ranges and create indexes."
-    }
-
-    input {
-        File gvcf
-        File gvcf_idx
-        String prefix
-        Array[String] ranges = []
-        Boolean remove_duplicates = true
-        Boolean create_indexes = false
-        Int default_max_retries = 0
-        String docker
-        RuntimeAttr? runtime_attr_override
-    }
-
-    Int disk_size = 1 + 2 * ceil(size(gvcf, "GB"))
-
-    command <<<
-        set -euo pipefail
-
-        test -s ~{gvcf_idx}
-        mkdir -p per_contig
-
-        filter_records() {
-            awk -F$'\t' '
-                BEGIN { removed_count = 0 }
-                function clear_group(    i) { for (i = 1; i <= row_count; i++) delete rows[i]; for (i in duplicate_count) delete duplicate_count[i]; for (i in removable) delete removable[i]; row_count = 0 }
-                function record_end(line,    fields, info_fields, field_count, info_count, i) { field_count = split(line, fields, "\t"); info_count = split(fields[8], info_fields, ";"); for (i = 1; i <= info_count; i++) if (info_fields[i] ~ /^END=[0-9]+$/) return substr(info_fields[i], 5) + 0; return fields[2] + length(fields[4]) - 1 }
-                function set_end(line, new_end,    fields, info_fields, field_count, info_count, i, output) { field_count = split(line, fields, "\t"); info_count = split(fields[8], info_fields, ";"); output = ""; for (i = 1; i <= info_count; i++) { if (info_fields[i] ~ /^END=[0-9]+$/) info_fields[i] = "END=" new_end; output = output (i == 1 ? "" : ";") info_fields[i] } fields[8] = output; output = fields[1]; for (i = 2; i <= field_count; i++) output = output "\t" fields[i]; return output }
-                function update_coverage(chrom, end) { if (!(chrom in covered_until) || end > covered_until[chrom]) covered_until[chrom] = end }
-                function emit_pending(next_chrom, next_pos,    line, end) { if (pending_line == "") return; line = pending_line; end = pending_end; if (pending_chrom == next_chrom && next_pos <= end) { end = next_pos - 1; line = set_end(line, end) } print line; update_coverage(pending_chrom, end); pending_line = "" }
-                function set_pending(line, chrom, end) { pending_line = line; pending_chrom = chrom; pending_end = end; removed_count-- }
-                function flush_group(    i, line, candidate_line, candidate_end, end, has_kept_row) {
-                    candidate_line = ""; candidate_end = -1; has_kept_row = 0
-                    for (i = 1; i <= row_count; i++) { line = rows[i]; if (removable[line] && duplicate_count[line] > 1) { if (!(line in seen_candidate)) { seen_candidate[line] = 1; end = record_end(line); if (end > candidate_end) { candidate_line = line; candidate_end = end } } removed_count++ } else has_kept_row = 1 }
-                    if (has_kept_row) { emit_pending(current_chrom, current_pos); for (i = 1; i <= row_count; i++) { line = rows[i]; if (!(removable[line] && duplicate_count[line] > 1)) { print line; update_coverage(current_chrom, record_end(line)) } } }
-                    else if (candidate_line != "") { if (pending_line != "") { if (pending_chrom != current_chrom || current_pos > pending_end) emit_pending("", 0); else if (candidate_end > pending_end) emit_pending(current_chrom, current_pos); else { for (i in seen_candidate) delete seen_candidate[i]; return } } if (!(current_chrom in covered_until) || current_pos > covered_until[current_chrom]) set_pending(candidate_line, current_chrom, candidate_end) }
-                    for (i in seen_candidate) delete seen_candidate[i]
-                }
-                function is_removable_record(    format_fields, sample_fields, field_count, sample_count, i, gt_index, min_dp_index, gt) { field_count = split($9, format_fields, ":"); gt_index = 0; min_dp_index = 0; for (i = 1; i <= field_count; i++) { if (format_fields[i] == "GT") gt_index = i; if (format_fields[i] == "MIN_DP") min_dp_index = i } if (gt_index == 0 || min_dp_index == 0 || NF < 10) return 0; sample_count = split($10, sample_fields, ":"); if (sample_count < gt_index || sample_count < min_dp_index) return 0; gt = sample_fields[gt_index]; return sample_fields[min_dp_index] == "0" && gt ~ /^(0|\.)([\/|](0|\.))*$/ }
-                /^#/ { print; next }
-                { coordinate = $1 SUBSEP $2; if (row_count > 0 && coordinate != current_coordinate) { flush_group(); clear_group() } current_coordinate = coordinate; current_chrom = $1; current_pos = $2 + 0; rows[++row_count] = $0; duplicate_count[$0]++; if (is_removable_record()) removable[$0] = 1 }
-                END { if (row_count > 0) flush_group(); emit_pending("", 0); print "Removed " removed_count " duplicate zero-depth non-alt gVCF records" > "/dev/stderr" }
-            '
-        }
-
-        write_records() {
-            local range="$1"
-            local outfile="$2"
-            if [[ "~{remove_duplicates}" == "true" ]]; then
-                if [[ -n "$range" ]]; then bcftools view ~{gvcf} "$range"; else bcftools view ~{gvcf}; fi | filter_records | bgzip > "$outfile"
-            else
-                if [[ -n "$range" ]]; then bcftools view ~{gvcf} "$range"; else bcftools view ~{gvcf}; fi | bgzip > "$outfile"
-            fi
-            if [[ "~{create_indexes}" == "true" ]]; then tabix -p vcf "$outfile"; fi
-        }
-
-        if [[ ~{length(ranges)} -eq 0 ]]; then
-            write_records "" "per_contig/~{prefix}.cleaned.g.vcf.gz"
-        else
-            index=0
-            for range in ~{sep=' ' ranges}; do
-                pindex=$(printf '%06d' "$index")
-                frange=$(echo "$range" | sed 's/[:-]/___/g')
-                write_records "$range" "per_contig/$pindex.~{basename(gvcf, ".g.vcf.gz")}.locus_$frange.g.vcf.gz"
-                index=$((index + 1))
-            done
-        fi
-    >>>
-
-    output {
-        Array[File] cleaned_gvcfs = glob("per_contig/*.g.vcf.gz")
-        Array[File] cleaned_gvcf_idxs = glob("per_contig/*.g.vcf.gz.tbi")
-    }
-
-    RuntimeAttr default_attr = object { cpu_cores: 1, mem_gb: 1, disk_gb: disk_size, boot_disk_gb: 25, preemptible_tries: 1, max_retries: default_max_retries }
-    RuntimeAttr runtime_attr = select_first([runtime_attr_override, default_attr])
-    runtime {
-        cpu: select_first([runtime_attr.cpu_cores, default_attr.cpu_cores])
-        memory: select_first([runtime_attr.mem_gb, default_attr.mem_gb]) + " GiB"
-        disks: "local-disk " + select_first([runtime_attr.disk_gb, default_attr.disk_gb]) + " SSD"
-        bootDiskSizeGb: select_first([runtime_attr.boot_disk_gb, default_attr.boot_disk_gb])
-        preemptible: select_first([runtime_attr.preemptible_tries, default_attr.preemptible_tries])
-        maxRetries: select_first([runtime_attr.max_retries, default_attr.max_retries])
-        docker: docker
     }
 }

@@ -22,7 +22,7 @@ workflow ExtractRandomCalls {
         Int? max_allele_length
         Array[String] include_samples = []
         Array[String] exclude_samples = []
-        
+
         String utils_docker
 
         RuntimeAttr? runtime_attr_sample

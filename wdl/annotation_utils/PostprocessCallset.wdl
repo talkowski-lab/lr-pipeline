@@ -11,7 +11,7 @@ workflow PostprocessCallset {
         String prefix
 
         Int? shard_bin_size
-        
+
         Boolean run_clean_vcf_header
         Boolean run_decrement_trv_ids
         Boolean run_drop_filters
@@ -30,7 +30,7 @@ workflow PostprocessCallset {
         File? transfer_vcf
         File? transfer_vcf_idx
         File? ped
-        
+
         String utils_docker
 
         RuntimeAttr? runtime_attr_subset_base

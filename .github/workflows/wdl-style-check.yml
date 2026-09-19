@@ -1,0 +1,30 @@
+name: WDL Style Check
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'wdl/**'
+      - '.github/scripts/check_wdl_style.py'
+  pull_request:
+    branches: [ main ]
+    paths:
+      - 'wdl/**'
+      - '.github/scripts/check_wdl_style.py'
+
+jobs:
+  wdl_style_check:
+    runs-on: ubuntu-latest
+    name: WDL Style Check
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up Python 3.8
+        uses: actions/setup-python@v3
+        with:
+          python-version: 3.8
+
+      - name: Check WDL style against docs/conventions.md
+        run: |
+          python .github/scripts/check_wdl_style.py

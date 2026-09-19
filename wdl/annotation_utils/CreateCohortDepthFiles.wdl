@@ -448,7 +448,7 @@ task MedianCov {
             > ~{prefix}_fixed.bed
 
         Rscript /opt/scripts/helper/medianCoverage.R ~{prefix}_fixed.bed -H ~{prefix}_medianCov.bed
-        
+
         Rscript -e "x <- read.table(\"~{prefix}_medianCov.bed\",check.names=FALSE); xtransposed <- t(x[,c(1,2)]); write.table(xtransposed,file=\"~{prefix}_medianCov.transposed.bed\",sep=\"\\t\",row.names=F,col.names=F,quote=F)"
     >>>
 

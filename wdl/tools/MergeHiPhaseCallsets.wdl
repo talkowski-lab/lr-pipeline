@@ -212,7 +212,6 @@ CODE
     }
 }
 
-
 task FixALHeader {
     input {
         File vcf

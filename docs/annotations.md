@@ -5,123 +5,123 @@ This document describes the INFO and FORMAT fields and FILTER values present in 
 ## INFO Fields
 - `allele_length`: Length of variant - positive for insertions, negative for deletions and 0 for SNVs.
 - `allele_type`: Classification type of variant, which is one of the below.
-	- `snv`: Single nucleotide variant.
-	- `del`: Deletion.
-	- `ins`: Insertion.
-	- `dup`: Tandem duplication, where the duplicated sequence is adjacent to its origin.
-	- `trv`: Tandem repeat.
+  - `snv`: Single nucleotide variant.
+  - `del`: Deletion.
+  - `ins`: Insertion.
+  - `dup`: Tandem duplication, where the duplicated sequence is adjacent to its origin.
+  - `trv`: Tandem repeat.
 - `allele_subtype`: Original classification for reclassified variants, which is one of the below.
-	- `tandem_dup`: Tandem duplication, kept as `allele_type = "dup"` if it meets the tandem criteria, otherwise demoted to `allele_type = "ins"`.
-	- `dup_interspersed`: Interspersed duplication.
-	- `complex_dup`: Complex duplication.
-	- `inv_dup`: Inverted duplication.
-	- `numt`: Nuclear-mitochondrial segment.
-	- `{ME_TYPE}_ins`: Mobile element insertion, where `{ME_TYPE}` is one of `alu`, `line` or `sva`.
-	- `{ME_TYPE}_del`: Mobile element deletion, where `{ME_TYPE}` is one of `alu`, `line` or `sva`.
+  - `tandem_dup`: Tandem duplication, kept as `allele_type = "dup"` if it meets the tandem criteria, otherwise demoted to `allele_type = "ins"`.
+  - `dup_interspersed`: Interspersed duplication.
+  - `complex_dup`: Complex duplication.
+  - `inv_dup`: Inverted duplication.
+  - `numt`: Nuclear-mitochondrial segment.
+  - `{ME_TYPE}_ins`: Mobile element insertion, where `{ME_TYPE}` is one of `alu`, `line` or `sva`.
+  - `{ME_TYPE}_del`: Mobile element deletion, where `{ME_TYPE}` is one of `alu`, `line` or `sva`.
 - Allele Frequencies: Per-variant allele frequencies and carrier counts across cohort populations.
-	- `AC`: Count of non-reference alleles.
-	- `AF`: Proportion of alleles that are non-reference.
-	- `AN`: Count of alleles genotyped.
-	- `AP_allele`: Allele purity per-allele (multiallelic sites only).
-	- `freq_het`: Heterozygous genotype frequency (biallelic sites only).
-	- `freq_homalt`: Homozygous alternate genotype frequency (biallelic sites only).
-	- `freq_homref`: Homozygous reference genotype frequency (biallelic sites only).
-	- `grpmax`: Population label with maximum allele frequency (biallelic sites only).
-	- `LPS_allele`: Longest polymer sequence per-allele (multiallelic sites only).
-	- `MC_allele`: Motif count per-allele (multiallelic sites only).
-	- `n_bi_genos`: Total number of samples with complete genotypes (biallelic sites only).
-	- `NCR`: Proportion of alleles that don't have a genotype call.
-	- `nhet`: Number of samples with heterozygous genotypes (biallelic sites only).
-	- `nhomalt`: Number of samples with homozygous alternate genotypes (biallelic sites only).
-	- `nhomref`: Number of samples with homozygous reference genotypes (biallelic sites only).
+  - `AC`: Count of non-reference alleles.
+  - `AF`: Proportion of alleles that are non-reference.
+  - `AN`: Count of alleles genotyped.
+  - `AP_allele`: Allele purity per-allele (multiallelic sites only).
+  - `freq_het`: Heterozygous genotype frequency (biallelic sites only).
+  - `freq_homalt`: Homozygous alternate genotype frequency (biallelic sites only).
+  - `freq_homref`: Homozygous reference genotype frequency (biallelic sites only).
+  - `grpmax`: Population label with maximum allele frequency (biallelic sites only).
+  - `LPS_allele`: Longest polymer sequence per-allele (multiallelic sites only).
+  - `MC_allele`: Motif count per-allele (multiallelic sites only).
+  - `n_bi_genos`: Total number of samples with complete genotypes (biallelic sites only).
+  - `NCR`: Proportion of alleles that don't have a genotype call.
+  - `nhet`: Number of samples with heterozygous genotypes (biallelic sites only).
+  - `nhomalt`: Number of samples with homozygous alternate genotypes (biallelic sites only).
+  - `nhomref`: Number of samples with homozygous reference genotypes (biallelic sites only).
 - `dbSNP_ID`: Variant ID from dbSNP for matched variants.
 - `dbVaR_ID`: Variant ID from dbVaR for matched variants.
 - Genotype Quality Metrics: Binned distributions of per-variant genotype quality and allele balance across carriers.
-	- `ab_hist_alt_bin_freq`: Histogram for AB in heterozygous individuals; bin edges are: 0.00|0.05|0.10|0.15|0.20|0.25|0.30|0.35|0.40|0.45|0.50|0.55|0.60|0.65|0.70|0.75|0.80|0.85|0.90|0.95|1.00.
-	- `age_hist_het_bin_freq`: Histogram for age of heterozygous individuals; bin edges are: 30.0|35.0|40.0|45.0|50.0|55.0|60.0|65.0|70.0|75.0|80.0.
-	- `age_hist_het_n_smaller`: Count of ages of heterozygous individuals falling below the lowest histogram bin edge.
-	- `age_hist_het_n_larger`: Count of ages of heterozygous individuals falling above the highest histogram bin edge.
-	- `age_hist_hom_bin_freq`: Histogram for age of homozygous individuals; bin edges are: 30.0|35.0|40.0|45.0|50.0|55.0|60.0|65.0|70.0|75.0|80.0.
-	- `age_hist_hom_n_smaller`: Count of ages of homozygous individuals falling below the lowest histogram bin edge.
-	- `age_hist_hom_n_larger`: Count of ages of homozygous individuals falling above the highest histogram bin edge.
-	- `dp_hist_all_bin_freq`: Histogram for DP; bin edges are: 0|5|10|15|20|25|30|35|40|45|50|55|60|65|70|75|80|85|90|95|100.
-	- `dp_hist_all_n_larger`: Count of DP values falling above the highest histogram bin edge.
-	- `dp_hist_alt_bin_freq`: Histogram for DP in heterozygous individuals; bin edges are: 0|5|10|15|20|25|30|35|40|45|50|55|60|65|70|75|80|85|90|95|100.
-	- `dp_hist_alt_n_larger`: Count of DP values falling above the highest histogram bin edge in heterozygous individuals.
-	- `gq_hist_all_bin_freq`: Histogram for GQ; bin edges are: 0|5|10|15|20|25|30|35|40|45|50|55|60|65|70|75|80|85|90|95|100.
-	- `gq_hist_alt_bin_freq`: Histogram for GQ in heterozygous individuals; bin edges are: 0|5|10|15|20|25|30|35|40|45|50|55|60|65|70|75|80|85|90|95|100.
-	- `sd_hist_all_bin_freq`: Histogram for SD; bin edges are: 0|5|10|15|20|25|30|35|40|45|50|55|60|65|70|75|80|85|90|95|100.
-	- `sd_hist_alt_bin_freq`: Histogram for SD in heterozygous individuals; bin edges are: 0|5|10|15|20|25|30|35|40|45|50|55|60|65|70|75|80|85|90|95|100.
+  - `ab_hist_alt_bin_freq`: Histogram for AB in heterozygous individuals; bin edges are: 0.00|0.05|0.10|0.15|0.20|0.25|0.30|0.35|0.40|0.45|0.50|0.55|0.60|0.65|0.70|0.75|0.80|0.85|0.90|0.95|1.00.
+  - `age_hist_het_bin_freq`: Histogram for age of heterozygous individuals; bin edges are: 30.0|35.0|40.0|45.0|50.0|55.0|60.0|65.0|70.0|75.0|80.0.
+  - `age_hist_het_n_smaller`: Count of ages of heterozygous individuals falling below the lowest histogram bin edge.
+  - `age_hist_het_n_larger`: Count of ages of heterozygous individuals falling above the highest histogram bin edge.
+  - `age_hist_hom_bin_freq`: Histogram for age of homozygous individuals; bin edges are: 30.0|35.0|40.0|45.0|50.0|55.0|60.0|65.0|70.0|75.0|80.0.
+  - `age_hist_hom_n_smaller`: Count of ages of homozygous individuals falling below the lowest histogram bin edge.
+  - `age_hist_hom_n_larger`: Count of ages of homozygous individuals falling above the highest histogram bin edge.
+  - `dp_hist_all_bin_freq`: Histogram for DP; bin edges are: 0|5|10|15|20|25|30|35|40|45|50|55|60|65|70|75|80|85|90|95|100.
+  - `dp_hist_all_n_larger`: Count of DP values falling above the highest histogram bin edge.
+  - `dp_hist_alt_bin_freq`: Histogram for DP in heterozygous individuals; bin edges are: 0|5|10|15|20|25|30|35|40|45|50|55|60|65|70|75|80|85|90|95|100.
+  - `dp_hist_alt_n_larger`: Count of DP values falling above the highest histogram bin edge in heterozygous individuals.
+  - `gq_hist_all_bin_freq`: Histogram for GQ; bin edges are: 0|5|10|15|20|25|30|35|40|45|50|55|60|65|70|75|80|85|90|95|100.
+  - `gq_hist_alt_bin_freq`: Histogram for GQ in heterozygous individuals; bin edges are: 0|5|10|15|20|25|30|35|40|45|50|55|60|65|70|75|80|85|90|95|100.
+  - `sd_hist_all_bin_freq`: Histogram for SD; bin edges are: 0|5|10|15|20|25|30|35|40|45|50|55|60|65|70|75|80|85|90|95|100.
+  - `sd_hist_alt_bin_freq`: Histogram for SD in heterozygous individuals; bin edges are: 0|5|10|15|20|25|30|35|40|45|50|55|60|65|70|75|80|85|90|95|100.
 - gnomAD Overlap: Identifiers and match metadata for variants with records in gnomAD V4.
-	- `gnomAD_STR`: gnomAD STR ID overlapping this tandem repeat variant.
-	- `gnomAD_V4_match_filter`: FILTER associated with matched gnomAD V4 variant.
-	- `gnomAD_V4_match_ID`: Variant ID of matched gnomAD V4 variant.
-	- `gnomAD_V4_match_source`: Source of matched gnomAD V4 variant, which is one of the below.
-		- `SNV_indel`: SNV & indel callset.
-		- `SV`: SV callset.
-	- `gnomAD_V4_match_type`: Method for generating match with gnomAD V4, which is one of the below.
-		- `BEDTOOLS_CLOSEST`: Bedtools closest match finetuned for SVs.
-		- `EXACT`: Exact match across CHROM, POS, REF and ALT.
-		- `TRUVARI_{X}`: Truvari match requiring X% sequence similarity.
+  - `gnomAD_STR`: gnomAD STR ID overlapping this tandem repeat variant.
+  - `gnomAD_V4_match_filter`: FILTER associated with matched gnomAD V4 variant.
+  - `gnomAD_V4_match_ID`: Variant ID of matched gnomAD V4 variant.
+  - `gnomAD_V4_match_source`: Source of matched gnomAD V4 variant, which is one of the below.
+    - `SNV_indel`: SNV & indel callset.
+    - `SV`: SV callset.
+  - `gnomAD_V4_match_type`: Method for generating match with gnomAD V4, which is one of the below.
+    - `BEDTOOLS_CLOSEST`: Bedtools closest match finetuned for SVs.
+    - `EXACT`: Exact match across CHROM, POS, REF and ALT.
+    - `TRUVARI_{X}`: Truvari match requiring X% sequence similarity.
 - `HOMOPOLYMER_TRV`: Flag indicating a tandem repeat call where the shortest motif has length 1.
 - Insilico Predictors: Pathogenicity and conservation scores for SNVs and indels from gnomAD V4.
-	- `cadd_phred`: CADD Phred-like scores ('scaled C-scores') ranging from 1 to 99, based on the rank of each variant relative to all possible 8.6 billion substitutions in the human reference genome. Larger values are more deleterious.
-	- `cadd_raw_score`: Raw CADD score, interpretable as the extent to which the annotation profile for a given variant suggests that the variant is likely to be 'observed' (negative values) vs 'simulated' (positive values). Larger values are more deleterious.
-	- `pangolin_largest`: Pangolin's largest delta score across 2 splicing consequences, reflecting the probability of the variant being splice-altering.
-	- `phylop`: Base-wise conservation score across the 241 placental mammals in the Zoonomia project. Score ranges from -20 to 9.28, where negative values reflect acceleration (faster evolution than expected under neutral drift) and positive values reflect conservation (slower than expected evolution).
-	- `revel_max`: Maximum REVEL score at a site's MANE Select or canonical transcript. An ensemble score for predicting the pathogenicity of missense variants based on 13 other variant predictors. Scores range from 0 to 1, with higher scores predicted to be more likely to be deleterious.
-	- `spliceai_ds_max`: Illumina's SpliceAI max delta score, interpreted as the probability of the variant being splice-altering.
+  - `cadd_phred`: CADD Phred-like scores ('scaled C-scores') ranging from 1 to 99, based on the rank of each variant relative to all possible 8.6 billion substitutions in the human reference genome. Larger values are more deleterious.
+  - `cadd_raw_score`: Raw CADD score, interpretable as the extent to which the annotation profile for a given variant suggests that the variant is likely to be 'observed' (negative values) vs 'simulated' (positive values). Larger values are more deleterious.
+  - `pangolin_largest`: Pangolin's largest delta score across 2 splicing consequences, reflecting the probability of the variant being splice-altering.
+  - `phylop`: Base-wise conservation score across the 241 placental mammals in the Zoonomia project. Score ranges from -20 to 9.28, where negative values reflect acceleration (faster evolution than expected under neutral drift) and positive values reflect conservation (slower than expected evolution).
+  - `revel_max`: Maximum REVEL score at a site's MANE Select or canonical transcript. An ensemble score for predicting the pathogenicity of missense variants based on 13 other variant predictors. Scores range from 0 to 1, with higher scores predicted to be more likely to be deleterious.
+  - `spliceai_ds_max`: Illumina's SpliceAI max delta score, interpreted as the probability of the variant being splice-altering.
 - `ORIGIN`: Origin of duplicated sequence for duplications and NUMTs.
 - `POSTHOC_BACKBONE_PHASED`: Flag on a replacement TRV for which one or more non-reference heterozygous genotypes were post-hoc phased by sequence agreement with base-VCF haplotypes.
 - SVAnnotate: Predicted functional effects for SVs on coding genes and noncoding regulatory elements, as annotated by GATK SVAnnotate.
-	- `PREDICTED_LOF`: Gene(s) predicted to undergo complete loss of function due to a deletion, truncation, or disruption of coding sequence.
-	- `PREDICTED_COPY_GAIN`: Gene(s) predicted to undergo copy gain from a duplication spanning the entire gene body.
-	- `PREDICTED_INTRAGENIC_EXON_DUP`: Gene(s) with an intragenic exonic duplication, where both breakpoints fall within the same gene's exons.
-	- `PREDICTED_PARTIAL_EXON_DUP`: Gene(s) with at least one breakpoint within an exon, resulting in a partial exon duplication.
-	- `PREDICTED_TSS_DUP`: Gene(s) whose transcription start site is duplicated (one breakpoint upstream, one downstream of the TSS).
-	- `PREDICTED_DUP_PARTIAL`: Gene(s) partially overlapped by a duplication with one breakpoint falling inside the gene's coding sequence.
-	- `PREDICTED_INV_SPAN`: Gene(s) completely spanned by an inversion (both breakpoints outside the gene).
-	- `PREDICTED_MSV_EXON_OVR`: Gene(s) with exons overlapping a multi-allelic SV.
-	- `PREDICTED_PROMOTER`: Gene(s) with a breakpoint in their promoter region.
-	- `PREDICTED_UTR`: Gene(s) with a breakpoint in their untranslated region.
-	- `PREDICTED_INTRONIC`: Gene(s) with a breakpoint in an intron.
-	- `PREDICTED_NONCODING_SPAN`: Noncoding regulatory element(s) completely spanned by the variant.
-	- `PREDICTED_NONCODING_BREAKPOINT`: Noncoding regulatory element(s) disrupted by a variant breakpoint.
-	- `PREDICTED_NEAREST_TSS`: Nearest transcription start site(s) for intergenic variants.
-	- `PREDICTED_INTERGENIC`: Flag indicating the variant is intergenic (no overlap with coding or noncoding elements).
+  - `PREDICTED_LOF`: Gene(s) predicted to undergo complete loss of function due to a deletion, truncation, or disruption of coding sequence.
+  - `PREDICTED_COPY_GAIN`: Gene(s) predicted to undergo copy gain from a duplication spanning the entire gene body.
+  - `PREDICTED_INTRAGENIC_EXON_DUP`: Gene(s) with an intragenic exonic duplication, where both breakpoints fall within the same gene's exons.
+  - `PREDICTED_PARTIAL_EXON_DUP`: Gene(s) with at least one breakpoint within an exon, resulting in a partial exon duplication.
+  - `PREDICTED_TSS_DUP`: Gene(s) whose transcription start site is duplicated (one breakpoint upstream, one downstream of the TSS).
+  - `PREDICTED_DUP_PARTIAL`: Gene(s) partially overlapped by a duplication with one breakpoint falling inside the gene's coding sequence.
+  - `PREDICTED_INV_SPAN`: Gene(s) completely spanned by an inversion (both breakpoints outside the gene).
+  - `PREDICTED_MSV_EXON_OVR`: Gene(s) with exons overlapping a multi-allelic SV.
+  - `PREDICTED_PROMOTER`: Gene(s) with a breakpoint in their promoter region.
+  - `PREDICTED_UTR`: Gene(s) with a breakpoint in their untranslated region.
+  - `PREDICTED_INTRONIC`: Gene(s) with a breakpoint in an intron.
+  - `PREDICTED_NONCODING_SPAN`: Noncoding regulatory element(s) completely spanned by the variant.
+  - `PREDICTED_NONCODING_BREAKPOINT`: Noncoding regulatory element(s) disrupted by a variant breakpoint.
+  - `PREDICTED_NEAREST_TSS`: Nearest transcription start site(s) for intergenic variants.
+  - `PREDICTED_INTERGENIC`: Flag indicating the variant is intergenic (no overlap with coding or noncoding elements).
 - `REGION`: Genomic region of variant, which is one of the below.
-	- `SR`: Simple Repeats.
-	- `SD`: Segmental Duplications.
-	- `RM`: Repeat Masked.
-	- `US`: Unique Sequence.
+  - `SR`: Simple Repeats.
+  - `SD`: Segmental Duplications.
+  - `RM`: Repeat Masked.
+  - `US`: Unique Sequence.
 - Site Quality Metrics: Computed site-level quality metrics derived from per-sample genotype data.
-	- `AS_pab_max`: Allele-specific maximum p-value over callset for binomial test of observed allele balance for a heterozygous genotype, given expectation of AB=0.5.
-	- `AS_QD`: Allele-specific variant call confidence normalized by depth of sample reads supporting a variant.
-	- `AS_QUALapprox`: Allele-specific sum of PL[0] values; used to approximate the QUAL score.
-	- `AS_VarDP`: Allele-specific depth over variant genotypes (does not include depth of reference samples).
-	- `HWE`: Hardy-Weinberg equilibrium p-value.
-	- `inbreeding_coeff`: Inbreeding coefficient, the excess heterozygosity at a variant site, computed as 1 - (the number of heterozygous genotypes)/(the number of heterozygous genotypes expected under Hardy-Weinberg equilibrium).
+  - `AS_pab_max`: Allele-specific maximum p-value over callset for binomial test of observed allele balance for a heterozygous genotype, given expectation of AB=0.5.
+  - `AS_QD`: Allele-specific variant call confidence normalized by depth of sample reads supporting a variant.
+  - `AS_QUALapprox`: Allele-specific sum of PL[0] values; used to approximate the QUAL score.
+  - `AS_VarDP`: Allele-specific depth over variant genotypes (does not include depth of reference samples).
+  - `HWE`: Hardy-Weinberg equilibrium p-value.
+  - `inbreeding_coeff`: Inbreeding coefficient, the excess heterozygosity at a variant site, computed as 1 - (the number of heterozygous genotypes)/(the number of heterozygous genotypes expected under Hardy-Weinberg equilibrium).
 - `SOURCE`: Source of call, which is one of the below.
-	- `DeepVariant`: SNV or indel call made by the DeepVariant pipeline.
-	- `HPRC_SV_Integration`: Structural variant call made by the HPRC SV Integration pipeline.
-	- `TRExplorer`: Tandem repeat loci from the TRExplorer v1.0.1 catalog.
-	- `Vamos`: Tandem repeat loci from the Vamos v2.1 catalog.
+  - `DeepVariant`: SNV or indel call made by the DeepVariant pipeline.
+  - `HPRC_SV_Integration`: Structural variant call made by the HPRC SV Integration pipeline.
+  - `TRExplorer`: Tandem repeat loci from the TRExplorer v1.0.1 catalog.
+  - `Vamos`: Tandem repeat loci from the Vamos v2.1 catalog.
 - `SUB_FAMILY`: Sub-family for MEI calls.
 - Tandem Repeats: Tandem repeat-specific annotations for TR calls, including motif composition and structural information.
-	- `MOTIFS`: Motifs that the tandem repeat is composed of.
-	- `STRUC`: Structure of the tandem repeat region.
-	- `TRID`: TR identifier for TR calls; source of enveloping variant with `allele_type = "trv"` for non-TR calls with the `TR_ENVELOPED` flag.
+  - `MOTIFS`: Motifs that the tandem repeat is composed of.
+  - `STRUC`: Structure of the tandem repeat region.
+  - `TRID`: TR identifier for TR calls; source of enveloping variant with `allele_type = "trv"` for non-TR calls with the `TR_ENVELOPED` flag.
 - `TR_ENVELOPED`: Flag indicating a variant with `allele_type != "trv"` is completely enveloped by a variant with `allele_type = "trv"`.
 - `TR_PARSED`: Flag indicating a variant with `allele_type != "trv"` is flagged as a tandem repeat by the `AnnotateIndelTRs` workflow.
 - `vep`: Annotations from the Variant Effect Predictor (VEP).
 - VRS: Standardized variant identifiers following the GA4GH Variant Representation Specification (VRS).
-	- `VRS_Allele_IDs`: Computed identifiers for the GA4GH VRS Alleles corresponding to the GT indexes of the REF and ALT alleles [VRS version=2.0.1;VRS-Python version=2.3.1].
-	- `VRS_Ends`: Interresidue coordinates used as the location ends for the GA4GH VRS Alleles corresponding to the GT indexes of the REF and ALT alleles.
-	- `VRS_Error`: Error message if an error occurred computing a VRS Identifier.
-	- `VRS_Lengths`: Length values from ReferenceLengthExpression states for the GA4GH VRS Alleles corresponding to the GT indexes of the REF and ALT alleles.
-	- `VRS_RepeatSubunitLengths`: Repeat subunit length values from ReferenceLengthExpression states for the GA4GH VRS Alleles corresponding to the GT indexes of the REF and ALT alleles.
-	- `VRS_Starts`: Interresidue coordinates used as the location starts for the GA4GH VRS Alleles corresponding to the GT indexes of the REF and ALT alleles.
-	- `VRS_States`: Literal sequence states used for the GA4GH VRS Alleles corresponding to the GT indexes of the REF and ALT alleles.
+  - `VRS_Allele_IDs`: Computed identifiers for the GA4GH VRS Alleles corresponding to the GT indexes of the REF and ALT alleles [VRS version=2.0.1;VRS-Python version=2.3.1].
+  - `VRS_Ends`: Interresidue coordinates used as the location ends for the GA4GH VRS Alleles corresponding to the GT indexes of the REF and ALT alleles.
+  - `VRS_Error`: Error message if an error occurred computing a VRS Identifier.
+  - `VRS_Lengths`: Length values from ReferenceLengthExpression states for the GA4GH VRS Alleles corresponding to the GT indexes of the REF and ALT alleles.
+  - `VRS_RepeatSubunitLengths`: Repeat subunit length values from ReferenceLengthExpression states for the GA4GH VRS Alleles corresponding to the GT indexes of the REF and ALT alleles.
+  - `VRS_Starts`: Interresidue coordinates used as the location starts for the GA4GH VRS Alleles corresponding to the GT indexes of the REF and ALT alleles.
+  - `VRS_States`: Literal sequence states used for the GA4GH VRS Alleles corresponding to the GT indexes of the REF and ALT alleles.
 
 
 ## FILTER Values

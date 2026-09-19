@@ -57,7 +57,7 @@ workflow AnnotateDbVaR {
             input:
                 vcf = SubsetVcfByArgs.subset_vcf,
                 vcf_idx = SubsetVcfByArgs.subset_vcf_idx,
-                move_all_dups = false,
+                move_dup_to_origin = true,
                 prefix = "~{prefix}.~{contig}.symbolic",
                 docker = utils_docker,
                 runtime_attr_override = runtime_attr_convert_symbolic
@@ -272,7 +272,7 @@ with open("~{prefix}.annotations.unsorted.tsv", 'w') as out:
         chrom = rec.chrom
         if chrom not in dbvar.header.contigs:
             continue
-        
+
         qs = rec.start
         qe = rec.stop
         ql = parse_query_len(rec)

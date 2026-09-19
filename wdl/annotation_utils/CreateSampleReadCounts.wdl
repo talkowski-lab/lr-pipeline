@@ -91,16 +91,16 @@ with gzip.open(bed_file, 'rt') as f:
         start = int(parts[1])
         end = int(parts[2])
         coverage = int(float(parts[3]))
-        
+
         start_bin = (start // bin_size) * bin_size
         end_bin = ((end - 1) // bin_size) * bin_size
-        
+
         for bin_start in range(start_bin, end_bin + 1, bin_size):
             bin_end = bin_start + bin_size
             overlap_start = max(start, bin_start)
             overlap_end = min(end, bin_end)
             overlap_length = overlap_end - overlap_start
-            
+
             if bin_start not in bins:
                 bins[bin_start] = []
             bins[bin_start].extend([coverage] * overlap_length)

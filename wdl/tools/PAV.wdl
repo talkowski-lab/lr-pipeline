@@ -65,6 +65,7 @@ task CallPAV {
     }
     RuntimeAttr runtime_attr = select_first([runtime_attr_override, default_attr])
     Int effective_cpu = select_first([runtime_attr.cpu_cores, default_attr.cpu_cores])
+
     command <<<
         set -euo pipefail
 
@@ -101,7 +102,7 @@ with open("assemblies.tsv", "w") as f:
         pat_link = f"asms/{sample_id}_pat.fa.gz"
         os.symlink(os.path.abspath(mat_files[i]), mat_link)
         os.symlink(os.path.abspath(pat_files[i]), pat_link)
-        
+
         mat_link_abs = os.path.abspath(mat_link)
         pat_link_abs = os.path.abspath(pat_link)
         f.write(f"{sample_id}\t{mat_link_abs}\t{pat_link_abs}\n")

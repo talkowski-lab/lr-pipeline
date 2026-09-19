@@ -18,9 +18,7 @@ workflow FillPhasedGenotypes {
 
         RuntimeAttr? runtime_attr_create_shards
         RuntimeAttr? runtime_attr_subset
-        RuntimeAttr? runtime_attr_split
         RuntimeAttr? runtime_attr_fill
-        RuntimeAttr? runtime_attr_annotate
         RuntimeAttr? runtime_attr_concat
     }
 
@@ -180,7 +178,7 @@ for record in phased_in:
         if alleles_key(cand) == rec_key:
             match = cand
             break
-    
+
     if match:
         for sample in record.samples:
             for fmt_key in record.samples[sample].keys():
@@ -196,7 +194,7 @@ for record in phased_in:
                             record.samples[sample][fmt_key] = match.samples[sample][fmt_key]
                         except Exception:
                             pass
-            
+
             for fmt_key in extra_fmt_keys:
                 if fmt_key in match.samples[sample]:
                     try:
@@ -207,7 +205,7 @@ for record in phased_in:
 
 out.close()
 CODE
-        
+
         tabix -p vcf ~{prefix}.vcf.gz
     >>>
 

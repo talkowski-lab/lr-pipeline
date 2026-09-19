@@ -1,5 +1,5 @@
 # Workflows
-This document describes each WDL workflow in the pipeline, including its purpose, inputs and outputs.
+This document describes each WDL workflow in the pipeline, including its purpose, inputs and outputs. Annotations, annotation utilities and tools are run directly and are registered in `.dockstore.yml`; the sub-workflows in the final section are imported building blocks that are never run on their own.
 
 
 ## Annotations
@@ -48,6 +48,10 @@ The workflow undergoes multiple rounds of variant matching in order to determine
 
 > **Note:** When converting to symbolic representation, only canonical DUPs (allele_type = `DUP` exactly) are treated as DUP; other DUP subtypes (e.g., `dup_interspersed`, `inv_dup`) are treated as insertions.
 
+> **Note:** Callset DUPs are compared twice, because the two matching rules need different coordinates. Against truth DUPs they are repositioned to their `ORIGIN` coordinates and compared by reciprocal overlap; against truth insertions they are held at their insertion site and compared by breakpoint proximity and length ratio.
+
+Both the exact-match and Truvari rounds can be sharded within a contig. Truvari shard boundaries are snapped forward to the next gap wider than `min_shard_gap_truvari_match`, which keeps results identical to an unsharded run because Truvari only groups records into a new comparison chunk once the next record clears the running end by more than its chunk size. Fixed-width bins alone would split colocated record pairs and silently lose matches.
+
 Inputs:
 - `File vcf`: Callset VCF being annotated.
 - `File vcf_idx`: Index for `vcf`.
@@ -60,10 +64,9 @@ Inputs:
 - `Int min_sv_length_truvari_truth_vcf`: Minimum length for a truth variant to enter the Truvari matching round.
 - `Int min_sv_length_bedtools_closest_vcf`: Minimum length for a callset variant to enter the `bedtools closest` matching round.
 - `Int min_sv_length_bedtools_closest_truth_vcf`: Minimum length for a truth variant to enter the `bedtools closest` matching round.
-- `Int? shard_bin_size_exact_match`: If set, shards the exact-match round into contig regions each containing roughly this many combined callset + truth records, run in parallel.
-- `Boolean do_exact`: Whether to run the exact matching round (default `true`).
-- `Boolean do_truvari`: Whether to run the Truvari matching round (default `true`).
-- `Boolean do_bedtools_closest`: Whether to run the `bedtools closest` matching round (default `true`).
+- `Int? shard_bin_size_exact_match`: If set, shards the exact-match round into contig regions of roughly this many base pairs, run in parallel.
+- `Int? shard_bin_size_truvari_match`: If set, shards the Truvari round into contig regions of at least this many base pairs, run in parallel. Each region is extended to the next safe gap, so a value of 1000000 or more is recommended.
+- `Int min_shard_gap_truvari_match`: Minimum gap between records that a Truvari shard boundary may fall in (default `10000`). Must stay above Truvari's `--chunksize`.
 - `String type_field_vcf`: INFO field in the callset VCF giving each variant's allele type (default `allele_type`).
 - `String length_field_vcf`: INFO field in the callset VCF giving each variant's allele length (default `allele_length`).
 - `String source_tag_truth_snv_indel_vcf`: Label used to tag matches against the SNV & indel truth VCF (default `SNV_indel`).
@@ -77,8 +80,8 @@ Inputs:
 - `Boolean? rename_id_strip_chr_vcf`: Whether to strip the `chr` prefix when renaming callset variant IDs.
 - `Boolean? rename_id_strip_chr_truth_snv_indel_vcf`: Whether to strip the `chr` prefix when renaming SNV & indel truth variant IDs.
 - `Boolean? rename_id_strip_chr_truth_sv_vcf`: Whether to strip the `chr` prefix when renaming SV truth variant IDs.
-- `File ref_fa`: From [references](references.md).
-- `File ref_fai`: From [references](references.md).
+- `File? ref_fa`: From [references](references.md). Only needed when either VCF represents alleles symbolically, since Truvari uses it solely to resolve those alleles to sequence.
+- `File? ref_fai`: From [references](references.md).
 
 Outputs:
 - `annotations_tsv_benchmark`: TSV mapping callset variants to their matched truth variants, match type, and the truth callset's AC/AF/AN and genotype-count fields.
@@ -182,7 +185,7 @@ Inputs:
 - `File vcf_idx`: Index for VCF to annotate.
 - `Array[String] contigs`: Contigs to annotate within the input VCF.
 - `Int? records_per_shard`: Number of variants to keep within a single shard during annotation.
-- `String annotate_in_silico_predictors_script`: Path to the Hail script that performs the lookups (defaults to the `lr-annotation` repository copy).
+- `String annotate_in_silico_predictors_script`: Path to the Hail script that performs the lookups (defaults to this repository's copy on `main`).
 - `String genome_build`: Genome build to annotate against (default `GRCh38`).
 - `String cadd_ht`: From [references](references.md).
 - `String pangolin_ht`: From [references](references.md).
@@ -359,8 +362,8 @@ Inputs:
 - `File vcf`: VCF to annotate.
 - `File vcf_idx`: Index for VCF to annotate.
 - `String? subset_vcf_string`: `bcftools view` arguments used to pre-subset the VCF before annotation.
-- `String split_vcf_hail_script`: Path to the Hail script used to scatter the VCF (defaults to the `lr-annotation` repository copy).
-- `String vep_annotate_hail_python_script`: Path to the Hail script used to run VEP (defaults to the `lr-annotation` repository copy).
+- `String split_vcf_hail_script`: Path to the Hail script used to scatter the VCF (defaults to this repository's copy on `main`).
+- `String vep_annotate_hail_python_script`: Path to the Hail script used to run VEP (defaults to this repository's copy on `main`).
 - `String genome_build`: Genome build to annotate against (default `GRCh38`).
 - `String vep_json_schema`: Hail type schema describing the structure of VEP's JSON output.
 - `String normalize_check_ref`: `bcftools norm` `--check-ref` mode used when normalizing (default `w`).
@@ -515,7 +518,6 @@ Outputs:
 - `concat_vcf`: Combined VCF.
 - `concat_vcf_idx`: Index for the combined VCF.
 
-
 ### [ExtractDisparateTRLoci](../wdl/annotation_utils/ExtractDisparateTRLoci.wdl)
 This utility subsets two VCFs to tandem-repeat variants (`INFO/allele_type=trv`) on one contig, then compares their loci. It produces one TSV for identities present in only one VCF, where identity is `CHROM`, `POS` and `len(REF)`, and another TSV for positive-base overlaps with distinct identities. Overlaps are identified with `bedtools intersect`; the overlapping TSV includes the `INFO/TRID` value from both VCFs.
 
@@ -531,7 +533,7 @@ Outputs:
 - `overlapping_variants_tsv`: Overlapping locus pairs with distinct identities and their `TRID` values.
 
 ### [SummarizeAnnotations](../wdl/annotation_utils/SummarizeAnnotations.wdl)
-This utility tallies annotation values across one or more VCFs to produce summary count tables, size-binned by allele class (SNV/DEL/INS/DUP/TRV). It always counts at the site level and can optionally count per sample, per allele, per functional gene consequence (from VEP/SVAnnotate `PREDICTED_*` fields), as raw per-variant value lists, and — when `create_plotting` is enabled — produce a separate set of AF-binned, region-aware Parquet tables for plotting (including a de novo transmission breakdown when a PED file is supplied and trios are found).
+This utility tallies annotation values across one or more VCFs to produce summary count tables, size-binned by allele class (SNV/DEL/INS/DUP/TRV). It always counts at the site level and can optionally count per sample, per allele, per functional gene consequence (from VEP/SVAnnotate `PREDICTED_*` fields), as raw per-variant value lists, and, when `create_plotting` is enabled, produce a separate set of AF-binned, region-aware Parquet tables for plotting (including a de novo transmission breakdown when a PED file is supplied and trios are found).
 
 Inputs:
 - `Array[File] vcfs`: VCFs whose annotations are counted.
@@ -874,7 +876,8 @@ Outputs:
 - `trv_postprocessed_vcf` / `trv_postprocessed_vcf_idx`: Input-style contig VCF with recovered calls replacing or inserted alongside existing TRVs.
 - `trv_subsetted_vcf` / `trv_subsetted_vcf_idx`: All final `INFO/allele_type=trv` calls.
 - `trv_catalog_match_tsv`: One row per contig-relevant catalog entry, sharing the HPRC/HGSVC columns plus a trailing `status` (`already_in_input_vcf`, `replaced_from_trgt`, `added_from_trgt`, `trgt_ac0_skipped`, `no_trgt_match`, `no_catalog_bed_match`, `not_eligible`).
-- `trv_phasing_summary_tsv`: Header-only stub (no phasing in the AoU path), preserved for output-shape parity.
+
+This workflow emits no phasing audit: with no base VCFs there is nothing to phase against, so the shared `ApplyTRLocusUpdates` phasing summary (a header-only stub here) is deliberately not surfaced.
 
 ### [PreprocessVcfs](../wdl/annotation_utils/PreprocessVcfs.wdl)
 This utility preprocesses and integrates one or more cohort VCFs into a single VCF. It first optionally converts symbolic alleles to sequence alleles, then applies any per-VCF sample-ID swaps, optionally subsets every VCF to the requested samples, and validates that the resulting sample sets are identical. Each VCF is then optionally normalized, annotated with core variant attributes and an optional source label, and length-filtered. Per-VCF controls are required arrays: an empty array disables that control for every VCF; a non-empty array must align with `vcfs`.
@@ -1031,7 +1034,6 @@ Outputs:
 - `contig_no_geno_vcfs`: Per-contig genotype-free VCFs when requested.
 - `contig_no_geno_vcf_idxs`: Indexes for `contig_no_geno_vcfs` when requested.
 
-
 ### [SubsetTsvToColumns](../wdl/annotation_utils/SubsetTsvToColumns.wdl)
 This utility subsets an annotation TSV to a chosen set of columns, optionally filtering rows to those whose columns match specified values. It outputs the subset TSV.
 
@@ -1095,6 +1097,32 @@ Inputs:
 Outputs:
 - `cleaned_vcf`: Cleaned gVCF.
 - `cleaned_vcf_idx`: Index for `cleaned_vcf`.
+
+### [ExtractRandomCalls](../wdl/annotation_utils/ExtractRandomCalls.wdl)
+This utility draws a random sample of variant/sample pairs from a set of VCF shards, for manual review or IGV curation. Each shard is sampled independently under the supplied filters, then the per-shard draws are pooled and down-sampled to the requested count using a fixed seed, so a given seed always yields the same selection.
+
+Inputs:
+- `Array[File] vcfs`: VCF shards to sample from.
+- `Array[File] vcf_idxs`: Indexes for `vcfs`.
+- `String prefix`: Prefix for all generated outputs.
+- `Int count`: Number of variant/sample pairs to return.
+- `Int random_seed`: Seed for the draw, so the selection is reproducible (default `42`).
+- `Float? min_af`, `Float? max_af`: Restrict to variants within an allele-frequency range.
+- `Int? min_ac`, `Int? max_ac`: Restrict to variants within an allele-count range.
+- `Boolean singleton`: Restrict to singletons (default `false`).
+- `Array[String] filters`: Restrict to variants carrying these FILTER values.
+- `Array[String] allele_types`: Restrict to these allele types.
+- `Int? min_allele_length`, `Int? max_allele_length`: Restrict to variants within an allele-length range.
+- `Array[String] include_samples`: Restrict the draw to these samples.
+- `Array[String] exclude_samples`: Exclude these samples from the draw.
+- `String utils_docker`: Docker image.
+- `RuntimeAttr?` overrides: `runtime_attr_sample`, `runtime_attr_merge`.
+
+Outputs:
+- `variant_sample_pairs`: TSV of the selected variant/sample pairs.
+- `candidate_summary`: TSV summarizing how many candidates each shard contributed.
+- `variant_vcf`: VCF containing just the selected variants.
+- `variant_vcf_idx`: Index for `variant_vcf`.
 
 
 ## Tools
@@ -1243,6 +1271,37 @@ Outputs:
 - `sv_kanpig_raw_vcf`: Raw Kanpig cohort VCF.
 - `sv_kanpig_raw_vcf_idx`: Index for the raw VCF.
 
+### [GLNexus](../wdl/tools/GLNexus.wdl)
+This tool joint-calls per-sample gVCFs into a cohort VCF using GLnexus, then converts the result to a Hail MatrixTable. Calling is sharded over genomic ranges derived from the input gVCF names, and the per-range BCFs are concatenated back into a single VCF.
+
+Inputs:
+- `Array[File] gvcfs`: Per-sample gVCFs to joint-call.
+- `Array[File] gvcf_idxs`: Indexes for `gvcfs`.
+- `File ref_map_file`: Reference map describing the genome build.
+- `String prefix`: Prefix for all generated outputs.
+- `Array[Array[File]]? background_sample_gvcfs`: Additional background-sample gVCFs to joint-call alongside the cohort.
+- `Array[Array[File]]? background_sample_gvcf_idxs`: Indexes for `background_sample_gvcfs`.
+- `Boolean force_add_missing_dp`: Add a `DP` FORMAT field to gVCFs that lack one before calling (default `false`).
+- `Boolean remove_duplicate_zero_depth_reference_blocks`: Drop duplicate zero-depth reference blocks before calling (default `false`).
+- `File? bed`: Restrict calling to these regions.
+- `String config`: GLnexus preset configuration (default `DeepVariantWGS`).
+- `File? config_file`: Custom GLnexus configuration, used in place of `config`.
+- `Boolean more_PL`: Emit additional PL values (default `false`).
+- `Boolean squeeze`: Squeeze the output representation (default `false`).
+- `Boolean trim_uncalled_alleles`: Remove alleles that no sample carries (default `false`).
+- `Int? num_cpus`: CPU count for the calling task; derived from the input count when unset.
+- `Int max_cpus`: Upper bound on the derived CPU count (default `64`).
+- `String reference`: Reference genome build (default `GRCh38`).
+- `String? ref_fa`: Reference FASTA, used when registering a custom reference with Hail.
+- `String? ref_fai`: Index for `ref_fa`.
+- `String glnexus_docker`, `String hail_docker`: Docker images.
+- `RuntimeAttr?` overrides: `runtime_attr_get_ranges`, `runtime_attr_shard_vcf_by_ranges`, `runtime_attr_call`, `runtime_attr_concat_variants`, `runtime_attr_convert_to_hail_mt`.
+
+Outputs:
+- `joint_vcf`: Joint-called cohort VCF.
+- `joint_vcf_idx`: Index for `joint_vcf`.
+- `joint_mt`: Tarred Hail MatrixTable of the joint callset.
+
 ### [LongReadCNVs](../wdl/tools/LongReadCNVs.wdl)
 This workflow calls cohort CNVs from long-read depth profiles with GATK gCNV, then converts, clusters and genotypes the depth calls. It outputs merged CNV calls, ploidy, and genotyped depth VCFs.
 
@@ -1265,57 +1324,6 @@ Outputs:
 - `genotyped_depth_vcf`: Clustered CNV VCF genotyped from read depth.
 - `genotyped_depth_vcf_idx`: Index for `genotyped_depth_vcf`.
 - `genotyping_rd_table`: Read-depth evidence used for genotyping.
-
-### [LRCNVs](../wdl/utils/LRCNVs.wdl)
-This component calls copy-number variants across a cohort using GATK germline CNV (gCNV) cohort mode. From per-sample depth profiles over a shared interval list it annotates and filters intervals, determines contig ploidy, fits gCNV across scattered interval shards, post-processes per-sample calls into genotyped interval and segment VCFs, and collects sample- and model-level QC.
-
-Inputs:
-- `File intervals`: Interval list over which CNVs are called.
-- `Array[String]+ sample_ids`: Sample IDs in the cohort.
-- `Array[File]+ depth_profiles`: Per-sample read-depth profiles, aligned to `sample_ids`.
-- `String prefix`: Prefix for all generated outputs.
-- `String cohort_id`: Identifier for the cohort.
-- `File contig_ploidy_priors`: Contig ploidy priors used to determine per-sample contig ploidy.
-- `Int num_intervals_per_scatter`: Number of intervals processed per scatter shard (default `10000`).
-- `File? gatk4_jar_override`: Override GATK4 jar.
-- `File? mappability_track_bed`: Mappability track used to annotate intervals.
-- `File? mappability_track_bed_idx`: Index for `mappability_track_bed`.
-- `File? segmental_duplication_track_bed`: Segmental-duplication track used to annotate intervals.
-- `File? segmental_duplication_track_bed_idx`: Index for `segmental_duplication_track_bed`.
-- `Int? feature_query_lookahead`: Base pairs to look ahead when querying interval-annotation feature tracks.
-- `File? blacklist_intervals`: Intervals to exclude from calling.
-- `Int? low_count_filter_count_threshold`: Minimum read count for an interval to be considered well-covered in a sample.
-- `Float? low_count_filter_percentage_of_samples`: Minimum percentage of samples that must meet `low_count_filter_count_threshold` for an interval to pass.
-- `Float? extreme_count_filter_minimum_percentile`: Lower count percentile below which an interval is considered an outlier.
-- `Float? extreme_count_filter_maximum_percentile`: Upper count percentile above which an interval is considered an outlier.
-- `Float? extreme_count_filter_percentage_of_samples`: Minimum percentage of samples that must pass the extreme-count percentile bounds for an interval to pass.
-- `Int ref_copy_number_autosomal_contigs`: Reference copy number for autosomes (default `2`).
-- `Array[String]? allosomal_contigs`: Contigs treated as allosomal.
-- `Int maximum_number_events_per_sample`: Maximum number of events permitted per sample (default `1000`).
-- The workflow additionally exposes numerous optional gCNV model and contig-ploidy hyperparameters, prefixed `gcnv_` and `ploidy_`, that tune the underlying GATK tasks.
-- `String gatk_docker`: GATK container image.
-- `RuntimeAttr? runtime_attr_*`: Optional per-task CPU, memory, disk, boot-disk, preemptible-attempt and retry overrides. Defaults use one preemptible attempt and no retries.
-- `File ref_fa`: From [references](references.md).
-- `File ref_fai`: From [references](references.md).
-- `File ref_dict`: From [references](references.md).
-
-Outputs:
-- `annotated_intervals`: Intervals annotated with GC content and tracks.
-- `filtered_intervals`: Intervals retained after filtering.
-- `contig_ploidy_model_tar`: Fitted contig-ploidy model.
-- `contig_ploidy_calls_tar`: Per-sample contig-ploidy calls.
-- `gcnv_model_tars`: Fitted gCNV models, one per scatter shard.
-- `gcnv_calls_tars`: Per-shard per-sample gCNV calls.
-- `gcnv_tracking_tars`: Per-shard model-fitting tracking files.
-- `genotyped_intervals_vcfs`: Per-sample genotyped interval VCFs.
-- `genotyped_intervals_vcf_idxs`: Indexes for `genotyped_intervals_vcfs`.
-- `genotyped_segments_vcfs`: Per-sample genotyped segment VCFs.
-- `genotyped_segments_vcf_idxs`: Indexes for `genotyped_segments_vcfs`.
-- `sample_qc_status_files`: Per-sample QC status files.
-- `sample_qc_status_strings`: Per-sample QC status strings.
-- `model_qc_status_file`: Model-level QC status file.
-- `model_qc_string`: Model-level QC status string.
-- `denoised_copy_ratios`: Per-sample denoised copy ratios.
 
 ### [MethylationProfiling](../wdl/tools/MethylationProfiling.wdl)
 This tool generates CpG methylation pileups from a haplotagged BAM using [pb-CpG-tools](https://github.com/PacificBiosciences/pb-CpG-tools), producing combined and per-haplotype methylation BED tracks.
@@ -1472,6 +1480,38 @@ Outputs:
 - `rm_out`: RepeatMasker output table.
 - `rm_fa`: FASTA of the masked insertion sequences.
 
+### [Sawfish](../wdl/tools/Sawfish.wdl)
+This tool calls structural variants and copy-number variants from aligned long reads with sawfish. It runs the per-sample discover step in a scatter, then joint-calls across the cohort, using per-sample sex to select the expected copy-number track.
+
+Inputs:
+- `Array[File] bams`: Per-sample aligned reads.
+- `Array[File] bais`: Indexes for `bams`.
+- `Array[String] sexes`: Per-sample sex, aligned to `bams`, selecting the expected copy-number track.
+- `Array[String] sample_ids`: Sample IDs, aligned to `bams`.
+- `String prefix`: Prefix for all generated outputs.
+- `File ref_fa`: Reference FASTA.
+- `File ref_fai`: Index for `ref_fa`.
+- `File expected_cn_male`: Expected copy-number track for male samples.
+- `File expected_cn_female`: Expected copy-number track for female samples.
+- `File exclude_bed`: Regions excluded from calling.
+- `File exclude_bed_idx`: Index for `exclude_bed`.
+- `Int min_sv_size`: Minimum SV length to report (default `35`).
+- `Int min_sv_mapq`: Minimum mapping quality for supporting reads (default `5`).
+- `Boolean fast_cnv_mode`: Use the faster, less sensitive CNV mode (default `false`).
+- `Boolean disable_cnv`: Skip CNV calling entirely (default `false`).
+- `Boolean treat_single_copy_as_haploid`: Emit haploid genotypes on single-copy contigs (default `false`).
+- `Boolean report_supporting_reads`: Also emit the reads supporting each call (default `false`).
+- `String sawfish_docker`: Docker image.
+- `RuntimeAttr?` overrides: `runtime_attr_discover`, `runtime_attr_joint_call`.
+
+Outputs:
+- `sawfish_vcf`: Joint-called SV and CNV VCF.
+- `sawfish_vcf_idx`: Index for `sawfish_vcf`.
+- `sawfish_bedgraphs`: Per-sample depth bedGraph files.
+- `sawfish_depth_bws`: Per-sample depth bigWig files.
+- `sawfish_log`: Joint-calling log.
+- `sawfish_supporting_reads`: Supporting reads per call, emitted only when `report_supporting_reads` is set.
+
 ### [TRGT](../wdl/tools/TRGT.wdl)
 This workflow leverages [TRGT](https://github.com/PacificBiosciences/trgt) in order to genotype short-tandem repeats.
 
@@ -1535,3 +1575,222 @@ Outputs:
 - `haplotagged_bam`: Haplotagged BAM.
 - `haplotagged_bai`: Index for the haplotagged BAM.
 - `haplotag_lists`: Per-contig haplotag read assignments.
+
+
+## Sub-workflows
+These workflows live in `wdl/utils/` and are building blocks rather than entry points. They are never registered in `.dockstore.yml` and are not run directly; a workflow imports one with `import "../utils/<Name>.wdl"` and calls it as `<Name>.<Name>`.
+
+
+### Depth-based CNV pipeline
+`LRCNVs`, `DepthPreprocessing`, `DepthClustering` and `GenotypeDepth` are called in that order by [LongReadCNVs](#longreadcnvs), which supplies their shared inputs.
+
+### [LRCNVs](../wdl/utils/LRCNVs.wdl)
+This component calls copy-number variants across a cohort using GATK germline CNV (gCNV) cohort mode. From per-sample depth profiles over a shared interval list it annotates and filters intervals, determines contig ploidy, fits gCNV across scattered interval shards, post-processes per-sample calls into genotyped interval and segment VCFs, and collects sample- and model-level QC.
+
+Inputs:
+- `File intervals`: Interval list over which CNVs are called.
+- `Array[String]+ sample_ids`: Sample IDs in the cohort.
+- `Array[File]+ depth_profiles`: Per-sample read-depth profiles, aligned to `sample_ids`.
+- `String prefix`: Prefix for all generated outputs.
+- `String cohort_id`: Identifier for the cohort.
+- `File contig_ploidy_priors`: Contig ploidy priors used to determine per-sample contig ploidy.
+- `Int num_intervals_per_scatter`: Number of intervals processed per scatter shard (default `10000`).
+- `File? gatk4_jar_override`: Override GATK4 jar.
+- `File? mappability_track_bed`: Mappability track used to annotate intervals.
+- `File? mappability_track_bed_idx`: Index for `mappability_track_bed`.
+- `File? segmental_duplication_track_bed`: Segmental-duplication track used to annotate intervals.
+- `File? segmental_duplication_track_bed_idx`: Index for `segmental_duplication_track_bed`.
+- `Int? feature_query_lookahead`: Base pairs to look ahead when querying interval-annotation feature tracks.
+- `File? blacklist_intervals`: Intervals to exclude from calling.
+- `Int? low_count_filter_count_threshold`: Minimum read count for an interval to be considered well-covered in a sample.
+- `Float? low_count_filter_percentage_of_samples`: Minimum percentage of samples that must meet `low_count_filter_count_threshold` for an interval to pass.
+- `Float? extreme_count_filter_minimum_percentile`: Lower count percentile below which an interval is considered an outlier.
+- `Float? extreme_count_filter_maximum_percentile`: Upper count percentile above which an interval is considered an outlier.
+- `Float? extreme_count_filter_percentage_of_samples`: Minimum percentage of samples that must pass the extreme-count percentile bounds for an interval to pass.
+- `Int ref_copy_number_autosomal_contigs`: Reference copy number for autosomes (default `2`).
+- `Array[String]? allosomal_contigs`: Contigs treated as allosomal.
+- `Int maximum_number_events_per_sample`: Maximum number of events permitted per sample (default `1000`).
+- The workflow additionally exposes numerous optional gCNV model and contig-ploidy hyperparameters, prefixed `gcnv_` and `ploidy_`, that tune the underlying GATK tasks.
+- `String gatk_docker`: GATK container image.
+- `RuntimeAttr? runtime_attr_*`: Optional per-task CPU, memory, disk, boot-disk, preemptible-attempt and retry overrides. Defaults use one preemptible attempt and no retries.
+- `File ref_fa`: From [references](references.md).
+- `File ref_fai`: From [references](references.md).
+- `File ref_dict`: From [references](references.md).
+
+Outputs:
+- `annotated_intervals`: Intervals annotated with GC content and tracks.
+- `filtered_intervals`: Intervals retained after filtering.
+- `contig_ploidy_model_tar`: Fitted contig-ploidy model.
+- `contig_ploidy_calls_tar`: Per-sample contig-ploidy calls.
+- `gcnv_model_tars`: Fitted gCNV models, one per scatter shard.
+- `gcnv_calls_tars`: Per-shard per-sample gCNV calls.
+- `gcnv_tracking_tars`: Per-shard model-fitting tracking files.
+- `genotyped_intervals_vcfs`: Per-sample genotyped interval VCFs.
+- `genotyped_intervals_vcf_idxs`: Indexes for `genotyped_intervals_vcfs`.
+- `genotyped_segments_vcfs`: Per-sample genotyped segment VCFs.
+- `genotyped_segments_vcf_idxs`: Indexes for `genotyped_segments_vcfs`.
+- `sample_qc_status_files`: Per-sample QC status files.
+- `sample_qc_status_strings`: Per-sample QC status strings.
+- `model_qc_status_file`: Model-level QC status file.
+- `model_qc_string`: Model-level QC status string.
+- `denoised_copy_ratios`: Per-sample denoised copy ratios.
+
+### [DepthPreprocessing](../wdl/utils/DepthPreprocessing.wdl)
+This sub-workflow converts per-sample gCNV genotyped-segment VCFs into cohort-level deletion and duplication call sets. Each sample's segments are converted to BED, merged per sample and then across the cohort separately for DEL and DUP, and finally rewritten as a single VCF alongside a ploidy table for downstream genotyping.
+
+Inputs:
+- `Array[String]+ sample_ids`: Sample IDs in the cohort.
+- `Array[File]+ genotyped_segments_vcfs`: Per-sample gCNV genotyped-segment VCFs.
+- `Array[File]+ genotyped_segments_vcf_idxs`: Indexes for `genotyped_segments_vcfs`.
+- `String prefix`: Prefix for all generated outputs.
+- `File contig_ploidy_calls_tar`: Tarred gCNV contig-ploidy calls.
+- `File primary_contigs_list`: Contigs to process.
+- `File ref_fai`: Reference FASTA index, used for contig ordering.
+- `File pedigree`: Pedigree supplying per-sample sex.
+- `String batch_id`: Identifier for the batch.
+- `String? chr_x`, `String? chr_y`: Allosome contig names, when they differ from the defaults.
+- `Int gcnv_qs_cutoff`: Minimum gCNV quality score for a segment to be kept.
+- `Float? defragment_max_dist`: Maximum gap, as a fraction of call length, across which adjacent calls are defragmented.
+- `String sv_base_mini_docker`, `String sv_pipeline_docker`: Docker images.
+- `RuntimeAttr?` overrides: `runtime_attr_gcnv_vcf_to_bed`, `runtime_attr_merge_sample`, `runtime_attr_merge_set`, `runtime_attr_make_ploidy_table`, `runtime_attr_cnv_bed_to_vcf`, `runtime_attr_concat_vcfs`.
+
+Outputs:
+- `del_bed`, `del_bed_idx`: Cohort-merged deletion calls and index.
+- `dup_bed`, `dup_bed_idx`: Cohort-merged duplication calls and index.
+- `merged_vcf`, `merged_vcf_idx`: Combined depth-based CNV VCF and index.
+- `ploidy_table`: Per-sample, per-contig ploidy table consumed by `DepthClustering` and `GenotypeDepth`.
+
+### [DepthClustering](../wdl/utils/DepthClustering.wdl)
+This sub-workflow clusters the depth-based CNV calls across samples with GATK `SVCluster`, contig by contig, then optionally drops calls overlapping excluded intervals and converts the GATK representation back to svtk-style VCF before concatenating the per-contig results.
+
+Inputs:
+- `File depth_vcf`, `File depth_vcf_idx`: Depth CNV VCF from `DepthPreprocessing`, and its index.
+- `File ploidy_table`: Ploidy table from `DepthPreprocessing`.
+- `String prefix`: Prefix for all generated outputs.
+- `String variant_prefix`: Prefix applied to generated variant IDs.
+- `File contig_list`: Contigs to cluster over.
+- `File? contig_subset_list`: Restrict clustering to this subset of contigs.
+- `File ref_fa`, `File ref_fai`, `File ref_dict`: Reference FASTA, index and sequence dictionary.
+- `String gatk_docker`, `String sv_base_mini_docker`, `String sv_pipeline_docker`: Docker images.
+- `Boolean fast_mode`: Use SVCluster fast mode (default `true`).
+- `String clustering_algorithm`: SVCluster algorithm (default `SINGLE_LINKAGE`).
+- `Boolean? enable_cnv`, `Boolean? default_no_call`, `Boolean? omit_members`, `String? breakpoint_summary_strategy`: SVCluster behavior flags.
+- `Float? defrag_padding_fraction`, `Float? defrag_sample_overlap`: Defragmentation thresholds.
+- `Float depth_sample_overlap`: Required sample overlap for depth clustering (default `0`).
+- `Float depth_interval_overlap`: Required reciprocal interval overlap (default `0.8`).
+- `Float? depth_size_similarity`: Required size similarity.
+- `Int depth_breakend_window`: Breakend join window in base pairs (default `10000000`).
+- `File? exclude_intervals`: Intervals whose overlapping calls are dropped.
+- `Float exclude_overlap_fraction`: Overlap fraction at which a call is excluded (default `0.5`).
+- `File? gatk_to_svtk_script`: Override for the GATK-to-svtk conversion script.
+- `Boolean svtk_set_pass`: Set FILTER to PASS during conversion (default `false`).
+- `RuntimeAttr?` overrides: `runtime_attr_sv_cluster`, `runtime_attr_exclude_intervals`, `runtime_attr_gatk_to_svtk_vcf`, `runtime_attr_concat_vcfs`.
+
+Outputs:
+- `clustered_vcf`: Cohort-clustered depth CNV VCF.
+- `clustered_vcf_idx`: Index for `clustered_vcf`.
+
+### [GenotypeDepth](../wdl/utils/GenotypeDepth.wdl)
+This sub-workflow trains a depth genotyping model on a set of training intervals, then genotypes the clustered depth CNV calls per contig with GATK and concatenates the results.
+
+Inputs:
+- `String prefix`: Prefix for all generated outputs.
+- `File vcf`, `File vcf_idx`: Clustered depth CNV VCF from `DepthClustering`, and its index.
+- `File training_intervals`: Intervals used to train the genotyping model.
+- `File median_coverage`: Per-sample median coverage.
+- `File rd_file`, `File rd_file_idx`: Read-depth evidence matrix and index.
+- `File ref_dict`: Reference sequence dictionary.
+- `File ploidy_table`: Ploidy table from `DepthPreprocessing`.
+- `File contig_list`: Contigs to genotype over.
+- `File? contig_subset_list`: Restrict genotyping to this subset of contigs.
+- `String chr_x`, `String chr_y`: Allosome contig names (defaults `chrX` and `chrY`).
+- `String gatk_docker`, `String sv_base_mini_docker`: Docker images.
+- `RuntimeAttr?` overrides: `runtime_attr_train_sv_genotyping`, `runtime_attr_genotype_svs`, `runtime_attr_concat_vcfs`.
+
+Outputs:
+- `genotyped_depth_vcf`: Genotyped depth CNV VCF.
+- `genotyped_depth_vcf_idx`: Index for `genotyped_depth_vcf`.
+- `genotyping_rd_table`: Read-depth table produced while training the model.
+
+### Callset matching and sharding
+`ExactMatch`, `TruvariMatch` and `BedtoolsClosestSV` are the three comparison rounds driven by [AnnotateCallsetOverlap](#annotatecallsetoverlap); each consumes what the previous round left unmatched. `ScatterVcf` is a general sharding helper.
+
+### [ExactMatch](../wdl/utils/ExactMatch.wdl)
+This sub-workflow performs the first callset-comparison round, matching records to a truth callset on exact position and allele. Both callsets are optionally renamed to a common ID scheme, sharded, matched, and the annotations concatenated. Records left unmatched are emitted in the form `TruvariMatch` expects.
+
+Inputs:
+- `File vcf`, `File vcf_idx`: Callset being compared, and its index.
+- `File truth_snv_indel_vcf`, `File truth_snv_indel_vcf_idx`: Truth callset, and its index.
+- `String contig`: Contig being processed.
+- `String prefix`: Prefix for all generated outputs.
+- `Int? shard_bin_size_exact_match`: Shard size for the matching step.
+- `Int min_sv_length_truvari_vcf`, `Int min_sv_length_truvari_truth_vcf`: Minimum lengths applied when emitting the Truvari inputs.
+- `String length_field_vcf`: INFO field holding allele length.
+- `String source_tag_truth_snv_indel_vcf`: Tag identifying the truth callset in the annotations.
+- `String? rename_id_string_vcf`, `String? rename_id_string_truth_snv_indel_vcf`: ID rename templates.
+- `Boolean? rename_id_strip_chr_vcf`, `Boolean? rename_id_strip_chr_truth_snv_indel_vcf`: Strip the `chr` prefix while renaming.
+- `String utils_docker`: Docker image.
+- `RuntimeAttr?` overrides: one per task, including `runtime_attr_exact_match` and the rename, shard, subset and concat steps.
+
+Outputs:
+- `annotated_tsv`: Exact-match annotations.
+- `truvari_eval_vcf`, `truvari_eval_vcf_idx`: Unmatched callset records, passed to `TruvariMatch`.
+- `truvari_truth_vcf`, `truvari_truth_vcf_idx`: Unmatched truth records, passed to `TruvariMatch`.
+
+### [TruvariMatch](../wdl/utils/TruvariMatch.wdl)
+This sub-workflow performs the second comparison round, matching records left unmatched by `ExactMatch` with Truvari at three decreasing sequence-similarity thresholds (0.9, 0.7, 0.5). Each threshold only sees what the previous one failed to match, so a record is annotated with the strictest threshold that matched it.
+
+Inputs:
+- `File vcf`, `File vcf_idx`: Unmatched callset records from `ExactMatch`, and index.
+- `File truth_snv_indel_vcf`, `File truth_snv_indel_vcf_idx`: Unmatched truth records, and index.
+- `String contig`: Contig being processed.
+- `String prefix`: Prefix for all generated outputs.
+- `String source_tag`: Tag identifying the truth callset in the annotations (default `SNV_indel`).
+- `Int? shard_bin_size_truvari_match`: Shard size for the matching step.
+- `Int min_shard_gap_truvari_match`: Minimum gap between records at which a shard boundary may fall (default `10000`).
+- `File? ref_fa`, `File? ref_fai`: Reference FASTA and index, when Truvari is run with reference context.
+- `String utils_docker`: Docker image.
+- `RuntimeAttr?` overrides: one per task, including `runtime_attr_run_truvari_09`, `runtime_attr_run_truvari_07` and `runtime_attr_run_truvari_05`.
+
+Outputs:
+- `annotation_tsv`: Truvari match annotations across all three thresholds.
+- `matched_truth_vcf`, `matched_truth_vcf_idx`: Truth records matched by any threshold, and index.
+- `unmatched_vcf`, `unmatched_vcf_idx`: Records still unmatched after 0.5, passed to `BedtoolsClosestSV`.
+
+### [BedtoolsClosestSV](../wdl/utils/BedtoolsClosestSV.wdl)
+This sub-workflow performs the final comparison round, pairing each still-unmatched record with its nearest truth-callset neighbour using `bedtools closest`. Insertions and CNVs are compared separately, since proximity means different things for each, and the two comparisons are merged into a single annotation table.
+
+Inputs:
+- `File vcf`, `File vcf_idx`: Records left unmatched by `TruvariMatch`, and index.
+- `File truth_sv_vcf`, `File truth_sv_vcf_idx`: Truth SV callset, and index.
+- `String prefix`: Prefix for all generated outputs.
+- `Int min_sv_length`, `Int min_sv_length_truth`: Minimum SV length applied to each callset.
+- `String type_field`: INFO field holding variant type.
+- `String length_field`: INFO field holding allele length.
+- `String source_tag`: Tag identifying the truth callset in the annotations (default `SV`).
+- `String gatk_sv_lr_docker`, `String utils_docker`: Docker images.
+- `RuntimeAttr?` overrides: one per task, including `runtime_attr_compare`, `runtime_attr_calculate` and `runtime_attr_merge_comparisons`.
+
+Outputs:
+- `annotation_tsv`: Nearest-neighbour annotations for the remaining records.
+
+### [ScatterVcf](../wdl/utils/ScatterVcf.wdl)
+This sub-workflow shards a VCF, either by contig, into a fixed number of record-count shards, or both. It can operate on a localized file or stream a remote one, and is used by [AnnotateVEPHail](#annotatevephail) to parallelize VEP annotation.
+
+Inputs:
+- `File file`: VCF or Hail MatrixTable to shard.
+- `String prefix`: Prefix for all generated outputs.
+- `Int n_shards`: Target shard count (default `0`, meaning unset).
+- `Int records_per_shard`: Target records per shard (default `0`, meaning unset).
+- `String split_vcf_hail_script`: URL of the Hail sharding script; defaults to this repository's copy on `main`.
+- `String genome_build`: Reference genome build (default `GRCh38`).
+- `Boolean localize_vcf`: Localize the input rather than streaming it remotely.
+- `Boolean get_chromosome_sizes`: Query contig sizes to size the shards.
+- `Boolean split_by_chromosome`: Split by contig.
+- `Boolean split_into_shards`: Split into record-count shards.
+- `Boolean has_index`: Whether the remote input already has an index.
+- `String hail_docker`, `String sv_base_mini_docker`: Docker images.
+- `RuntimeAttr?` overrides: `runtime_attr_split_by_chr`, `runtime_attr_split_into_shards`.
+
+Outputs:
+- `vcf_shards`: The resulting shards, or the original file when no splitting was requested.

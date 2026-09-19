@@ -8,7 +8,7 @@ Raw reads were aligned to GRCh38 at 65x coverage using Minimap2, then downsample
 
 ### SNV/Indel Callset
 1. **DeepVariant**: Call short variants per sample from the downsampled reads.
-2. **GLNexus** : Joint call and integrate per-sample DeepVariant gVCFs into a cohort short-variant VCF.
+2. **GLNexus** ([docs](workflows.md#glnexus)): Joint call and integrate per-sample DeepVariant gVCFs into a cohort short-variant VCF.
 
 ### SV Callset
 1. **SV Callers**: Multiple callers (cuteSV, Sniffles, Delly, pbsv, Sawfish, dipcall, hapdiff) were run per sample to generate structural variant calls.
@@ -18,8 +18,8 @@ Raw reads were aligned to GRCh38 at 65x coverage using Minimap2, then downsample
 
 ### TRGT Callset
 **[TRGT](../wdl/tools/TRGT.wdl)** ([docs](workflows.md#trgt)): Genotyped tandem repeat loci per sample from the diploid reads, running separately against two catalogs:
-   - TRExplorer v1.0.1.
-   - Vamos v2.1.
+- TRExplorer v1.0.1.
+- Vamos v2.1.
 
 
 ## 2. Callset Processing

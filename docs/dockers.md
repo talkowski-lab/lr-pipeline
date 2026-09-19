@@ -1,5 +1,31 @@
 # Docker images
-This document lists the Docker images used by the pipeline - repo-built, collaborator-built, and published third-party.
+This document lists the Docker images used by the pipeline - repo-built, collaborator-built, and published third-party - and describes how the repository's own images are built, tagged and pushed.
+
+
+## Building and Pushing
+Every container image is built from a `dockerfiles/Dockerfile.<image-name>` file, where `<image-name>` is all-lowercase and is exactly the name the image is pushed under - e.g. `Dockerfile.utils` builds `utils`, `Dockerfile.stranalysis` builds `stranalysis`. There is no separate name-mapping file; the Dockerfile suffix mechanically is the image name. The one exception is `Dockerfile.trgtlps`, which is pushed as `trgt-lps` with a hyphen, so do not assume the two always match.
+
+Images are pushed to Artifact Registry at:
+```
+us-central1-docker.pkg.dev/talkowski-sv-gnomad/kj-dockers/<image-name>
+```
+
+Build and push an image with the helper script, which takes the image name as its only argument:
+```bash
+dockerfiles/build_docker.sh <image-name>
+# e.g. dockerfiles/build_docker.sh utils
+```
+
+The script does the following:
+- Resolves any `ARG` declared in the Dockerfile without an inline default from [`dockerfiles/versions.env`](../dockerfiles/versions.env), keyed as `<image-name>__<ARG_NAME>`, and passes each as a `--build-arg`. That file is the single source of truth for pinned tool and library versions.
+- Queries `gcloud artifacts docker tags list` for the highest `kj_V<N>` tag already pushed for the image and increments it, so version numbering never has to be tracked by hand.
+- Builds with `podman build --platform linux/amd64` from the repository root, then pushes under both the new `kj_V<N>` tag and `:latest`.
+
+Two consequences worth knowing:
+- Because the build context is the repository root, `Dockerfile.utils` bakes the live `scripts/` tree into the image via `COPY ./scripts /opt/scripts`. Any change under `scripts/` therefore requires rebuilding `utils`, and then any image that inherits from it, before the change reaches a running task. The exception is the Hail scripts, which workflows fetch by URL at run time - see [Scripts](repository-structure.md#scripts).
+- The script needs an authenticated `gcloud` for tag discovery and a `podman` logged in to the registry for the push.
+
+**Which tag to use:** WDL tasks never hardcode a docker image URI - the `String docker` task input is always supplied by the caller via Terra workspace data, per [Conventions](conventions.md). Workspace data should point at the `:latest` tag for each image, since every `build_docker.sh` run retags `:latest` to the newest build. The `kj_V<N>` tags exist purely as an immutable version history, for pinning or rolling back to a specific prior build.
 
 
 ## Repository
@@ -27,15 +53,7 @@ Built from [dockerfiles/](../dockerfiles/) in this repository.
 | `hificnv_docker` | kj-dockers/hificnv:latest | `Dockerfile.hificnv` |
 | `sawfish_docker` | kj-dockers/sawfish:latest | `Dockerfile.sawfish` |
 
-`Dockerfile.utils` is the base image for most other repo Dockerfiles. Every
-Dockerfile currently in `dockerfiles/` maps to exactly one argument above —
-none are unused.
-
-Note: `Dockerfile.trgtlps` is pushed under the image name `trgt-lps` (hyphenated),
-not `trgtlps` as `build_docker.sh`'s naming convention would derive from the
-filename — a pre-existing drift from [repository-structure.md](repository-structure.md)'s
-"Dockerfile suffix mechanically is the image name" rule. Works today since the
-attribute matches the actual pushed name; just don't assume the two always match.
+`Dockerfile.utils` is the base image for most other repo Dockerfiles. Every Dockerfile in `dockerfiles/` maps to exactly one argument above; retired ones live in [`archive/dockerfiles/`](../archive/dockerfiles/) and are not built.
 
 
 ## Collaborators

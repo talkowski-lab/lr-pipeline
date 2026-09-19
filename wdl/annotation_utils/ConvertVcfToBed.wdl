@@ -190,7 +190,7 @@ task RenameOutput {
         set -euo pipefail
 
         mv ~{bed} ~{prefix}.~{base_ext}
-        
+
         if [ "~{output_gz}" == "true" ]; then
             gzip -1 ~{prefix}.~{base_ext}
         fi

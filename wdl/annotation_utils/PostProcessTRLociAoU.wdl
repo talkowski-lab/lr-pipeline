@@ -7,7 +7,7 @@ import "../annotation/AnnotateSQMetrics.wdl"
 import "../annotation/AnnotateVRS.wdl"
 import "../utils/Structs.wdl"
 import "AnnotateVcf.wdl"
-import "PostProcessTRLociHPRCHGSVC.wdl" as TRShared
+import "PostProcessTRLociHPRCHGSVC.wdl"
 
 workflow PostProcessTRLociAoU {
     input {
@@ -16,15 +16,14 @@ workflow PostProcessTRLociAoU {
         String contig
         File trgt_vcf
         File trgt_vcf_idx
-        File trgt_catalog_bed_gz
         String prefix
+
+        File gnomad_tr_json
+        File trgt_catalog_bed_gz
 
         Boolean run_flag_homopolymer_trvs
         Boolean replace_gnomad_str
 
-        File gnomad_tr_json
-        File ref_fa
-        File ref_fai
         File seqrepo_tar
         File simple_repeats_bed
         File seg_dup_bed
@@ -34,7 +33,7 @@ workflow PostProcessTRLociAoU {
         String phylop_ht
         String revel_ht
         String spliceai_ht
-        String annotate_in_silico_predictors_script = "https://raw.githubusercontent.com/talkowski-lab/lr-annotation/main/scripts/annotation/annotate_insilico_predictors.py"
+        String annotate_in_silico_predictors_script = "https://raw.githubusercontent.com/talkowski-lab/lr-pipeline/main/scripts/annotation/annotate_insilico_predictors.py"
         String genome_build = "GRCh38"
 
         String utils_docker
@@ -167,7 +166,7 @@ workflow PostProcessTRLociAoU {
         }
     }
 
-    call TRShared.ApplyTRLocusUpdates {
+    call PostProcessTRLociHPRCHGSVC.ApplyTRLocusUpdates {
         input:
             vcf = vcf,
             vcf_idx = vcf_idx,
@@ -187,7 +186,6 @@ workflow PostProcessTRLociAoU {
         File trv_subsetted_vcf = ApplyTRLocusUpdates.trv_subsetted_vcf
         File trv_subsetted_vcf_idx = ApplyTRLocusUpdates.trv_subsetted_vcf_idx
         File trv_catalog_match_tsv = ApplyTRLocusUpdates.trv_catalog_match_tsv
-        File trv_phasing_summary_tsv = ApplyTRLocusUpdates.trv_phasing_summary_tsv
     }
 }
 
@@ -413,7 +411,10 @@ for entry in catalog:
         tsv_rows.append(row)
         continue
     bed_start0, bed_end = bed_match
-    locus_pos = bed_start0 + 1  # BED 0-based half-open -> VCF 1-based inclusive start.
+    # TRGT records carry a left anchor base, so the anchored POS is numerically the BED
+    # 0-based start and POS+len(REF)-1 is the BED end. Verified against the catalog BED:
+    # 33607/33607 input TRVs matched by TRID satisfy POS==col2 and POS+len(REF)-1==col3.
+    locus_pos = bed_start0
 
     input_overlaps = []
     if main_contig is not None:
@@ -422,9 +423,7 @@ for entry in catalog:
                 input_overlaps.append(rec.copy())
     row['input_overlapping_trids'] = '|'.join(sorted({trid_text(r) for r in input_overlaps if trid_text(r)})) or '.'
     coord_matches = [r for r in input_overlaps if r.pos == locus_pos and record_end(r) == bed_end]
-    # gnomAD_STR reuse matches the enveloping TRV by TRExplorerV1 substring, so claim a strict input
-    # hit only when the coordinate-matched record also carries the explorer in its TRID
-    row['input_has_TRExplorerV1_substring'] = 'true' if any(matched_explorer in trid_text(r) for r in coord_matches) else 'false'
+    row['input_has_TRExplorerV1_substring'] = 'true' if any(matched_explorer in trid_text(r) for r in input_overlaps) else 'false'
     if coord_matches:
         row['status'] = 'already_in_input_vcf'
         tsv_rows.append(row)

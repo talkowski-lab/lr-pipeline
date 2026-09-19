@@ -63,7 +63,7 @@ workflow AnnotateSVAnnotate {
                 input:
                     vcf = vcfs_to_process[i],
                     vcf_idx = vcf_idxs_to_process[i],
-                    move_all_dups = false,
+                    move_dup_to_origin = true,
                     prefix = "~{prefix}.~{contig}.converted.shard_~{i}",
                     docker = utils_docker,
                     runtime_attr_override = runtime_attr_convert_symbolic

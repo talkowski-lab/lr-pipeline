@@ -118,7 +118,7 @@ task RunFilterVcfToTRs {
     }
 
     command <<<
-        set -eou pipefail
+        set -euo pipefail
 
         python3 -m str_analysis.filter_vcf_to_tandem_repeats catalog \
             -R ~{ref_fa} \

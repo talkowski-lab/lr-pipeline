@@ -3,7 +3,7 @@ This document tracks ad hoc processing notes across generated callsets.
 
 
 ## Phased `_V2` callset lineage
-- Purpose: rerun _HiPhase_ without TRGT homopolymers (remove one-base repeat motifs before phasing).
+In order to rerun _HiPhase_ without TRGT homopolymers.
 - _HiPhase_.
 - _HiPhaseMerge_ --> hiphase_merged_integrated_vcf_V2, hiphase_merged_trgt_vcf_V2.
 - _FillPhasedGenotypes_ --> hiphase_phased_integrated_vcf_V2.
@@ -23,9 +23,9 @@ This document tracks ad hoc processing notes across generated callsets.
 - _AnnotateVcfDownstream_.
 - _PostprocessCallset_.
 - Untrim variants:
-	- _FindUntrimmedAlleles_.
-	- Annotation: _AnnotateCallsetOverlap_, _AnnotateDbSNP_, _AnnotateDbVaR_, _AnnotateInSilicoPredictors_, _AnnotateVRS_.
-	- _AnnotateVcfCleared_.
+  - _FindUntrimmedAlleles_.
+  - Annotation: _AnnotateCallsetOverlap_, _AnnotateDbSNP_, _AnnotateDbVaR_, _AnnotateInSilicoPredictors_, _AnnotateVRS_.
+  - _AnnotateVcfCleared_.
 
 
 ## V2
@@ -35,9 +35,9 @@ This document tracks ad hoc processing notes across generated callsets.
 - _PostprocessCallset_.
 - _AnnotateAF_.
 - Untrim variants:
-	- _FindUntrimmedAlleles_.
-	- _AnnotateCallsetOverlap_.
-	- _AnnotateVcfCleared_.
+  - _FindUntrimmedAlleles_.
+  - _AnnotateCallsetOverlap_.
+  - _AnnotateVcfCleared_.
 - (HPRC/HGSVC Only) _ResolveHaplotypeOverlaps_.
 - (HPRC/HGSVC Only) _AnnotateAFPostHoc_.
 - _NormalizeAlleleTypes_.
@@ -46,11 +46,12 @@ This document tracks ad hoc processing notes across generated callsets.
 - _FilterLowCoverageRegions_ --> hprc_hgsvc_vcf_V3, aou_vcf_V2.
 - _AnnotateCallsetOverlap_.
 - _AnnotateVcfCallsetOverlap_ --> hprc_hgsvc_vcf_V4, aou_vcf_V3.
-- (HPRC/HGSVC Only) _PostProcessTRLociHPRCHGSVC_ --> hprc_hgsvc_vcf_V5.
-- (AoU Only) _PostProcessTRLociAoU_ --> aou_vcf_V4.
-- (AoU Only) _StripGenotypes_ --> aou_sites_vcf.
+- (HPRC/HGSVC Only) _PostProcessTRLoci_ --> hprc_hgsvc_vcf_V5, aou_vcf_V4.
 - (HPRC/HGSVC Only) _FillFormatFields_ --> hprc_hgsvc_vcf_V6.
 - (HPRC/HGSVC Only) _FilterLowCoverageGenotypes_ --> hprc_hgsvc_vcf_V7.
 - (HPRC/HGSVC Only) _AnnotatSQMetrics_, _AnnotatGQMetrics_.
 - (HPRC/HGSVC Only) _AnnotateVcfGQSQ_ --> hprc_hgsvc_vcf_V8.
 - (HPRC/HGSVC Only) _AnnotateAFPostHoc_ --> hprc_hgsvc_vcf_V9.
+- _AnnotateSVAnnotate_.
+- _AnnotateVcfSVAnnotate_ --> hprc_hgsvc_vcf_V10, aou_vcf_V4.
+- (AoU Only) _StripGenotypes_ --> aou_sites_vcf.

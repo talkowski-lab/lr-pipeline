@@ -11,7 +11,7 @@ workflow ScatterVcf {
         Int n_shards = 0
         Int records_per_shard = 0
 
-        String split_vcf_hail_script = "https://raw.githubusercontent.com/talkowski-lab/annotations/refs/heads/main/scripts/split_vcf_hail.py"
+        String split_vcf_hail_script = "https://raw.githubusercontent.com/talkowski-lab/lr-pipeline/main/scripts/helper/split_vcf_hail.py"
         String genome_build = 'GRCh38'
         Boolean localize_vcf
         Boolean get_chromosome_sizes
@@ -25,15 +25,13 @@ workflow ScatterVcf {
         RuntimeAttr? runtime_attr_split_by_chr
         RuntimeAttr? runtime_attr_split_into_shards
     }
-    
+
     if (split_by_chromosome) {
         if (!localize_vcf) {
-            String vcf_uri = file
-
             if (get_chromosome_sizes) {
                 call GetChromosomeSizes {
                     input:
-                        vcf_file = vcf_uri,
+                        vcf_file = file,
                         has_index = select_first([has_index]),
                         docker = sv_base_mini_docker
                 }
@@ -59,24 +57,22 @@ workflow ScatterVcf {
             }
 
             if (!localize_vcf) {
-                String vcf_uri = file
                 # Estimate remote input size from contig length scaled by sample count
-                Float input_size_ = if (get_chromosome_sizes) then select_first([GetChromosomeSizes.contig_lengths])[chromosome] * ceil(select_first([GetChromosomeSizes.n_samples])*0.001) / 1000000 else size(vcf_uri, 'GB')
+                Float remote_input_size = if (get_chromosome_sizes) then select_first([GetChromosomeSizes.contig_lengths])[chromosome] * ceil(select_first([GetChromosomeSizes.n_samples])*0.001) / 1000000 else size(file, 'GB')
                 call SplitByChromosomeRemote {
                     input:
-                        vcf_file = vcf_uri,
+                        vcf_file = file,
                         chromosome = chromosome,
                         prefix = prefix,
-                        input_size = input_size_,
-                        has_index = select_first([has_index]),
+                        input_size = remote_input_size,
                         docker = sv_base_mini_docker,
                         runtime_attr_override = runtime_attr_split_by_chr
                 }
             }
 
-            File splitChromosomeShards = select_first([SplitByChromosome.shards, SplitByChromosomeRemote.shards])
-            Float splitChromosomeContigLengths = select_first([SplitByChromosome.contig_lengths, SplitByChromosomeRemote.contig_lengths])
-            Pair[File, Float] split_chromosomes = (splitChromosomeShards, splitChromosomeContigLengths)
+            File split_chromosome_shards = select_first([SplitByChromosome.shards, SplitByChromosomeRemote.shards])
+            Float split_chromosome_contig_lengths = select_first([SplitByChromosome.contig_lengths, SplitByChromosomeRemote.contig_lengths])
+            Pair[File, Float] split_chromosomes = (split_chromosome_shards, split_chromosome_contig_lengths)
         }
     }
 
@@ -88,7 +84,7 @@ workflow ScatterVcf {
                 Int chrom_n_shards = ceil(chrom_n_records / select_first([records_per_shard, 0]))
                 String chrom_shard_prefix = basename(chrom_shard, ".vcf.gz")
 
-                call ExecuteScattering as scatterChromosomes {
+                call ExecuteScattering as ScatterChromosomes {
                     input:
                         vcf_file = chrom_shard,
                         split_vcf_hail_script = split_vcf_hail_script,
@@ -100,9 +96,9 @@ workflow ScatterVcf {
                         runtime_attr_override = runtime_attr_split_into_shards
                 }
             }
-            Array[File] chromosome_shards = flatten(scatterChromosomes.shards)
+            Array[File] chromosome_shards = flatten(ScatterChromosomes.shards)
         }
-        
+
         if (!defined(split_chromosomes)) {
             if (localize_vcf) {
                 call ExecuteScattering {
@@ -115,22 +111,22 @@ workflow ScatterVcf {
                         genome_build = genome_build,
                         docker = hail_docker,
                         runtime_attr_override = runtime_attr_split_into_shards
-                    }
+                }
             }
 
             if (!localize_vcf) {
                 String mt_uri = file
 
-                call Helpers.GetHailMTSize as getHailMTSize {
+                call Helpers.GetHailMTSize {
                     input:
                         mt_uri = mt_uri,
                         docker = hail_docker
                 }
-                
+
                 call ScatterVcfRemote {
                     input:
                         vcf_file = mt_uri,
-                        input_size = getHailMTSize.mt_size,
+                        input_size = GetHailMTSize.mt_size,
                         split_vcf_hail_script = split_vcf_hail_script,
                         n_shards = select_first([n_shards]),
                         records_per_shard = select_first([records_per_shard, 0]),
@@ -141,12 +137,12 @@ workflow ScatterVcf {
                 }
             }
         }
-    }    
+    }
 
     output {
-        Array[File] vcf_shards = select_first([ExecuteScattering.shards, ScatterVcfRemote.shards, chromosome_shards, splitChromosomeShards, [file]])
+        Array[File] vcf_shards = select_first([ExecuteScattering.shards, ScatterVcfRemote.shards, chromosome_shards, split_chromosome_shards, [file]])
     }
-}   
+}
 
 task GetChromosomeSizes {
     input {
@@ -155,7 +151,7 @@ task GetChromosomeSizes {
         String docker
         RuntimeAttr? runtime_attr_override
     }
-    
+
     Float base_disk_gb = 10.0
 
     command <<<
@@ -166,9 +162,9 @@ task GetChromosomeSizes {
             ( while true ; do curl -H "Metadata-Flavor: Google" http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token > /tmp/token_fifo ; done ) &
             HTS_AUTH_LOCATION=/tmp/token_fifo tabix --verbosity 3 ~{vcf_file}
         fi;
-        
+
         export GCS_OAUTH_TOKEN=`/google-cloud-sdk/bin/gcloud auth application-default print-access-token`
-        
+
         bcftools index -s ~{vcf_file} | cut -f1,3 > contig_lengths.txt
         bcftools query -l ~{vcf_file} | wc -l > n_samples.txt
     >>>
@@ -204,7 +200,6 @@ task SplitByChromosomeRemote {
         String chromosome
         String prefix
         Float input_size
-        Boolean has_index
         String docker
         RuntimeAttr? runtime_attr_override
     }
@@ -214,12 +209,12 @@ task SplitByChromosomeRemote {
 
     command <<<
         set -euo pipefail
-        
+
         mkfifo /tmp/token_fifo
         ( while true ; do curl -H "Metadata-Flavor: Google" http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token > /tmp/token_fifo ; done ) &
-        
+
         HTS_AUTH_LOCATION=/tmp/token_fifo tabix --verbosity 3 -h ~{vcf_file} ~{chromosome} | bgzip -c > ~{prefix}."~{chromosome}".vcf.gz
-        
+
         tabix -p vcf ~{prefix}."~{chromosome}".vcf.gz
         # Count records in the contig
         HTS_AUTH_LOCATION=/tmp/token_fifo bcftools index -n ~{prefix}."~{chromosome}".vcf.gz > contig_length.txt
@@ -268,11 +263,11 @@ task SplitByChromosome {
         set -euo pipefail
 
         tabix --verbosity 3 ~{vcf_file}
-        
+
         tabix --verbosity 3 -h ~{vcf_file} ~{chromosome} | bgzip -c > ~{prefix}."~{chromosome}".vcf.gz
-        
+
         tabix -p vcf ~{prefix}."~{chromosome}".vcf.gz
-        
+
         # Count records in the contig
         HTS_AUTH_LOCATION=/tmp/token_fifo bcftools index -n ~{prefix}."~{chromosome}".vcf.gz > contig_length.txt
     >>>
@@ -321,11 +316,11 @@ task ExecuteScattering {
 
     command <<<
         set -euo pipefail
-        
+
         curl  ~{split_vcf_hail_script} > split_vcf.py
-        
+
         python3 split_vcf.py ~{vcf_file} ~{n_shards} ~{records_per_shard} ~{prefix} ~{select_first([runtime_attr.cpu_cores, default_attr.cpu_cores])} ~{select_first([runtime_attr.mem_gb, default_attr.mem_gb])} ~{genome_build}
-        
+
         for file in $(ls ~{prefix}.vcf.bgz | grep '.bgz'); do
             shard_num=$(echo $file | cut -d '-' -f2);
             mv ~{prefix}.vcf.bgz/$file ~{prefix}.shard_"$shard_num".vcf.bgz
@@ -375,11 +370,11 @@ task ScatterVcfRemote {
 
     command <<<
         set -euo pipefail
-        
+
         curl  ~{split_vcf_hail_script} > split_vcf.py
-        
+
         python3 split_vcf.py ~{vcf_file} ~{n_shards} ~{records_per_shard} ~{prefix} ~{select_first([runtime_attr.cpu_cores, default_attr.cpu_cores])} ~{select_first([runtime_attr.mem_gb, default_attr.mem_gb])} ~{genome_build}
-        
+
         for file in $(ls ~{prefix}.vcf.bgz | grep '.bgz'); do
             shard_num=$(echo $file | cut -d '-' -f2);
             mv ~{prefix}.vcf.bgz/$file ~{prefix}.shard_"$shard_num".vcf.bgz

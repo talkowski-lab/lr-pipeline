@@ -48,7 +48,6 @@ workflow CreateCohortCoverageSummary {
     call ConcatenateCoverages {
         input:
             formatted_coverages = ComputeBinnedCoverage.binned_coverage,
-            thresholds = thresholds,
             prefix = "~{prefix}.coverage",
             docker = utils_docker,
             runtime_attr_override = runtime_attr_merge_coverages
@@ -100,13 +99,13 @@ current_rows = []
 
 for bed_file in mosdepth_files:
     proc = subprocess.Popen(
-        ['tabix', bed_file, region], 
-        stdout=subprocess.PIPE, 
+        ['tabix', bed_file, region],
+        stdout=subprocess.PIPE,
         stderr=subprocess.DEVNULL,
         text=True
     )
     iterators.append(proc.stdout)
-    
+
     # Fast-forward to first valid overlapping interval
     line = proc.stdout.readline()
     while line:
@@ -141,13 +140,13 @@ with gzip.open(output_file + '.gz', 'wt') as out:
                     line = iterators[i].readline()
                 else:
                     current_rows[i] = None
-        
+
         if any(r is None for r in current_rows):
             break
-            
+
         # Find the end of this block of constant coverage across all samples
         min_end = min((r[1] for r in current_rows))
-        
+
         if min_end > current_pos:
             # Calculate stats once for the whole constant block
             depths = [r[2] for r in current_rows]
@@ -157,7 +156,7 @@ with gzip.open(output_file + '.gz', 'wt') as out:
             median_cov = int(depths_sorted[num_samples // 2])
             over_fracs = [round(sum(1 for d in depths if d > t) / num_samples, 6) for t in thresholds]
             stats_str = f"{mean_cov:.6f}\t{median_cov}\t{int(total_dp)}\t" + "\t".join(f"{f:.6f}" for f in over_fracs)
-            
+
             # Output bins matching the bin_size
             while current_pos < min_end:
                 next_bin_boundary = ((current_pos // bin_size) + 1) * bin_size
@@ -197,7 +196,6 @@ CODE
 task ConcatenateCoverages {
     input {
         Array[File] formatted_coverages
-        Array[Int] thresholds
         String prefix
         String docker
         RuntimeAttr? runtime_attr_override

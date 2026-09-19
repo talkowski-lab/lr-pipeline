@@ -164,10 +164,10 @@ task AddHeaders {
         set -euo pipefail
 
         bcftools view -h "~{vcf}" | grep "^##" > header.txt
-        
+
         echo '##INFO=<ID=SUB_FAMILY,Number=1,Type=String,Description="Sub-family of mobile element.">' >> header.txt
         echo '##INFO=<ID=ORIGIN,Number=.,Type=String,Description="Genomic coordinates for the source of the inserted sequence.">' >> header.txt
-        
+
         bcftools view -h "~{vcf}" | grep "^#CHROM" >> header.txt
 
         bcftools reheader \
@@ -222,7 +222,7 @@ task AnnotateDup {
         dup_prefix=~{select_first([dup_prefix, ''])}
         dup_suffix=~{select_first([dup_suffix, ''])}
         dup_lowercase=~{select_first([dup_lowercase, 'false'])}
-        
+
         awk -v pre="$dup_prefix" -v suf="$dup_suffix" -v lower="$dup_lowercase" '
             BEGIN {
                 FS = OFS = "\t"
@@ -231,31 +231,31 @@ task AnnotateDup {
                 gsub(/[\n\r]/, "", $6)
                 gsub(/[\n\r]/, "", $7)
                 gsub(/[\n\r]/, "", $8)
-                
+
                 $6 = pre $6 suf
                 if (lower == "true") {
                     $6 = tolower($6)
                 }
-                
+
                 if ($7 != "" && $7 != "." && length($7) > 0) {
                     origin = $7
                 } else {
                     origin = $8
                 }
-                
+
                 print $1, $2, $3, $4, $5, $6, origin
             }
         ' "~{dup_tsv}" > "dup_modified.tsv"
-        
+
         bgzip -c "dup_modified.tsv" > "dup_annotations.tsv.gz"
         tabix -s1 -b2 -e2 "dup_annotations.tsv.gz"
-        
+
         bcftools annotate \
             -a "dup_annotations.tsv.gz" \
             -c CHROM,POS,REF,ALT,~ID,INFO/allele_type,INFO/ORIGIN \
             -Oz -o ~{prefix}.vcf.gz \
             "~{vcf}"
-        
+
         tabix -p vcf ~{prefix}.vcf.gz
     >>>
 
@@ -303,7 +303,7 @@ task AnnotateMei {
         mei_prefix=~{select_first([mei_prefix, ''])}
         mei_suffix=~{select_first([mei_suffix, ''])}
         mei_lowercase=~{select_first([mei_lowercase, 'false'])}
-        
+
         awk -v pre="$mei_prefix" -v suf="$mei_suffix" -v lower="$mei_lowercase" '
             BEGIN {
                 FS = OFS = "\t"
@@ -318,16 +318,16 @@ task AnnotateMei {
                 print
             }
         ' "~{mei_tsv}" > "mei_modified.tsv"
-        
+
         bgzip -c "mei_modified.tsv" > "mei_annotations.tsv.gz"
         tabix -s1 -b2 -e2 "mei_annotations.tsv.gz"
-        
+
         bcftools annotate \
             -a "mei_annotations.tsv.gz" \
             -c CHROM,POS,REF,ALT,~ID,INFO/allele_type,INFO/SUB_FAMILY \
             -Oz -o ~{prefix}.vcf.gz \
             "~{vcf}"
-        
+
         tabix -p vcf ~{prefix}.vcf.gz
     >>>
 
@@ -375,7 +375,7 @@ task AnnotateMed {
         med_prefix=~{select_first([med_prefix, ''])}
         med_suffix=~{select_first([med_suffix, ''])}
         med_lowercase=~{select_first([med_lowercase, 'false'])}
-        
+
         awk -v pre="$med_prefix" -v suf="$med_suffix" -v lower="$med_lowercase" '
             BEGIN {
                 FS = OFS = "\t"
@@ -390,16 +390,16 @@ task AnnotateMed {
                 print
             }
         ' "~{med_tsv}" > "med_modified.tsv"
-        
+
         bgzip -c "med_modified.tsv" > "med_annotations.tsv.gz"
         tabix -s1 -b2 -e2 "med_annotations.tsv.gz"
-        
+
         bcftools annotate \
             -a "med_annotations.tsv.gz" \
             -c CHROM,POS,REF,ALT,~ID,INFO/allele_type,INFO/SUB_FAMILY \
             -Oz -o ~{prefix}.vcf.gz \
             "~{vcf}"
-        
+
         tabix -p vcf ~{prefix}.vcf.gz
     >>>
 

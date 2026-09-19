@@ -255,7 +255,7 @@ EOF
                 --allow-overlaps \
                 -Oz -o ~{prefix}.vcf.gz \
                 main_minus.vcf.gz subset_for_concat.vcf.gz
-            
+
             tabix -p vcf ~{prefix}.vcf.gz
         else
             mv annotated_source.vcf.gz ~{prefix}.vcf.gz

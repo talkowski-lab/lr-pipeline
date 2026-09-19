@@ -147,7 +147,7 @@ task RunKanpig {
 
     command <<<
         set -euo pipefail
-        
+
         kanpig gt \
             --input ~{input_vcf} \
             --out ~{prefix}.kanpig.vcf \
@@ -162,9 +162,9 @@ task RunKanpig {
             --max-mem ~{select_first([runtime_attr.mem_gb, default_attr.mem_gb]) - 1}G \
             -Oz -o ~{prefix}.vcf.gz \
             ~{prefix}.kanpig.vcf
-        
+
         rm ~{prefix}.kanpig.vcf
-        
+
         tabix -p vcf ~{prefix}.vcf.gz
     >>>
 
@@ -268,7 +268,7 @@ for rec in base_vcf:
     )
     kp_gt = kp_rec.samples[sample]['GT']
 
-    is_hemi = is_male and chrom in {"chrX", "chrY"} 
+    is_hemi = is_male and chrom in {"chrX", "chrY"}
     is_female_y = (not is_male) and chrom == "chrY"
 
     # Case 1: Ref/missing in base and ref in Kanpig
@@ -279,14 +279,14 @@ for rec in base_vcf:
         else:
             # Case 1b: Autosome, male on chrX/chrY and female on chrX, so set AD/DP/PL/GQ from Kanpig
             rec.samples[sample]['DP'] = kp_rec.samples[sample]['DP']
-            
+
             if kp_rec.samples[sample]['AD'] is not None and len(kp_rec.samples[sample]['AD']) == n_alleles:
                 ad = kp_rec.samples[sample]['AD']
                 pls = calculate_pl(ad[0], ad[1])
                 rec.samples[sample]['AD'] = ad
                 rec.samples[sample]['PL'] = pls
                 rec.samples[sample]['GQ'] = calculate_gq(pls)
-            
+
             if is_hemi:
                 # Case 1b_i: Male on chrX/chrY, so set GT to 0/.
                 rec.samples[sample]['GT'] = (0, None)
@@ -297,11 +297,11 @@ for rec in base_vcf:
     # Case 2: Ref/missing in base and missing/alt in Kanpig, so clear FORMAT fields
     if (not is_called(base_gt) and is_missing(kp_gt)) or (not is_called(base_gt) and is_called(kp_gt)):
         clear_format_fields(rec, sample, n_alleles)
-    
+
     gt_current = rec.samples[sample]['GT']
     rec.samples[sample]['GT'] = tuple(sorted(gt_current, key=lambda a: (a is None, a if a is not None else 0)))
     rec.samples[sample].phased = False
-    
+
     out.write(rec)
 
 base_vcf.close()

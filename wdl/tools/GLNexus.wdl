@@ -171,7 +171,7 @@ task GetRanges {
     Int disk_size = 1 + ceil(size(dict, "GB"))
 
     command <<<
-        set -euxo pipefail
+        set -euo pipefail
 
         if [[ "~{defined(bed)}" == "true" ]]; then
             cat ~{bed} | awk '{ print $1 ":" $2 "-" $3 }' > ranges.txt
@@ -244,7 +244,7 @@ task GLNexusJointCall {
     Int mem = 4 * num_cpus
 
     command <<<
-        set -x
+        set -euo pipefail
 
         # For guidance on performance settings, see https://github.com/dnanexus-rnd/GLnexus/wiki/Performance
         ulimit -Sn 65536
@@ -261,7 +261,8 @@ task GLNexusJointCall {
                 bn=$(basename ${gvcf} | sed -e 's/\.gz$//' -e 's/\.bgz$//' -e 's/\.vcf$//' -e 's@\.g$@@')
                 nn=${bn}.missing_dp_added.g.vcf.gz
                 SM=$(bcftools query -l ${gvcf})
-                bcftools view ${gvcf} | grep -v ':DP:' | grep -v '^#' | awk -F$'\t' 'BEGIN{OFS="\t"}{print $1,$2,"0"}' | bgzip -c > annot.txt.gz
+                # Tolerate a gVCF that already carries DP on every record, where both greps select nothing and exit 1
+                bcftools view ${gvcf} | grep -v ':DP:' | grep -v '^#' | awk -F$'\t' 'BEGIN{OFS="\t"}{print $1,$2,"0"}' | bgzip -c > annot.txt.gz || true
                 tabix -s1 -b2 -e2 annot.txt.gz
                 bcftools annotate -Oz2 -o ${nn} -s "${SM}" -a annot.txt.gz -c CHROM,POS,FORMAT/DP ${gvcf}
                 bcftools index -t ${nn}
@@ -323,7 +324,7 @@ task ConcatVariants {
     String file_suffix = if is_gvcf then "g.vcf.bgz" else "vcf.bgz"
 
     command <<<
-        set -euxo pipefail
+        set -euo pipefail
 
         bcftools concat -n ~{sep=' ' variant_files} | bcftools view | bgzip -@ ~{num_cpus} -c > ~{prefix}.~{file_suffix}
         tabix -p vcf ~{prefix}.~{file_suffix}

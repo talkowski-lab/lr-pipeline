@@ -27,7 +27,7 @@ workflow RepeatMasker {
             runtime_attr_override = runtime_attr_ins_to_fa
     }
 
-    call RepeatMasker {
+    call RunRepeatMasker {
         input:
             fa = INSToFa.ins_fa,
             prefix = "~{prefix}.rm",
@@ -36,7 +36,7 @@ workflow RepeatMasker {
     }
 
     output {
-        File rm_out = RepeatMasker.rm_out
+        File rm_out = RunRepeatMasker.rm_out
         File rm_fa = INSToFa.ins_fa
     }
 }
@@ -57,12 +57,12 @@ task INSToFa {
             -i '~{if defined(min_length) then "abs(INFO/allele_length) >= " + min_length + " && " else ""}INFO/allele_type == "ins"' \
             -Oz -o ~{prefix}.subset.vcf.gz \
             ~{vcf}
-        
+
         bcftools query \
             -f '%CHROM\t%POS\t%REF\t%ALT\n' \
             ~{prefix}.subset.vcf.gz \
         | awk 'length($3)==1 {print ">"$1":"$2";"$3"\n"$4}' > ~{prefix}.tmp.fa
-        
+
         seqkit rename -N1 ~{prefix}.tmp.fa > ~{prefix}.fa
     >>>
 
@@ -90,7 +90,7 @@ task INSToFa {
     }
 }
 
-task RepeatMasker {
+task RunRepeatMasker {
     input {
         File fa
         String prefix
@@ -100,14 +100,14 @@ task RepeatMasker {
 
     command <<<
         set -euo pipefail
-  
+
         RepeatMasker \
             -e rmblast \
             -species human \
             -pa 4 \
             -s \
             ~{fa}
-        
+
         mv ~{fa}.out ./~{prefix}.out
     >>>
 

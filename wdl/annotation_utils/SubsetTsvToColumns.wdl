@@ -118,7 +118,7 @@ CODE
     }
 
     RuntimeAttr default_attr = object {
-        cpu_cores: 1, 
+        cpu_cores: 1,
         mem_gb: 4,
         disk_gb: 2 * ceil(size(tsv_file, "GB")) + 5,
         boot_disk_gb: 10,

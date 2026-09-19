@@ -80,7 +80,7 @@ task SubsetLpsTsvToContig {
     }
 
     command <<<
-        set -eou pipefail
+        set -euo pipefail
 
         zcat -f ~{tsv} \
             | awk -F'\t' -v contig="~{contig}" '
@@ -147,7 +147,7 @@ task ConvertLPSTableToAFHistograms {
     }
 
     command <<<
-        set -eou pipefail
+        set -euo pipefail
 
         python3 -m str_analysis.convert_multisample_LPS_table_to_allele_frequency_histograms \
             --input-table ~{lps_tsv} \
@@ -156,7 +156,7 @@ task ConvertLPSTableToAFHistograms {
             --output-format TSV \
             --stratify-by-population \
             --stratify-by-sex
-        
+
         mv "$(dirname ~{lps_tsv})"/*.per_locus_and_motif.*.tsv.gz ~{prefix}.tsv.gz
     >>>
 

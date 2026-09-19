@@ -1,0 +1,30 @@
+name: Markdown Style Check
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - '**.md'
+      - '.github/scripts/check_markdown_style.py'
+  pull_request:
+    branches: [ main ]
+    paths:
+      - '**.md'
+      - '.github/scripts/check_markdown_style.py'
+
+jobs:
+  markdown_style_check:
+    runs-on: ubuntu-latest
+    name: Markdown Style Check
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up Python 3.8
+        uses: actions/setup-python@v3
+        with:
+          python-version: 3.8
+
+      - name: Check Markdown style against docs/conventions.md
+        run: |
+          python .github/scripts/check_markdown_style.py

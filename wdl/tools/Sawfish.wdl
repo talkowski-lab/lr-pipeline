@@ -171,7 +171,7 @@ task JointCall {
             ln -s "${bais[$i]}" "aligned/${ids[$i]}.bam.bai"
             echo "${ids[$i]}_discover, ${PWD}/aligned/${ids[$i]}.bam" >> samples.csv
         done
-        
+
         sawfish joint-call \
             --threads ~{select_first([runtime_attr.cpu_cores, default_attr.cpu_cores])} \
             --ref ~{ref_fa} \

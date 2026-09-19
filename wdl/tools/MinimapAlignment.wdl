@@ -86,7 +86,7 @@ task AlignAssembly {
         | samtools sort -@4 -o "~{out_prefix}.bam"
 
         samtools index -@3 "~{out_prefix}.bam"
-        
+
         samtools view -h "~{out_prefix}.bam" \
         | k8 $(which paftools.js) sam2paf \
             -L \
