@@ -53,5 +53,5 @@ In order to rerun _HiPhase_ without TRGT homopolymers.
 - (HPRC/HGSVC Only) _AnnotateVcfGQSQ_ --> hprc_hgsvc_vcf_V8.
 - (HPRC/HGSVC Only) _AnnotateAFPostHoc_ --> hprc_hgsvc_vcf_V9.
 - _AnnotateSVAnnotate_.
-- _AnnotateVcfSVAnnotate_ --> hprc_hgsvc_vcf_V10, aou_vcf_V4.
+- _AnnotateVcfSVAnnotate_ --> hprc_hgsvc_vcf_V10, aou_vcf_V5.
 - (AoU Only) _StripGenotypes_ --> aou_sites_vcf.
