@@ -16,8 +16,7 @@ workflow GenotypeDepth {
         File ref_dict
         File ploidy_table
 
-        File contig_list
-        File? contig_subset_list
+        Array[String] contigs
 
         String chr_x = "chrX"
         String chr_y = "chrY"
@@ -43,11 +42,11 @@ workflow GenotypeDepth {
             rd_file_idx = rd_file_idx,
             ref_dict = ref_dict,
             ploidy_table = ploidy_table,
+            contigs = contigs,
             docker = gatk_docker,
             runtime_attr_override = runtime_attr_train_sv_genotyping
     }
 
-    Array[String] contigs = read_lines(select_first([contig_subset_list, contig_list]))
     scatter (contig in contigs) {
         call GenotypeSVs {
             input:
@@ -108,6 +107,7 @@ task TrainSVGenotyping {
         String chr_y
         File ref_dict
         File ploidy_table
+        Array[String] contigs
         String prefix
         String docker
         RuntimeAttr? runtime_attr_override
@@ -123,6 +123,7 @@ task TrainSVGenotyping {
         set -euo pipefail
 
         gatk --java-options "-Xmx~{java_mem_mib}M" TrainSVGenotyping \
+            -L ~{sep=" -L " contigs} \
             -XL '~{chr_x}' \
             -XL '~{chr_y}' \
             -V '~{vcf}' \

@@ -304,8 +304,8 @@ workflows:
         - /.*/
 
   - subclass: WDL
-    name: CreateCohortAncestryFileAoUPhase2
-    primaryDescriptorPath: /wdl/annotation_utils/CreateCohortAncestryFileAoUPhase2.wdl
+    name: CreateCohortPedigreeAncestryFilesAoUPhase2
+    primaryDescriptorPath: /wdl/annotation_utils/CreateCohortPedigreeAncestryFilesAoUPhase2.wdl
     filters:
       branches:
         - main

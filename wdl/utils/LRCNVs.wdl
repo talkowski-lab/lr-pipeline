@@ -37,6 +37,7 @@ workflow LRCNVs {
         intervals: "GATK-style intervals used to collect depth profiles."
         sample_ids: "Identifier for each sample."
         depth_profiles: "Median depth at each interval, rounded to an integer. One file per sample. See the TSV format here https://gatk.broadinstitute.org/hc/en-us/articles/35967568802843-CollectReadCounts."
+        contigs: "Contigs to call CNVs on; intervals are intersected with these before annotation and filtering."
         cohort_id: "Identifier for the cohort used for denoising model generation."
         contig_ploidy_priors: "File containing contig ploidy priors."
         num_intervals_per_scatter: "Number of intervals to process in each scatter."
@@ -50,6 +51,7 @@ workflow LRCNVs {
         File intervals
         Array[String]+ sample_ids
         Array[File]+ depth_profiles
+        Array[String] contigs
         String prefix
         String cohort_id
 
@@ -147,6 +149,7 @@ workflow LRCNVs {
     call AnnotateIntervals {
         input:
             intervals = intervals,
+            contigs = contigs,
             prefix = prefix,
             ref_fa = ref_fa,
             ref_fai = ref_fai,
@@ -164,6 +167,7 @@ workflow LRCNVs {
     call FilterIntervals {
         input:
             intervals = intervals,
+            contigs = contigs,
             prefix = prefix,
             annotated_intervals = AnnotateIntervals.annotated_intervals,
             blacklist_intervals = blacklist_intervals,
@@ -318,6 +322,7 @@ workflow LRCNVs {
 task AnnotateIntervals {
     input {
         File intervals
+        Array[String] contigs
         String prefix
         File ref_fa
         File ref_fai
@@ -341,6 +346,8 @@ task AnnotateIntervals {
 
         gatk --java-options "-Xmx~{command_mem_mb}m" AnnotateIntervals \
             -L ~{intervals} \
+            -L ~{sep=" -L " contigs} \
+            --interval-set-rule INTERSECTION \
             --reference ~{ref_fa} \
             --sequence-dictionary ~{ref_dict} \
             ~{"--mappability-track " + mappability_track_bed} \
@@ -377,6 +384,7 @@ task AnnotateIntervals {
 task FilterIntervals {
     input {
         File intervals
+        Array[String] contigs
         String prefix
         File annotated_intervals
         File? blacklist_intervals
@@ -400,6 +408,8 @@ task FilterIntervals {
 
         gatk --java-options "-Xmx~{command_mem_mb}m" FilterIntervals \
             -L ~{intervals} \
+            -L ~{sep=" -L " contigs} \
+            --interval-set-rule INTERSECTION \
             ~{"-XL " + blacklist_intervals} \
             ~{if defined(read_count_files) then "--input " else ""} ~{sep=" --input " read_count_files} \
             ~{"--annotated-intervals " + annotated_intervals} \

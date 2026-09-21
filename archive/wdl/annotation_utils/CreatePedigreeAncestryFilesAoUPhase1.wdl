@@ -3,7 +3,7 @@ version 1.0
 import "../utils/Helpers.wdl"
 import "../utils/Structs.wdl"
 
-workflow CreatePedigreeAndAncestryFilesAoUPhase1 {
+workflow CreatePedigreeAncestryFilesAoUPhase1 {
     input {
         Array[String] sample_ids
         Array[String] sexes

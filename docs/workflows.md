@@ -641,14 +641,15 @@ Inputs:
 Outputs:
 - `metadata`: Merged cohort metadata file.
 
-### [CreateCohortAncestryFileAoUPhase2](../wdl/annotation_utils/CreateCohortAncestryFileAoUPhase2.wdl)
-This utility builds the two-column cohort ancestry file consumed by [CreateCohortMetadata](#createcohortmetadata) from the All of Us Phase 2 ancestry-prediction table, keeping the `ancestry_pred` label for each requested sample. It fails if any requested sample is absent from the predictions, and separately reports predicted samples that the cohort does not include.
+### [CreateCohortPedigreeAncestryFilesAoUPhase2](../wdl/annotation_utils/CreateCohortPedigreeAncestryFilesAoUPhase2.wdl)
+This utility builds the pedigree and two-column ancestry files consumed by [CreateCohortMetadata](#createcohortmetadata) from the All of Us Phase 2 ancestry-prediction table, keeping the `ancestry_pred` label for each requested sample. Every sample becomes a singleton PED row with unknown parents, sex and phenotype, since All of Us releases no pedigree or sex calls. It fails if any requested sample is absent from the predictions, and separately reports predicted samples that the cohort does not include.
 
 Inputs:
 - `File ancestry_predictions`: All of Us Phase 2 ancestry predictions, keyed by `research_id`.
 - `Array[String] sample_ids`: Sample IDs making up the cohort.
 
 Outputs:
+- `ped`: Pedigree file covering every sample in `sample_ids`.
 - `ancestry`: Two-column file of sample IDs and ancestry labels.
 - `missing_samples`: Samples present in `ancestry_predictions` but not in `sample_ids`.
 
@@ -1318,9 +1319,10 @@ This workflow calls cohort CNVs from long-read depth profiles with GATK gCNV, th
 
 Inputs:
 - `File intervals`, `Array[String]+ sample_ids`, `Array[File]+ depth_profiles`, and `String batch_id`: Cohort gCNV inputs and identifier.
-- `File contig_ploidy_priors`, `File ref_fa`, `File ref_fai`, and `File ref_dict`: gCNV and reference inputs; `Int num_intervals_per_scatter` defaults to `10000`.
+- `Array[String] contigs`: Contigs to process, given in reference dictionary order. gCNV interval annotation and filtering, depth preprocessing, clustering and genotyping are all restricted to these contigs, so genome-wide `intervals`, `merged_bincov`, `training_intervals` and `contig_ploidy_priors` are accepted.
+- `File contig_ploidy_priors`, `File ref_fa`, `File ref_fai`, and `File ref_dict`: gCNV and reference inputs; `Int num_intervals_per_scatter` defaults to `1500`.
 - `File merged_bincov` and `File merged_bincov_idx`: Merged read-depth evidence and its tabix index for depth genotyping.
-- `File pedigree`, `File primary_contigs_list`, `File training_intervals`, and `File median_coverage`: Cohort genotyping inputs. `File? contig_subset_list` restricts clustering and genotyping to selected contigs.
+- `File pedigree`, `File training_intervals`, and `File median_coverage`: Cohort genotyping inputs.
 - `String prefix` and `String variant_prefix`: Output and variant-ID prefixes. `String chr_x` and `String chr_y` default to `chrX` and `chrY`.
 - `String gatk_docker`, `String sv_base_mini_docker`, and `String sv_pipeline_docker`: Required container images.
 - Optional gCNV interval-filtering, contig-ploidy, and model controls retain their `mappability_*`, `segmental_duplication_*`, `blacklist_intervals`, `ploidy_*`, and `gcnv_*` names from `LRCNVs`.
@@ -1602,10 +1604,11 @@ Inputs:
 - `File intervals`: Interval list over which CNVs are called.
 - `Array[String]+ sample_ids`: Sample IDs in the cohort.
 - `Array[File]+ depth_profiles`: Per-sample read-depth profiles, aligned to `sample_ids`.
+- `Array[String] contigs`: Contigs to call CNVs on. `intervals` is intersected with these during annotation and filtering, so a genome-wide interval list may be supplied.
 - `String prefix`: Prefix for all generated outputs.
 - `String cohort_id`: Identifier for the cohort.
-- `File contig_ploidy_priors`: Contig ploidy priors used to determine per-sample contig ploidy.
-- `Int num_intervals_per_scatter`: Number of intervals processed per scatter shard (default `10000`).
+- `File contig_ploidy_priors`: Contig ploidy priors used to determine per-sample contig ploidy. May cover more contigs than `contigs`.
+- `Int num_intervals_per_scatter`: Number of intervals processed per scatter shard.
 - `File? gatk4_jar_override`: Override GATK4 jar.
 - `File? mappability_track_bed`: Mappability track used to annotate intervals.
 - `File? mappability_track_bed_idx`: Index for `mappability_track_bed`.
@@ -1655,7 +1658,7 @@ Inputs:
 - `Array[File]+ genotyped_segments_vcf_idxs`: Indexes for `genotyped_segments_vcfs`.
 - `String prefix`: Prefix for all generated outputs.
 - `File contig_ploidy_calls_tar`: Tarred gCNV contig-ploidy calls.
-- `File primary_contigs_list`: Contigs to process.
+- `Array[String] contigs`: Contigs to process, given in reference dictionary order.
 - `File ref_fai`: Reference FASTA index, used for contig ordering.
 - `File pedigree`: Pedigree supplying per-sample sex.
 - `String batch_id`: Identifier for the batch.
@@ -1679,8 +1682,7 @@ Inputs:
 - `File ploidy_table`: Ploidy table from `DepthPreprocessing`.
 - `String prefix`: Prefix for all generated outputs.
 - `String variant_prefix`: Prefix applied to generated variant IDs.
-- `File contig_list`: Contigs to cluster over.
-- `File? contig_subset_list`: Restrict clustering to this subset of contigs.
+- `Array[String] contigs`: Contigs to cluster over, given in reference dictionary order. These also become the `##contig` lines of the svtk-formatted output.
 - `File ref_fa`, `File ref_fai`, `File ref_dict`: Reference FASTA, index and sequence dictionary.
 - `String gatk_docker`, `String sv_base_mini_docker`, `String sv_pipeline_docker`: Docker images.
 - `Boolean fast_mode`: Use SVCluster fast mode (default `true`).
@@ -1712,8 +1714,7 @@ Inputs:
 - `File rd_file`, `File rd_file_idx`: Read-depth evidence matrix and index.
 - `File ref_dict`: Reference sequence dictionary.
 - `File ploidy_table`: Ploidy table from `DepthPreprocessing`.
-- `File contig_list`: Contigs to genotype over.
-- `File? contig_subset_list`: Restrict genotyping to this subset of contigs.
+- `Array[String] contigs`: Contigs to genotype over, given in reference dictionary order. Model training is also restricted to these, so `training_intervals` and `rd_file` may be genome-wide.
 - `String chr_x`, `String chr_y`: Allosome contig names (defaults `chrX` and `chrY`).
 - `String gatk_docker`, `String sv_base_mini_docker`: Docker images.
 - `RuntimeAttr?` overrides: `runtime_attr_train_sv_genotyping`, `runtime_attr_genotype_svs`, `runtime_attr_concat_vcfs`.

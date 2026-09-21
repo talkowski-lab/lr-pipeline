@@ -33,7 +33,7 @@ Outputs:
 - `biallelic_vcf_idx`: Index for the biallelic VCF.
 
 
-### [CreatePedigreeAndAncestryFilesAoUPhase1](../wdl/annotation_utils/CreatePedigreeAndAncestryFilesAoUPhase1.wdl)
+### [CreatePedigreeAncestryFilesAoUPhase1](../wdl/annotation_utils/CreatePedigreeAncestryFilesAoUPhase1.wdl)
 This utility generates a minimal pedigree file and an ancestry-assignment file from a list of sample IDs and their sexes, assigning every sample the `afr` ancestry of the All of Us Phase 1 cohort. It outputs both files.
 
 Inputs:

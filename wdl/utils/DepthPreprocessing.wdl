@@ -11,7 +11,7 @@ workflow DepthPreprocessing {
         Array[File]+ genotyped_segments_vcf_idxs
         String prefix
         File contig_ploidy_calls_tar
-        File primary_contigs_list
+        Array[String] contigs
         File ref_fai
         File pedigree
         String batch_id
@@ -93,7 +93,7 @@ workflow DepthPreprocessing {
     call MakePloidyTable {
         input:
             pedigree = pedigree,
-            contigs_list = primary_contigs_list,
+            contigs = contigs,
             chr_x = chr_x,
             chr_y = chr_y,
             prefix = prefix + ".ploidy",
@@ -105,7 +105,7 @@ workflow DepthPreprocessing {
         input:
             bed = MergeSetDel.out,
             sample_list = write_lines(sample_ids),
-            contig_list = primary_contigs_list,
+            contigs = contigs,
             ploidy_table = MakePloidyTable.ploidy_table,
             ref_fai = ref_fai,
             vid_prefix = "~{batch_id}_DEL",
@@ -118,7 +118,7 @@ workflow DepthPreprocessing {
         input:
             bed = MergeSetDup.out,
             sample_list = write_lines(sample_ids),
-            contig_list = primary_contigs_list,
+            contigs = contigs,
             ploidy_table = MakePloidyTable.ploidy_table,
             ref_fai = ref_fai,
             vid_prefix = "~{batch_id}_DUP",
@@ -328,7 +328,7 @@ task MergeSet {
 task MakePloidyTable {
     input {
         File pedigree
-        File contigs_list
+        Array[String] contigs
         String? chr_x
         String? chr_y
         String prefix
@@ -342,7 +342,7 @@ task MakePloidyTable {
         python /opt/sv-pipeline/scripts/ploidy_table_from_ped.py \
             --ped '~{pedigree}' \
             --out '~{prefix}.tsv' \
-            --contigs '~{contigs_list}' \
+            --contigs '~{write_lines(contigs)}' \
             ~{"--chr-x " + chr_x} \
             ~{"--chr-y " + chr_y}
     >>>
@@ -376,7 +376,7 @@ task CNVBEDToVCF {
     input {
         File bed
         File sample_list
-        File contig_list
+        Array[String] contigs
         File ploidy_table
         File ref_fai
         String vid_prefix
@@ -392,7 +392,7 @@ task CNVBEDToVCF {
             --bed '~{bed}' \
             --out '~{prefix}.vcf.gz' \
             --sample '~{sample_list}' \
-            --contigs '~{contig_list}' \
+            --contigs '~{write_lines(contigs)}' \
             --vid-prefix '~{vid_prefix}' \
             --ploidy-table '~{ploidy_table}' \
             --fai '~{ref_fai}'
@@ -408,7 +408,7 @@ task CNVBEDToVCF {
     RuntimeAttr default_attr = object {
         cpu_cores: 1,
         mem_gb: 4,
-        disk_gb: ceil(size([bed, sample_list, contig_list, ploidy_table, ref_fai], "GB") * 2) + 50,
+        disk_gb: ceil(size([bed, sample_list, ploidy_table, ref_fai], "GB") * 2) + 50,
         boot_disk_gb: 10,
         preemptible_tries: 1,
         max_retries: 0

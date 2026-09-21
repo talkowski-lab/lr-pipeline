@@ -16,6 +16,7 @@ workflow LongReadCNVs {
         File intervals
         Array[String]+ sample_ids
         Array[File]+ depth_profiles
+        Array[String] contigs
         Boolean sort_depth_profiles
         String batch_id
         File contig_ploidy_priors
@@ -26,10 +27,8 @@ workflow LongReadCNVs {
         File ref_dict
 
         File pedigree
-        File primary_contigs_list
         File training_intervals
         File median_coverage
-        File? contig_subset_list
 
         String prefix
         String variant_prefix
@@ -160,6 +159,7 @@ workflow LongReadCNVs {
             intervals = intervals,
             sample_ids = sample_ids,
             depth_profiles = depth_profiles_,
+            contigs = contigs,
             prefix = prefix,
             cohort_id = batch_id,
             contig_ploidy_priors = contig_ploidy_priors,
@@ -240,7 +240,7 @@ workflow LongReadCNVs {
             genotyped_segments_vcfs = LRCNVs.genotyped_segments_vcfs,
             genotyped_segments_vcf_idxs = LRCNVs.genotyped_segments_vcf_idxs,
             contig_ploidy_calls_tar = LRCNVs.contig_ploidy_calls_tar,
-            primary_contigs_list = primary_contigs_list,
+            contigs = contigs,
             ref_fai = ref_fai,
             pedigree = pedigree,
             batch_id = batch_id,
@@ -266,8 +266,7 @@ workflow LongReadCNVs {
             ploidy_table = DepthPreprocessing.ploidy_table,
             prefix = prefix,
             variant_prefix = variant_prefix,
-            contig_list = primary_contigs_list,
-            contig_subset_list = contig_subset_list,
+            contigs = contigs,
             ref_fa = ref_fa,
             ref_fai = ref_fai,
             ref_dict = ref_dict,
@@ -307,8 +306,7 @@ workflow LongReadCNVs {
             rd_file_idx = merged_bincov_idx,
             ref_dict = ref_dict,
             ploidy_table = DepthPreprocessing.ploidy_table,
-            contig_list = primary_contigs_list,
-            contig_subset_list = contig_subset_list,
+            contigs = contigs,
             chr_x = chr_x,
             chr_y = chr_y,
             gatk_docker = gatk_docker,

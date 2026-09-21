@@ -2,7 +2,7 @@ version 1.0
 
 import "../utils/Structs.wdl"
 
-workflow CreateCohortAncestryFileAoUPhase2 {
+workflow CreateCohortPedigreeAncestryFilesAoUPhase2 {
     input {
         File ancestry_predictions
         Array[String] sample_ids
@@ -10,25 +10,26 @@ workflow CreateCohortAncestryFileAoUPhase2 {
 
         String utils_docker
 
-        RuntimeAttr? runtime_attr_create_ancestry_file
+        RuntimeAttr? runtime_attr_create_pedigree_ancestry_files
     }
 
-    call CreateAncestryFile {
+    call CreatePedigreeAncestryFiles {
         input:
             ancestry_predictions = ancestry_predictions,
             sample_ids = sample_ids,
             prefix = prefix,
             docker = utils_docker,
-            runtime_attr_override = runtime_attr_create_ancestry_file
+            runtime_attr_override = runtime_attr_create_pedigree_ancestry_files
     }
 
     output {
-        File ancestry = CreateAncestryFile.ancestry_file
-        File missing_samples = CreateAncestryFile.missing_samples_file
+        File ped = CreatePedigreeAncestryFiles.ped_file
+        File ancestry = CreatePedigreeAncestryFiles.ancestry_file
+        File missing_samples = CreatePedigreeAncestryFiles.missing_samples_file
     }
 }
 
-task CreateAncestryFile {
+task CreatePedigreeAncestryFiles {
     input {
         File ancestry_predictions
         Array[String] sample_ids
@@ -56,6 +57,11 @@ absent = [sample_id for sample_id in sample_ids if sample_id not in pop_map]
 if absent:
     raise ValueError(f"Samples absent from the ancestry predictions: {', '.join(absent)}")
 
+# Write one singleton PED row per sample, with unknown parents, sex and phenotype
+with open("~{prefix}.ped", "w") as f:
+    for sample_id in sample_ids:
+        f.write(f"{sample_id}\t{sample_id}\t0\t0\t0\t0\n")
+
 with open("~{prefix}.ancestry.tsv", "w") as f:
     for sample_id in sample_ids:
         f.write(f"{sample_id}\t{pop_map[sample_id]}\n")
@@ -68,6 +74,7 @@ CODE
     >>>
 
     output {
+        File ped_file = "~{prefix}.ped"
         File ancestry_file = "~{prefix}.ancestry.tsv"
         File missing_samples_file = "~{prefix}.missing_samples.txt"
     }

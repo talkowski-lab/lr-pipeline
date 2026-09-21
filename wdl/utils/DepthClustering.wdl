@@ -11,8 +11,7 @@ workflow DepthClustering {
         String prefix
         String variant_prefix
 
-        File contig_list
-        File? contig_subset_list
+        Array[String] contigs
 
         File ref_fa
         File ref_fai
@@ -50,7 +49,6 @@ workflow DepthClustering {
         RuntimeAttr? runtime_attr_concat_vcfs
     }
 
-    Array[String] contigs = read_lines(select_first([contig_subset_list, contig_list]))
     scatter (contig in contigs) {
         call SVCluster {
             input:
@@ -99,7 +97,7 @@ workflow DepthClustering {
                 vcf_idx = select_first([ExcludeIntervalsByIntervalOverlap.filtered_vcf_idx, SVCluster.clustered_vcf_idx]),
                 prefix = "~{prefix}-~{contig}-depth-svtk_formatted",
                 script = gatk_to_svtk_script,
-                contig_list = contig_list,
+                contigs = contigs,
                 set_pass = svtk_set_pass,
                 docker = sv_pipeline_docker,
                 runtime_attr_override = runtime_attr_gatk_to_svtk_vcf
@@ -274,7 +272,7 @@ task GatkToSvtkVcf {
         File vcf
         File vcf_idx
         File? script
-        File contig_list
+        Array[String] contigs
         Boolean set_pass
         String prefix
         String docker
@@ -288,7 +286,7 @@ task GatkToSvtkVcf {
             --vcf '~{vcf}' \
             --out '~{prefix}.vcf.gz' \
             --source depth \
-            --contigs '~{contig_list}' \
+            --contigs '~{write_lines(contigs)}' \
             --remove-formats CN \
             ~{if set_pass then "--set-pass" else ""}
         tabix '~{prefix}.vcf.gz'
