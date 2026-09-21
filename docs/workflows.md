@@ -641,6 +641,17 @@ Inputs:
 Outputs:
 - `metadata`: Merged cohort metadata file.
 
+### [CreateCohortAncestryFileAoUPhase2](../wdl/annotation_utils/CreateCohortAncestryFileAoUPhase2.wdl)
+This utility builds the two-column cohort ancestry file consumed by [CreateCohortMetadata](#createcohortmetadata) from the All of Us Phase 2 ancestry-prediction table, keeping the `ancestry_pred` label for each requested sample. It fails if any requested sample is absent from the predictions, and separately reports predicted samples that the cohort does not include.
+
+Inputs:
+- `File ancestry_predictions`: All of Us Phase 2 ancestry predictions, keyed by `research_id`.
+- `Array[String] sample_ids`: Sample IDs making up the cohort.
+
+Outputs:
+- `ancestry`: Two-column file of sample IDs and ancestry labels.
+- `missing_samples`: Samples present in `ancestry_predictions` but not in `sample_ids`.
+
 ### [CreateSampleReadCounts](../wdl/annotation_utils/CreateSampleReadCounts.wdl)
 This utility produces a binned read-counts file for a single sample from its per-contig mosdepth BED outputs, binning counts at a fixed resolution and merging across contigs. It outputs the binned read-counts file.
 

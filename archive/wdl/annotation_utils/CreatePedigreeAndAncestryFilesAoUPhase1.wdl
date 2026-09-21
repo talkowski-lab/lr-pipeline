@@ -3,11 +3,11 @@ version 1.0
 import "../utils/Helpers.wdl"
 import "../utils/Structs.wdl"
 
-workflow CreatePedigreeAndAncestryFiles {
+workflow CreatePedigreeAndAncestryFilesAoUPhase1 {
     input {
         Array[String] sample_ids
         Array[String] sexes
-        String prefix = "cohort"
+        String prefix
 
         String utils_docker
 
