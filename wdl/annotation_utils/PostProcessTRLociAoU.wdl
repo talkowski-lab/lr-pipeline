@@ -52,7 +52,7 @@ workflow PostProcessTRLociAoU {
         RuntimeAttr? runtime_attr_apply
     }
 
-    call PhaseReplacementLociAoU {
+    call PrepareReplacementLociAoU {
         input:
             vcf = vcf,
             vcf_idx = vcf_idx,
@@ -67,11 +67,11 @@ workflow PostProcessTRLociAoU {
             runtime_attr_override = runtime_attr_prepare
     }
 
-    if (PhaseReplacementLociAoU.retained_count > 0) {
+    if (PrepareReplacementLociAoU.retained_count > 0) {
         call AnnotateSQMetrics.CalculateSiteMetrics as CalculateReplacementSQMetrics {
             input:
-                vcf = PhaseReplacementLociAoU.prepared_vcf,
-                vcf_idx = PhaseReplacementLociAoU.prepared_vcf_idx,
+                vcf = PrepareReplacementLociAoU.prepared_vcf,
+                vcf_idx = PrepareReplacementLociAoU.prepared_vcf_idx,
                 prefix = "~{prefix}.~{contig}.replacement.sq_metrics",
                 docker = utils_docker,
                 runtime_attr_override = runtime_attr_replacement_sq_metrics
@@ -79,8 +79,8 @@ workflow PostProcessTRLociAoU {
 
         call AnnotateGQMetrics.GenerateGQAnnotationTsv as CalculateReplacementSDMetrics {
             input:
-                vcf = PhaseReplacementLociAoU.prepared_vcf,
-                vcf_idx = PhaseReplacementLociAoU.prepared_vcf_idx,
+                vcf = PrepareReplacementLociAoU.prepared_vcf,
+                vcf_idx = PrepareReplacementLociAoU.prepared_vcf_idx,
                 gq_field = "SD",
                 gq_bins = [0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70, 75, 80, 85, 90, 95, 100],
                 gq_variant_filter = ".",
@@ -92,8 +92,8 @@ workflow PostProcessTRLociAoU {
 
         call AnnotateGQMetrics.GenerateABAnnotationTsv as CalculateReplacementABMetrics {
             input:
-                vcf = PhaseReplacementLociAoU.prepared_vcf,
-                vcf_idx = PhaseReplacementLociAoU.prepared_vcf_idx,
+                vcf = PrepareReplacementLociAoU.prepared_vcf,
+                vcf_idx = PrepareReplacementLociAoU.prepared_vcf_idx,
                 ab_bins = [0.00, 0.05, 0.10, 0.15, 0.20, 0.25, 0.30, 0.35, 0.40, 0.45, 0.50, 0.55, 0.60, 0.65, 0.70, 0.75, 0.80, 0.85, 0.90, 0.95, 1.00],
                 prefix = "~{prefix}.~{contig}.replacement.ab_metrics",
                 docker = utils_docker,
@@ -102,8 +102,8 @@ workflow PostProcessTRLociAoU {
 
         call AnnotateVRS.AnnotateVcfWithVRS as AnnotateReplacementVRS {
             input:
-                vcf = PhaseReplacementLociAoU.prepared_vcf,
-                vcf_idx = PhaseReplacementLociAoU.prepared_vcf_idx,
+                vcf = PrepareReplacementLociAoU.prepared_vcf,
+                vcf_idx = PrepareReplacementLociAoU.prepared_vcf_idx,
                 prefix = "~{prefix}.~{contig}.replacement.vrs",
                 seqrepo_tar = seqrepo_tar,
                 docker = vrs_docker,
@@ -121,8 +121,8 @@ workflow PostProcessTRLociAoU {
 
         call AnnotateRegion.AnnotateGenomicContext as AnnotateReplacementRegion {
             input:
-                vcf = PhaseReplacementLociAoU.prepared_vcf,
-                vcf_idx = PhaseReplacementLociAoU.prepared_vcf_idx,
+                vcf = PrepareReplacementLociAoU.prepared_vcf,
+                vcf_idx = PrepareReplacementLociAoU.prepared_vcf_idx,
                 simple_repeats_bed = simple_repeats_bed,
                 seg_dup_bed = seg_dup_bed,
                 repeat_masked_bed = repeat_masked_bed,
@@ -133,8 +133,8 @@ workflow PostProcessTRLociAoU {
 
         call AnnotateInSilicoPredictors.AnnotateInSilicoPredictorsTask as AnnotateReplacementInSilico {
             input:
-                vcf = PhaseReplacementLociAoU.prepared_vcf,
-                vcf_idx = PhaseReplacementLociAoU.prepared_vcf_idx,
+                vcf = PrepareReplacementLociAoU.prepared_vcf,
+                vcf_idx = PrepareReplacementLociAoU.prepared_vcf_idx,
                 cadd_ht = cadd_ht,
                 pangolin_ht = pangolin_ht,
                 phylop_ht = phylop_ht,
@@ -149,8 +149,8 @@ workflow PostProcessTRLociAoU {
 
         call AnnotateVcf.AnnotateSequentially as AttachReplacementAnnotations {
             input:
-                vcf = PhaseReplacementLociAoU.prepared_vcf,
-                vcf_idx = PhaseReplacementLociAoU.prepared_vcf_idx,
+                vcf = PrepareReplacementLociAoU.prepared_vcf,
+                vcf_idx = PrepareReplacementLociAoU.prepared_vcf_idx,
                 annotations_tsvs = [AnnotateReplacementRegion.annotations_tsv, AnnotateReplacementInSilico.annotations_tsv, ExtractReplacementVRS.annotations_tsv, CalculateReplacementSQMetrics.annotations_tsv, CalculateReplacementSDMetrics.annotation_tsv, CalculateReplacementABMetrics.annotation_tsv],
                 prefix = "~{prefix}.~{contig}.replacement_annotated",
                 info_names = [["REGION"], ["cadd_raw_score", "cadd_phred", "pangolin_largest", "revel_max", "phylop", "spliceai_ds_max"], ["VRS_Allele_IDs", "VRS_Error", "VRS_Starts", "VRS_Ends", "VRS_States", "VRS_Lengths", "VRS_RepeatSubunitLengths"], ["inbreeding_coeff", "AS_pab_max", "AS_QUALapprox", "AS_QD", "AS_VarDP", "HWE"], ["sd_hist_all_bin_freq", "sd_hist_alt_bin_freq"], ["ab_hist_alt_bin_freq"]],
@@ -172,8 +172,8 @@ workflow PostProcessTRLociAoU {
             vcf_idx = vcf_idx,
             replacement_vcf = AttachReplacementAnnotations.annotated_vcf,
             replacement_vcf_idx = AttachReplacementAnnotations.annotated_vcf_idx,
-            replacement_map_tsv = PhaseReplacementLociAoU.replacement_map_tsv,
-            input_trv_catalog_match_tsv = PhaseReplacementLociAoU.trv_catalog_match_tsv,
+            replacement_map_tsv = PrepareReplacementLociAoU.replacement_map_tsv,
+            input_trv_catalog_match_tsv = PrepareReplacementLociAoU.trv_catalog_match_tsv,
             replace_gnomad_str = replace_gnomad_str,
             prefix = "~{prefix}.~{contig}",
             docker = utils_docker,
@@ -191,7 +191,7 @@ workflow PostProcessTRLociAoU {
 
 # Recover disease-associated catalog loci missing from the integrated VCF using a joint TRGT VCF and catalog BED
 # Genotypes are taken unphased, exactly as TRGT reports them
-task PhaseReplacementLociAoU {
+task PrepareReplacementLociAoU {
     input {
         File vcf
         File vcf_idx
@@ -380,6 +380,7 @@ tsv_columns = [
 ]
 tsv_rows = []
 selected = []
+selected_by_record = {}
 
 for entry in catalog:
     if not entry or not entry.get('LocusId'):
@@ -453,7 +454,11 @@ for entry in catalog:
     best = max(input_overlaps, key=lambda r: overlap(trec, r), default=None)
     old = best if (best is not None and overlap(trec, best) > 0) else None
     row['status'] = 'replaced_from_trgt' if old is not None else 'added_from_trgt'
-    selected.append({'trec': trec, 'old': old})
+    # Several catalog loci can share one TRExplorerV1, so recover each TRGT record once
+    record_identity = (trec.contig, trec.start, trec.stop, trec.ref, trec.alts)
+    if record_identity not in selected_by_record:
+        selected_by_record[record_identity] = {'trec': trec, 'old': old}
+        selected.append(selected_by_record[record_identity])
     tsv_rows.append(row)
 
 # Assign IDs exactly as IntegrateTRs.SetTrVariantIds does, including the _1/_2 suffixes on duplicates
