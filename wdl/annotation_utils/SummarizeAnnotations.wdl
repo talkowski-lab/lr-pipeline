@@ -42,6 +42,7 @@ workflow SummarizeAnnotations {
 
     Boolean sites_only = !(create_per_sample || create_per_allele || create_plotting)
     Boolean run_denovo = create_plotting && defined(ped)
+    Array[String] no_trios = []
 
     if (run_denovo) {
         call Helpers.FindTrios {
@@ -54,6 +55,8 @@ workflow SummarizeAnnotations {
                 runtime_attr_override = runtime_attr_find_trios
         }
     }
+    
+    File trio_definitions = select_first([FindTrios.trio_definitions, write_lines(no_trios)])
 
     scatter (i in range(length(vcfs))) {
         if (sites_only) {
@@ -106,7 +109,7 @@ workflow SummarizeAnnotations {
                     create_list = create_list,
                     create_plotting = create_plotting,
                     split_by_region = split_by_region,
-                    trio_definitions = FindTrios.trio_definitions,
+                    trio_definitions = trio_definitions,
                     length_bins_summary = length_bins_summary,
                     length_bins_plotting = length_bins_plotting,
                     af_bins_plotting = af_bins_plotting,
@@ -322,7 +325,7 @@ task CountAnnotationShard {
         Boolean create_list
         Boolean create_plotting
         Boolean split_by_region
-        File? trio_definitions
+        File trio_definitions
         Array[Int] length_bins_summary
         Array[Int] length_bins_plotting
         Array[Float] af_bins_plotting
@@ -805,7 +808,7 @@ with open(SAMPLE_COUNT_OUTPUT, "w") as handle:
 
 trios = []
 all_probands = []
-if CREATE_PLOTTING and TRIO_DEF_PATH:
+if CREATE_PLOTTING:
     with open(TRIO_DEF_PATH) as f:
         for line in f:
             fields = line.strip().split("\t")
