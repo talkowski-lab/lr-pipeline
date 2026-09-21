@@ -25,9 +25,8 @@ workflow SummarizeAnnotations {
         Int max_length = -1
         Int min_length = -1
 
-        Int? records_per_shard
-
         File? ped
+        Int? records_per_shard
 
         String utils_docker
 
@@ -41,22 +40,16 @@ workflow SummarizeAnnotations {
     }
 
     Boolean sites_only = !(create_per_sample || create_per_allele || create_plotting)
-    Boolean run_denovo = create_plotting && defined(ped)
-    Array[String] no_trios = []
 
-    if (run_denovo) {
-        call Helpers.FindTrios {
-            input:
-                vcf = vcfs[0],
-                vcf_idx = vcf_idxs[0],
-                ped = select_first([ped]),
-                prefix = prefix,
-                docker = utils_docker,
-                runtime_attr_override = runtime_attr_find_trios
-        }
+    call Helpers.FindTrios {
+        input:
+            vcf = vcfs[0],
+            vcf_idx = vcf_idxs[0],
+            ped = ped,
+            prefix = prefix,
+            docker = utils_docker,
+            runtime_attr_override = runtime_attr_find_trios
     }
-    
-    File trio_definitions = select_first([FindTrios.trio_definitions, write_lines(no_trios)])
 
     scatter (i in range(length(vcfs))) {
         if (sites_only) {
@@ -109,7 +102,7 @@ workflow SummarizeAnnotations {
                     create_list = create_list,
                     create_plotting = create_plotting,
                     split_by_region = split_by_region,
-                    trio_definitions = trio_definitions,
+                    trio_definitions = FindTrios.trio_definitions,
                     length_bins_summary = length_bins_summary,
                     length_bins_plotting = length_bins_plotting,
                     af_bins_plotting = af_bins_plotting,
@@ -264,22 +257,20 @@ workflow SummarizeAnnotations {
                 runtime_attr_override = runtime_attr_convert
         }
 
-        if (run_denovo) {
-            call MergeSampleSpecificTables as MergePlottingDenovo {
-                input:
-                    count_tsvs = select_all(flatten(CountAnnotationShard.plotting_denovo_tsv)),
-                    prefix = "~{prefix}.plotting_denovo",
-                    docker = utils_docker,
-                    runtime_attr_override = runtime_attr_merge
-            }
+        call MergeSampleSpecificTables as MergePlottingDenovo {
+            input:
+                count_tsvs = select_all(flatten(CountAnnotationShard.plotting_denovo_tsv)),
+                prefix = "~{prefix}.plotting_denovo",
+                docker = utils_docker,
+                runtime_attr_override = runtime_attr_merge
+        }
 
-            call Helpers.ConvertTsvToParquet as ConvertPlottingDenovo {
-                input:
-                    tsv = MergePlottingDenovo.merged_tsv,
-                    prefix = "~{prefix}.plotting_denovo",
-                    docker = utils_docker,
-                    runtime_attr_override = runtime_attr_convert
-            }
+        call Helpers.ConvertTsvToParquet as ConvertPlottingDenovo {
+            input:
+                tsv = MergePlottingDenovo.merged_tsv,
+                prefix = "~{prefix}.plotting_denovo",
+                docker = utils_docker,
+                runtime_attr_override = runtime_attr_convert
         }
 
         call MergeVariantListTables {

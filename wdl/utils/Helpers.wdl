@@ -2360,7 +2360,7 @@ task FindTrios {
     input {
         File vcf
         File vcf_idx
-        File ped
+        File? ped
         String prefix
         String docker
         RuntimeAttr? runtime_attr_override
@@ -2372,20 +2372,23 @@ task FindTrios {
         python3 <<'PYCODE'
 import pysam
 
-vcf = pysam.VariantFile("~{vcf}")
-vcf_samples = set(vcf.header.samples)
-vcf.close()
+PED_PATH = "~{ped}"
 
 trios = []
-with open("~{ped}") as f:
-    for line in f:
-        if line.startswith("#"):
-            continue
-        fields = line.strip().split("\t")
-        sample, father, mother = fields[1], fields[2], fields[3]
-        if father != "0" and mother != "0":
-            if sample in vcf_samples and father in vcf_samples and mother in vcf_samples:
-                trios.append((sample, father, mother))
+if PED_PATH:
+    vcf = pysam.VariantFile("~{vcf}")
+    vcf_samples = set(vcf.header.samples)
+    vcf.close()
+
+    with open(PED_PATH) as f:
+        for line in f:
+            if line.startswith("#"):
+                continue
+            fields = line.strip().split("\t")
+            sample, father, mother = fields[1], fields[2], fields[3]
+            if father != "0" and mother != "0":
+                if sample in vcf_samples and father in vcf_samples and mother in vcf_samples:
+                    trios.append((sample, father, mother))
 
 with open("~{prefix}.trio_definitions.tsv", "w") as out:
     for child, father, mother in trios:
@@ -2409,7 +2412,7 @@ PYCODE
     RuntimeAttr default_attr = object {
         cpu_cores: 1,
         mem_gb: 4,
-        disk_gb: ceil(size([vcf, ped], "GB")) + 10,
+        disk_gb: ceil(size(vcf, "GB") + size(ped, "GB")) + 10,
         boot_disk_gb: 10,
         preemptible_tries: 1,
         max_retries: 0
