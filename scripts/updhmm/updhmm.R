@@ -13,6 +13,7 @@ suppressPackageStartupMessages({
     library(VariantAnnotation)
     library(UPDhmm)
     library(BiocParallel)
+    library(Rsamtools)
 })
 
 args <- commandArgs(trailingOnly = TRUE)
@@ -34,17 +35,34 @@ ncpu      <- suppressWarnings(as.integer(args[[7]]))
 base_cols <- c("ID", "chromosome", "start", "end", "group", "n_snps",
                "ratio_father", "ratio_mother", "ratio_proband", "n_mendelian_error")
 
-# Read only GT to keep memory bounded on whole-genome trios.
-param <- ScanVcfParam(info = NA, geno = "GT")
-vcf <- readVcf(vcf_file, genome = "hg38", param = param)
-
-vcf <- vcfCheck(vcf, proband = proband, mother = mother, father = father)
-
 bp <- if (!is.na(ncpu) && ncpu > 1) MulticoreParam(workers = ncpu) else SerialParam()
-events <- calculateEvents(vcf, add_ratios = TRUE, BPPARAM = bp)
 
-if (!is.null(events) && nrow(events) > 0) {
-    events <- collapseEvents(events)
+# Process one chromosome at a time so peak memory is bounded by the largest
+# single contig rather than the whole genome. UPD events never span chromosomes
+# (the HMM runs along one contig), so per-chromosome results are identical to a
+# genome-wide run once concatenated. Only GT is read, and the trio VCF is tabix-
+# indexed, so each ranged read touches only that contig's records.
+contigs <- seqnamesTabix(vcf_file)
+seq_len <- seqlengths(seqinfo(scanVcfHeader(vcf_file)))
+
+per_chrom <- list()
+for (chr in contigs) {
+    end <- if (chr %in% names(seq_len) && !is.na(seq_len[[chr]])) seq_len[[chr]] else .Machine$integer.max
+    which_gr <- GRanges(chr, IRanges(1L, end))
+    param <- ScanVcfParam(info = NA, geno = "GT", which = which_gr)
+    vcf <- readVcf(vcf_file, genome = "hg38", param = param)
+    if (nrow(vcf) == 0) { rm(vcf); next }
+
+    vcf <- vcfCheck(vcf, proband = proband, mother = mother, father = father)
+    ev <- calculateEvents(vcf, add_ratios = TRUE, BPPARAM = bp)
+    if (!is.null(ev) && nrow(ev) > 0) per_chrom[[chr]] <- ev
+
+    rm(vcf)
+    gc(verbose = FALSE)
+}
+
+if (length(per_chrom) > 0) {
+    events <- collapseEvents(do.call(rbind, per_chrom))
 } else {
     events <- data.frame(setNames(rep(list(character(0)), length(base_cols)), base_cols),
                          stringsAsFactors = FALSE)
