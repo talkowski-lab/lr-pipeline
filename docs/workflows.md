@@ -991,9 +991,10 @@ Inputs:
 - `File metadata_tsv`: Sample metadata (population, sex) used to stratify the histograms.
 - `Array[File] vcf_trid_metadata_tsvs`: Per-contig TRID metadata from `TRGTLPS.vcf_trid_metadata_tsvs`, index-aligned with the `contigs` input array. Required for any callset genotyped against a catalog that contains variation clusters, as it allows TRIDs that include several comma-separated LocusIds to be processed correctly. Defaults to empty, which keeps the previous behavior for catalogs of isolated repeats only.
 - `Array[String] contigs`: Contigs to process within the LPS table.
+- `Array[Array[String]] filter_trid_motif_pairs`: `(TRID, motif)` pairs to drop from `lps_tsv` before the histograms are computed, given as two-element arrays of the LPS table's `trid` and `motif` column values - e.g. `[['X-149631602-149631617-TCC,X-149631685-149631694-GCT,X-149631723-149631735-CGCCGT', 'CGC']]`. Use it for a row trgt-lps emitted from a spurious `INFO/MOTIFS` value, which cannot be resolved against `vcf_trid_metadata_tsvs` because no LocusId in the TRID carries that motif. Every pair must match at least one LPS row or the task fails. Pass an empty array to filter nothing.
 - `String prefix`: Prefix for output file names.
 - `String stranalysis_docker`, `String utils_docker`: Container images.
-- `RuntimeAttr? runtime_attr_*`: Optional per-task runtime overrides (3).
+- `RuntimeAttr? runtime_attr_*`: Optional per-task runtime overrides (4).
 
 Outputs:
 - `File trgt_histograms_tsv`: Combined per-locus allele-frequency histograms TSV.

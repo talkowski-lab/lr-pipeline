@@ -15,6 +15,7 @@ workflow CreateTRGTHistograms {
         metadata_tsv: "Sample metadata (population, sex) used to stratify the histograms."
         vcf_trid_metadata_tsvs: "Per-contig TRID metadata from `TRGTLPS.vcf_trid_metadata_tsvs`, index-aligned with the `contigs` input array. Required for any callset genotyped against a catalog that contains variation clusters, as it allows TRIDs that include several comma-separated LocusIds to be processed correctly. Defaults to empty, which keeps the previous behavior for catalogs of isolated repeats only."
         contigs: "Contigs to process within the LPS table."
+        filter_trid_motif_pairs: "`(TRID, motif)` pairs to drop from `lps_tsv` before the histograms are computed, given as two-element arrays of the LPS table's `trid` and `motif` column values - e.g. `[['X-149631602-149631617-TCC,X-149631685-149631694-GCT,X-149631723-149631735-CGCCGT', 'CGC']]`. Use it for a row trgt-lps emitted from a spurious `INFO/MOTIFS` value, which cannot be resolved against `vcf_trid_metadata_tsvs` because no LocusId in the TRID carries that motif. Every pair must match at least one LPS row or the task fails. Pass an empty array to filter nothing."
         trgt_histograms_tsv: "Combined per-locus allele-frequency histograms TSV."
     }
 
@@ -25,15 +26,31 @@ workflow CreateTRGTHistograms {
         Array[String] contigs
         String prefix
 
+        Array[Array[String]] filter_trid_motif_pairs
+
         String stranalysis_docker
         String utils_docker
 
+        RuntimeAttr? runtime_attr_filter_lps_rows
         RuntimeAttr? runtime_attr_subset_tsv
         RuntimeAttr? runtime_attr_convert
         RuntimeAttr? runtime_attr_concat
     }
 
     Boolean single_contig = length(contigs) == 1
+
+    if (length(filter_trid_motif_pairs) > 0) {
+        call Helpers.FilterLpsTsvRows {
+            input:
+                tsv = lps_tsv,
+                filter_trid_motif_pairs = filter_trid_motif_pairs,
+                prefix = "~{prefix}.filtered",
+                docker = utils_docker,
+                runtime_attr_override = runtime_attr_filter_lps_rows
+        }
+    }
+
+    File filtered_lps_tsv = select_first([FilterLpsTsvRows.filtered_tsv, lps_tsv])
 
     scatter (i in range(length(contigs))) {
         String contig = contigs[i]
@@ -45,7 +62,7 @@ workflow CreateTRGTHistograms {
         if (!single_contig) {
             call SubsetLpsTsvToContig {
                 input:
-                    tsv = lps_tsv,
+                    tsv = filtered_lps_tsv,
                     contig = contig,
                     prefix = "~{prefix}.~{contig}",
                     docker = utils_docker,
@@ -53,7 +70,7 @@ workflow CreateTRGTHistograms {
             }
         }
 
-        File contig_lps_tsv = select_first([SubsetLpsTsvToContig.subset_tsv, lps_tsv])
+        File contig_lps_tsv = select_first([SubsetLpsTsvToContig.subset_tsv, filtered_lps_tsv])
 
         call ConvertLPSTableToAFHistograms {
             input:

@@ -2238,6 +2238,92 @@ task FilterDuplicateZeroDepthReferenceBlocks {
     }
 }
 
+# Drop hand-listed (trid, motif) rows from an LPS table, e.g. one trgt-lps emitted from a spurious INFO/MOTIFS value
+task FilterLpsTsvRows {
+    input {
+        File tsv
+        Array[Array[String]] filter_trid_motif_pairs
+        String prefix
+        String docker
+        RuntimeAttr? runtime_attr_override
+    }
+
+    command <<<
+        set -euo pipefail
+
+        zcat -f ~{tsv} \
+            | awk -F'\t' '
+                # Every pair is read before the LPS table, so a pair matching no row can be reported at the end
+                NR == FNR {
+                    if (NF != 2) {
+                        printf "Filter pair on line %d has %d field(s), expected a trid and a motif\n", FNR, NF > "/dev/stderr"
+                        malformed = 1
+                        exit 1
+                    }
+                    matched[$1 SUBSEP $2] = 0
+                    next
+                }
+
+                FNR == 1 {
+                    print
+                    next
+                }
+
+                ($1 SUBSEP $2) in matched {
+                    matched[$1 SUBSEP $2] += 1
+                    next
+                }
+
+                {
+                    print
+                }
+
+                END {
+                    if (malformed) {
+                        exit 1
+                    }
+
+                    for (key in matched) {
+                        split(key, pair, SUBSEP)
+                        printf "Filtered %d LPS row(s) for pair (%s, %s)\n", matched[key], pair[1], pair[2] > "/dev/stderr"
+                        if (matched[key] == 0) {
+                            unmatched = 1
+                        }
+                    }
+
+                    if (unmatched) {
+                        printf "Every filter pair must match at least one LPS row; the LPS table and the filter list disagree\n" > "/dev/stderr"
+                        exit 1
+                    }
+                }
+            ' ~{write_tsv(filter_trid_motif_pairs)} - \
+            > ~{prefix}.tsv
+    >>>
+
+    output {
+        File filtered_tsv = "~{prefix}.tsv"
+    }
+
+    RuntimeAttr default_attr = object {
+        cpu_cores: 1,
+        mem_gb: 4,
+        disk_gb: 10 * ceil(size(tsv, "GB")) + 20,
+        boot_disk_gb: 10,
+        preemptible_tries: 1,
+        max_retries: 0
+    }
+    RuntimeAttr runtime_attr = select_first([runtime_attr_override, default_attr])
+    runtime {
+        cpu: select_first([runtime_attr.cpu_cores, default_attr.cpu_cores])
+        memory: select_first([runtime_attr.mem_gb, default_attr.mem_gb]) + " GiB"
+        disks: "local-disk " + select_first([runtime_attr.disk_gb, default_attr.disk_gb]) + " HDD"
+        bootDiskSizeGb: select_first([runtime_attr.boot_disk_gb, default_attr.boot_disk_gb])
+        docker: docker
+        preemptible: select_first([runtime_attr.preemptible_tries, default_attr.preemptible_tries])
+        maxRetries: select_first([runtime_attr.max_retries, default_attr.max_retries])
+    }
+}
+
 task FilterTRGTVcf {
     input {
         File vcf
