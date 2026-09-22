@@ -26,6 +26,7 @@ workflow CreateCohortPedigreeAncestryFilesAoUPhase2 {
         File ped = CreatePedigreeAncestryFiles.ped_file
         File ancestry = CreatePedigreeAncestryFiles.ancestry_file
         File missing_samples = CreatePedigreeAncestryFiles.missing_samples_file
+        File samples_missing_ancestry = CreatePedigreeAncestryFiles.samples_missing_ancestry_file
     }
 }
 
@@ -44,6 +45,9 @@ task CreatePedigreeAncestryFiles {
         python3 <<CODE
 import csv
 
+# Rename the All of Us European label to the gnomAD label that compute_AFs.py accepts
+POP_LABELS = {"eur": "nfe"}
+
 with open("~{write_lines(sample_ids)}") as f:
     sample_ids = [line.strip() for line in f if line.strip()]
 
@@ -51,25 +55,29 @@ with open("~{write_lines(sample_ids)}") as f:
 pop_map = {}
 with open("~{ancestry_predictions}") as f:
     for row in csv.DictReader(f, delimiter='\t'):
-        pop_map[row["research_id"]] = row["ancestry_pred"]
-
-absent = [sample_id for sample_id in sample_ids if sample_id not in pop_map]
-if absent:
-    raise ValueError(f"Samples absent from the ancestry predictions: {', '.join(absent)}")
+        ancestry_pred = row["ancestry_pred"]
+        pop_map[row["research_id"]] = POP_LABELS.get(ancestry_pred, ancestry_pred)
 
 # Write one singleton PED row per sample, with unknown parents, sex and phenotype
 with open("~{prefix}.ped", "w") as f:
     for sample_id in sample_ids:
         f.write(f"{sample_id}\t{sample_id}\t0\t0\t0\t0\n")
 
+# Label unpredicted samples '.' so compute_AFs.py counts them globally but in no population
 with open("~{prefix}.ancestry.tsv", "w") as f:
     for sample_id in sample_ids:
-        f.write(f"{sample_id}\t{pop_map[sample_id]}\n")
+        f.write(f"{sample_id}\t{pop_map.get(sample_id, '.')}\n")
 
 # Report predicted samples that the cohort does not include
 with open("~{prefix}.missing_samples.txt", "w") as f:
     for sample_id in sorted(set(pop_map) - set(sample_ids)):
         f.write(f"{sample_id}\n")
+
+# Report cohort samples that the predictions do not cover
+with open("~{prefix}.samples_missing_ancestry.txt", "w") as f:
+    for sample_id in sample_ids:
+        if sample_id not in pop_map:
+            f.write(f"{sample_id}\n")
 CODE
     >>>
 
@@ -77,6 +85,7 @@ CODE
         File ped_file = "~{prefix}.ped"
         File ancestry_file = "~{prefix}.ancestry.tsv"
         File missing_samples_file = "~{prefix}.missing_samples.txt"
+        File samples_missing_ancestry_file = "~{prefix}.samples_missing_ancestry.txt"
     }
 
     RuntimeAttr default_attr = object {
