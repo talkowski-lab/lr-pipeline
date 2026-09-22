@@ -1387,6 +1387,26 @@ Outputs:
 - `Array[File] resource_usage_visualizations`: Per-shard diagnostic outputs.
 - `Array[File] visual_reports`: Per-shard diagnostic outputs.
 
+### [Hifiasm](../wdl/tools/Hifiasm.wdl)
+This tool assembles a sample's long reads into a haplotype-resolved de novo assembly using hifiasm (https://github.com/chhylp123/hifiasm). Reads are converted to FASTQ, assembled in bubble-phasing mode and the resulting assembly graphs are converted to bgzipped FASTA.
+
+Without parental or Hi-C data the two haplotype assignments are arbitrary and switch between bubbles, so 'hap1' and 'hap2' do not correspond to the maternal and paternal haplotypes. Downstream callers that assume parental phase should not rely on which output a contig came from.
+
+Inputs:
+- `Array[File] bams`: Unaligned BAMs for the sample, one per SMRT cell.
+- `String prefix`: Prefix for output file names.
+- `String hifiasm_docker`: Container image.
+- `RuntimeAttr? runtime_attr_*`: Optional per-task runtime overrides.
+
+Outputs:
+- `File hifiasm_hap1_fa`: Bgzipped FASTA of the first haplotype assembly.
+- `File hifiasm_hap2_fa`: Bgzipped FASTA of the second haplotype assembly.
+- `File hifiasm_primary_fa`: Bgzipped FASTA of the primary contig assembly.
+- `File hifiasm_hap1_gfa`: Assembly graph for the first haplotype assembly.
+- `File hifiasm_hap2_gfa`: Assembly graph for the second haplotype assembly.
+- `File hifiasm_primary_gfa`: Assembly graph for the primary contig assembly.
+- `File hifiasm_log`: Console log from the hifiasm run, including the inferred coverage histogram.
+
 ### [HiFiCNV](../wdl/tools/HiFiCNV.wdl)
 This tool runs PacBio HiFiCNV (https://github.com/PacificBiosciences/HiFiCNV) on a sample's aligned HiFi BAM to call copy number variants from read depth. It outputs the CNV VCF, a copy-number bedgraph, a depth BigWig track and the tool's log.
 
@@ -1680,6 +1700,26 @@ Outputs:
 - `File minimap_assembled_bai_pat`: Index for the paternal BAM.
 - `File minimap_assembled_paf_pat`: Paternal-assembly PAF alignment.
 
+### [MinimapReadAlignment](../wdl/tools/MinimapReadAlignment.wdl)
+This tool aligns a sample's unaligned long reads to a reference using Minimap2 (https://github.com/lh3/minimap2). Every unaligned BAM for the sample is converted to FASTQ, streamed through Minimap2 in a single pass and coordinate-sorted into one indexed BAM.
+
+Base modification tags are carried across from the unaligned BAM, since `samtools fastq` drops all tags by default and downstream methylation profiling needs them. Assemblies are aligned by `MinimapAlignment` instead.
+
+Inputs:
+- `Array[File] bams`: Unaligned BAMs for the sample, one per SMRT cell.
+- `String sample_id`: ID of the sample being aligned, used for the read group ID and sample name.
+- `String map_preset`: Minimap2 preset passed to '-x'. (default `map-hifi`)
+- `Array[String] tags_to_preserve`: SAM tags carried over from the unaligned BAMs into the aligned BAM. (default `["MM", "ML"]`)
+- `File ref_fa`: From references.
+- `File ref_fai`: From references.
+- `String prefix`: Prefix for output file names.
+- `String minimap2_docker`: Container image.
+- `RuntimeAttr? runtime_attr_*`: Optional per-task runtime overrides.
+
+Outputs:
+- `File aligned_bam`: Coordinate-sorted aligned reads.
+- `File aligned_bai`: Index for the aligned reads.
+
 ### [MosDepth](../wdl/tools/MosDepth.wdl)
 This tool runs mosdepth (https://github.com/brentp/mosdepth) to compute sequencing depth over a sample's BAM per contig. By default it emits per-base coverage; when `bin_size` is set, it instead windows depth into fixed-size bins (`--by`, `--no-per-base`) and emits per-region coverage.
 
@@ -1804,6 +1844,27 @@ Outputs:
 - `File? debug_sam`: Optional debug alignment file.
 - `Array[File]? debug_temp`: Optional debug intermediate files.
 
+### [PBSV](../wdl/tools/PBSV.wdl)
+This tool calls structural variants from a sample's aligned long reads using pbsv (https://github.com/PacificBiosciences/pbsv). Signatures of structural variation are discovered from the alignments and then genotyped into a bgzipped, indexed VCF.
+
+Supplying a tandem repeat BED lets pbsv collapse the alignment noise inside repeats, which reduces false calls at those loci.
+
+Inputs:
+- `File bam`: Aligned reads for the sample.
+- `File bai`: Index for the aligned reads.
+- `Boolean is_hifi`: Whether the reads are HiFi, which enables the pbsv optimisations for low-error reads. (default `true`)
+- `File ref_fa`: From references.
+- `File ref_fai`: From references.
+- `File? tandem_repeat_bed`: Tandem repeat intervals used to suppress alignment noise inside repeats.
+- `String prefix`: Prefix for output file names.
+- `String pbsv_docker`: Container image.
+- `RuntimeAttr? runtime_attr_*`: Optional per-task runtime overrides (2).
+
+Outputs:
+- `File pbsv_vcf`: Structural variant calls for the sample.
+- `File pbsv_vcf_idx`: Index for the structural variant calls.
+- `File pbsv_svsig`: Structural variant signatures discovered from the alignments.
+
 ### [RepeatMasker](../wdl/tools/RepeatMasker.wdl)
 This workflow leverages RepeatMasker (https://github.com/Dfam-consortium/RepeatMasker) in order to annotate repeated and mobile-element content in the insertions of an input VCF. It extracts each insertion's inserted sequence to a FASTA, optionally restricted to a minimum length, and runs RepeatMasker over it.
 
@@ -1850,6 +1911,28 @@ Outputs:
 - `Array[File] sawfish_depth_bws`: Per-sample depth bigWig files.
 - `File sawfish_log`: Joint-calling log.
 - `File? sawfish_supporting_reads`: Supporting reads per call, emitted only when `report_supporting_reads` is set.
+
+### [Sniffles](../wdl/tools/Sniffles.wdl)
+This tool calls structural variants from a sample's aligned long reads using Sniffles2 (https://github.com/fritzsedlazeck/Sniffles). It emits both a bgzipped, indexed single-sample VCF and the sample's SNF file.
+
+The SNF file holds the sample's raw structural variant candidates and is what Sniffles2 population mode re-genotypes across a cohort, so it is retained even though this pipeline merges callsets by other means.
+
+Inputs:
+- `File bam`: Aligned reads for the sample.
+- `File bai`: Index for the aligned reads.
+- `String sample_id`: ID of the sample being called, written to the VCF sample column.
+- `Int min_sv_len`: Minimum structural variant length in base pairs to report. (default `50`)
+- `File ref_fa`: From references.
+- `File ref_fai`: From references.
+- `File? tandem_repeat_bed`: Tandem repeat intervals used to suppress alignment noise inside repeats.
+- `String prefix`: Prefix for output file names.
+- `String sniffles_docker`: Container image.
+- `RuntimeAttr? runtime_attr_*`: Optional per-task runtime overrides.
+
+Outputs:
+- `File sniffles_vcf`: Structural variant calls for the sample.
+- `File sniffles_vcf_idx`: Index for the structural variant calls.
+- `File sniffles_snf`: Structural variant candidates for the sample, for later population-mode calling.
 
 ### [TRGT](../wdl/tools/TRGT.wdl)
 This workflow leverages TRGT (https://github.com/PacificBiosciences/trgt) in order to genotype short-tandem repeats.
