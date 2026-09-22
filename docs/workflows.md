@@ -34,6 +34,8 @@ Note: When converting to symbolic representation, only canonical DUPs (allele_ty
 
 Note: Callset DUPs are compared twice, because the two matching rules need different coordinates. Against truth DUPs they are repositioned to their `ORIGIN` coordinates and compared by reciprocal overlap; against truth insertions they are held at their insertion site and compared by breakpoint proximity and length ratio.
 
+Note: The SV truth VCF is expected to be symbolic already. Set `convert_symbolic_truth_sv_vcf` when it instead carries sequence alleles in the same format as the callset, in which case it is converted with its DUPs repositioned onto their `ORIGIN` coordinates, matching how truth DUPs are positioned in a symbolic truth callset.
+
 Both the exact-match and Truvari rounds can be sharded within a contig. Truvari shard boundaries are snapped forward to the next gap wider than the `min_shard_gap_truvari_match` input of `TruvariMatch`, which keeps results identical to an unsharded run because Truvari only groups records into a new comparison chunk once the next record clears the running end by more than its chunk size. Fixed-width bins alone would split colocated record pairs and silently lose matches.
 
 Inputs:
@@ -68,7 +70,7 @@ Inputs:
 - `File? ref_fai`: From references.
 - `String prefix`: Prefix for output file names.
 - `String gatk_sv_lr_docker`, `String utils_docker`: Container images.
-- `RuntimeAttr? runtime_attr_*`: Optional per-task runtime overrides (36).
+- `RuntimeAttr? runtime_attr_*`: Optional per-task runtime overrides (37).
 
 Outputs:
 - `File annotations_tsv_benchmark`: TSV mapping callset variants to their matched truth variants, match type, and the truth callset's AC/AF/AN and genotype-count fields.
