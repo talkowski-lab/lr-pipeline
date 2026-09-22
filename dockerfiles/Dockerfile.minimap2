@@ -1,0 +1,15 @@
+FROM us-central1-docker.pkg.dev/talkowski-sv-gnomad/kj-dockers/utils:latest
+
+MAINTAINER Karan Jaisingh
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Install minimap2
+ARG MINIMAP2_VERSION
+RUN wget -q https://github.com/lh3/minimap2/releases/download/v${MINIMAP2_VERSION}/minimap2-${MINIMAP2_VERSION}_x64-linux.tar.bz2 \
+    && tar xjf minimap2-${MINIMAP2_VERSION}_x64-linux.tar.bz2 \
+    && mv minimap2-${MINIMAP2_VERSION}_x64-linux/minimap2 /usr/local/bin/ \
+    && mv minimap2-${MINIMAP2_VERSION}_x64-linux/k8 /usr/local/bin/ \
+    && mv minimap2-${MINIMAP2_VERSION}_x64-linux/paftools.js /usr/local/bin/ \
+    && rm -rf minimap2-${MINIMAP2_VERSION}_x64-linux* \
+    && minimap2 --version

@@ -1,0 +1,16 @@
+FROM us-central1-docker.pkg.dev/talkowski-sv-gnomad/kj-dockers/utils:latest
+
+MAINTAINER Karan Jaisingh
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Install pbsv - PacBio only publish it via Bioconda, so the static binary is unpacked straight
+# out of the Bioconda package rather than pulling a conda distribution into this image
+ARG PBSV_VERSION
+ARG PBSV_BUILD
+RUN wget -q https://conda.anaconda.org/bioconda/linux-64/pbsv-${PBSV_VERSION}-${PBSV_BUILD}.tar.bz2 \
+    && mkdir pbsv-pkg \
+    && tar xjf pbsv-${PBSV_VERSION}-${PBSV_BUILD}.tar.bz2 -C pbsv-pkg \
+    && mv pbsv-pkg/bin/pbsv /usr/local/bin/ \
+    && rm -rf pbsv-pkg pbsv-${PBSV_VERSION}-${PBSV_BUILD}.tar.bz2 \
+    && pbsv --version

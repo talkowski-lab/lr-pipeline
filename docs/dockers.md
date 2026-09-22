@@ -51,6 +51,10 @@ Built from [dockerfiles/](../dockerfiles/) in this repository.
 | `svan_docker` | kj-dockers/svan:latest | `Dockerfile.svan` |
 | `hificnv_docker` | kj-dockers/hificnv:latest | `Dockerfile.hificnv` |
 | `sawfish_docker` | kj-dockers/sawfish:latest | `Dockerfile.sawfish` |
+| `minimap2_docker` | kj-dockers/minimap2:latest | `Dockerfile.minimap2` |
+| `hifiasm_docker` | kj-dockers/hifiasm:latest | `Dockerfile.hifiasm` |
+| `pbsv_docker` | kj-dockers/pbsv:latest | `Dockerfile.pbsv` |
+| `sniffles_docker` | kj-dockers/sniffles:latest | `Dockerfile.sniffles` |
 
 `Dockerfile.utils` is the base image for most other repo Dockerfiles. Every Dockerfile in `dockerfiles/` maps to exactly one argument above; retired ones live in [`archive/dockerfiles/`](../archive/dockerfiles/) and are not built.
 

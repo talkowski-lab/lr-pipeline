@@ -1,0 +1,14 @@
+FROM us-central1-docker.pkg.dev/talkowski-sv-gnomad/kj-dockers/utils:latest
+
+MAINTAINER Karan Jaisingh
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Install hifiasm
+ARG HIFIASM_VERSION
+RUN wget -q -O hifiasm-${HIFIASM_VERSION}.tar.gz https://github.com/chhylp123/hifiasm/archive/refs/tags/${HIFIASM_VERSION}.tar.gz \
+    && tar xzf hifiasm-${HIFIASM_VERSION}.tar.gz \
+    && make -C hifiasm-${HIFIASM_VERSION} -j 4 \
+    && mv hifiasm-${HIFIASM_VERSION}/hifiasm /usr/local/bin/ \
+    && rm -rf hifiasm-${HIFIASM_VERSION}* \
+    && hifiasm --version

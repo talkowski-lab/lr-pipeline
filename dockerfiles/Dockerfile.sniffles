@@ -1,0 +1,10 @@
+FROM us-central1-docker.pkg.dev/talkowski-sv-gnomad/kj-dockers/utils:latest
+
+MAINTAINER Karan Jaisingh
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Install Sniffles2
+ARG SNIFFLES_VERSION
+RUN python3 -m pip install --no-cache-dir "sniffles==${SNIFFLES_VERSION}" \
+    && sniffles --version

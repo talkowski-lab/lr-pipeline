@@ -577,6 +577,15 @@ workflows:
         - /.*/
 
   - subclass: WDL
+    name: Hifiasm
+    primaryDescriptorPath: /wdl/tools/Hifiasm.wdl
+    filters:
+      branches:
+        - main
+      tags:
+        - /.*/
+
+  - subclass: WDL
     name: HiFiCNV
     primaryDescriptorPath: /wdl/tools/HiFiCNV.wdl
     filters:
@@ -649,6 +658,15 @@ workflows:
         - /.*/
 
   - subclass: WDL
+    name: MinimapReadAlignment
+    primaryDescriptorPath: /wdl/tools/MinimapReadAlignment.wdl
+    filters:
+      branches:
+        - main
+      tags:
+        - /.*/
+
+  - subclass: WDL
     name: MosDepth
     primaryDescriptorPath: /wdl/tools/MosDepth.wdl
     filters:
@@ -694,6 +712,15 @@ workflows:
         - /.*/
 
   - subclass: WDL
+    name: PBSV
+    primaryDescriptorPath: /wdl/tools/PBSV.wdl
+    filters:
+      branches:
+        - main
+      tags:
+        - /.*/
+
+  - subclass: WDL
     name: RepeatMasker
     primaryDescriptorPath: /wdl/tools/RepeatMasker.wdl
     filters:
@@ -705,6 +732,15 @@ workflows:
   - subclass: WDL
     name: Sawfish
     primaryDescriptorPath: /wdl/tools/Sawfish.wdl
+    filters:
+      branches:
+        - main
+      tags:
+        - /.*/
+
+  - subclass: WDL
+    name: Sniffles
+    primaryDescriptorPath: /wdl/tools/Sniffles.wdl
     filters:
       branches:
         - main
