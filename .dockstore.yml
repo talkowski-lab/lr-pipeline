@@ -125,6 +125,15 @@ workflows:
       tags:
         - /.*/
 
+  - subclass: WDL
+    name: RunUPDhmm
+    primaryDescriptorPath: /wdl/annotation/RunUPDhmm.wdl
+    filters:
+      branches:
+        - aou_scaling
+      tags:
+        - /.*/
+
   # --------------------
   # Annotation Utilities
   # --------------------
