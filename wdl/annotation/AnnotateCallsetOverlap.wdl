@@ -13,6 +13,7 @@ workflow AnnotateCallsetOverlap {
             "The workflow undergoes multiple rounds of variant matching in order to determine matched pairs: (1) Exact match across CHROM, POS, REF and ALT. (2) Truvari match with overlap percentages of 90%, 70% and 50%. (3) Matching based on `bedtools closest`, finetuned for SVs. Here the callset and truth variants are split by type and converted to a symbolic representation, after which separate `bedtools closest` passes are run - one tuned for deletions and duplications via reciprocal positional overlap, and one tuned for insertions via breakpoint proximity - so that each callset variant is paired with the nearest same-type truth variant above the per-callset minimum SV-length thresholds.",
             "Note: When converting to symbolic representation, only canonical DUPs (allele_type = `DUP` exactly) are treated as DUP; other DUP subtypes (e.g., `dup_interspersed`, `inv_dup`) are treated as insertions.",
             "Note: Callset DUPs are compared twice, because the two matching rules need different coordinates. Against truth DUPs they are repositioned to their `ORIGIN` coordinates and compared by reciprocal overlap; against truth insertions they are held at their insertion site and compared by breakpoint proximity and length ratio.",
+            "Note: The SV truth VCF is expected to be symbolic already. Set `convert_symbolic_truth_sv_vcf` when it instead carries sequence alleles in the same format as the callset, in which case it is converted with its DUPs repositioned onto their `ORIGIN` coordinates, matching how truth DUPs are positioned in a symbolic truth callset.",
             "Both the exact-match and Truvari rounds can be sharded within a contig. Truvari shard boundaries are snapped forward to the next gap wider than the `min_shard_gap_truvari_match` input of `TruvariMatch`, which keeps results identical to an unsharded run because Truvari only groups records into a new comparison chunk once the next record clears the running end by more than its chunk size. Fixed-width bins alone would split colocated record pairs and silently lose matches."
         ]
     }
@@ -31,6 +32,7 @@ workflow AnnotateCallsetOverlap {
         min_sv_length_bedtools_closest_truth_vcf: "Minimum length for a truth variant to enter the `bedtools closest` matching round."
         shard_bin_size_exact_match: "If set, shards the exact-match round into contig regions of roughly this many base pairs, run in parallel."
         shard_bin_size_truvari_match: "If set, shards the Truvari round into contig regions of at least this many base pairs, run in parallel. Each region is extended to the next safe gap, so a value of 1000000 or more is recommended."
+        convert_symbolic_truth_sv_vcf: "Whether the SV truth VCF represents alleles as sequence rather than symbolically. When true it is converted to a symbolic representation first, reading the same `type_field_vcf` and `length_field_vcf` INFO fields as the callset."
         type_field_vcf: "INFO field in the callset VCF giving each variant's allele type."
         length_field_vcf: "INFO field in the callset VCF giving each variant's allele length."
         source_tag_truth_snv_indel_vcf: "Label used to tag matches against the SNV & indel truth VCF."
@@ -68,6 +70,8 @@ workflow AnnotateCallsetOverlap {
         Int? shard_bin_size_exact_match
         Int? shard_bin_size_truvari_match
 
+        Boolean convert_symbolic_truth_sv_vcf = false
+
         String type_field_vcf = "allele_type"
         String length_field_vcf = "allele_length"
         String source_tag_truth_snv_indel_vcf = "SNV_indel"
@@ -93,6 +97,7 @@ workflow AnnotateCallsetOverlap {
         RuntimeAttr? runtime_attr_subset_truth
         RuntimeAttr? runtime_attr_subset_sv_truth
         RuntimeAttr? runtime_attr_rename_sv_truth
+        RuntimeAttr? runtime_attr_convert_sv_truth
         RuntimeAttr? runtime_attr_rename_vcf
         RuntimeAttr? runtime_attr_rename_truth
         RuntimeAttr? runtime_attr_create_exact_shards
@@ -181,8 +186,27 @@ workflow AnnotateCallsetOverlap {
             }
         }
 
-        File truth_sv_vcf_final = select_first([RenameSVTruthIds.renamed_vcf, SubsetSVTruth.subset_vcf])
-        File truth_sv_vcf_final_idx = select_first([RenameSVTruthIds.renamed_vcf_idx, SubsetSVTruth.subset_vcf_idx])
+        File truth_sv_vcf_renamed = select_first([RenameSVTruthIds.renamed_vcf, SubsetSVTruth.subset_vcf])
+        File truth_sv_vcf_renamed_idx = select_first([RenameSVTruthIds.renamed_vcf_idx, SubsetSVTruth.subset_vcf_idx])
+
+        # Give a sequence-allele SV truth VCF the symbolic ALTs, SVTYPE, SVLEN and END that the bedtools closest round
+        # reads off the truth callset, using the same conversion the callset itself goes through
+        if (convert_symbolic_truth_sv_vcf) {
+            call Helpers.ConvertToSymbolic as ConvertSVTruth {
+                input:
+                    vcf = truth_sv_vcf_renamed,
+                    vcf_idx = truth_sv_vcf_renamed_idx,
+                    move_dup_to_origin = true,
+                    type_field = type_field_vcf,
+                    length_field = length_field_vcf,
+                    prefix = "~{prefix}.~{contig}.sv_truth.symbolic",
+                    docker = utils_docker,
+                    runtime_attr_override = runtime_attr_convert_sv_truth
+            }
+        }
+
+        File truth_sv_vcf_final = select_first([ConvertSVTruth.processed_vcf, truth_sv_vcf_renamed])
+        File truth_sv_vcf_final_idx = select_first([ConvertSVTruth.processed_vcf_idx, truth_sv_vcf_renamed_idx])
 
         call ExactMatch.ExactMatch {
             input:
