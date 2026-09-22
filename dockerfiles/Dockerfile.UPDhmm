@@ -1,0 +1,16 @@
+FROM bioconductor/bioconductor_docker:RELEASE_3_20
+
+MAINTAINER Yossi Mostovoy
+
+# bcftools/tabix for any in-container VCF handling; UPDhmm + its readers from Bioconductor.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        bcftools tabix && \
+    rm -rf /var/lib/apt/lists/*
+
+RUN R -e 'BiocManager::install(c("UPDhmm", "VariantAnnotation", "BiocParallel"), update = FALSE, ask = FALSE)' && \
+    R -e 'stopifnot(requireNamespace("UPDhmm", quietly = TRUE))'
+
+COPY ./scripts/updhmm/updhmm.R /opt/gnomad-lr/scripts/updhmm/updhmm.R
+
+# Build from the repository root so the COPY path resolves, e.g.:
+#   docker build -f dockerfiles/Dockerfile.UPDhmm -t quay.io/ymostovoy/lr-updhmm:latest .
