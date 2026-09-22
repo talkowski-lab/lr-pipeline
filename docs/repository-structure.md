@@ -34,7 +34,9 @@ Workflows are split by role:
 - **`wdl/tools/`** - thin wrappers around individual bioinformatics tools (PALMER, TRGT, HiPhase, mosdepth, etc.) that aren't annotation-specific.
 - **`wdl/utils/`** - not directly run. `Structs.wdl` defines the shared `RuntimeAttr` struct; `Helpers.wdl` is a task library holding reusable tasks (subsetting, concatenation, sharding, etc.) imported by the other three directories, with its tasks declared alphabetically. It also holds importable sub-workflows, which are never Dockstore-registered: `BedtoolsClosestSV.wdl`, `ExactMatch.wdl`, `ScatterVcf.wdl` and `TruvariMatch.wdl` are callset-matching and sharding building blocks, while `LRCNVs.wdl`, `DepthPreprocessing.wdl`, `DepthClustering.wdl` and `GenotypeDepth.wdl` form the depth-based CNV pipeline driven by `tools/LongReadCNVs.wdl`. All eight are described in [Sub-workflows](workflows.md#sub-workflows).
 
-Every workflow directly run in the pipeline (i.e. everything in `annotation/`, `annotation_utils/` and `tools/`) must have a matching entry in [`.dockstore.yml`](../.dockstore.yml), under its corresponding `# Annotation Workflows` / `# Annotation Utilities` / `# Tools` section. This is enforced by CI (see [CI/CD](ci-cd.md)). For the full WDL/task/input style convention, see [Conventions](conventions.md).
+Every workflow directly run in the pipeline (i.e. everything in `annotation/`, `annotation_utils/` and `tools/`) must have a matching entry in [`.dockstore.yml`](../.dockstore.yml), under its corresponding `# Annotation Workflows` / `# Annotation Utilities` / `# Tools` section. This is enforced by CI (see [CI/CD](ci-cd.md)), and that file's ordering is also the section order of [Workflows](workflows.md). For the full WDL/task/input style convention, see [Conventions](conventions.md).
+
+Every workflow also documents itself: a `meta` block holds its description and a `parameter_meta` block describes every input and output, and [Workflows](workflows.md) is generated from those blocks rather than written by hand. See [Workflow documentation](conventions.md#workflow-documentation).
 
 
 ## Dockerfiles
@@ -66,4 +68,4 @@ Some workflows invoke scripts under `/opt/sv-pipeline/` or `/app/SVAN/`. Those b
 
 
 ## CI-CD
-Six GitHub Actions workflows gate `main`, covering WDL syntax, WDL style, Markdown style, Python linting, Dockstore registration and agent-instruction sync. See [CI/CD](ci-cd.md) for the full table, the matching commands to run locally before pushing, and how Dockstore registration and image releases work.
+Seven GitHub Actions workflows gate `main`, covering WDL syntax, WDL style, Markdown style, Python linting, Dockstore registration, agent-instruction sync and workflow-documentation generation. See [CI/CD](ci-cd.md) for the full table, the matching commands to run locally before pushing, and how Dockstore registration and image releases work.

@@ -4,6 +4,22 @@ import "../utils/Helpers.wdl"
 import "../utils/Structs.wdl"
 
 workflow AnnotateGnomADSTR {
+    meta {
+        description: [
+            "This workflow annotates tandem-repeat variants in the input VCF with overlapping loci from the gnomAD V4 tandem-repeat catalog. It subsets to tandem-repeat calls and matches each against the catalog using a minimum reciprocal-overlap threshold, emitting a TSV linking calls to their gnomAD TR locus."
+        ]
+    }
+
+    parameter_meta {
+        vcf: "VCF to annotate."
+        vcf_idx: "Index for VCF to annotate."
+        contigs: "Contigs to annotate within the input VCF."
+        records_per_shard: "Number of variants to keep within a single shard during annotation."
+        gnomad_tr_json: "From references."
+        trv_reciprocal_overlap: "Minimum reciprocal overlap between a call and a catalog locus to be matched."
+        annotations_tsv_gnomad_str: "TSV mapping tandem-repeat calls to their gnomAD TR loci."
+    }
+
     input {
         File vcf
         File vcf_idx

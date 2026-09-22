@@ -4,6 +4,23 @@ import "../utils/Helpers.wdl"
 import "../utils/Structs.wdl"
 
 workflow NormalizeAlleleTypes {
+    meta {
+        description: [
+            "This utility reclassifies `allele_type` values and records the original type in a new `allele_subtype` field. Variants with `allele_type=dup` are tested for tandemness against their duplication source (from `INFO/ORIGIN`) using two criteria: size similarity between the insertion length and the ORIGIN region length must meet the `dup_size_similarity` threshold, and the insertion POS must fall within the ORIGIN region or within `dup_breakpoint_window` bases of its breakpoints. All get `allele_subtype=tandem_dup`; those passing keep `allele_type=dup`, while those failing are set to `allele_type=ins`. Variants with `allele_type` of `complex_dup`, `dup_interspersed`, `inv_dup`, `alu_ins`, `line_ins`, `sva_ins` or `numt` are set to `allele_type=ins`, and those with `alu_del`, `line_del` or `sva_del` are set to `allele_type=del`, each recording the original value in `allele_subtype`. REF/ALT/POS are never modified. Records with other `allele_type` values are passed through unchanged. Supports optional record-count sharding."
+        ]
+    }
+
+    parameter_meta {
+        vcf: "VCF to transform."
+        vcf_idx: "Index for `vcf`."
+        records_per_shard: "Number of records per shard for parallel processing."
+        dup_breakpoint_window: "Maximum distance (bp) between insertion POS and ORIGIN breakpoints to pass the breakpoint check."
+        dup_size_similarity: "Minimum size similarity ratio (relative to the larger of the two lengths) between insertion and ORIGIN lengths."
+        min_dup_size: "Minimum insertion size (bp) to consider for the tandem check."
+        transformed_vcf: "VCF with revised `allele_type`/`allele_subtype`."
+        transformed_vcf_idx: "Index for `transformed_vcf`."
+    }
+
     input {
         File vcf
         File vcf_idx
@@ -96,13 +113,11 @@ min_dup_size = ~{min_dup_size}
 INS_SUBTYPES = {"complex_dup", "dup_interspersed", "inv_dup", "alu_ins", "line_ins", "sva_ins", "numt"}
 DEL_SUBTYPES = {"alu_del", "line_del", "sva_del"}
 
-
 def parse_origin(origin):
     m = re.match(r'^(.+):(\d+)-(\d+)_?[+-]$', origin)
     if m is None:
         return None
     return m.group(1), int(m.group(2)), int(m.group(3))
-
 
 def passes_criteria(pos, dup_length, origin_start, origin_end):
     origin_length = origin_end - origin_start
@@ -112,7 +127,6 @@ def passes_criteria(pos, dup_length, origin_start, origin_end):
     if origin_start <= pos <= origin_end:
         return True
     return abs(origin_start - pos) <= dup_breakpoint_window or abs(origin_end - pos) <= dup_breakpoint_window
-
 
 def is_tandem(record):
     allele_length = record.info.get("allele_length")
@@ -136,7 +150,6 @@ def is_tandem(record):
     dup_length = abs(int(allele_length))
 
     return passes_criteria(record.pos, dup_length, origin_start, origin_end)
-
 
 vcf_in = pysam.VariantFile("~{vcf}")
 header = vcf_in.header.copy()

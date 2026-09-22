@@ -4,6 +4,21 @@ import "../utils/Helpers.wdl"
 import "../utils/Structs.wdl"
 
 workflow ConcatenateVcfsAcrossContigs {
+    meta {
+        description: [
+            "This utility concatenates exactly one VCF per contig into a single VCF, optionally dropping genotypes before concatenation. It validates that the VCF, index, and contig arrays are aligned and that no contig is duplicated."
+        ]
+    }
+
+    parameter_meta {
+        vcfs: "Per-contig VCFs to concatenate."
+        vcf_idxs: "Indexes for `vcfs`."
+        contigs: "Contigs corresponding to `vcfs`."
+        drop_genotypes: "Whether to strip genotypes before concatenation."
+        concat_vcf: "Combined VCF."
+        concat_vcf_idx: "Index for the combined VCF."
+    }
+
     input {
         Array[File] vcfs
         Array[File] vcf_idxs

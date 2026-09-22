@@ -4,6 +4,20 @@ import "../utils/Helpers.wdl"
 import "../utils/Structs.wdl"
 
 workflow MergePALMERCallsets {
+    meta {
+        description: [
+            "This tool merges multiple PALMER MEI VCFs into a single VCF per contig and concatenates the result across contigs. It outputs the merged PALMER VCF."
+        ]
+    }
+
+    parameter_meta {
+        vcfs: "PALMER VCFs to merge."
+        vcf_idxs: "Indexes for `vcfs`."
+        contigs: "Contigs to process."
+        palmer_merged_vcf: "Merged PALMER VCF."
+        palmer_merged_vcf_idx: "Index for the merged VCF."
+    }
+
     input {
         Array[File] vcfs
         Array[File] vcf_idxs

@@ -4,6 +4,27 @@ import "../utils/Helpers.wdl"
 import "../utils/Structs.wdl"
 
 workflow SplitVcfPerContig {
+    meta {
+        description: [
+            "This utility splits a VCF into one VCF per requested contig. It can add missing INFO-header lines, create genotype-free copies, rewrite SNV IDs, and rename source contigs to dbSNP or dbVar naming."
+        ]
+    }
+
+    parameter_meta {
+        vcf: "VCF to split."
+        vcf_idx: "Index for `vcf`."
+        contigs: "Contigs to extract."
+        create_no_geno: "Whether to also produce genotype-free VCFs."
+        modify_snv_ids: "Whether to rewrite SNV IDs."
+        rename_dbsnp_contigs: "Whether to rename source contigs from dbSNP naming."
+        rename_dbvar_contigs: "Whether to rename source contigs from dbVar naming."
+        missing_info_header_fields: "INFO-header lines to add if missing."
+        contig_vcfs: "Per-contig VCFs."
+        contig_vcf_idxs: "Indexes for `contig_vcfs`."
+        contig_no_geno_vcfs: "Per-contig genotype-free VCFs when requested."
+        contig_no_geno_vcf_idxs: "Indexes for `contig_no_geno_vcfs` when requested."
+    }
+
     input {
         File vcf
         File vcf_idx
@@ -73,11 +94,6 @@ task SplitByContig {
         Boolean rename_dbvar_contigs
         String docker
         RuntimeAttr? runtime_attr_override
-    }
-
-    parameter_meta {
-        vcf: { localization_optional: true }
-        vcf_idx: { localization_optional: true }
     }
 
     command <<<

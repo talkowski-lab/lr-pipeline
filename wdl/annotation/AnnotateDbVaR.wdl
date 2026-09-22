@@ -4,6 +4,33 @@ import "../utils/Helpers.wdl"
 import "../utils/Structs.wdl"
 
 workflow AnnotateDbVaR {
+    meta {
+        description: [
+            "This workflow annotates structural variants in the input VCF with matching records from dbVar. It restricts to variants at or above a minimum length, converts them to a symbolic representation, and matches deletions, duplications and insertions separately against a per-contig dbVar VCF using type-specific size-similarity, reciprocal-overlap and breakpoint-window thresholds. It emits a TSV linking matched variants to their dbVar records.",
+            "Note: When converting to symbolic representation, only canonical DUPs (allele_type = `DUP` exactly) are treated as DUP; other DUP subtypes (e.g., `dup_interspersed`, `inv_dup`) are treated as insertions."
+        ]
+    }
+
+    parameter_meta {
+        vcf: "VCF to annotate."
+        vcf_idx: "Index for VCF to annotate."
+        dbvar_vcf: "From references."
+        dbvar_vcf_idx: "From references."
+        contigs: "Contigs to annotate within the input VCF."
+        min_length: "Minimum variant length to consider for matching."
+        records_per_shard: "Number of variants to keep within a single shard during annotation."
+        del_breakpoint_window: "Breakpoint window, in bp, for matching deletions."
+        del_reciprocal_overlap: "Minimum reciprocal overlap for matching deletions."
+        del_size_similarity: "Minimum size similarity for matching deletions."
+        dup_breakpoint_window: "Breakpoint window, in bp, for matching duplications."
+        dup_reciprocal_overlap: "Minimum reciprocal overlap for matching duplications."
+        dup_size_similarity: "Minimum size similarity for matching duplications."
+        ins_breakpoint_window: "Breakpoint window, in bp, for matching insertions."
+        ins_reciprocal_overlap: "Minimum reciprocal overlap for matching insertions."
+        ins_size_similarity: "Minimum size similarity for matching insertions."
+        annotations_tsv_dbvar: "TSV mapping variants to their matched dbVar records."
+    }
+
     input {
         File vcf
         File vcf_idx

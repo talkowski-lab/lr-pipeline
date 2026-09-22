@@ -5,6 +5,27 @@ import "../utils/Structs.wdl"
 import "../tools/BackbonePhase.wdl"
 
 workflow EvaluateBackbonePhasing {
+    meta {
+        description: [
+            "This utility evaluates backbone-phasing accuracy by comparing backbone-phased VCFs against base (truth) VCFs. It assigns samples to their base VCFs, compares phased genotypes per contig and aggregates the results into tables broken down by variants outside tandem repeats, TR-enveloped variants and TR variants. It outputs these summary tables plus per-VCF status tables."
+        ]
+    }
+
+    parameter_meta {
+        backbone_phased_vcfs: "Backbone-phased VCFs to evaluate."
+        backbone_phased_vcf_idxs: "Indexes for `backbone_phased_vcfs`."
+        base_vcfs: "Base (truth) VCFs to compare against."
+        base_vcf_idxs: "Indexes for `base_vcfs`."
+        contigs: "Contigs to process."
+        max_variants: "Maximum number of variants to evaluate, or `-1` for no limit."
+        subset_samples: "Samples to restrict the evaluation to."
+        outside_tr_table: "Phasing-accuracy table for variants outside tandem repeats."
+        tr_enveloped_table: "Phasing-accuracy table for TR-enveloped variants."
+        trv_table: "Phasing-accuracy table for tandem-repeat variants."
+        missing_samples: "Samples with no matching base VCF."
+        vcf_tables: "Per-VCF variant-status tables."
+    }
+
     input {
         Array[File] backbone_phased_vcfs
         Array[File] backbone_phased_vcf_idxs
@@ -231,13 +252,11 @@ from collections import defaultdict
 import gzip
 import pysam
 
-
 def get_allele_type(record):
     try:
         return record.info["allele_type"]
     except (KeyError, ValueError):
         return ""
-
 
 def parse_sample_gt(sample_data, require_phased=False):
     gt = sample_data.get("GT")
@@ -248,7 +267,6 @@ def parse_sample_gt(sample_data, require_phased=False):
     if require_phased and not sample_data.phased:
         return None
     return tuple(int(allele) for allele in gt), sample_data.phased
-
 
 def normalize_biallelic_variant(pos, ref, alt):
     pos = int(pos)
@@ -262,7 +280,6 @@ def normalize_biallelic_variant(pos, ref, alt):
         ref = ref[:-1]
         alt = alt[:-1]
     return pos, ref, alt
-
 
 def iter_comparable_calls(record, sample_name, require_phased=False):
     parsed = parse_sample_gt(record.samples[sample_name], require_phased=require_phased)
@@ -291,7 +308,6 @@ def iter_comparable_calls(record, sample_name, require_phased=False):
         "key": (record.contig, record.pos, record.ref.upper(), tuple(alt_values)),
     }]
 
-
 def normalize_record_key(record):
     alt_values = [alt.upper() for alt in record.alts] if record.alts else []
     allele_type = get_allele_type(record)
@@ -304,7 +320,6 @@ def normalize_record_key(record):
         "" if allele_type in ("", ".") else allele_type,
     )
 
-
 def get_trid(record):
     value = record.info.get("TRID")
     if isinstance(value, (list, tuple)):
@@ -312,7 +327,6 @@ def get_trid(record):
     if value in (None, ""):
         return None
     return str(value)
-
 
 def is_tr_enveloped(record, trv_trids):
     if get_allele_type(record) == "trv":
@@ -322,7 +336,6 @@ def is_tr_enveloped(record, trv_trids):
     trid = get_trid(record)
     return trid is not None and trid in trv_trids
 
-
 def get_collection(record, trv_trids):
     allele_type = get_allele_type(record)
     if allele_type == "trv":
@@ -330,7 +343,6 @@ def get_collection(record, trv_trids):
     if is_tr_enveloped(record, trv_trids):
         return "tr_enveloped"
     return "outside_tr"
-
 
 def summarize(points):
     points.sort(key=lambda item: item[0])
@@ -371,7 +383,6 @@ def summarize(points):
             record_statuses[record_key] = status
 
     return matched_count, switch_error_count, flip_error_count, record_statuses
-
 
 with pysam.VariantFile("backbone.vcf.gz") as backbone_in:
     samples = list(backbone_in.header.samples)
@@ -490,13 +501,11 @@ task BuildContigVcfTable {
 import gzip
 import pysam
 
-
 def get_allele_type(rec):
     try:
         return rec.info["allele_type"]
     except (KeyError, ValueError):
         return ""
-
 
 def make_record_key(rec):
     alt_values = [alt.upper() for alt in rec.alts] if rec.alts else []
@@ -508,7 +517,6 @@ def make_record_key(rec):
         ",".join(alt_values),
         get_allele_type(rec),
     )
-
 
 def classify_backbone_status(sample_data, comparable_status, is_missing_sample):
     gt = sample_data.get("GT")
@@ -531,7 +539,6 @@ def classify_backbone_status(sample_data, comparable_status, is_missing_sample):
     if gt[0] != gt[1]:
         return "NF"
     return "OTH"
-
 
 subset_samples = {line for line in """~{sep='\n' select_first([subset_samples, []])}""".splitlines() if line}
 missing_samples = {line.strip() for line in open("~{missing_samples_file}") if line.strip()}

@@ -4,6 +4,20 @@ import "../utils/Helpers.wdl"
 import "../utils/Structs.wdl"
 
 workflow CreateTRGTHistograms {
+    meta {
+        description: [
+            "This utility generates per-locus tandem repeat allele-frequency histograms, stratified by population and sex, from a multisample LPS (longest polymer sequence) table for use in the TR browser. It outputs a single combined histograms TSV."
+        ]
+    }
+
+    parameter_meta {
+        lps_tsv: "Multisample LPS table."
+        metadata_tsv: "Sample metadata (population, sex) used to stratify the histograms."
+        vcf_trid_metadata_tsvs: "Per-contig TRID metadata from `TRGTLPS.vcf_trid_metadata_tsvs`, index-aligned with the `contigs` input array. Required for any callset genotyped against a catalog that contains variation clusters, as it allows TRIDs that include several comma-separated LocusIds to be processed correctly. Defaults to empty, which keeps the previous behavior for catalogs of isolated repeats only."
+        contigs: "Contigs to process within the LPS table."
+        trgt_histograms_tsv: "Combined per-locus allele-frequency histograms TSV."
+    }
+
     input {
         File lps_tsv
         File metadata_tsv

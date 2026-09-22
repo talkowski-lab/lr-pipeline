@@ -4,6 +4,39 @@ import "../utils/Helpers.wdl"
 import "../utils/Structs.wdl"
 
 workflow FillFormatFields {
+    meta {
+        description: [
+            "This utility fills missing FORMAT fields in one VCF using the values from a second, more complete VCF covering the same sites. It supports selectively copying named format fields plus toggles for filling alternate and reference genotypes, unphasing genotypes and adding PL. Sites are matched on CHROM/POS/REF/ALT, optionally also requiring a matching ID, and filling can be restricted to variants whose INFO field matches a given value. Either input can first be run through `bcftools norm`, sharded by record count so normalization never runs over a whole-contig VCF at once; normalized shards are re-concatenated with sorting (since normalization can shift a variant's position, e.g. when splitting a multiallelic) before being re-binned for matching. It outputs the refilled VCF."
+        ]
+    }
+
+    parameter_meta {
+        unfilled_vcf: "VCF whose FORMAT fields are filled."
+        unfilled_vcf_idx: "Index for `unfilled_vcf`."
+        filled_vcf: "VCF providing the FORMAT field values."
+        filled_vcf_idx: "Index for `filled_vcf`."
+        contig: "Contig to process."
+        ref_fa: "Reference FASTA used for normalization. Required if either normalize input is `true`."
+        ref_fai: "Index for `ref_fa`. Required if either normalize input is `true`."
+        records_per_shard_normalize: "Number of variants per shard when normalizing. When set, normalization runs in parallel shards that are re-concatenated and sorted afterward."
+        shard_bin_size_fill: "Region-bin size, in bp, used when sharding the contig for matching/filling."
+        transfer_format_fields: "FORMAT fields to fill from `filled_vcf`."
+        drop_format_fields: "FORMAT fields to drop entirely from the output (e.g. fields known to be unreliable). Cannot include `GT`."
+        fill_alt_gts: "Whether to overwrite a sample's GT in `unfilled_vcf` with `filled_vcf`'s GT when `filled_vcf`'s GT is alt-containing, regardless of the current GT in `unfilled_vcf`."
+        fill_ref_gts: "Whether to overwrite a sample's GT in `unfilled_vcf` with `filled_vcf`'s GT when `filled_vcf`'s GT is non-alt (hom-ref or no-call), regardless of the current GT in `unfilled_vcf`."
+        match_by_id: "Whether matching also requires equal variant IDs, in addition to CHROM/POS/REF/ALT."
+        unphase_gts: "Whether to unphase genotypes while filling."
+        add_missing_pl_via_ad: "Whether to add a `PL` FORMAT field derived from `AD` for genotypes that lack one."
+        expand_ad_across_alleles: "Whether to expand a fully-missing `AD` into one missing value per allele, which GLNexus writes as a bare '.' rather than '.,.'."
+        split_rnc_across_alleles: "Whether to split a merged `RNC` code into one character per allele copy, which GLNexus writes as 'MI' rather than 'M,I'."
+        normalize_unfilled_vcf: "Whether to normalize `unfilled_vcf` with `bcftools norm` before matching."
+        normalize_filled_vcf: "Whether to normalize `filled_vcf` with `bcftools norm` before matching."
+        subset_unfilled_vcf_field: "INFO field on `unfilled_vcf` used to limit which variants are filled. Requires `subset_unfilled_vcf_value`."
+        subset_unfilled_vcf_value: "Value that `subset_unfilled_vcf_field` must equal for a variant to be filled. Variants that don't match are left unfilled."
+        refilled_vcf: "VCF with FORMAT fields filled."
+        refilled_vcf_idx: "Index for the refilled VCF."
+    }
+
     input {
         File unfilled_vcf
         File unfilled_vcf_idx

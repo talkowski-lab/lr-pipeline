@@ -8,28 +8,26 @@ import "../utils/Helpers.wdl"
 
 workflow DeepVariant {
     meta {
-        description: "Call and merge small variants with DeepVariant from an aligned whole-genome BAM."
+        description: [
+            "This tool follows the DeepVariant path of the linked source workflow: it reads the source reference-bundle and small-variant-options JSON files, subsets the input BAM into its size-balanced shards, calls CPU or GPU DeepVariant, then merges the VCFs and gVCFs. The same region list controls BAM subsetting and DeepVariant `--regions`, preventing duplicate off-shard zero-depth gVCF blocks. It performs no explicit GCS-directory copy; map its declared outputs directly to attributes in the main Terra entity table."
+        ]
     }
 
     parameter_meta {
-        bam: "Aligned whole-genome BAM file."
-        bai: "Index for bam."
-        sex: "Biological sex; M enables the reference bundle's allosome settings."
-        prefix: "Prefix for merged VCF, gVCF, and monitoring outputs."
-        model_for_dv_andor_pepper: "DeepVariant model type, for example PACBIO or ONT_R104."
-        ref_bundle_json_file: "Reference bundle JSON used by the source workflow; its size-balanced shard manifests are required."
-        small_variant_calling_options_json: "Small-variant options JSON used by the source workflow."
-        gcp_zones: "Google Cloud zones for task placement."
-        deepvariant_docker: "Docker image for CPU DeepVariant tasks."
-        deepvariant_gpu_docker: "Docker image for GPU DeepVariant tasks."
-        utils_docker: "Docker image containing samtools, bcftools, and tabix."
-        resource_visualization_docker: "Docker image containing /opt/plot.resources.R."
-        runtime_attr_subset_bam: "Override runtime attributes for BAM subsetting tasks."
-        runtime_attr_run_deepvariant: "Override runtime attributes for CPU DeepVariant tasks."
-        runtime_attr_run_deepvariant_gpu: "Override runtime attributes for GPU DeepVariant tasks."
-        runtime_attr_visualize_resource_usage: "Override runtime attributes for resource-usage plotting tasks."
-        runtime_attr_merge_gvcfs: "Override runtime attributes for gVCF merge task."
-        runtime_attr_merge_vcfs: "Override runtime attributes for VCF merge task."
+        bam: "Aligned whole-genome BAM and index."
+        bai: "Aligned whole-genome BAM and index."
+        sex: "Biological sex; `M` enables the source reference bundle's haploid-contig and PAR settings."
+        model_for_dv_andor_pepper: "DeepVariant model, such as `PACBIO` or `ONT_R104`."
+        ref_bundle_json_file: "Source-compatible reference bundle JSON. Its size-balanced shard manifests are required."
+        small_variant_calling_options_json: "Source-compatible small-variant options JSON, providing DeepVariant threads, memory, GPU use, and haploid contigs."
+        gcp_zones: "Placement zones."
+        gvcf: "Merged gVCF."
+        gvcf_idx: "Index for gvcf."
+        vcf: "Merged VCF."
+        vcf_idx: "Index for vcf."
+        resource_usage_logs: "Per-shard diagnostic outputs."
+        resource_usage_visualizations: "Per-shard diagnostic outputs."
+        visual_reports: "Per-shard diagnostic outputs."
     }
 
     input {

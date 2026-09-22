@@ -4,6 +4,24 @@ import "../utils/Helpers.wdl"
 import "../utils/Structs.wdl"
 
 workflow ExtractSampleVcfs {
+    meta {
+        description: [
+            "This utility extracts per-sample VCFs from a cohort VCF, splitting each sample's variants into a SNV/indel VCF and an SV VCF based on a minimum SV length. It outputs the per-sample SNV/indel and SV VCFs."
+        ]
+    }
+
+    parameter_meta {
+        cohort_vcf: "Cohort VCF to extract from."
+        cohort_vcf_idx: "Index for the cohort VCF."
+        contigs: "Contigs to process within the cohort VCF."
+        sample_ids: "Samples to extract."
+        min_sv_length: "Minimum length at which a variant is routed to the SV VCF rather than the SNV/indel VCF."
+        snv_indel_vcfs: "Per-sample SNV/indel VCFs."
+        snv_indel_vcf_idxs: "Indexes for the SNV/indel VCFs."
+        sv_vcfs: "Per-sample SV VCFs."
+        sv_vcf_idxs: "Indexes for the SV VCFs."
+    }
+
     input {
         File cohort_vcf
         File cohort_vcf_idx

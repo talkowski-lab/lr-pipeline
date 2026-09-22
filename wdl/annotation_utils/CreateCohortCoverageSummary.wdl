@@ -4,6 +4,23 @@ import "../utils/Structs.wdl"
 import "../utils/Helpers.wdl"
 
 workflow CreateCohortCoverageSummary {
+    meta {
+        description: [
+            "This utility builds a binned coverage matrix across a cohort from per-sample mosdepth BED outputs. It tiles the genome into windows, computes the mean coverage and threshold-crossing counts within each bin for every sample, and concatenates the results into a single coverage TSV."
+        ]
+    }
+
+    parameter_meta {
+        mosdepth_bed_files: "Per-sample mosdepth coverage BED files."
+        mosdepth_bed_idx: "Indexes for `mosdepth_bed_files`."
+        ref_fai: "From references."
+        contigs: "Contigs over which to compute coverage."
+        window_size: "Size, in bp, of each genomic window."
+        bin_size: "Size, in bp, of each coverage bin within a window."
+        thresholds: "Coverage thresholds at which to count bins as covered."
+        binned_coverage_tsv: "Binned coverage matrix across the cohort."
+    }
+
     input {
         Array[File] mosdepth_bed_files
         Array[File] mosdepth_bed_idx

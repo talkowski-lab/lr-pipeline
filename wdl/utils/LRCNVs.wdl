@@ -33,18 +33,95 @@ version 1.0
 import "Structs.wdl"
 
 workflow LRCNVs {
+    meta {
+        description: [
+            "This component calls copy-number variants across a cohort using GATK germline CNV (gCNV) cohort mode. From per-sample depth profiles over a shared interval list it annotates and filters intervals, determines contig ploidy, fits gCNV across scattered interval shards, post-processes per-sample calls into genotyped interval and segment VCFs, and collects sample- and model-level QC."
+        ]
+    }
+
     parameter_meta {
-        intervals: "GATK-style intervals used to collect depth profiles."
-        sample_ids: "Identifier for each sample."
-        depth_profiles: "Median depth at each interval, rounded to an integer. One file per sample. See the TSV format here https://gatk.broadinstitute.org/hc/en-us/articles/35967568802843-CollectReadCounts."
-        contigs: "Contigs to call CNVs on; intervals are intersected with these before annotation and filtering."
-        cohort_id: "Identifier for the cohort used for denoising model generation."
-        contig_ploidy_priors: "File containing contig ploidy priors."
-        num_intervals_per_scatter: "Number of intervals to process in each scatter."
-        ref_fa: "Reference sequences FASTA file."
-        ref_fai: "Index for ref_fa."
-        ref_dict: "Reference sequences dictionary."
-        gatk_docker: "Docker image for the GATK tool."
+        intervals: "Interval list over which CNVs are called."
+        sample_ids: "Sample IDs in the cohort."
+        depth_profiles: "Per-sample read-depth profiles, aligned to `sample_ids`."
+        contigs: "Contigs to call CNVs on. `intervals` is subset to these before annotation and filtering, so a genome-wide interval list may be supplied. GATK copy-number tools reject a non-UNION `--interval-set-rule`, so the subset is taken as a separate step rather than by interval intersection."
+        cohort_id: "Identifier for the cohort."
+        contig_ploidy_priors: "Contig ploidy priors used to determine per-sample contig ploidy. May cover more contigs than `contigs`."
+        ref_fa: "From references."
+        ref_fai: "From references."
+        ref_dict: "From references."
+        num_intervals_per_scatter: "Number of intervals processed per scatter shard."
+        gatk4_jar_override: "Override GATK4 jar."
+        mappability_track_bed: "Mappability track used to annotate intervals."
+        mappability_track_bed_idx: "Index for `mappability_track_bed`."
+        segmental_duplication_track_bed: "Segmental-duplication track used to annotate intervals."
+        segmental_duplication_track_bed_idx: "Index for `segmental_duplication_track_bed`."
+        feature_query_lookahead: "Base pairs to look ahead when querying interval-annotation feature tracks."
+        blacklist_intervals: "Intervals to exclude from calling."
+        low_count_filter_count_threshold: "Minimum read count for an interval to be considered well-covered in a sample."
+        low_count_filter_percentage_of_samples: "Minimum percentage of samples that must meet `low_count_filter_count_threshold` for an interval to pass."
+        extreme_count_filter_minimum_percentile: "Lower count percentile below which an interval is considered an outlier."
+        extreme_count_filter_maximum_percentile: "Upper count percentile above which an interval is considered an outlier."
+        extreme_count_filter_percentage_of_samples: "Minimum percentage of samples that must pass the extreme-count percentile bounds for an interval to pass."
+        ploidy_mean_bias_standard_deviation: "DetermineGermlineContigPloidy --mean-bias-standard-deviation."
+        ploidy_mapping_error_rate: "DetermineGermlineContigPloidy --mapping-error-rate."
+        ploidy_global_psi_scale: "DetermineGermlineContigPloidy --global-psi-scale."
+        ploidy_sample_psi_scale: "DetermineGermlineContigPloidy --sample-psi-scale."
+        gcnv_p_alt: "GermlineCNVCaller --p-alt."
+        gcnv_p_active: "GermlineCNVCaller --p-active."
+        gcnv_cnv_coherence_length: "GermlineCNVCaller --cnv-coherence-length."
+        gcnv_class_coherence_length: "GermlineCNVCaller --class-coherence-length."
+        gcnv_max_copy_number: "GermlineCNVCaller --max-copy-number."
+        gcnv_max_bias_factors: "GermlineCNVCaller --max-bias-factors."
+        gcnv_mapping_error_rate: "GermlineCNVCaller --mapping-error-rate."
+        gcnv_interval_psi_scale: "GermlineCNVCaller --interval-psi-scale."
+        gcnv_sample_psi_scale: "GermlineCNVCaller --sample-psi-scale."
+        gcnv_depth_correction_tau: "GermlineCNVCaller --depth-correction-tau."
+        gcnv_log_mean_bias_standard_deviation: "GermlineCNVCaller --log-mean-bias-standard-deviation."
+        gcnv_init_ard_rel_unexplained_variance: "GermlineCNVCaller --init-ard-rel-unexplained-variance."
+        gcnv_num_gc_bins: "GermlineCNVCaller --num-gc-bins."
+        gcnv_gc_curve_standard_deviation: "GermlineCNVCaller --gc-curve-standard-deviation."
+        gcnv_copy_number_posterior_expectation_mode: "GermlineCNVCaller --copy-number-posterior-expectation-mode."
+        gcnv_enable_bias_factors: "GermlineCNVCaller --enable-bias-factors."
+        gcnv_active_class_padding_hybrid_mode: "GermlineCNVCaller --active-class-padding-hybrid-mode."
+        gcnv_learning_rate: "GermlineCNVCaller --learning-rate."
+        gcnv_adamax_beta_1: "GermlineCNVCaller --adamax-beta-1."
+        gcnv_adamax_beta_2: "GermlineCNVCaller --adamax-beta-2."
+        gcnv_log_emission_samples_per_round: "GermlineCNVCaller --log-emission-samples-per-round."
+        gcnv_log_emission_sampling_median_rel_error: "GermlineCNVCaller --log-emission-sampling-median-rel-error."
+        gcnv_log_emission_sampling_rounds: "GermlineCNVCaller --log-emission-sampling-rounds."
+        gcnv_max_advi_iter_first_epoch: "GermlineCNVCaller --max-advi-iter-first-epoch."
+        gcnv_max_advi_iter_subsequent_epochs: "GermlineCNVCaller --max-advi-iter-subsequent-epochs."
+        gcnv_min_training_epochs: "GermlineCNVCaller --min-training-epochs."
+        gcnv_max_training_epochs: "GermlineCNVCaller --max-training-epochs."
+        gcnv_initial_temperature: "GermlineCNVCaller --initial-temperature."
+        gcnv_num_thermal_advi_iters: "GermlineCNVCaller --num-thermal-advi-iters."
+        gcnv_convergence_snr_averaging_window: "GermlineCNVCaller --convergence-snr-averaging-window."
+        gcnv_convergence_snr_trigger_threshold: "GermlineCNVCaller --convergence-snr-trigger-threshold."
+        gcnv_convergence_snr_countdown_window: "GermlineCNVCaller --convergence-snr-countdown-window."
+        gcnv_max_calling_iters: "GermlineCNVCaller --max-calling-iters."
+        gcnv_caller_update_convergence_threshold: "GermlineCNVCaller --caller-update-convergence-threshold."
+        gcnv_caller_internal_admixing_rate: "GermlineCNVCaller --caller-internal-admixing-rate."
+        gcnv_caller_external_admixing_rate: "GermlineCNVCaller --caller-external-admixing-rate."
+        gcnv_disable_annealing: "GermlineCNVCaller --disable-annealing."
+        ref_copy_number_autosomal_contigs: "Reference copy number for autosomes."
+        allosomal_contigs: "Contigs treated as allosomal."
+        maximum_number_events_per_sample: "Maximum number of events permitted per sample."
+        annotated_intervals: "Intervals annotated with GC content and tracks."
+        filtered_intervals: "Intervals retained after filtering."
+        contig_ploidy_model_tar: "Fitted contig-ploidy model."
+        contig_ploidy_calls_tar: "Per-sample contig-ploidy calls."
+        gcnv_model_tars: "Fitted gCNV models, one per scatter shard."
+        gcnv_calls_tars: "Per-shard per-sample gCNV calls."
+        gcnv_tracking_tars: "Per-shard model-fitting tracking files."
+        genotyped_intervals_vcfs: "Per-sample genotyped interval VCFs."
+        genotyped_intervals_vcf_idxs: "Indexes for `genotyped_intervals_vcfs`."
+        genotyped_segments_vcfs: "Per-sample genotyped segment VCFs."
+        genotyped_segments_vcf_idxs: "Indexes for `genotyped_segments_vcfs`."
+        sample_qc_status_files: "Per-sample QC status files."
+        sample_qc_status_strings: "Per-sample QC status strings."
+        model_qc_status_file: "Model-level QC status file."
+        model_qc_string: "Model-level QC status string."
+        denoised_copy_ratios: "Per-sample denoised copy ratios."
     }
 
     input {
@@ -60,6 +137,7 @@ workflow LRCNVs {
         File ref_fai
         File ref_dict
         String gatk_docker
+        String sv_base_mini_docker
 
         Int num_intervals_per_scatter
 
@@ -136,6 +214,7 @@ workflow LRCNVs {
         # CollectSampleQualityMetrics
         Int maximum_number_events_per_sample = 1000
 
+        RuntimeAttr? runtime_attr_subset_intervals
         RuntimeAttr? runtime_attr_annotate_intervals
         RuntimeAttr? runtime_attr_filter_intervals
         RuntimeAttr? runtime_attr_scatter_intervals
@@ -146,10 +225,18 @@ workflow LRCNVs {
         RuntimeAttr? runtime_attr_collect_model_quality_metrics
     }
 
-    call AnnotateIntervals {
+    call SubsetIntervals {
         input:
             intervals = intervals,
             contigs = contigs,
+            prefix = prefix,
+            docker = sv_base_mini_docker,
+            runtime_attr_override = runtime_attr_subset_intervals
+    }
+
+    call AnnotateIntervals {
+        input:
+            intervals = SubsetIntervals.subset_intervals,
             prefix = prefix,
             ref_fa = ref_fa,
             ref_fai = ref_fai,
@@ -166,8 +253,7 @@ workflow LRCNVs {
 
     call FilterIntervals {
         input:
-            intervals = intervals,
-            contigs = contigs,
+            intervals = SubsetIntervals.subset_intervals,
             prefix = prefix,
             annotated_intervals = AnnotateIntervals.annotated_intervals,
             blacklist_intervals = blacklist_intervals,
@@ -319,10 +405,65 @@ workflow LRCNVs {
     }
 }
 
-task AnnotateIntervals {
+task SubsetIntervals {
     input {
         File intervals
         Array[String] contigs
+        String prefix
+        String docker
+        RuntimeAttr? runtime_attr_override
+    }
+
+    # Write into a directory so the input file name, whose extension GATK uses to infer the interval format, is kept
+    String subset_intervals_dir = "~{prefix}.subset_intervals"
+    String intervals_filename = basename(intervals)
+
+    command <<<
+        set -euo pipefail
+
+        mkdir '~{subset_intervals_dir}'
+
+        # Keep SAM-style header lines, then retain records whose contig is requested, reading either a
+        # tab-delimited interval list or the one-per-line contig:start-end form
+        awk -F'\t' 'BEGIN { while ((getline contig < "~{write_lines(contigs)}") > 0) keep[contig] = 1 }
+            /^@/ { print; next }
+            { split($1, fields, ":"); if (fields[1] in keep) print }' \
+            '~{intervals}' > '~{subset_intervals_dir}/~{intervals_filename}'
+
+        if ! grep -qv '^@' '~{subset_intervals_dir}/~{intervals_filename}'; then
+            printf 'No intervals remain after subsetting to the requested contigs\n' >&2
+            exit 1
+        fi
+    >>>
+
+    output {
+        File subset_intervals = "~{subset_intervals_dir}/~{intervals_filename}"
+    }
+
+    RuntimeAttr default_attr = object {
+        cpu_cores: 1,
+        mem_gb: 2,
+        disk_gb: ceil(size(intervals, "GB") * 2) + 20,
+        boot_disk_gb: 10,
+        preemptible_tries: 1,
+        max_retries: 0
+    }
+    RuntimeAttr runtime_attr = select_first([runtime_attr_override, default_attr])
+    runtime {
+        cpu: select_first([runtime_attr.cpu_cores, default_attr.cpu_cores])
+        memory: select_first([runtime_attr.mem_gb, default_attr.mem_gb]) + " GiB"
+        disks: "local-disk " + select_first([runtime_attr.disk_gb, default_attr.disk_gb]) + " HDD"
+        bootDiskSizeGb: select_first([runtime_attr.boot_disk_gb, default_attr.boot_disk_gb])
+        docker: docker
+        preemptible: select_first([runtime_attr.preemptible_tries, default_attr.preemptible_tries])
+        maxRetries: select_first([runtime_attr.max_retries, default_attr.max_retries])
+        noAddress: true
+    }
+}
+
+task AnnotateIntervals {
+    input {
+        File intervals
         String prefix
         File ref_fa
         File ref_fai
@@ -346,8 +487,6 @@ task AnnotateIntervals {
 
         gatk --java-options "-Xmx~{command_mem_mb}m" AnnotateIntervals \
             -L ~{intervals} \
-            -L ~{sep=" -L " contigs} \
-            --interval-set-rule INTERSECTION \
             --reference ~{ref_fa} \
             --sequence-dictionary ~{ref_dict} \
             ~{"--mappability-track " + mappability_track_bed} \
@@ -384,7 +523,6 @@ task AnnotateIntervals {
 task FilterIntervals {
     input {
         File intervals
-        Array[String] contigs
         String prefix
         File annotated_intervals
         File? blacklist_intervals
@@ -408,8 +546,6 @@ task FilterIntervals {
 
         gatk --java-options "-Xmx~{command_mem_mb}m" FilterIntervals \
             -L ~{intervals} \
-            -L ~{sep=" -L " contigs} \
-            --interval-set-rule INTERSECTION \
             ~{"-XL " + blacklist_intervals} \
             ~{if defined(read_count_files) then "--input " else ""} ~{sep=" --input " read_count_files} \
             ~{"--annotated-intervals " + annotated_intervals} \

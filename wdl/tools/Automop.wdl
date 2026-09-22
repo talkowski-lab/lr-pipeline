@@ -4,6 +4,20 @@ import "../utils/Helpers.wdl"
 import "../utils/Structs.wdl"
 
 workflow Automop {
+    meta {
+        description: [
+            "This tool runs `mop` (via FISS) to clean up unreferenced intermediate files in a Terra workspace, freeing storage. A dry-run mode reports what would be deleted without removing anything."
+        ]
+    }
+
+    parameter_meta {
+        workspace_namespace: "Terra workspace namespace to clean."
+        workspace_name: "Terra workspace name to clean."
+        user: "User running the cleanup."
+        dry_run: "Whether to report rather than perform deletions."
+        fissfc_log: "Log of the cleanup run."
+    }
+
     input {
         String workspace_namespace
         String workspace_name
@@ -94,7 +108,6 @@ def main(workspace_namespace, workspace_name, user):
         }
     db = bigquery.Client(project='broad-dsde-methods-automop')
     db.insert_rows(db.get_table('broad-dsde-methods-automop.automop.mop_events'), [mop_event])
-
 
 if __name__ == '__main__':
     main('~{workspace_namespace}', '~{workspace_name}', '~{user}')

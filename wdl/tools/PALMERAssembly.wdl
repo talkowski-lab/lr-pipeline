@@ -4,6 +4,42 @@ import "../utils/Helpers.wdl"
 import "../utils/Structs.wdl"
 
 workflow PALMERAssembly {
+    meta {
+        description: [
+            "This workflow runs PALMER on a pair of aligned assembly haplotypes in order to generate MEI calls. It then convets the raw PALMER calls generated into a VCF, merges calls across the haplotypes to create a diploid VCF per haplotype and then finally integrates these into a final VCF containing multiple MEI types."
+        ]
+    }
+
+    parameter_meta {
+        bam_pat: "Aligned assembly for paternal haplotype."
+        bai_pat: "Index for `bam_pat`."
+        bam_mat: "Aligned assembly for maternal haplotype."
+        bai_mat: "Index for `bam_mat`."
+        override_palmer_calls_pat: "Optional precomputed PALMER calls for the paternal haplotype, causing the workflow to bypass execution."
+        override_palmer_tsd_files_pat: "Optional precomputed PALMER TSD files for the paternal haplotype, causing the workflow to bypass execution."
+        override_palmer_calls_mat: "Optional precomputed PALMER calls for the maternal haplotype, causing the workflow to bypass execution."
+        override_palmer_tsd_files_mat: "Optional precomputed PALMER TSD files for the maternal haplotype, causing the workflow to bypass execution."
+        ref_fa: "From references."
+        ref_fai: "From references."
+        contigs: "Contigs to run PALMER on."
+        sample: "ID of the sample being processed."
+        mode: "PALMER run mode."
+        mei_types: "MEI modes to run PALMER in - a subset of `ALU`, `SVA`, `LINE` or `HERVK`."
+        truvari_collapse_params: "Per-MEI-type Truvari parameters used when merging calls across haplotypes."
+        palmer_pat_calls: "Raw PALMER calls for the paternal haplotype, per MEI type."
+        palmer_pat_tsd_reads: "PALMER TSD reads for the paternal haplotype, per MEI type."
+        palmer_pat_vcfs: "Paternal-haplotype PALMER VCFs, per MEI type."
+        palmer_pat_vcf_idxs: "Indexes for the paternal-haplotype VCFs."
+        palmer_mat_calls: "Raw PALMER calls for the maternal haplotype, per MEI type."
+        palmer_mat_tsd_reads: "PALMER TSD reads for the maternal haplotype, per MEI type."
+        palmer_mat_vcfs: "Maternal-haplotype PALMER VCFs, per MEI type."
+        palmer_mat_vcf_idxs: "Indexes for the maternal-haplotype VCFs."
+        palmer_diploid_vcfs: "Diploid PALMER VCFs merged across haplotypes, per MEI type."
+        palmer_diploid_vcf_idxs: "Indexes for the diploid VCFs."
+        palmer_combined_vcf: "Final VCF combining all MEI types."
+        palmer_combined_vcf_idx: "Index for the combined VCF."
+    }
+
     input {
         File? bam_pat
         File? bai_pat

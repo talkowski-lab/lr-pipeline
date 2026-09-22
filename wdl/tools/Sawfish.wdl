@@ -3,6 +3,37 @@ version 1.0
 import "../utils/Structs.wdl"
 
 workflow Sawfish {
+    meta {
+        description: [
+            "This tool calls structural variants and copy-number variants from aligned long reads with sawfish. It runs the per-sample discover step in a scatter, then joint-calls across the cohort, using per-sample sex to select the expected copy-number track."
+        ]
+    }
+
+    parameter_meta {
+        bams: "Per-sample aligned reads."
+        bais: "Indexes for `bams`."
+        sexes: "Per-sample sex, aligned to `bams`, selecting the expected copy-number track."
+        sample_ids: "Sample IDs, aligned to `bams`."
+        ref_fa: "Reference FASTA."
+        ref_fai: "Index for `ref_fa`."
+        expected_cn_male: "Expected copy-number track for male samples."
+        expected_cn_female: "Expected copy-number track for female samples."
+        exclude_bed: "Regions excluded from calling."
+        exclude_bed_idx: "Index for `exclude_bed`."
+        min_sv_size: "Minimum SV length to report."
+        min_sv_mapq: "Minimum mapping quality for supporting reads."
+        fast_cnv_mode: "Use the faster, less sensitive CNV mode."
+        disable_cnv: "Skip CNV calling entirely."
+        treat_single_copy_as_haploid: "Emit haploid genotypes on single-copy contigs."
+        report_supporting_reads: "Also emit the reads supporting each call."
+        sawfish_vcf: "Joint-called SV and CNV VCF."
+        sawfish_vcf_idx: "Index for `sawfish_vcf`."
+        sawfish_bedgraphs: "Per-sample depth bedGraph files."
+        sawfish_depth_bws: "Per-sample depth bigWig files."
+        sawfish_log: "Joint-calling log."
+        sawfish_supporting_reads: "Supporting reads per call, emitted only when `report_supporting_reads` is set."
+    }
+
     input {
         Array[File] bams
         Array[File] bais

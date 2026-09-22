@@ -4,6 +4,32 @@ import "../utils/Helpers.wdl"
 import "../utils/Structs.wdl"
 
 workflow AnnotateVcf {
+    meta {
+        description: [
+            "This utility applies a list of annotation TSVs to a VCF as new INFO fields, adding the specified field names, descriptions, types and numbers for each TSV in turn. Each annotation source can optionally have its TSV sorted, the VCF pre-subset and its TSV rows filtered beforehand. It outputs the annotated VCF."
+        ]
+    }
+
+    parameter_meta {
+        vcf: "VCF to annotate."
+        vcf_idx: "Index for VCF to annotate."
+        annotations_tsvs: "Annotation TSVs to apply, each as a set of INFO fields."
+        contigs: "Contigs to annotate within the input VCF."
+        records_per_shard: "Number of variants to keep within a single shard during annotation. When set, each contig VCF is sharded by record count, annotated in parallel and concatenated."
+        sort_tsvs: "Per-TSV flag indicating whether to sort the TSV before annotation."
+        strip_info_fields_per_tsv: "Per-TSV flags selecting which annotations have their pre-existing INFO fields stripped before the annotation is written. Must be the same length as the annotation TSV list, and takes precedence over `strip_info_fields_by_name`."
+        strip_info_fields_by_name: "Names of INFO fields to strip from the input VCF before annotation. Ignored when `strip_info_fields_per_tsv` is set."
+        subset_vcf_strings: "Per-TSV `bcftools view` arguments used to pre-subset the VCF."
+        awk_tsv_conditions: "Per-TSV `awk` condition used to filter the TSV rows applied."
+        subset_tsv_columns: "Per-TSV 1-based column indices (beyond the always-kept CHROM/POS/REF/ALT/ID columns 1-5) to keep from the TSV before annotation; an empty list for a TSV keeps all columns."
+        info_names: "INFO field names added by each annotation TSV."
+        info_descriptions: "INFO field header descriptions for each annotation TSV."
+        info_types: "INFO field types for each annotation TSV."
+        info_numbers: "INFO field `Number` values for each annotation TSV."
+        annotated_vcf: "Annotated VCF."
+        annotated_vcf_idx: "Index for the annotated VCF."
+    }
+
     input {
         File vcf
         File vcf_idx

@@ -3,6 +3,18 @@ version 1.0
 import "../utils/Structs.wdl"
 
 workflow ConcatenateMosDepth {
+    meta {
+        description: [
+            "This utility concatenates a sample's per-contig `MosDepth` per-base coverage BED files into a single indexed BED. It outputs the combined per-base coverage BED and its index."
+        ]
+    }
+
+    parameter_meta {
+        mosdepth_bed_files: "Per-contig mosdepth per-base coverage BED files to concatenate."
+        mosdepth_per_base_combined: "Combined per-base coverage BED."
+        mosdepth_per_base_combined_idx: "Index for the combined BED."
+    }
+
     input {
         Array[File] mosdepth_bed_files
         String prefix

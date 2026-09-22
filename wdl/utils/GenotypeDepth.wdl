@@ -4,6 +4,29 @@ import "Structs.wdl"
 import "Helpers.wdl"
 
 workflow GenotypeDepth {
+    meta {
+        description: [
+            "This sub-workflow trains a depth genotyping model on a set of training intervals, then genotypes the clustered depth CNV calls per contig with GATK and concatenates the results."
+        ]
+    }
+
+    parameter_meta {
+        vcf: "Clustered depth CNV VCF from `DepthClustering`."
+        vcf_idx: "Index for vcf."
+        training_intervals: "Intervals used to train the genotyping model."
+        median_coverage: "Per-sample median coverage."
+        rd_file: "Read-depth evidence matrix."
+        rd_file_idx: "Index for rd_file."
+        ref_dict: "Reference sequence dictionary."
+        ploidy_table: "Ploidy table from `DepthPreprocessing`."
+        contigs: "Contigs to genotype over, given in reference dictionary order. Model training is also restricted to these, so `training_intervals` and `rd_file` may be genome-wide."
+        chr_x: "Allosome contig names (defaults `chrX` and `chrY`)."
+        chr_y: "Allosome contig names (defaults `chrX` and `chrY`)."
+        genotyped_depth_vcf: "Genotyped depth CNV VCF."
+        genotyped_depth_vcf_idx: "Index for `genotyped_depth_vcf`."
+        genotyping_rd_table: "Read-depth table produced while training the model."
+    }
+
     input {
         String prefix
         File vcf
@@ -113,10 +136,6 @@ task TrainSVGenotyping {
         RuntimeAttr? runtime_attr_override
     }
 
-    parameter_meta {
-        rd_file: { localization_optional: true }
-    }
-
     Int java_mem_mib = ceil(select_first([runtime_attr.mem_gb, default_attr.mem_gb]) * 0.8 * 1024)
 
     command <<<
@@ -175,10 +194,6 @@ task GenotypeSVs {
         String? contig
         String docker
         RuntimeAttr? runtime_attr_override
-    }
-
-    parameter_meta {
-        rd_file: { localization_optional: true }
     }
 
     Int java_mem_mib = ceil(select_first([runtime_attr.mem_gb, default_attr.mem_gb]) * 0.8 * 1024)

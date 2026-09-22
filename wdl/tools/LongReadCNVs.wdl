@@ -9,7 +9,111 @@ import "../utils/Structs.wdl"
 
 workflow LongReadCNVs {
     meta {
-        description: "Run GATK-gCNV on long-read samples, cluster the calls and genotype them in all samples."
+        description: [
+            "This workflow calls cohort CNVs from long-read depth profiles with GATK gCNV, then converts, clusters and genotypes the depth calls. It outputs merged CNV calls, ploidy, and genotyped depth VCFs."
+        ]
+    }
+
+    parameter_meta {
+        intervals: "Interval list over which CNVs are called."
+        sample_ids: "Sample IDs in the cohort."
+        depth_profiles: "Per-sample read-depth profiles, aligned to `sample_ids`."
+        contigs: "Contigs to process, given in reference dictionary order. `intervals` is subset to these before gCNV runs, and depth preprocessing, clustering and genotyping are likewise restricted, so genome-wide `intervals`, `merged_bincov`, `training_intervals` and `contig_ploidy_priors` are accepted."
+        sort_depth_profiles: "Whether to sort each depth profile by contig and position first, for profiles that are not already coordinate sorted."
+        batch_id: "Identifier for the cohort batch."
+        contig_ploidy_priors: "Contig ploidy priors used to determine per-sample contig ploidy."
+        merged_bincov: "Merged read-depth evidence and its tabix index for depth genotyping."
+        merged_bincov_idx: "Index for merged_bincov."
+        ref_fa: "From references."
+        ref_fai: "From references."
+        ref_dict: "From references."
+        pedigree: "Cohort pedigree used by depth genotyping."
+        training_intervals: "Intervals used to train the depth genotyping model."
+        median_coverage: "Per-sample median coverage table used by depth genotyping."
+        variant_prefix: "Prefix used for generated variant IDs."
+        gcnv_qs_cutoff: "Minimum gCNV quality score for a segment to be kept."
+        num_intervals_per_scatter: "Number of intervals processed per scatter shard."
+        chr_x: "Name of the X contig in the reference."
+        chr_y: "Name of the Y contig in the reference."
+        gatk4_jar_override: "Override GATK4 jar."
+        mappability_track_bed: "Mappability track used to annotate intervals."
+        mappability_track_bed_idx: "Index for `mappability_track_bed`."
+        segmental_duplication_track_bed: "Segmental-duplication track used to annotate intervals."
+        segmental_duplication_track_bed_idx: "Index for `segmental_duplication_track_bed`."
+        feature_query_lookahead: "Base pairs to look ahead when querying interval-annotation feature tracks."
+        blacklist_intervals: "Intervals to exclude from calling."
+        low_count_filter_count_threshold: "Minimum read count for an interval to be considered well-covered in a sample."
+        low_count_filter_percentage_of_samples: "Minimum percentage of samples that must meet `low_count_filter_count_threshold` for an interval to pass."
+        extreme_count_filter_minimum_percentile: "Lower count percentile below which an interval is considered an outlier."
+        extreme_count_filter_maximum_percentile: "Upper count percentile above which an interval is considered an outlier."
+        extreme_count_filter_percentage_of_samples: "Minimum percentage of samples that must pass the extreme-count percentile bounds for an interval to pass."
+        ploidy_mean_bias_standard_deviation: "DetermineGermlineContigPloidy --mean-bias-standard-deviation."
+        ploidy_mapping_error_rate: "DetermineGermlineContigPloidy --mapping-error-rate."
+        ploidy_global_psi_scale: "DetermineGermlineContigPloidy --global-psi-scale."
+        ploidy_sample_psi_scale: "DetermineGermlineContigPloidy --sample-psi-scale."
+        gcnv_p_alt: "GermlineCNVCaller --p-alt."
+        gcnv_p_active: "GermlineCNVCaller --p-active."
+        gcnv_cnv_coherence_length: "GermlineCNVCaller --cnv-coherence-length."
+        gcnv_class_coherence_length: "GermlineCNVCaller --class-coherence-length."
+        gcnv_max_copy_number: "GermlineCNVCaller --max-copy-number."
+        gcnv_max_bias_factors: "GermlineCNVCaller --max-bias-factors."
+        gcnv_mapping_error_rate: "GermlineCNVCaller --mapping-error-rate."
+        gcnv_interval_psi_scale: "GermlineCNVCaller --interval-psi-scale."
+        gcnv_sample_psi_scale: "GermlineCNVCaller --sample-psi-scale."
+        gcnv_depth_correction_tau: "GermlineCNVCaller --depth-correction-tau."
+        gcnv_log_mean_bias_standard_deviation: "GermlineCNVCaller --log-mean-bias-standard-deviation."
+        gcnv_init_ard_rel_unexplained_variance: "GermlineCNVCaller --init-ard-rel-unexplained-variance."
+        gcnv_num_gc_bins: "GermlineCNVCaller --num-gc-bins."
+        gcnv_gc_curve_standard_deviation: "GermlineCNVCaller --gc-curve-standard-deviation."
+        gcnv_copy_number_posterior_expectation_mode: "GermlineCNVCaller --copy-number-posterior-expectation-mode."
+        gcnv_enable_bias_factors: "GermlineCNVCaller --enable-bias-factors."
+        gcnv_active_class_padding_hybrid_mode: "GermlineCNVCaller --active-class-padding-hybrid-mode."
+        gcnv_learning_rate: "GermlineCNVCaller --learning-rate."
+        gcnv_adamax_beta_1: "GermlineCNVCaller --adamax-beta-1."
+        gcnv_adamax_beta_2: "GermlineCNVCaller --adamax-beta-2."
+        gcnv_log_emission_samples_per_round: "GermlineCNVCaller --log-emission-samples-per-round."
+        gcnv_log_emission_sampling_median_rel_error: "GermlineCNVCaller --log-emission-sampling-median-rel-error."
+        gcnv_log_emission_sampling_rounds: "GermlineCNVCaller --log-emission-sampling-rounds."
+        gcnv_max_advi_iter_first_epoch: "GermlineCNVCaller --max-advi-iter-first-epoch."
+        gcnv_max_advi_iter_subsequent_epochs: "GermlineCNVCaller --max-advi-iter-subsequent-epochs."
+        gcnv_min_training_epochs: "GermlineCNVCaller --min-training-epochs."
+        gcnv_max_training_epochs: "GermlineCNVCaller --max-training-epochs."
+        gcnv_initial_temperature: "GermlineCNVCaller --initial-temperature."
+        gcnv_num_thermal_advi_iters: "GermlineCNVCaller --num-thermal-advi-iters."
+        gcnv_convergence_snr_averaging_window: "GermlineCNVCaller --convergence-snr-averaging-window."
+        gcnv_convergence_snr_trigger_threshold: "GermlineCNVCaller --convergence-snr-trigger-threshold."
+        gcnv_convergence_snr_countdown_window: "GermlineCNVCaller --convergence-snr-countdown-window."
+        gcnv_max_calling_iters: "GermlineCNVCaller --max-calling-iters."
+        gcnv_caller_update_convergence_threshold: "GermlineCNVCaller --caller-update-convergence-threshold."
+        gcnv_caller_internal_admixing_rate: "GermlineCNVCaller --caller-internal-admixing-rate."
+        gcnv_caller_external_admixing_rate: "GermlineCNVCaller --caller-external-admixing-rate."
+        gcnv_disable_annealing: "GermlineCNVCaller --disable-annealing."
+        ref_copy_number_autosomal_contigs: "Reference copy number for autosomes."
+        allosomal_contigs: "Contigs treated as allosomal."
+        maximum_number_events_per_sample: "Maximum number of events permitted per sample."
+        defragment_max_dist: "Maximum gap, as a fraction of call length, across which adjacent calls are defragmented."
+        fast_mode: "Use SVCluster fast mode."
+        clustering_algorithm: "SVCluster algorithm."
+        enable_cnv: "SVCluster behavior flags."
+        default_no_call: "SVCluster behavior flags."
+        omit_members: "SVCluster behavior flags."
+        breakpoint_summary_strategy: "SVCluster behavior flags."
+        defrag_padding_fraction: "Defragmentation thresholds."
+        defrag_sample_overlap: "Defragmentation thresholds."
+        depth_sample_overlap: "Required sample overlap for depth clustering."
+        depth_interval_overlap: "Required reciprocal interval overlap."
+        depth_size_similarity: "Required size similarity."
+        depth_breakend_window: "Breakend join window in base pairs."
+        exclude_intervals: "Intervals whose overlapping calls are dropped."
+        exclude_overlap_fraction: "Overlap fraction at which a call is excluded."
+        gatk_to_svtk_script: "Override for the GATK-to-svtk conversion script."
+        svtk_set_pass: "Set FILTER to PASS during conversion."
+        merged_cnvs_vcf: "Cohort CNV VCF after depth preprocessing."
+        merged_cnvs_vcf_idx: "Index for `merged_cnvs_vcf`."
+        ploidy_table: "Per-sample ploidy table."
+        genotyped_depth_vcf: "Clustered CNV VCF genotyped from read depth."
+        genotyped_depth_vcf_idx: "Index for `genotyped_depth_vcf`."
+        genotyping_rd_table: "Read-depth evidence used for genotyping."
     }
 
     input {
@@ -117,6 +221,7 @@ workflow LongReadCNVs {
         Boolean svtk_set_pass = false
 
         RuntimeAttr? runtime_attr_sort_depth_profiles
+        RuntimeAttr? runtime_attr_subset_intervals
         RuntimeAttr? runtime_attr_annotate_intervals
         RuntimeAttr? runtime_attr_filter_intervals
         RuntimeAttr? runtime_attr_scatter_intervals
@@ -168,6 +273,7 @@ workflow LongReadCNVs {
             ref_fai = ref_fai,
             ref_dict = ref_dict,
             gatk_docker = gatk_docker,
+            sv_base_mini_docker = sv_base_mini_docker,
             gatk4_jar_override = gatk4_jar_override,
             mappability_track_bed = mappability_track_bed,
             mappability_track_bed_idx = mappability_track_bed_idx,
@@ -224,6 +330,7 @@ workflow LongReadCNVs {
             ref_copy_number_autosomal_contigs = ref_copy_number_autosomal_contigs,
             allosomal_contigs = allosomal_contigs,
             maximum_number_events_per_sample = maximum_number_events_per_sample,
+            runtime_attr_subset_intervals = runtime_attr_subset_intervals,
             runtime_attr_annotate_intervals = runtime_attr_annotate_intervals,
             runtime_attr_filter_intervals = runtime_attr_filter_intervals,
             runtime_attr_scatter_intervals = runtime_attr_scatter_intervals,

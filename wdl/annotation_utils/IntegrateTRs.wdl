@@ -4,6 +4,25 @@ import "../utils/Helpers.wdl"
 import "../utils/Structs.wdl"
 
 workflow IntegrateTRs {
+    meta {
+        description: [
+            "This utility integrates tandem-repeat calls into a base VCF for a cohort. It aligns samples between the base and TR VCFs, sets missing filters to pass, tags TR records with their source catalog, assigns TR identifiers and annotates the base VCF with the integrated TR calls. It outputs the TR-annotated VCF."
+        ]
+    }
+
+    parameter_meta {
+        vcf: "Base VCF to integrate TRs into."
+        vcf_idx: "Index for the base VCF."
+        tr_vcf: "Tandem-repeat VCF to integrate."
+        tr_vcf_idx: "Index for the TR VCF."
+        contigs: "Contigs to process."
+        sample_ids: "Samples shared between the base and TR VCFs."
+        tr_catalogs: "Catalogs from which the TR calls were derived."
+        tr_catalog_ids: "Identifier for each catalog in `tr_catalogs`."
+        tr_annotated_vcf: "Base VCF annotated with integrated TR calls."
+        tr_annotated_vcf_idx: "Index for the annotated VCF."
+    }
+
     input {
         File vcf
         File vcf_idx

@@ -3,6 +3,34 @@ version 1.0
 import "../utils/Structs.wdl"
 
 workflow ExtractRandomCalls {
+    meta {
+        description: [
+            "This utility draws a random sample of variant/sample pairs from a set of VCF shards, for manual review or IGV curation. Each shard is sampled independently under the supplied filters, then the per-shard draws are pooled and down-sampled to the requested count using a fixed seed, so a given seed always yields the same selection."
+        ]
+    }
+
+    parameter_meta {
+        vcfs: "VCF shards to sample from."
+        vcf_idxs: "Indexes for `vcfs`."
+        count: "Number of variant/sample pairs to return."
+        random_seed: "Seed for the draw, so the selection is reproducible."
+        min_af: "Restrict to variants within an allele-frequency range."
+        max_af: "Restrict to variants within an allele-frequency range."
+        min_ac: "Restrict to variants within an allele-count range."
+        max_ac: "Restrict to variants within an allele-count range."
+        singleton: "Restrict to singletons."
+        filters: "Restrict to variants carrying these FILTER values."
+        allele_types: "Restrict to these allele types."
+        min_allele_length: "Restrict to variants within an allele-length range."
+        max_allele_length: "Restrict to variants within an allele-length range."
+        include_samples: "Restrict the draw to these samples."
+        exclude_samples: "Exclude these samples from the draw."
+        variant_sample_pairs: "TSV of the selected variant/sample pairs."
+        candidate_summary: "TSV summarizing how many candidates each shard contributed."
+        variant_vcf: "VCF containing just the selected variants."
+        variant_vcf_idx: "Index for `variant_vcf`."
+    }
+
     input {
         Array[File] vcfs
         Array[File] vcf_idxs

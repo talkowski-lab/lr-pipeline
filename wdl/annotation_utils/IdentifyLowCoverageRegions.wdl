@@ -3,6 +3,28 @@ version 1.0
 import "../utils/Structs.wdl"
 
 workflow IdentifyLowCoverageRegions {
+    meta {
+        description: [
+            "This utility finds recurrent low-coverage regions from cohort mosdepth per-base BED files. It streams each sample independently, divides each chromosome into fixed bins anchored at position 0, and calculates each bin's base-weighted median coverage. Each sample's median binned coverage is rounded down before its regular low-coverage cutoff is calculated as `floor(median_coverage * median_coverage_cutoff)`; bins at or below this inclusive cutoff are flagged. A cohort bin fails when its low-coverage sample proportion is at or above the inclusive `sample_proportion_cutoff`.",
+            "Sample sex is read from a six-column PED (`1` for male and `2` for female). Male chrX and chrY use half the floored regular cutoff. Female chrY is excluded from binning, the sample median, sample histograms, and low-coverage calls. Samples missing from the PED or carrying unsupported sex codes fail explicitly. The workflow scatters once across samples, then aggregates flagged bins in one cohort task to avoid a nested scatter."
+        ]
+    }
+
+    parameter_meta {
+        mosdepth_bed_files: "One sorted, contiguous mosdepth per-base BED or BED.GZ per sample. Files must use four columns (`chrom`, `start`, `end`, `coverage`), cover each included chromosome from position 0, and have the same chromosome coordinate system."
+        sample_ids: "Sample IDs corresponding by array index to `mosdepth_bed_files`."
+        ped: "Six-column PED containing every input sample and its sex."
+        bin_size: "Fixed genomic bin size in bp."
+        median_coverage_cutoff: "Fraction of the floored sample median coverage defining the inclusive regular low-coverage cutoff. The operational cutoff is also rounded down: `floor(floor(median_coverage) * median_coverage_cutoff)`. For example, `0.2` gives a `12x` cutoff for a sample with median coverage `60x`."
+        sample_proportion_cutoff: "Inclusive minimum proportion of eligible samples with low coverage required to fail a cohort bin."
+        chrY_coverage_cutoff: "Fraction of a sample's autosomal median coverage that its chrY median coverage must reach for the sample to be inferred male."
+        sample_histograms_tar: "Tarball of per-sample coverage histograms with weighted, data-driven bins. The displayed range extends through at least the 95th percentile and the `Q3 + 3 * IQR` upper fence; omitted extreme bins are counted, actual low-coverage bins are orange, and the sample median plus regular/sex-chromosome cutoffs are annotated."
+        chromosome_low_coverage_tar: "Tarball of per-chromosome plots showing number of samples flagged in each genomic bin."
+        cohort_coverage_counts_tsv: "Raw, uncompressed TSV underlying the chromosome plots, with low-coverage and eligible-sample counts for every eligible genomic bin, including bins with zero low-coverage samples. chrY includes only male samples in its eligibility denominator and is omitted when no male samples are present."
+        failed_bins_bed: "Raw, uncompressed, naturally chromosome-sorted BED of cohort bins whose low-coverage sample proportion is greater than or equal to `sample_proportion_cutoff`."
+        sample_cutoffs_tsv: "TSV with `sample_id`, floored regular `cutoff`, and floored `median_coverage` for every input sample. Both values match those used for low-coverage calls and plots."
+    }
+
     input {
         Array[File] mosdepth_bed_files
         Array[String] sample_ids
@@ -86,7 +108,6 @@ from collections import Counter
 import matplotlib.pyplot as plt
 import numpy as np
 
-
 INPUT = "~{mosdepth_bed}"
 PED = "~{ped}"
 SAMPLE_ID = "~{sample_id}"
@@ -100,12 +121,10 @@ AUTOSOMES = {f"chr{i}" for i in range(1, 23)}
 
 plt.switch_backend("Agg")
 
-
 def open_text(path):
     if path.endswith(".gz"):
         return gzip.open(path, "rt")
     return open(path, "r")
-
 
 def weighted_median(depth_counts, base_count):
     lower_rank = (base_count + 1) // 2
@@ -122,12 +141,10 @@ def weighted_median(depth_counts, base_count):
             break
     return (lower_value + upper_value) / 2
 
-
 def format_depth(depth):
     if depth.is_integer():
         return str(int(depth))
     return f"{depth:.10g}"
-
 
 def read_sample_sex(path, sample_id):
     sex = None
@@ -159,7 +176,6 @@ def read_sample_sex(path, sample_id):
         raise ValueError(f"Sample {sample_id} is missing from PED")
     return sex
 
-
 def determine_sex_from_coverage(path, chrY_coverage_cutoff):
     autosome_counts = Counter()
     autosome_bases = 0
@@ -187,7 +203,6 @@ def determine_sex_from_coverage(path, chrY_coverage_cutoff):
     if chrY_median >= chrY_coverage_cutoff * autosome_median:
         return "male"
     return "female"
-
 
 def write_binned_coverage(input_path, output_path):
     coverage_counts = Counter()
@@ -260,7 +275,6 @@ def write_binned_coverage(input_path, output_path):
         finish_bin(writer, previous_end)
     return histogram
 
-
 def weighted_quantile(histogram, fraction):
     bin_count = sum(histogram.values())
     target_rank = max(1, math.ceil(fraction * bin_count))
@@ -270,7 +284,6 @@ def weighted_quantile(histogram, fraction):
         if cumulative >= target_rank:
             return depth, bin_count
     raise ValueError("Cannot calculate cutoff from empty histogram")
-
 
 def write_low_coverage_bins(binned_path, output_path, regular_cutoff, sex_cutoff):
     low_bin_count = 0
@@ -292,7 +305,6 @@ def write_low_coverage_bins(binned_path, output_path, regular_cutoff, sex_cutoff
                 low_bin_count += 1
                 low_histogram[depth] += 1
     return low_bin_count, low_histogram
-
 
 def plot_histogram(
     histogram,
@@ -389,7 +401,6 @@ def plot_histogram(
     figure.tight_layout()
     figure.savefig(output_path, dpi=150)
     plt.close(figure)
-
 
 if BIN_SIZE <= 0:
     raise ValueError("bin_size must be greater than 0")
@@ -515,7 +526,6 @@ from pathlib import Path
 
 import matplotlib.pyplot as plt
 
-
 RAW_COUNTS = "~{prefix}.low_coverage_raw.tsv.gz"
 COUNTS = "~{prefix}.coverage_counts.tsv"
 FAILED_BINS = "~{prefix}.failed_bins.bed"
@@ -529,16 +539,13 @@ OUTPUT_DIR = Path("chromosome_plots")
 
 plt.switch_backend("Agg")
 
-
 def open_text(path):
     if path.endswith(".gz"):
         return gzip.open(path, "rt")
     return open(path, "r")
 
-
 def safe_filename(value):
     return re.sub(r"[^A-Za-z0-9._-]", "_", value)
-
 
 def chromosome_sort_key(chrom):
     name = chrom[3:] if chrom.startswith("chr") else chrom
@@ -546,7 +553,6 @@ def chromosome_sort_key(chrom):
         return (0, int(name))
     order = {"X": 0, "Y": 1, "M": 2, "MT": 2}
     return (1, order.get(name, 3), name)
-
 
 def write_sample_cutoffs(input_paths, output_path, sample_ids):
     rows_by_sample = {}
@@ -573,7 +579,6 @@ def write_sample_cutoffs(input_paths, output_path, sample_ids):
             writer.writerow([sample_id, row["regular_cutoff"], row["median"]])
     return {sample_id: rows_by_sample[sample_id]["sex"] for sample_id in sample_ids}
 
-
 def plot_chromosome(chrom, chrom_end, flagged_bins, eligible_sample_count):
     starts = range(0, chrom_end, BIN_SIZE)
     positions = [
@@ -596,7 +601,6 @@ def plot_chromosome(chrom, chrom_end, flagged_bins, eligible_sample_count):
     figure.tight_layout()
     figure.savefig(OUTPUT_DIR / f"{safe_filename(chrom)}.low_coverage.png", dpi=150)
     plt.close(figure)
-
 
 if not SAMPLE_IDS:
     raise ValueError("sample_ids must not be empty")

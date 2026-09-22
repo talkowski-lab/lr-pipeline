@@ -4,6 +4,22 @@ import "../utils/Helpers.wdl"
 import "../utils/Structs.wdl"
 
 workflow CombineTRs {
+    meta {
+        description: [
+            "This utility combines tandem-repeat VCFs from multiple callers for one sample or a cohort into one VCF. It checks sample consistency, sets missing filters to pass, tags each caller's calls, assigns TR identifiers, deduplicates overlapping variants and priority-merges the callers per contig. It outputs the combined TR VCF."
+        ]
+    }
+
+    parameter_meta {
+        tr_vcfs: "Tandem-repeat VCFs to combine, one per caller."
+        tr_vcf_idxs: "Indexes for `tr_vcfs`."
+        tr_callers: "Caller name for each VCF in `tr_vcfs`, used for tagging and merge priority."
+        contigs: "Contigs to process."
+        sample_ids: "Sample IDs expected across all input VCFs."
+        combined_tr_vcf: "Combined tandem-repeat VCF."
+        combined_tr_vcf_idx: "Index for the combined VCF."
+    }
+
     input {
         Array[File] tr_vcfs
         Array[File] tr_vcf_idxs

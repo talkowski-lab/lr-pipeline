@@ -4,6 +4,31 @@ import "../utils/Helpers.wdl"
 import "../utils/Structs.wdl"
 
 workflow ConvertVcfToBed {
+    meta {
+        description: [
+            "This utility converts per-contig VCFs to one BED-like table with `svtk vcf2bed`. It can filter by variant length, rewrite selected INFO fields, convert records to insertion/deletion classes, shard large inputs, and control INFO, sample, filter, BND, CPX, compression, and output-extension behavior."
+        ]
+    }
+
+    parameter_meta {
+        vcfs: "Per-contig VCFs to convert."
+        vcf_idxs: "Indexes for `vcfs`."
+        contigs: "Contigs corresponding to `vcfs`."
+        records_per_shard: "Optional record count per conversion shard."
+        min_length: "Optional minimum absolute variant length."
+        length_field: "INFO field containing variant length."
+        convert_to_ins_del: "Whether to reduce variant classes to insertions/deletions."
+        switch_info_fields: "INFO-field/value rewrites applied before conversion."
+        info_columns: "INFO columns included in output."
+        include_samples: "Whether to include sample columns."
+        include_filters: "Whether to include FILTER."
+        split_bnd: "Whether to split BND records."
+        split_cpx: "Whether to split complex records."
+        output_gz: "Whether to gzip output."
+        output_bed: "Whether to use a `.bed` extension instead of `.tsv`."
+        bed: "Combined converted BED/TSV artifact."
+    }
+
     input {
         Array[File] vcfs
         Array[File] vcf_idxs

@@ -3,6 +3,29 @@ version 1.0
 import "../utils/Helpers.wdl"
 
 workflow PreprocessVcfs {
+    meta {
+        description: [
+            "This utility preprocesses and integrates one or more cohort VCFs into a single VCF. It first optionally converts symbolic alleles to sequence alleles, then applies any per-VCF sample-ID swaps, optionally subsets every VCF to the requested samples, and validates that the resulting sample sets are identical. Each VCF is then optionally normalized, annotated with core variant attributes and an optional source label, and length-filtered. Per-VCF controls are required arrays: an empty array disables that control for every VCF; a non-empty array must align with `vcfs`."
+        ]
+    }
+
+    parameter_meta {
+        vcfs: "Cohort VCFs to preprocess and merge."
+        vcf_idxs: "Indexes for `vcfs`."
+        normalize_vcfs: "Per-VCF normalization settings. `[]` disables normalization; otherwise aligned with `vcfs`."
+        convert_symbolic_to_sequence: "Per-VCF symbolic-allele conversion settings. `[]` disables conversion; otherwise aligned with `vcfs`. For enabled VCFs, `<DEL>` becomes a reference-anchored deletion, and `<DUP>` becomes a reference-anchored insertion using `SVLEN` or `END` as a fallback to determine the inserted-reference length. `<INS>` remains unchanged; existing `INFO/allele_length` and `INFO/allele_type` values are preserved, while missing values receive an absolute length from `SVLEN` or `END` as a fallback and `allele_type=ins`. `<INV>` remains symbolic but receives `INFO/allele_type=inv` and an absolute `INFO/allele_length` from `SVLEN` or `END` as a fallback. Any other angle-bracket symbolic ALT fails the workflow."
+        source_tags: "Per-VCF `SOURCE` values. `[]` disables source tagging; otherwise aligned with `vcfs`. Required when at least one length cutoff is enabled."
+        swap_sample_lists: "Per-VCF sample-ID swap maps, applied before sample subsetting. `[]` disables swapping; otherwise aligned with `vcfs`. A zero-byte map means no swap for that VCF."
+        min_length_cutoffs: "Per-VCF minimum absolute allele lengths. `[]` disables minimum-length filtering; otherwise aligned with `vcfs`. A value of `-1` disables this filter for that VCF. Calls with `abs(allele_length)` strictly below an enabled cutoff receive `SMALL_{source_tags[i]}`."
+        max_length_cutoffs: "Per-VCF maximum absolute allele lengths. `[]` disables maximum-length filtering; otherwise aligned with `vcfs`. A value of `-1` disables this filter for that VCF. Calls with `abs(allele_length)` strictly above an enabled cutoff receive `LARGE_{source_tags[i]}`."
+        records_per_shard: "Number of variants to keep within a single shard during processing."
+        sample_ids: "Samples to retain in every VCF. `[]` skips sample subsetting. After swaps and any subsetting, all input VCFs must contain identical sample sets."
+        ref_fa: "From references."
+        ref_fai: "From references."
+        preprocessed_vcf: "Preprocessed and merged cohort VCF."
+        preprocessed_vcf_idx: "Index for the preprocessed VCF."
+    }
+
     input {
         Array[File] vcfs
         Array[File] vcf_idxs

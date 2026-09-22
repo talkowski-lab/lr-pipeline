@@ -4,6 +4,25 @@ import "../utils/Helpers.wdl"
 import "../utils/Structs.wdl"
 
 workflow AnnotateMEDs {
+    meta {
+        description: [
+            "This workflow annotates mobile element deletions (MEDs) by intersecting the deletions in the input VCF against a catalog of known mobile-element loci. Deletions are extracted to BED form and matched to the catalog using size-similarity, reciprocal-overlap, breakpoint-window and sequence-similarity thresholds, producing a TSV of the deletions identified as MEDs."
+        ]
+    }
+
+    parameter_meta {
+        vcf: "VCF to annotate."
+        vcf_idx: "Index for VCF to annotate."
+        contigs: "Contigs to annotate within the input VCF."
+        records_per_shard: "Number of variants to keep within a single shard during annotation."
+        del_breakpoint_window: "Breakpoint window, in bp, for matching."
+        del_reciprocal_overlap: "Minimum reciprocal overlap for a deletion to match a catalog locus."
+        del_sequence_similarity: "Minimum sequence similarity for a deletion to match a catalog locus."
+        del_size_similarity: "Minimum size similarity for a deletion to match a catalog locus."
+        mei_catalog: "From references."
+        annotations_tsv_meds: "TSV of deletions identified as mobile element deletions."
+    }
+
     input {
         File vcf
         File vcf_idx

@@ -4,6 +4,23 @@ import "../utils/Helpers.wdl"
 import "../utils/Structs.wdl"
 
 workflow AnnotateAgeMetrics {
+    meta {
+        description: [
+            "This workflow computes the age distribution of carriers for every variant in the input VCF. For each sample it derives an age from a date-of-birth table relative to a fixed reference date, then tabulates the number of heterozygous and homozygous carriers of each allele that fall into a set of user-defined age bins, along with overflow `smaller` and `larger` bins for ages outside the configured range. It emits a TSV of these per-allele age-bin counts."
+        ]
+    }
+
+    parameter_meta {
+        vcf: "VCF to annotate."
+        vcf_idx: "Index for VCF to annotate."
+        contigs: "Contigs to annotate within the input VCF."
+        records_per_shard: "Number of variants to keep within a single shard during annotation."
+        age_data: "CSV file with `person_id` and `date_of_birth` columns, used to derive each sample's age."
+        age_bins: "Age-bin edges, in years, into which carrier ages are binned."
+        reference_date: "Reference date (`YYYY-MM-DD`) against which each sample's age is computed."
+        annotations_tsv_age: "TSV of per-allele carrier counts across the age bins."
+    }
+
     input {
         File vcf
         File vcf_idx

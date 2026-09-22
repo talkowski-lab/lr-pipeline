@@ -4,6 +4,18 @@ import "../utils/Helpers.wdl"
 import "../utils/Structs.wdl"
 
 workflow CreateCohortMetadata {
+    meta {
+        description: [
+            "This utility builds a cohort metadata file by combining a pedigree file with an ancestry-assignment file. It outputs the merged metadata file."
+        ]
+    }
+
+    parameter_meta {
+        ped_file: "Cohort pedigree file."
+        ancestry_file: "Two-column file of sample IDs and ancestry labels."
+        metadata: "Merged cohort metadata file."
+    }
+
     input {
         File ped_file
         File ancestry_file

@@ -738,11 +738,3 @@ workflows:
       tags:
         - /.*/
 
-  - subclass: WDL
-    name: Whatshap
-    primaryDescriptorPath: /wdl/tools/Whatshap.wdl
-    filters:
-      branches:
-        - main
-      tags:
-        - /.*/

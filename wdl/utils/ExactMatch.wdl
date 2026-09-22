@@ -4,6 +4,34 @@ import "../utils/Helpers.wdl"
 import "../utils/Structs.wdl"
 
 workflow ExactMatch {
+    meta {
+        description: [
+            "This sub-workflow performs the first callset-comparison round, matching records to a truth callset on exact position and allele. Both callsets are optionally renamed to a common ID scheme, sharded, matched, and the annotations concatenated. Records left unmatched are emitted in the form `TruvariMatch` expects."
+        ]
+    }
+
+    parameter_meta {
+        vcf: "Callset being compared."
+        vcf_idx: "Index for vcf."
+        truth_snv_indel_vcf: "Truth callset."
+        truth_snv_indel_vcf_idx: "Index for truth_snv_indel_vcf."
+        contig: "Contig being processed."
+        shard_bin_size_exact_match: "Shard size for the matching step."
+        min_sv_length_truvari_vcf: "Minimum lengths applied when emitting the Truvari inputs."
+        min_sv_length_truvari_truth_vcf: "Minimum lengths applied when emitting the Truvari inputs."
+        length_field_vcf: "INFO field holding allele length."
+        source_tag_truth_snv_indel_vcf: "Tag identifying the truth callset in the annotations."
+        rename_id_string_vcf: "ID rename templates."
+        rename_id_string_truth_snv_indel_vcf: "ID rename templates."
+        rename_id_strip_chr_vcf: "Strip the `chr` prefix while renaming."
+        rename_id_strip_chr_truth_snv_indel_vcf: "Strip the `chr` prefix while renaming."
+        annotated_tsv: "Exact-match annotations."
+        truvari_eval_vcf: "Unmatched callset records, passed to `TruvariMatch`."
+        truvari_eval_vcf_idx: "Index for truvari_eval_vcf."
+        truvari_truth_vcf: "Unmatched truth records, passed to `TruvariMatch`."
+        truvari_truth_vcf_idx: "Index for truvari_truth_vcf."
+    }
+
     input {
         File vcf
         File vcf_idx

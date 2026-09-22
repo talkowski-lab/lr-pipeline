@@ -4,6 +4,47 @@ import "../utils/Helpers.wdl"
 import "../utils/Structs.wdl"
 
 workflow AnnotatePALMER {
+    meta {
+        description: [
+            "This workflow leverages PALMER (https://github.com/WeichenZhou/PALMER) in order to annotate MEI calls for a cohort in a given cohort VCF. It retains the genotypes present in the VCF, simply adding an INFO field `ME_TYPE` to insertions whose characteristics match those of the PALMER calls. Matching is performed per MEI type using type-specific reciprocal-overlap, size-similarity, sequence-similarity, breakpoint-window and minimum-shared-sample thresholds."
+        ]
+    }
+
+    parameter_meta {
+        vcf: "VCF to annotate."
+        vcf_idx: "Index for VCF to annotate."
+        PALMER_vcf: "VCF of PALMER MEI calls to match against."
+        PALMER_vcf_idx: "Index for `PALMER_vcf`."
+        contigs: "Contigs to annotate within the input VCF."
+        records_per_shard: "Number of variants to keep within a single shard during annotation."
+        mei_types: "MEI types to run on - must be a subset of [`ALU`, `SVA`, `LINE` or `HERVK`]."
+        min_length: "Minimum insertion length to consider for annotation."
+        rm_out: "RepeatMasker output for the input VCF's insertions."
+        rm_buffer: "Padding, in bp, applied around RepeatMasker annotations when matching."
+        ref_fai: "From references."
+        ins_breakpoint_window_alu: "Per-type breakpoint window, in bp, for matching."
+        ins_reciprocal_overlap_alu: "Per-type minimum reciprocal overlap for matching."
+        ins_sequence_similarity_alu: "Per-type minimum sequence similarity for matching."
+        ins_size_similarity_alu: "Per-type minimum size similarity for matching."
+        ins_min_shared_samples_alu: "Per-type minimum number of shared samples for matching."
+        ins_breakpoint_window_line: "Per-type breakpoint window, in bp, for matching."
+        ins_reciprocal_overlap_line: "Per-type minimum reciprocal overlap for matching."
+        ins_sequence_similarity_line: "Per-type minimum sequence similarity for matching."
+        ins_size_similarity_line: "Per-type minimum size similarity for matching."
+        ins_min_shared_samples_line: "Per-type minimum number of shared samples for matching."
+        ins_breakpoint_window_sva: "Per-type breakpoint window, in bp, for matching."
+        ins_reciprocal_overlap_sva: "Per-type minimum reciprocal overlap for matching."
+        ins_sequence_similarity_sva: "Per-type minimum sequence similarity for matching."
+        ins_size_similarity_sva: "Per-type minimum size similarity for matching."
+        ins_min_shared_samples_sva: "Per-type minimum number of shared samples for matching."
+        ins_breakpoint_window_hervk: "Per-type breakpoint window, in bp, for matching."
+        ins_reciprocal_overlap_hervk: "Per-type minimum reciprocal overlap for matching."
+        ins_sequence_similarity_hervk: "Per-type minimum sequence similarity for matching."
+        ins_size_similarity_hervk: "Per-type minimum size similarity for matching."
+        ins_min_shared_samples_hervk: "Per-type minimum number of shared samples for matching."
+        annotations_tsv_palmer: "TSV of insertions annotated with their PALMER `ME_TYPE`."
+    }
+
     input {
         File vcf
         File vcf_idx

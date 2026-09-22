@@ -4,6 +4,31 @@ import "../utils/Helpers.wdl"
 import "../utils/Structs.wdl"
 
 workflow PALMERDiploid {
+    meta {
+        description: [
+            "This tool runs PALMER (https://github.com/WeichenZhou/PALMER) on a single sample to generate mobile element insertion calls and convert them to a VCF. It shards the input BAM, runs PALMER per MEI type, merges the shard outputs and converts the raw calls into a per-type VCF, optionally bypassing execution when PALMER calls are supplied directly. It outputs the raw PALMER call and TSD files, per-type VCFs and a combined VCF."
+        ]
+    }
+
+    parameter_meta {
+        bam: "Aligned reads to run PALMER on."
+        bai: "Index for `bam`."
+        override_palmer_calls: "Optional precomputed PALMER calls, causing the workflow to bypass execution."
+        override_palmer_tsd_files: "Optional precomputed PALMER TSD files, causing the workflow to bypass execution."
+        ref_fa: "From references."
+        ref_fai: "From references."
+        contigs: "Contigs to run PALMER on."
+        sample: "ID of the sample being processed."
+        mode: "PALMER run mode."
+        mei_types: "MEI modes to run PALMER in - a subset of `ALU`, `SVA`, `LINE` or `HERVK`."
+        palmer_calls: "Raw PALMER calls, per MEI type."
+        palmer_tsd_reads: "PALMER TSD reads, per MEI type."
+        palmer_diploid_vcfs: "Per-MEI-type PALMER VCFs."
+        palmer_diploid_vcf_idxs: "Indexes for the per-type VCFs."
+        palmer_combined_vcf: "Final VCF combining all MEI types."
+        palmer_combined_vcf_idx: "Index for the combined VCF."
+    }
+
     input {
         File? bam
         File? bai

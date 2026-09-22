@@ -3,6 +3,25 @@ version 1.0
 import "../utils/Structs.wdl"
 
 workflow TRGT {
+    meta {
+        description: [
+            "This workflow leverages TRGT (https://github.com/PacificBiosciences/trgt) in order to genotype short-tandem repeats."
+        ]
+    }
+
+    parameter_meta {
+        bam: "Aligned reads."
+        bai: "Index for aligned reads."
+        sample_id: "ID of the sample being genotyped."
+        sex: "Sex of sample (one of `M` or `F`)."
+        catalog_name: "Name of the repeat catalog used, included in the output VCF filename."
+        ref_fa: "From references."
+        ref_fai: "From references."
+        repeat_catalog_trgt: "From references."
+        trgt_vcf: "TRGT tandem-repeat genotype VCF."
+        trgt_vcf_idx: "Index for the TRGT VCF."
+    }
+
     input {
         File bam
         File bai

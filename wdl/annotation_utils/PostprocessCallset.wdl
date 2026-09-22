@@ -4,6 +4,39 @@ import "../utils/Helpers.wdl"
 import "../utils/Structs.wdl"
 
 workflow PostprocessCallset {
+    meta {
+        description: [
+            "This utility bundles every genotype-update and post-processing step applied to a near-final callset into one workflow, with a required `run_` Boolean guarding each step so that the input VCF is left untouched when all are set to `false`. The per-record steps are applied in a single pass over the VCF: each variant is first matched against `transfer_vcf` and has its genotypes transferred (when `run_transfer_genotypes` is set) using its unmodified properties, after which the remaining steps - unphasing, ploidy normalization, TR-ID decrementing, MEI pruning, homopolymer flagging, singleton filtering and same-coordinate sorting - run in order. Some steps require an accompanying field - `run_transfer_genotypes` needs `transfer_vcf`, `run_unphase_samples` needs `unphase_samples`, and `run_normalize_ploidy` needs `ped`. The per-record pass can optionally be region-sharded via `shard_bin_size`."
+        ]
+    }
+
+    parameter_meta {
+        vcf: "VCF to post-process."
+        vcf_idx: "Index for VCF to post-process."
+        contigs: "Contigs to process within the input VCF."
+        shard_bin_size: "Region-bin size, in bp, used when sharding the per-record pass."
+        run_clean_vcf_header: "Whether to run the header-cleaning step."
+        run_decrement_trv_ids: "Whether to decrement tandem-repeat variant IDs."
+        run_drop_filters: "Whether to drop the FILTER values listed in `drop_filters`."
+        run_filter_assembly_only_singletons: "Whether to apply the `ASSEMBLY_ONLY_SINGLETON` filter and emit a matching TSV."
+        run_filter_single_read_singletons: "Whether to apply the `SINGLE_READ_SUPPORT` filter to singleton calls."
+        run_flag_homopolymer_trvs: "Whether to flag tandem repeats with a length-1 shortest motif as `HOMOPOLYMER_TRV`."
+        run_normalize_ploidy: "Whether to normalize ploidy by sex - clearing chrY female calls, making chrX/chrY male calls hemizygous, enforcing diploidy and right-aligning unphased calls (requires `ped`)."
+        run_prune_meis: "Whether to reclassify mobile elements whose length falls outside the expected bounds back to plain insertions/deletions."
+        run_reassign_suffixes: "Whether to run the variant-ID suffix reassignment step."
+        run_sorting: "Whether to sort records sharing a coordinate by absolute allele length and variant ID."
+        run_transfer_genotypes: "Whether to transfer genotypes from `transfer_vcf` onto heterozygous calls (run first; requires `transfer_vcf`)."
+        run_unphase_samples: "Whether to unphase the samples in `unphase_samples` (requires `unphase_samples`)."
+        unphase_samples: "Samples to unphase when `run_unphase_samples` is set (defaults to empty)."
+        drop_filters: "FILTER values to drop when `run_drop_filters` is set."
+        transfer_vcf: "VCF whose genotypes are transferred when `run_transfer_genotypes` is set."
+        transfer_vcf_idx: "Index for `transfer_vcf`."
+        ped: "Cohort pedigree file, used for ploidy normalization when `run_normalize_ploidy` is set."
+        post_processed_vcf: "Post-processed VCF."
+        post_processed_vcf_idx: "Index for the post-processed VCF."
+        assembly_only_singletons_tsv: "Optional TSV containing one row per assembly-only singleton ALT allele; present only when `run_filter_assembly_only_singletons` is true."
+    }
+
     input {
         File vcf
         File vcf_idx
@@ -270,7 +303,6 @@ from collections import defaultdict
 
 import pysam
 
-
 transfer_genotypes = ~{true="True" false="False" transfer_genotypes}
 unphase = ~{true="True" false="False" unphase}
 normalize_ploidy = ~{true="True" false="False" normalize_ploidy}
@@ -292,7 +324,6 @@ drop_filters_set = set(drop_filters_list)
 ASSEMBLY_CALLERS = {"dipcall", "hapdiff"}
 CALLER_RE = re.compile(r"^([A-Za-z0-9]+)")
 
-
 def parse_ped(path):
     sex_by_sample = {}
     with open(path, "r") as handle:
@@ -310,7 +341,6 @@ def parse_ped(path):
                 sex_by_sample[sample_id] = None
     return sex_by_sample
 
-
 def get_scalar(value):
     if isinstance(value, (list, tuple)):
         for item in value:
@@ -319,24 +349,20 @@ def get_scalar(value):
         return None
     return value
 
-
 def is_heterozygous(gt):
     if gt is None:
         return False
     called = [allele for allele in gt if allele is not None]
     return len(called) >= 2 and len(set(called)) > 1
 
-
 def clear_format_fields(sample_data):
     sample_data["GT"] = (None, None)
     sample_data.phased = False
-
 
 def right_align_unphased(gt):
     if gt is None:
         return gt
     return tuple(sorted(gt, key=lambda allele: (allele is not None, allele if allele is not None else -1)))
-
 
 def decrement_trv_id(trv_id):
     if not trv_id:
@@ -349,7 +375,6 @@ def decrement_trv_id(trv_id):
     except ValueError:
         return trv_id
     return "{}-{}".format(head, ref_len - 1)
-
 
 def make_male_hemizygous(gt, phased):
     if gt is None:
@@ -383,7 +408,6 @@ def make_male_hemizygous(gt, phased):
     new_gt[-1] = keep_allele
     return right_align_unphased(tuple(new_gt))
 
-
 def prune_record_meis(record):
     allele_type = get_scalar(record.info.get("allele_type"))
     allele_length = get_scalar(record.info.get("allele_length"))
@@ -400,7 +424,6 @@ def prune_record_meis(record):
         if "SUB_FAMILY" in record.info:
             del record.info["SUB_FAMILY"]
 
-
 def shortest_motif_length(record):
     motifs = record.info.get("MOTIFS")
     if motifs is None:
@@ -416,7 +439,6 @@ def shortest_motif_length(record):
     if not motif_values:
         return None
     return min(len(motif) for motif in motif_values)
-
 
 def has_single_read_support(record):
     if 'AC' in record.info and len(record.alts) == 1 and record.info['AC'][0] > 2:
@@ -440,7 +462,6 @@ def has_single_read_support(record):
 
     return len(alt_depths) == 1 and alt_depths[0] == 1
 
-
 def parse_callers(ev_value):
     if ev_value is None:
         return None
@@ -457,7 +478,6 @@ def parse_callers(ev_value):
         if match:
             callers.add(match.group(1).lower())
     return callers or None
-
 
 def assembly_only_singleton_alt_idx(record):
     allele_counts = record.info.get("AC")
@@ -486,7 +506,6 @@ def assembly_only_singleton_alt_idx(record):
             matches.append(alt_index)
     return matches
 
-
 def info_string(value):
     if value is None:
         return "."
@@ -494,7 +513,6 @@ def info_string(value):
         values = [str(item) for item in value if item is not None]
         return ",".join(values) if values else "."
     return str(value)
-
 
 def write_assembly_only_singleton_rows(record, alt_idx, tsv_writer):
     if not alt_idx:
@@ -514,7 +532,6 @@ def write_assembly_only_singleton_rows(record, alt_idx, tsv_writer):
                 filters,
             )
         )
-
 
 def regroup_header(header):
     group_order = ["fileformat", "OTHER", "contig", "INFO", "FILTER", "FORMAT", "ALT", "SAMPLE", "PEDIGREE"]
@@ -537,14 +554,12 @@ def regroup_header(header):
         new_header.add_sample(sample)
     return new_header
 
-
 def id_base_and_suffix(rec_id):
     id_val = rec_id if rec_id else ""
     parts = id_val.rsplit('_', 1)
     if len(parts) == 2 and parts[1].isdigit():
         return parts[0], int(parts[1])
     return id_val, 0
-
 
 def reassign_id_suffixes(buf):
     groups = defaultdict(list)
@@ -560,7 +575,6 @@ def reassign_id_suffixes(buf):
         for i, r in enumerate(recs, start=1):
             r.id = "{}_{}".format(base, i)
 
-
 def flush_buffer(buf, out_vcf, tsv_writer, assembly_alt_idx, reassign_suffixes, sort_records):
     def custom_sort_key(rec):
         al_val = get_scalar(rec.info.get("allele_length"))
@@ -574,7 +588,6 @@ def flush_buffer(buf, out_vcf, tsv_writer, assembly_alt_idx, reassign_suffixes, 
     for r in buf:
         out_vcf.write(r)
         write_assembly_only_singleton_rows(r, assembly_alt_idx.pop(id(r), []), tsv_writer)
-
 
 sex_by_sample = parse_ped("~{default="NONE" ped}") if normalize_ploidy else {}
 

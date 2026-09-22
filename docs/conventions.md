@@ -14,7 +14,7 @@ These rules apply to WDL, Python, R and Bash alike, including code embedded in a
 - Commented-out code should be deleted rather than left in place.
 - Comments inside a WDL `command` block must never contain `~{`, `${` or backticks. Cromwell and Bash expand these even within a comment.
 - License, copyright and upstream-provenance headers are exempt from all of the above and must be preserved verbatim. Provenance headers use the form `# Derived from <repo> <path or URL>`.
-- Terminology should be used consistently: `gVCF` (not `GVCF`), `GLNexus`, `contig` (not `chr` or `chrom`), `locus`/`loci`, `FORMAT`/`INFO` field names in uppercase, and `chrX`/`chrY` rather than `chrX/Y`.
+- Terminology should be used consistently: `gVCF` (not `GVCF`), `contig` (not `chr` or `chrom`), `locus`/`loci` and `FORMAT`/`INFO` field names in uppercase.
 
 
 ## WDL
@@ -24,10 +24,11 @@ These rules apply to WDL, Python, R and Bash alike, including code embedded in a
 - Each task should contain exactly one `input`, `command`, `output` and `runtime` block.
 - Workflows should be structured in the following order, with each of the below separated by a blank line:
   1. Imports.
-  2. Inputs.
-  3. Definition of variables dynamically generated in the workflow itself.
-  4. Calls to tasks.
-  5. Outputs.
+  2. Documentation - a `meta` block, then a `parameter_meta` block, as described in [Workflow documentation](#workflow-documentation).
+  3. Inputs.
+  4. Definition of variables dynamically generated in the workflow itself.
+  5. Calls to tasks.
+  6. Outputs.
 - Tasks should be structured in the following order, with each of the below separated by a blank line:
   1. Inputs.
   2. Definition of variables dynamically generated in the task itself.
@@ -90,6 +91,20 @@ These rules apply to WDL, Python, R and Bash alike, including code embedded in a
 - Annotation workflows should always output a TSV file rather than a VCF, unless its annotations are done for every single variant in the input VCF or if the underlying workflow is designed to annotate variants in a VCF.
 - The mechanically checkable rules above are enforced by `.github/scripts/check_wdl_style.py`, which should be run after editing any file under `wdl/`. The rules it cannot check - input grouping, naming verbs, runtime sizing, comment wording - still apply and are left to review.
 - `miniwdl check --strict wdl/<file>.wdl` is a useful deeper audit for unused declarations and name collisions, but it is not part of CI: it also flags the index localization inputs and the sub-workflow namespace collisions described above, both of which are intentional here.
+
+
+## Workflow documentation
+[`docs/workflows.md`](workflows.md) is generated from the `meta` and `parameter_meta` blocks of every workflow by [`generate_workflows_doc.py`](../.github/scripts/generate_workflows_doc.py). It should never be edited by hand: write the documentation in the WDL and the document follows. The rules below are enforced by [`check_wdl_style.py`](../.github/scripts/check_wdl_style.py), so a workflow that passes the style check is guaranteed to generate a complete section.
+- Every workflow should open with a `meta` block, then a `parameter_meta` block, then its `input` block, before any other statement.
+- `meta` should declare exactly one key, `description`, whose value is an array of strings holding one string per paragraph - an array even when there is only one paragraph. The first paragraph should say what the workflow does; later paragraphs should cover method detail or caveats.
+- **Every input and every output should have a `parameter_meta` entry**, written as `name: "Description."`, and the entries should appear in declaration order: all documented inputs in `input` order, then all outputs in `output` order.
+- An entry should give only the description. The parameter's type, whether it is optional, and its default are all read from the declaration and added when the document is generated, so restating them in the description duplicates what the reader already sees.
+- `RuntimeAttr?` inputs, Docker image inputs (`docker` and `*_docker`) and `String prefix` should never appear in `parameter_meta`. They are boilerplate, so the generator emits a standard bullet for each instead.
+- Descriptions should be plain prose. They should never contain Markdown links, emphasis, headings, list markers or block quotes, since the generated document supplies its own structure. Refer to another workflow, task, input or file by bare name in backticks - e.g. `LongReadCNVs`.
+- The one URL a description may cite is a bare parenthesized URL immediately after the first mention of an external tool - e.g. `L1ME-AID (https://github.com/Markloftus/L1ME-AID)`. Never write it as a Markdown link.
+- Descriptions should use single quotes rather than escaped double quotes, which keeps the WDL string readable.
+- An index input should be described as `Index for <name>.`, and a shared reference file from [references.md](references.md) as `From references.`, which the generated document expands into a pointer to that document.
+- After changing any workflow's `meta`, `parameter_meta`, `input` or `output` block, run `python .github/scripts/check_wdl_style.py`. Regenerating the document is not necessary: CI regenerates and commits it on push to `main`.
 
 
 ## Python

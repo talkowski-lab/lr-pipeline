@@ -4,6 +4,22 @@ import "../utils/Helpers.wdl"
 import "../utils/Structs.wdl"
 
 workflow CreateSampleReadCounts {
+    meta {
+        description: [
+            "This utility produces a binned read-counts file for a single sample from its per-contig mosdepth BED outputs, binning counts at a fixed resolution and merging across contigs. It outputs the binned read-counts file."
+        ]
+    }
+
+    parameter_meta {
+        mosdepth_bed_files: "Per-contig mosdepth coverage BED files for the sample."
+        mosdepth_bed_idx: "Indexes for `mosdepth_bed_files`."
+        ref_dict: "From references."
+        contigs: "Contigs over which to bin read counts."
+        bin_size: "Size, in bp, of each read-count bin."
+        sample_id: "ID of the sample being processed."
+        binned_read_counts: "Binned read-counts file for the sample."
+    }
+
     input {
         Array[File] mosdepth_bed_files
         Array[File] mosdepth_bed_idx

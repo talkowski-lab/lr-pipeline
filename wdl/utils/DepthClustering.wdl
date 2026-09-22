@@ -4,6 +4,41 @@ import "Structs.wdl"
 import "Helpers.wdl"
 
 workflow DepthClustering {
+    meta {
+        description: [
+            "This sub-workflow clusters the depth-based CNV calls across samples with GATK `SVCluster`, contig by contig, then optionally drops calls overlapping excluded intervals and converts the GATK representation back to svtk-style VCF before concatenating the per-contig results."
+        ]
+    }
+
+    parameter_meta {
+        depth_vcf: "Depth CNV VCF from `DepthPreprocessing`."
+        depth_vcf_idx: "Index for depth_vcf."
+        ploidy_table: "Ploidy table from `DepthPreprocessing`."
+        variant_prefix: "Prefix applied to generated variant IDs."
+        contigs: "Contigs to cluster over, given in reference dictionary order. These also become the `##contig` lines of the svtk-formatted output."
+        ref_fa: "Reference FASTA, index and sequence dictionary."
+        ref_fai: "Reference FASTA, index and sequence dictionary."
+        ref_dict: "Reference FASTA, index and sequence dictionary."
+        fast_mode: "Use SVCluster fast mode."
+        clustering_algorithm: "SVCluster algorithm."
+        enable_cnv: "SVCluster behavior flags."
+        default_no_call: "SVCluster behavior flags."
+        omit_members: "SVCluster behavior flags."
+        breakpoint_summary_strategy: "SVCluster behavior flags."
+        defrag_padding_fraction: "Defragmentation thresholds."
+        defrag_sample_overlap: "Defragmentation thresholds."
+        depth_sample_overlap: "Required sample overlap for depth clustering."
+        depth_interval_overlap: "Required reciprocal interval overlap."
+        depth_size_similarity: "Required size similarity."
+        depth_breakend_window: "Breakend join window in base pairs."
+        exclude_intervals: "Intervals whose overlapping calls are dropped."
+        exclude_overlap_fraction: "Overlap fraction at which a call is excluded."
+        gatk_to_svtk_script: "Override for the GATK-to-svtk conversion script."
+        svtk_set_pass: "Set FILTER to PASS during conversion."
+        clustered_vcf: "Cohort-clustered depth CNV VCF."
+        clustered_vcf_idx: "Index for `clustered_vcf`."
+    }
+
     input {
         File depth_vcf
         File depth_vcf_idx
@@ -158,10 +193,6 @@ task SVCluster {
         String? variant_prefix
         String docker
         RuntimeAttr? runtime_attr_override
-    }
-
-    parameter_meta {
-        vcf: { localization_optional: true }
     }
 
     Int command_mem_mb = ceil(select_first([runtime_attr.mem_gb, default_attr.mem_gb]) * 0.8 * 1024)

@@ -4,6 +4,26 @@ import "Helpers.wdl"
 import "Structs.wdl"
 
 workflow ScatterVcf {
+    meta {
+        description: [
+            "This sub-workflow shards a VCF, either by contig, into a fixed number of record-count shards, or both. It can operate on a localized file or stream a remote one, and is used by `AnnotateVEPHail` to parallelize VEP annotation."
+        ]
+    }
+
+    parameter_meta {
+        file: "VCF or Hail MatrixTable to shard."
+        n_shards: "Target shard count."
+        records_per_shard: "Target records per shard."
+        split_vcf_hail_script: "URL of the Hail sharding script; defaults to this repository's copy on `main`."
+        genome_build: "Reference genome build."
+        localize_vcf: "Localize the input rather than streaming it remotely."
+        get_chromosome_sizes: "Query contig sizes to size the shards."
+        split_by_chromosome: "Split by contig."
+        split_into_shards: "Split into record-count shards."
+        has_index: "Whether the remote input already has an index."
+        vcf_shards: "The resulting shards, or the original file when no splitting was requested."
+    }
+
     input {
         File file
         String prefix

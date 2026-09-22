@@ -4,6 +4,21 @@ import "../utils/Helpers.wdl"
 import "../utils/Structs.wdl"
 
 workflow AnnotateMEIs {
+    meta {
+        description: [
+            "This workflow consolidates the mobile element insertion calls produced by the `AnnotateL1MEAID`, `AnnotatePALMER` and `AnnotateSVAN` workflows into a single harmonized set. It reconciles the three per-tool annotation TSVs, using the SVAN annotation header for typing, to produce a final TSV of MEI calls."
+        ]
+    }
+
+    parameter_meta {
+        annotations_tsv_l1meaid: "MEI annotation TSV output by `AnnotateL1MEAID`."
+        annotations_tsv_palmer: "MEI annotation TSV output by `AnnotatePALMER`."
+        annotations_tsv_svan: "MEI annotation TSV output by `AnnotateSVAN`."
+        annotations_header_svan: "Annotation header output by `AnnotateSVAN`, used to type the consolidated fields."
+        contigs: "Contigs to annotate."
+        annotations_tsv_meis: "Consolidated TSV of mobile element insertion calls."
+    }
+
     input {
         File annotations_tsv_l1meaid
         File annotations_tsv_palmer

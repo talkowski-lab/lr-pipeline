@@ -5,10 +5,12 @@ on:
     branches: [ main ]
     paths:
       - 'scripts/**'
+      - '.github/scripts/**'
   pull_request:
     branches: [ main ]
     paths:
       - 'scripts/**'
+      - '.github/scripts/**'
 
 jobs:
   linting:
@@ -29,4 +31,4 @@ jobs:
 
     - name: Lint with flake8
       run: |
-        flake8 scripts/
+        flake8 scripts/ .github/scripts/

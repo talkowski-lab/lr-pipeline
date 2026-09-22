@@ -7,36 +7,33 @@ import "../utils/Helpers.wdl"
 
 workflow GLNexus {
     meta {
-        description: "Joint-call gVCFs with GLNexus and convert the resulting callset to a Hail MatrixTable."
+        description: [
+            "This tool joint-calls per-sample gVCFs into a cohort VCF using GLnexus, then converts the result to a Hail MatrixTable. Calling is sharded over genomic ranges derived from the input gVCF names, and the per-range BCFs are concatenated back into a single VCF."
+        ]
     }
 
     parameter_meta {
-        gvcfs: "gVCFs to joint-call."
-        gvcf_idxs: "Indexes for gvcfs."
-        ref_map_file: "Table mapping reference sequence names to auxiliary files; must include a dict entry."
-        prefix: "Prefix for joint-called VCF, its index, and MatrixTable archive."
-        background_sample_gvcfs: "Nested arrays of background gVCFs to joint-call alongside gvcfs."
-        background_sample_gvcf_idxs: "Indexes for background_sample_gvcfs."
-        force_add_missing_dp: "Add missing DP fields to gVCFs before joint calling."
-        remove_duplicate_zero_depth_reference_blocks: "Remove excess exact duplicate input gVCF records with a non-alt GT and MIN_DP=0 while preserving gVCF coverage in each shard."
-        bed: "Intervals to restrict joint calling to."
-        config: "GLNexus configuration preset or .yml filename."
-        config_file: "Custom GLNexus configuration file; overrides config."
-        more_PL: "Include PL from reference bands and other cases omitted by default."
-        squeeze: "Reduce pVCF size by suppressing detail derived from reference bands."
-        trim_uncalled_alleles: "Remove alleles with no output GT calls in postprocessing."
-        num_cpus: "Number of CPUs to use."
-        max_cpus: "Maximum number of CPUs to allow."
-        reference: "Reference assembly label for MatrixTable conversion."
-        ref_fa: "Reference sequences FASTA file for MatrixTable conversion."
-        ref_fai: "Index for ref_fa."
-        glnexus_docker: "Docker image for GLNexus tasks."
-        hail_docker: "Docker image for Hail MatrixTable conversion."
-        runtime_attr_get_ranges: "Override runtime attributes for reference range discovery."
-        runtime_attr_shard_vcf_by_ranges: "Override runtime attributes for gVCF sharding."
-        runtime_attr_call: "Override runtime attributes for GLNexus calling."
-        runtime_attr_concat_variants: "Override runtime attributes for VCF concatenation."
-        runtime_attr_convert_to_hail_mt: "Override runtime attributes for Hail MatrixTable conversion."
+        gvcfs: "Per-sample gVCFs to joint-call."
+        gvcf_idxs: "Indexes for `gvcfs`."
+        ref_map_file: "Reference map describing the genome build."
+        background_sample_gvcfs: "Additional background-sample gVCFs to joint-call alongside the cohort."
+        background_sample_gvcf_idxs: "Indexes for `background_sample_gvcfs`."
+        force_add_missing_dp: "Add a `DP` FORMAT field to gVCFs that lack one before calling."
+        remove_duplicate_zero_depth_reference_blocks: "Drop duplicate zero-depth reference blocks before calling."
+        bed: "Restrict calling to these regions."
+        config: "GLnexus preset configuration."
+        config_file: "Custom GLnexus configuration, used in place of `config`."
+        more_PL: "Emit additional PL values."
+        squeeze: "Squeeze the output representation."
+        trim_uncalled_alleles: "Remove alleles that no sample carries."
+        num_cpus: "CPU count for the calling task; derived from the input count when unset."
+        max_cpus: "Upper bound on the derived CPU count."
+        reference: "Reference genome build."
+        ref_fa: "Reference FASTA, used when registering a custom reference with Hail."
+        ref_fai: "Index for `ref_fa`."
+        joint_vcf: "Joint-called cohort VCF."
+        joint_vcf_idx: "Index for `joint_vcf`."
+        joint_mt: "Tarred Hail MatrixTable of the joint callset."
     }
 
     input {
@@ -157,9 +154,6 @@ workflow GLNexus {
 }
 
 task GetRanges {
-    meta {
-        description: "Select loci over which to parallelize downstream operations."
-    }
 
     input {
         File dict
@@ -209,22 +203,6 @@ task GetRanges {
 }
 
 task GLNexusJointCall {
-    meta {
-        description: "Joint-call gVCFs with GLNexus."
-    }
-
-    parameter_meta {
-        gvcfs: "gVCFs to joint-call."
-        config: "GLNexus configuration preset. One of: gatk, gatk_unfiltered, xAtlas, xAtlas_unfiltered, weCall, weCall_unfiltered, DeepVariant, DeepVariantWGS, DeepVariantWES, DeepVariantWES_MED_DP, DeepVariant_unfiltered, Strelka2, GxS."
-        config_file: "Custom GLNexus configuration file; overrides config."
-        more_PL: "Include PL from reference bands and other cases omitted by default."
-        squeeze: "Reduce pVCF size by suppressing detail derived from reference bands."
-        trim_uncalled_alleles: "Remove alleles with no output GT calls in postprocessing."
-        force_add_missing_dp: "Add missing DP fields to gVCFs before joint calling, which GATK-called gVCFs require. Done in this task so the gVCFs are localized once rather than twice."
-        num_cpus: "Number of CPUs to use."
-        prefix: "Prefix for the joint-called BCF."
-        runtime_attr_override: "Override runtime attributes for this task."
-    }
 
     input {
         Array[File] gvcfs
@@ -307,9 +285,6 @@ task GLNexusJointCall {
 }
 
 task ConcatVariants {
-    meta {
-        description: "Concatenate VCFs/BCFs into a single .vcf.bgz file and index it."
-    }
 
     input {
         Array[File] variant_files

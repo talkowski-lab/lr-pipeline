@@ -4,6 +4,23 @@ import "../utils/Helpers.wdl"
 import "../utils/Structs.wdl"
 
 workflow AnnotateRegion {
+    meta {
+        description: [
+            "This workflow annotates each variant with the genomic region class it falls within - simple repeat (`SR`), segmental duplication (`SD`), RepeatMasker region (`RM`) or unique sequence (`US`) - by intersecting it against the corresponding BED panels. It emits a TSV of per-variant `REGION` assignments."
+        ]
+    }
+
+    parameter_meta {
+        vcf: "VCF to annotate."
+        vcf_idx: "Index for VCF to annotate."
+        contigs: "Contigs to annotate within the input VCF."
+        records_per_shard: "Number of variants to keep within a single shard during annotation."
+        simple_repeats_bed: "From references."
+        seg_dup_bed: "From references."
+        repeat_masked_bed: "From references."
+        annotations_tsv_region: "TSV of per-variant genomic-region assignments."
+    }
+
     input {
         File vcf
         File vcf_idx

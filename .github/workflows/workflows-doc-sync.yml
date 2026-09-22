@@ -1,0 +1,73 @@
+name: Workflows Doc Sync
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'wdl/**'
+      - '.dockstore.yml'
+      - '.github/scripts/wdl_meta.py'
+      - '.github/scripts/generate_workflows_doc.py'
+  pull_request:
+    branches: [ main ]
+    paths:
+      - 'wdl/**'
+      - '.dockstore.yml'
+      - '.github/scripts/wdl_meta.py'
+      - '.github/scripts/generate_workflows_doc.py'
+
+jobs:
+  check:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    name: Check Workflow Documentation
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up Python 3.8
+        uses: actions/setup-python@v3
+        with:
+          python-version: 3.8
+
+      - name: Check the meta and parameter_meta blocks the document is built from
+        run: |
+          python .github/scripts/check_wdl_style.py
+
+      # The document is regenerated and committed on push to main, so a stale copy on a
+      # pull request is not an error; only a document that cannot be built is
+      - name: Confirm docs/workflows.md can be generated
+        run: |
+          python .github/scripts/generate_workflows_doc.py --dry-run
+
+  generate:
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    name: Generate Workflow Documentation
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up Python 3.8
+        uses: actions/setup-python@v3
+        with:
+          python-version: 3.8
+
+      - name: Regenerate docs/workflows.md
+        run: |
+          python .github/scripts/generate_workflows_doc.py
+
+      # A push made with GITHUB_TOKEN does not start another workflow run, so this cannot loop
+      - name: Commit docs/workflows.md when it changed
+        run: |
+          if git diff --quiet -- docs/workflows.md; then
+            echo "docs/workflows.md is already up to date."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add docs/workflows.md
+          git commit -m "Regenerate docs/workflows.md"
+          git push

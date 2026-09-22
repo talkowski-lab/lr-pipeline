@@ -4,6 +4,35 @@ import "../utils/Helpers.wdl"
 import "../utils/Structs.wdl"
 
 workflow AnnotateSVAN {
+    meta {
+        description: [
+            "This workflow leverages SVAN (https://github.com/REPBIO-LAB/SVAN) in order to annotate Mobile Element Insertions (MEIs), Mobile Element Deletions, Tandem Duplications, Dispersed Duplications and Nuclear Mitochondrial Segments (NUMT). It processes insertions and deletions separately, first running Tandem Repeat Finder (TRF) on the inserted or deleted sequence of each SV in the input VCF and then running SVAN over the result, before extracting and aligning the annotations into a single TSV. Before extraction, the `DUP_COORD` field produced by SVAN is reformatted: any `flank_`-prefixed relative coordinates are resolved to absolute genomic positions, preserving the original order of comma-separated values."
+        ]
+    }
+
+    parameter_meta {
+        vcf: "VCF to annotate."
+        vcf_idx: "Index for VCF to annotate."
+        contigs: "Contigs to annotate within the input VCF."
+        records_per_shard: "Number of variants to keep within a single shard during annotation."
+        type_field: "INFO field giving each variant's allele type, used to select insertions/deletions for annotation."
+        type_ins: "Value of `type_field` identifying an insertion."
+        type_del: "Value of `type_field` identifying a deletion."
+        length_field: "INFO field giving each variant's allele length."
+        min_length: "Minimum insertion/deletion length to consider for annotation."
+        annotate_ins: "Whether to annotate insertions."
+        annotate_del: "Whether to annotate deletions."
+        vntr_bed: "From references."
+        exons_bed: "From references."
+        repeats_bed: "From references."
+        ref_fa: "From references."
+        ref_fa_idx: "From references."
+        mei_fa: "From references."
+        mei_fa_idx: "From references."
+        annotations_tsv_svan: "TSV of SVAN annotations."
+        annotations_header_svan: "Header lines describing the SVAN annotation fields."
+    }
+
     input {
         File vcf
         File vcf_idx

@@ -5,15 +5,16 @@ import "../utils/Helpers.wdl"
 
 workflow FilterDuplicateZeroDepthReferenceBlocks {
     meta {
-        description: "Collapse duplicate zero-depth non-alt reference blocks from a single gVCF while preserving coverage."
+        description: [
+            "This utility cleans a single-sample gVCF by removing exact duplicate zero-depth, non-alt records, except that it retains one representative when removal would leave its start uncovered. It preserves gVCF coverage: a retained duplicate block is shortened by updating its `END` to one base before the next non-duplicate record when that record begins inside the block. This prevents cleanup from overlapping a distinct record or creating a coverage gap that GLNexus would genotype as `./.`. Singleton records, distinct records at the same coordinate, alternate genotypes, and records with non-zero or missing `MIN_DP` are retained unchanged."
+        ]
     }
 
     parameter_meta {
-        gvcf: "gVCF to clean."
-        gvcf_idx: "Index for gvcf."
-        prefix: "Prefix for cleaned gVCF and index."
-        utils_docker: "Docker image containing bcftools, bgzip, and tabix."
-        runtime_attr_filter: "Override runtime attributes for duplicate reference block filtering."
+        gvcf: "Single-sample gVCF to clean."
+        gvcf_idx: "Index for `gvcf`."
+        cleaned_vcf: "Cleaned gVCF."
+        cleaned_vcf_idx: "Index for `cleaned_vcf`."
     }
 
     input {

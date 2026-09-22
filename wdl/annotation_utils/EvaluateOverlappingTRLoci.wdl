@@ -4,6 +4,19 @@ import "../utils/Helpers.wdl"
 import "../utils/Structs.wdl"
 
 workflow EvaluateOverlappingTRLoci {
+    meta {
+        description: [
+            "This utility evaluates how consistently TRGT genotypes the same reference bases when the repeat catalog defines overlapping loci. It takes a single-sample TRGT VCF, pairs every two records whose `POS`-to-`INFO/END` reference spans intersect and, for each pair, projects both haplotype sequences onto the shared reference interval and scores their agreement. Only pairs where at least one locus carries a non-reference call are evaluated, since two reference calls agree on the shared bases by construction. Each TRGT record is a full-locus replacement - `REF` is the reference sequence spanning the locus and each `ALT` is a complete haplotype sequence - so no reference FASTA or prior `bcftools norm` is needed. The projection aligns each haplotype to its own `REF` with `edlib` and assigns inserted bases to the reference base they follow, which means the projected sequence of a haplotype carrying a length change inherits the aligner's placement of that change; when a length change is placed at the edge of the shared interval its whole length is charged to that interval, so `max_similarity` can fall below `0`. Genotypes are unphased, so both haplotype assignments are scored and the one with the lower summed edit distance is reported. Haploid records are scored on their single haplotype and report `.` for the absent haplotype, and records with a missing genotype are skipped."
+        ]
+    }
+
+    parameter_meta {
+        vcf: "Single-sample TRGT VCF to evaluate."
+        vcf_idx: "Index for `vcf`."
+        contigs: "Contigs to process."
+        overlapping_loci_tsv: "One row per evaluated locus pair, with the `INFO/TRID` and `INFO/MOTIFS` of both records reproduced verbatim, the shared reference interval and its length, the projected haplotype sequences of both records (`-` where the interval is deleted on that haplotype, `.` where the record is haploid), `min_edit_distance` - the edit distance summed over both haplotype pairs under the better of the two assignments - and `max_similarity`, that distance divided by the shared interval length times the number of compared haplotypes and subtracted from `1`, so `1` means the records agree exactly."
+    }
+
     input {
         File vcf
         File vcf_idx
@@ -79,13 +92,11 @@ HEADER = [
     'min_edit_distance', 'max_similarity',
 ]
 
-
 def reference_slice(record, start, end):
     """Reference bases of an interval contained in a record's own span, read off its REF allele."""
     if start > end:
         return ''
     return record['ref'][start - record['start']:end - record['start'] + 1]
-
 
 def union_sequences(record, other, union_start, union_end):
     """Haplotype sequences of a record extended to the union span of the two loci.
@@ -100,14 +111,12 @@ def union_sequences(record, other, union_start, union_end):
     right = reference_slice(other, record['end'] + 1, union_end)
     return [left + hap + right for hap in record['haps']]
 
-
 def edit_distance(seq_a, seq_b):
     if seq_a == seq_b:
         return 0
     if not seq_a or not seq_b:
         return max(len(seq_a), len(seq_b))
     return edlib.align(seq_a, seq_b, task='distance')['editDistance']
-
 
 def compare_loci(seqs_a, seqs_b):
     """Total edit distance over the best unphased haplotype pairing, and a length-normalized similarity.
@@ -132,12 +141,10 @@ def compare_loci(seqs_a, seqs_b):
     similarity = 1.0 if denominator == 0 else 1 - distance / denominator
     return distance, similarity
 
-
 def info_text(rec, key):
     """Render a comma-separated INFO field exactly as written in the VCF, whichever way pysam splits it."""
     value = rec.info[key]
     return value if isinstance(value, str) else ','.join(value)
-
 
 def load_record(rec):
     """Collect the reference span, genotyped haplotype sequences, TRID and motifs of a TRGT record."""
@@ -158,11 +165,9 @@ def load_record(rec):
         'motifs': info_text(rec, 'MOTIFS'),
     }
 
-
 def format_haps(seqs):
     formatted = [seq if seq else EMPTY_SEQ for seq in seqs]
     return formatted + [ABSENT_HAP] * (2 - len(formatted))
-
 
 records = 0
 pairs = 0

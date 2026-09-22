@@ -10,6 +10,41 @@ import "AnnotateVcf.wdl"
 import "PostProcessTRLociHPRCHGSVC.wdl"
 
 workflow PostProcessTRLociAoU {
+    meta {
+        description: [
+            "The AoU counterpart of `PostProcessTRLociHPRCHGSVC` for cohorts that have a single joint-genotyped TRGT VCF and no haplotype-resolved base VCFs, so no sequence-agreement phasing is performed. For each disease-associated `TRExplorerV1` (JSON `Diseases` a non-empty array), it locates the matching entry in `trgt_catalog_bed_gz` (`TRExplorerV1` as a substring of the BED `ID=`), then uses that entry's coordinates to check the input VCF: a TRV whose `POS`/`POS+len(REF)-1` equal the BED start+1/end is treated as already present and left untouched. Otherwise it recovers the matching `trgt_vcf` record (subset and reordered to the main-VCF sample set), keeps it only when its recomputed `INFO/AC>0`, and either replaces the best-overlapping `INFO/allele_type=trv` record or, when nothing overlaps, inserts it as a new locus. Recovered records receive canonical `IntegrateTRs` IDs, `SOURCE=TRExplorer`, optional `HOMOPOLYMER_TRV`, VRS/region/in-silico/metric annotations, and flow through the shared `ApplyTRLocusUpdates` (extended to accept insert map rows) for envelope and `gnomAD_STR` assembly. Genotypes are emitted unphased and `POSTHOC_BACKBONE_PHASED` is never set.",
+            "This workflow emits no phasing audit: with no base VCFs there is nothing to phase against, so the shared `ApplyTRLocusUpdates` phasing summary (a header-only stub here) is deliberately not surfaced."
+        ]
+    }
+
+    parameter_meta {
+        vcf: "VCF to post-process."
+        vcf_idx: "Index for `vcf`."
+        contig: "Contig represented by `vcf`."
+        trgt_vcf: "TRGT VCF whose loci are matched against the callset."
+        trgt_vcf_idx: "Index for `trgt_vcf`."
+        gnomad_tr_json: "TRExplorer catalog JSON; only entries with a non-empty `Diseases` array are eligible."
+        trgt_catalog_bed_gz: "TRGT catalog BED (gzipped) whose column-4 `ID=` values bridge each `TRExplorerV1` to canonical coordinates."
+        run_flag_homopolymer_trvs: "Flag recovered TRVs whose shortest `MOTIFS` element has length one."
+        replace_gnomad_str: "Assemble `INFO/gnomAD_STR` from the catalog-match report."
+        seqrepo_tar: "From references."
+        simple_repeats_bed: "From references."
+        seg_dup_bed: "From references."
+        repeat_masked_bed: "From references."
+        cadd_ht: "From references."
+        pangolin_ht: "From references."
+        phylop_ht: "From references."
+        revel_ht: "From references."
+        spliceai_ht: "From references."
+        annotate_in_silico_predictors_script: "Path to the Hail script that performs the lookups (defaults to this repository's copy on `main`)."
+        genome_build: "Reference genome build passed to the in-silico predictor annotation script."
+        trv_postprocessed_vcf: "Post-processed tandem-repeat VCF."
+        trv_postprocessed_vcf_idx: "Index for `trv_postprocessed_vcf`."
+        trv_subsetted_vcf: "Tandem-repeat VCF subset to the recovered loci."
+        trv_subsetted_vcf_idx: "Index for `trv_subsetted_vcf`."
+        trv_catalog_match_tsv: "One row per contig-relevant catalog entry, sharing the HPRC/HGSVC columns plus a trailing `status` (`already_in_input_vcf`, `replaced_from_trgt`, `added_from_trgt`, `trgt_ac0_skipped`, `no_trgt_match`, `no_catalog_bed_match`, `not_eligible`)."
+    }
+
     input {
         File vcf
         File vcf_idx
@@ -239,30 +274,23 @@ import pysam
 CONTIG = '~{contig}'
 RUN_HOMOPOLYMER = ~{true="True" false="False" run_flag_homopolymer_trvs}
 
-
 def norm_contig(value):  # noqa: E302
     return value[3:] if value.lower().startswith('chr') else value
-
 
 def record_end(rec):  # noqa: E302
     return rec.stop if rec.stop is not None else rec.pos + len(rec.ref) - 1
 
-
 def vals(value):  # noqa: E302
     return [str(item) for item in value] if isinstance(value, (list, tuple)) else ([] if value is None else [str(value)])
-
 
 def trid_text(rec):  # noqa: E302
     return ','.join(vals(rec.info.get('TRID')))
 
-
 def record_key(rec):  # noqa: E302
     return rec.id if rec.id and rec.id != '.' else f'{rec.chrom}:{rec.pos}:{rec.ref}:{",".join(rec.alts or [])}'
 
-
 def overlap(left, right):  # noqa: E302
     return max(0, min(record_end(left), record_end(right)) - max(left.pos, right.pos) + 1)
-
 
 def parse_explorer(value):  # noqa: E302
     fields = value.rsplit('-', 3)
@@ -272,7 +300,6 @@ def parse_explorer(value):  # noqa: E302
         return fields[0], int(fields[1]), int(fields[2]), fields[3]
     except ValueError:
         return None
-
 
 def shortest_motif_length(rec):  # noqa: E302
     """Match PostprocessCallset: a shortest MOTIFS element of length one is homopolymer."""
@@ -287,7 +314,6 @@ def shortest_motif_length(rec):  # noqa: E302
     ]
     return min((len(part) for part in parts), default=None)
 
-
 def recompute_ac(rec):  # noqa: E302
     counts = [0] * len(rec.alts or [])
     for sample_data in rec.samples.values():
@@ -296,7 +322,6 @@ def recompute_ac(rec):  # noqa: E302
                 counts[allele - 1] += 1
     rec.info['AC'] = tuple(counts)
     return sum(counts)
-
 
 # Build a contig-local catalog BED of canonical coordinates keyed by embedded ID
 bed_entries = []
@@ -315,7 +340,6 @@ with gzip.open('~{trgt_catalog_bed_gz}', 'rt') as handle:
         if bed_id is not None:
             bed_entries.append((bed_id, cols[0], int(cols[1]), int(cols[2])))
 
-
 def find_bed(explorer):  # noqa: E302
     # Prefer an exact ID match, otherwise treat TRExplorerV1 as a substring of the catalog TRID
     for bed_id, _, start0, end in bed_entries:
@@ -326,13 +350,11 @@ def find_bed(explorer):  # noqa: E302
             return start0, end
     return None
 
-
 def contig_for(handle, contig):  # noqa: E302
     if contig in handle.header.contigs:
         return contig
     alternate = contig[3:] if contig.startswith('chr') else f'chr{contig}'
     return alternate if alternate in handle.header.contigs else None
-
 
 main = pysam.VariantFile('~{vcf}', index_filename='~{vcf_idx}')
 main_samples = list(main.header.samples)
@@ -361,7 +383,6 @@ trgt_contig = contig_for(trgt, CONTIG)
 with open('~{gnomad_tr_json}') as handle:
     catalog = json.load(handle)
 
-
 def explorers_on_contig(entry):  # noqa: E302
     raw = entry.get('TRExplorerV1')
     raw = raw if isinstance(raw, list) else [raw]
@@ -371,7 +392,6 @@ def explorers_on_contig(entry):  # noqa: E302
         if parsed and norm_contig(parsed[0]) == norm_contig(CONTIG):
             result.append(str(value))
     return result
-
 
 tsv_columns = [
     'locus_id', 'TRExplorerV1', 'has_diseases', 'input_overlapping_trids',

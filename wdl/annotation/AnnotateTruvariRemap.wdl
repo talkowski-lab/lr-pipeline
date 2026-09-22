@@ -4,6 +4,28 @@ import "../utils/Structs.wdl"
 import "../utils/Helpers.wdl"
 
 workflow AnnotateTruvariRemap {
+    meta {
+        description: [
+            "This tool remaps insertion sequences with minimap2 (via Truvari) in order to flag insertions whose inserted sequence aligns elsewhere in the reference. Each insertion above a minimum length is realigned per contig and assessed against alignment-score and coverage thresholds, emitting a TSV of the remap results."
+        ]
+    }
+
+    parameter_meta {
+        vcf: "VCF whose insertions are remapped."
+        vcf_idx: "Index for VCF."
+        ref_fa: "From references."
+        ref_bwa_idx: "BWA indices for `ref_fa`, from references."
+        contigs: "Contigs to process."
+        records_per_shard: "Number of variants to keep within a single shard during annotation."
+        type_field: "INFO field giving each variant's allele type, used to select insertions to remap."
+        type_ins: "Value of `type_field` identifying an insertion."
+        min_length: "Minimum insertion length to remap."
+        max_length: "Maximum insertion length to remap."
+        mm2_threshold: "Minimum minimap2 alignment score to flag an insertion."
+        cov_threshold: "Minimum alignment coverage to flag an insertion."
+        annotations_tsv_remap: "TSV of insertion remap results."
+    }
+
     input {
         File vcf
         File vcf_idx

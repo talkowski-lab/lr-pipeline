@@ -6,11 +6,13 @@ on:
     paths:
       - 'wdl/**'
       - '.github/scripts/check_wdl_style.py'
+      - '.github/scripts/wdl_meta.py'
   pull_request:
     branches: [ main ]
     paths:
       - 'wdl/**'
       - '.github/scripts/check_wdl_style.py'
+      - '.github/scripts/wdl_meta.py'
 
 jobs:
   wdl_style_check:

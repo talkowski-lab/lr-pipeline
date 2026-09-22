@@ -4,6 +4,23 @@ import "../utils/Helpers.wdl"
 import "../utils/Structs.wdl"
 
 workflow FilterLowCoverageRegions {
+    meta {
+        description: [
+            "This utility adds the `LOW_COVERAGE_REGION` FILTER to a VCF record when at least `min_region_coverage_cutoff` of its entire REF span overlaps a supplied low-coverage BED. The span is `POS-1` through `POS-1 + len(REF)` in 0-based half-open BED coordinates; therefore SNVs and insertions both have a one-base REF span at their VCF position. The decision is per record, independent of ALT count or content and `INFO/allele_type`. It adds the FILTER definition to the VCF header, preserves existing filters, and emits an indexed filtered VCF."
+        ]
+    }
+
+    parameter_meta {
+        vcf: "VCF to filter."
+        vcf_idx: "Index for VCF to filter."
+        low_coverage_regions_bed: "BED of low-coverage regions. It may include multiple contigs; the workflow subsets it to the requested `contigs`."
+        contigs: "Contigs to process within the input VCF."
+        min_region_coverage_cutoff: "Inclusive minimum fraction of a variant's reference span that must overlap a low-coverage region to add the filter."
+        records_per_shard: "Number of variants per shard. When set, variants are processed in parallel shards and concatenated."
+        low_coverage_region_filtered_vcf: "VCF with low-coverage-region filters added."
+        low_coverage_region_filtered_vcf_idx: "Index for the filtered VCF."
+    }
+
     input {
         File vcf
         File vcf_idx

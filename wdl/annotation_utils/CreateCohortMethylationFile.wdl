@@ -3,6 +3,26 @@ version 1.0
 import "../utils/Structs.wdl"
 
 workflow CreateCohortMethylationFile {
+    meta {
+        description: [
+            "This utility builds cohort-level CpG methylation matrices from per-sample `MethylationProfiling` BED outputs. For each contig, it merges every sample's combined and per-haplotype modification-score BEDs into a wide site-by-sample(/haplotype) matrix, filling `.` for sites missing in a given sample or haplotype. Samples can optionally be processed in shards (merged independently, then joined column-wise) to bound how many sample files are localized onto a single task at once."
+        ]
+    }
+
+    parameter_meta {
+        combined_beds: "Per-sample combined CpG pileup BEDs (`cpg_combined_bed` from MethylationProfiling)."
+        combined_bed_idxs: "Indexes for `combined_beds`."
+        hap1_beds: "Per-sample haplotype 1 CpG pileup BEDs (`cpg_hap1_bed` from MethylationProfiling)."
+        hap1_bed_idxs: "Indexes for `hap1_beds`."
+        hap2_beds: "Per-sample haplotype 2 CpG pileup BEDs (`cpg_hap2_bed` from MethylationProfiling)."
+        hap2_bed_idxs: "Indexes for `hap2_beds`."
+        sample_ids: "Sample IDs, parallel to `combined_beds`/`hap1_beds`/`hap2_beds`."
+        contigs: "Contigs to process."
+        samples_per_shard: "Maximum number of samples merged per shard before shards are joined column-wise into the final matrix."
+        combined_methylation_beds: "Per-contig site-by-sample modification-score matrix BEDs."
+        haplotype_methylation_beds: "Per-contig site-by-haplotype modification-score matrix BEDs."
+    }
+
     input {
         Array[File] combined_beds
         Array[File] combined_bed_idxs

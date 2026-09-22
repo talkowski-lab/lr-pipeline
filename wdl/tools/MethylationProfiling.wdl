@@ -4,6 +4,25 @@ import "../utils/Helpers.wdl"
 import "../utils/Structs.wdl"
 
 workflow MethylationProfiling {
+    meta {
+        description: [
+            "This tool generates CpG methylation pileups from a haplotagged BAM using pb-CpG-tools (https://github.com/PacificBiosciences/pb-CpG-tools), producing combined and per-haplotype methylation BED tracks."
+        ]
+    }
+
+    parameter_meta {
+        bam: "Haplotagged aligned reads."
+        bai: "Index for `bam`."
+        ref_fa: "From references."
+        ref_fai: "From references."
+        cpg_combined_bed: "Combined methylation pileup BED."
+        cpg_combined_bed_idx: "Index for the combined BED."
+        cpg_hap1_bed: "Haplotype 1 methylation pileup BED."
+        cpg_hap1_bed_idx: "Index for the haplotype 1 BED."
+        cpg_hap2_bed: "Haplotype 2 methylation pileup BED."
+        cpg_hap2_bed_idx: "Index for the haplotype 2 BED."
+    }
+
     input {
         File bam
         File bai

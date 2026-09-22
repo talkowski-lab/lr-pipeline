@@ -4,6 +4,44 @@ import "../utils/Helpers.wdl"
 import "../utils/Structs.wdl"
 
 workflow SummarizeAnnotations {
+    meta {
+        description: [
+            "This utility tallies annotation values across one or more VCFs to produce summary count tables, size-binned by allele class (SNV/DEL/INS/DUP/TRV). It always counts at the site level and can optionally count per sample, per allele, per functional gene consequence (from VEP/SVAnnotate `PREDICTED_*` fields), as raw per-variant value lists, and, when `create_plotting` is enabled, produce a separate set of AF-binned, region-aware Parquet tables for plotting (including a de novo transmission breakdown when a PED file is supplied and trios are found)."
+        ]
+    }
+
+    parameter_meta {
+        vcfs: "VCFs whose annotations are counted."
+        vcf_idxs: "Indexes for `vcfs`."
+        length_bins_summary: "Size-bin edges used for the summary count tables."
+        length_bins_plotting: "Size-bin edges used for the plotting tables."
+        af_bins_plotting: "Allele-frequency bin edges used for the plotting tables."
+        create_per_sample: "Whether to additionally produce per-sample counts."
+        create_per_allele: "Whether to additionally produce per-allele counts."
+        create_list: "Whether to additionally produce raw per-variant value-list tables."
+        create_functional: "Whether to additionally produce per-gene functional counts."
+        create_plotting: "Whether to additionally produce AF-binned Parquet tables for plotting."
+        use_ssd: "Whether to use SSD-backed local disks."
+        split_by_region: "Whether to split each VCF by genomic region before counting."
+        subset_vcf_string: "`bcftools view` arguments used to pre-subset the VCFs."
+        max_length: "Maximum variant length to count, or `-1` for no maximum."
+        min_length: "Minimum variant length to count, or `-1` for no minimum."
+        ped: "PED file used to identify trios for the de novo transmission breakdown (only used when `create_plotting` is enabled)."
+        records_per_shard: "Number of variants to keep within a single shard."
+        summary_sites_tsv: "Site-level annotation counts."
+        summary_samples_tsv: "Per-sample counts (when `create_per_sample`)."
+        summary_alleles_tsv: "Per-allele counts (when `create_per_allele`)."
+        summary_list_tsv: "Raw per-variant value lists (when `create_list`)."
+        summary_functional_tsv: "Per-gene functional counts (when `create_functional`)."
+        summary_functional_samples_tsv: "Per-gene per-sample functional counts (when `create_functional` and `create_per_sample`)."
+        summary_functional_alleles_tsv: "Per-gene per-allele functional counts (when `create_functional` and `create_per_allele`)."
+        plotting_sites_parquet: "Site-level AF/size-binned counts, as Parquet (when `create_plotting`)."
+        plotting_samples_parquet: "Per-sample AF/size-binned counts, as Parquet (when `create_plotting`)."
+        plotting_alleles_parquet: "Per-allele AF/size-binned counts, as Parquet (when `create_plotting`)."
+        plotting_denovo_parquet: "Per-proband de novo transmission counts, as Parquet (when `create_plotting` and trios are found via `ped`)."
+        plotting_variant_list_parquet: "Raw per-variant genotype-count list, as Parquet (when `create_plotting`)."
+    }
+
     input {
         Array[File] vcfs
         Array[File] vcf_idxs
@@ -337,7 +375,6 @@ import re
 from collections import defaultdict
 import pysam
 
-
 # Constants
 VCF_PATH = "~{vcf}"
 SITE_OUTPUT = "~{prefix}.sites.raw.tsv"
@@ -493,7 +530,6 @@ PREDICTED_FIELDS = [
     "PREDICTED_INTRONIC",
     "PREDICTED_PROMOTER"
 ]
-
 
 # Helper functions
 def init_table(column_buckets):
@@ -783,7 +819,6 @@ def write_gene_counts(path, gene_count_data):
         for gene in gene_count_data:
             for category, count in gene_count_data[gene].items():
                 writer.writerow([gene, category, str(count)])
-
 
 # Initialize data
 site_table = init_table(COLUMN_BUCKETS_SUMMARY)
@@ -1336,10 +1371,8 @@ task MergeAnnotationListTables {
         python3 <<'PYCODE'
 import csv
 
-
 LIST_FILES = [path for path in "~{sep=',' list_tsvs}".split(",") if path]
 OUTPUT = "~{prefix}.tsv"
-
 
 header = None
 variant_order = []

@@ -4,6 +4,25 @@ import "Helpers.wdl"
 import "Structs.wdl"
 
 workflow BedtoolsClosestSV {
+    meta {
+        description: [
+            "This sub-workflow performs the final comparison round, pairing each still-unmatched record with its nearest truth-callset neighbour using `bedtools closest`. Insertions and CNVs are compared separately, since proximity means different things for each, and the two comparisons are merged into a single annotation table."
+        ]
+    }
+
+    parameter_meta {
+        vcf: "Records left unmatched by `TruvariMatch`."
+        vcf_idx: "Index for vcf."
+        truth_sv_vcf: "Truth SV callset."
+        truth_sv_vcf_idx: "Index for truth_sv_vcf."
+        min_sv_length: "Minimum SV length applied to each callset."
+        min_sv_length_truth: "Minimum SV length applied to each callset."
+        type_field: "INFO field holding variant type."
+        length_field: "INFO field holding allele length."
+        source_tag: "Tag identifying the truth callset in the annotations."
+        annotation_tsv: "Nearest-neighbour annotations for the remaining records."
+    }
+
     input {
         File vcf
         File vcf_idx

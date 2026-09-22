@@ -4,6 +4,32 @@ import "../utils/Helpers.wdl"
 import "../utils/Structs.wdl"
 
 workflow AnnotateAlleleType {
+    meta {
+        description: [
+            "This utility sets the `allele_type` INFO field on variants in a VCF using three annotation TSVs - one for mobile element deletions, one for mobile element insertions and one for duplications - applying each in turn. Each annotation source can have its values transformed via an optional prefix, suffix and lowercasing. It outputs the annotated VCF."
+        ]
+    }
+
+    parameter_meta {
+        vcf: "VCF to annotate."
+        vcf_idx: "Index for VCF to annotate."
+        med_tsv: "TSV of mobile element deletion allele types."
+        mei_tsv: "TSV of mobile element insertion allele types."
+        dup_tsv: "TSV of duplication allele types."
+        contigs: "Contigs to annotate within the input VCF."
+        med_prefix: "Prefix prepended to mobile element deletion allele-type values."
+        med_suffix: "Suffix appended to mobile element deletion allele-type values."
+        med_lowercase: "Whether to lowercase mobile element deletion allele-type values."
+        mei_prefix: "Prefix prepended to mobile element insertion allele-type values."
+        mei_suffix: "Suffix appended to mobile element insertion allele-type values."
+        mei_lowercase: "Whether to lowercase mobile element insertion allele-type values."
+        dup_prefix: "Prefix prepended to duplication allele-type values."
+        dup_suffix: "Suffix appended to duplication allele-type values."
+        dup_lowercase: "Whether to lowercase duplication allele-type values."
+        allele_type_annotated_vcf: "VCF annotated with `allele_type`."
+        allele_type_annotated_vcf_idx: "Index for the annotated VCF."
+    }
+
     input {
         File vcf
         File vcf_idx

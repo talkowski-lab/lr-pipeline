@@ -4,6 +4,32 @@ import "../utils/Helpers.wdl"
 import "../utils/Structs.wdl"
 
 workflow Kanpig {
+    meta {
+        description: [
+            "This tool regenotypes a cohort SV VCF against each sample's aligned reads using Kanpig (https://github.com/ACEnglish/kanpig). It subsets the cohort to the target samples, runs Kanpig per sample with sex-aware ploidy beds, and merges the per-sample genotypes back into both a raw and a processed cohort VCF. It outputs the regenotyped (processed) and raw Kanpig VCFs."
+        ]
+    }
+
+    parameter_meta {
+        cohort_vcf: "Cohort SV VCF to regenotype."
+        cohort_vcf_idx: "Index for the cohort VCF."
+        bams: "Aligned reads, one per sample."
+        bais: "Indexes for `bams`."
+        ref_fa: "From references."
+        ref_fai: "From references."
+        ploidy_bed_male: "From references."
+        ploidy_bed_female: "From references."
+        sample_ids: "Samples to regenotype."
+        sexes: "Sex of each sample in `sample_ids`."
+        swap_samples: "Sample-ID swap map applied to the cohort VCF."
+        merge_args: "Arguments controlling the per-sample genotype merge."
+        kanpig_params: "Parameters passed to Kanpig."
+        sv_kanpig_vcf: "Regenotyped (processed) cohort VCF."
+        sv_kanpig_vcf_idx: "Index for the processed VCF."
+        sv_kanpig_raw_vcf: "Raw Kanpig cohort VCF."
+        sv_kanpig_raw_vcf_idx: "Index for the raw VCF."
+    }
+
     input {
         File cohort_vcf
         File cohort_vcf_idx

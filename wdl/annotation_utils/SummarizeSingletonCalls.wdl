@@ -4,6 +4,20 @@ import "../utils/Helpers.wdl"
 import "../utils/Structs.wdl"
 
 workflow SummarizeSingletonCalls {
+    meta {
+        description: [
+            "This utility counts each sample's called genotypes across variant type, allele-length range, genomic region, evidence source, and sample-level alternate-allele count. It classifies calls supported only by `hapdiff` and/or `dipcall` as assemblies, calls with any other `EV` value as alignments, and calls without either kind of evidence as other. Output columns use the format `variant_type - size_range - region - count_type - singleton_type`."
+        ]
+    }
+
+    parameter_meta {
+        vcfs: "VCFs whose sample calls are counted."
+        vcf_idxs: "Indexes for `vcfs`."
+        min_length: "Minimum absolute `INFO/allele_length` to count."
+        records_per_shard: "Number of variants to keep within a single shard."
+        singleton_counts_tsv: "Wide per-sample count table."
+    }
+
     input {
         Array[File] vcfs
         Array[File] vcf_idxs
@@ -94,11 +108,9 @@ import csv
 import re
 from collections import defaultdict
 
-
 INPUT = "variants.tsv"
 SAMPLES_INPUT = "~{prefix}.samples.txt"
 OUTPUT = "~{prefix}.tsv"
-
 
 def get_size_range(length):
     if length < 50:
@@ -111,7 +123,6 @@ def get_size_range(length):
         return "500-4999"
     return "5000+"
 
-
 def get_count_type(ev):
     callers = set()
     if ev not in {"", "."}:
@@ -121,7 +132,6 @@ def get_count_type(ev):
     if callers:
         return "assemblies"
     return "other"
-
 
 def get_singleton_type(gt):
     alleles = re.split(r"[/|]", gt)
@@ -133,7 +143,6 @@ def get_singleton_type(gt):
     if alt_count == 1:
         return "ac_1"
     return "ac_>1"
-
 
 with open(SAMPLES_INPUT, "r") as handle:
     samples = [line.rstrip("\n") for line in handle]
@@ -217,14 +226,12 @@ task MergeSingletonCounts {
 import csv
 from collections import defaultdict
 
-
 COUNT_FILES = [path for path in "~{sep=',' count_tsvs}".split(",") if path]
 SAMPLE_FILES = [path for path in "~{sep=',' sample_files}".split(",") if path]
 OUTPUT = "~{prefix}.tsv"
 SIZE_RANGES = ["<50", "50-199", "200-499", "500-4999", "5000+"]
 COUNT_TYPES = ["assemblies", "alignments", "other"]
 SINGLETON_TYPES = ["ac_0", "ac_1", "ac_>1"]
-
 
 samples = set()
 for path in SAMPLE_FILES:

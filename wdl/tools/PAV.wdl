@@ -3,6 +3,26 @@ version 1.0
 import "../utils/Structs.wdl"
 
 workflow PAV {
+    meta {
+        description: [
+            "This tool runs PAV (https://github.com/EichlerLab/pav) in batch mode across multiple samples' phased haplotype assemblies to call variants against the reference. It outputs per-sample VCFs, along with tarballs of the full PAV results and log directories."
+        ]
+    }
+
+    parameter_meta {
+        mat_haplotypes: "Maternal haplotype assemblies, one per sample."
+        pat_haplotypes: "Paternal haplotype assemblies, one per sample."
+        sample_ids: "Sample IDs, aligned by index to `mat_haplotypes`/`pat_haplotypes`."
+        ref_fa: "From references."
+        ref_fai: "From references."
+        pav_results_tarball: "Tarball of the full PAV results directory."
+        pav_log_tarball: "Tarball of the full PAV log directory."
+        pav_vcfs: "Per-sample called VCFs."
+        pav_vcf_idx: "Indexes for the per-sample VCFs."
+        debug_sam: "Optional debug alignment file."
+        debug_temp: "Optional debug intermediate files."
+    }
+
     input {
         Array[File] mat_haplotypes
         Array[File] pat_haplotypes

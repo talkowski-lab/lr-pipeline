@@ -5,6 +5,21 @@ import "../tools/RepeatMasker.wdl"
 import "../utils/Structs.wdl"
 
 workflow AnnotateL1MEAID {
+    meta {
+        description: [
+            "This workflow first runs RepeatMasker on the insertions in an input VCF. It then uses its output to run L1ME-AID (https://github.com/Markloftus/L1ME-AID) and INTACT_MEI (https://github.com/xzhuo/INTACT_MEI) in order to identify, annotate and filter mobile element insertion (MEI) calls. It restricts to insertions at or above a minimum length and emits a TSV of the resulting MEI annotations."
+        ]
+    }
+
+    parameter_meta {
+        vcf: "VCF to annotate."
+        vcf_idx: "Index for VCF to annotate."
+        contigs: "Contigs to annotate within the input VCF."
+        records_per_shard: "Number of variants to keep within a single shard during annotation."
+        min_length: "Minimum insertion length to consider for MEI annotation."
+        annotations_tsv_l1meaid: "TSV of L1ME-AID and INTACT_MEI MEI annotations."
+    }
+
     input {
         File vcf
         File vcf_idx

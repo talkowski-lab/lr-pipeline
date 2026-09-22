@@ -4,6 +4,30 @@ import "../utils/Helpers.wdl"
 import "../utils/Structs.wdl"
 
 workflow AnnotateVcfCleared {
+    meta {
+        description: [
+            "This utility is a variant of `AnnotateVcf` that, before applying the annotation TSVs, clears existing annotations and optionally swaps in records from an untrimmed VCF in order to restore full REF/ALT alleles. It then adds the specified INFO fields and outputs the annotated VCF."
+        ]
+    }
+
+    parameter_meta {
+        vcf: "VCF to annotate."
+        vcf_idx: "Index for VCF to annotate."
+        subset_untrimmed_vcf: "Untrimmed VCF whose records are swapped in to restore full REF/ALT alleles."
+        subset_untrimmed_vcf_idx: "Index for `subset_untrimmed_vcf`."
+        annotations_tsvs: "Annotation TSVs to apply, each as a set of INFO fields."
+        contigs: "Contigs to annotate within the input VCF."
+        sort_tsvs: "Per-TSV flag indicating whether to sort the TSV before annotation."
+        subset_vcf_strings: "Per-TSV `bcftools view` arguments used to pre-subset the VCF."
+        awk_tsv_conditions: "Per-TSV `awk` condition used to filter the TSV rows applied."
+        info_names: "INFO field names added by each annotation TSV."
+        info_descriptions: "INFO field header descriptions for each annotation TSV."
+        info_types: "INFO field types for each annotation TSV."
+        info_numbers: "INFO field `Number` values for each annotation TSV."
+        annotated_vcf: "Annotated VCF."
+        annotated_vcf_idx: "Index for the annotated VCF."
+    }
+
     input {
         File vcf
         File vcf_idx

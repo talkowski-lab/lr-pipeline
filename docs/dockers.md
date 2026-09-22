@@ -49,7 +49,6 @@ Built from [dockerfiles/](../dockerfiles/) in this repository.
 | `mosdepthstream_docker` | kj-dockers/mosdepthstream:latest | `Dockerfile.mosdepthstream` |
 | `kanpig_docker` | kj-dockers/kanpig:latest | `Dockerfile.kanpig` |
 | `svan_docker` | kj-dockers/svan:latest | `Dockerfile.svan` |
-| `whatshap_docker` | kj-dockers/whatshap:latest | `Dockerfile.whatshap` |
 | `hificnv_docker` | kj-dockers/hificnv:latest | `Dockerfile.hificnv` |
 | `sawfish_docker` | kj-dockers/sawfish:latest | `Dockerfile.sawfish` |
 

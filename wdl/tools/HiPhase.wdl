@@ -4,6 +4,40 @@ import "../utils/Helpers.wdl"
 import "../utils/Structs.wdl"
 
 workflow HiPhase {
+    meta {
+        description: [
+            "This tool runs PacBio HiPhase (https://github.com/PacificBiosciences/HiPhase) to jointly phase a sample's small-variant, SV and (optionally) TRGT VCFs against its aligned reads. It preprocesses and synchronizes the input VCFs per contig, phases them together and optionally haplotags the BAM. It outputs the phased VCF, per-contig phasing statistics and an optional haplotagged BAM."
+        ]
+    }
+
+    parameter_meta {
+        bam: "Aligned reads for the sample."
+        bai: "Index for `bam`."
+        small_vcf: "Small-variant (SNV/indel) VCF to phase."
+        small_vcf_idx: "Index for `small_vcf`."
+        sv_vcf: "SV VCF to phase."
+        sv_vcf_idx: "Index for `sv_vcf`."
+        trgt_vcf: "TRGT tandem-repeat VCF to additionally phase."
+        trgt_vcf_idx: "Index for `trgt_vcf`."
+        ref_fa: "From references."
+        ref_fai: "From references."
+        contigs: "Contigs to phase."
+        trgt_min_repeat_unit: "Minimum repeat-unit length retained when filtering the TRGT VCF."
+        trgt_normalize: "Whether to normalize the TRGT VCF before phasing."
+        trgt_min_length_diff: "Minimum length difference retained when filtering the TRGT VCF."
+        trgt_max_catalog_length: "Maximum catalog length retained when filtering the TRGT VCF."
+        hiphase_extra_args: "Additional arguments passed to HiPhase."
+        run_haplotagging: "Whether to also haplotag the BAM."
+        hiphase_vcf: "Phased VCF."
+        hiphase_vcf_idx: "Index for the phased VCF."
+        hiphase_haplotag_files: "Per-contig haplotag read assignments."
+        hiphase_stats: "Per-contig phasing statistics."
+        hiphase_blocks: "Per-contig phase blocks."
+        hiphase_summary: "Per-contig phasing summaries."
+        hiphase_haplotagged_bam: "Haplotagged BAM (only when `run_haplotagging`)."
+        hiphase_haplotagged_bam_idx: "Index for the haplotagged BAM (only when `run_haplotagging`)."
+    }
+
     input {
         File bam
         File bai

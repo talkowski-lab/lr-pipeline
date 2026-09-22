@@ -7,6 +7,49 @@ import "../utils/Structs.wdl"
 import "../utils/TruvariMatch.wdl"
 
 workflow AnnotateCallsetOverlap {
+    meta {
+        description: [
+            "This workflow ingests a callset VCF and two truth VCFs - one of SNVs & indels and one of SVs - and finds matching variants across them, annotating each matched callset variant with the truth callset's AC/AF/AN and genotype-count fields. This enables benchmarking annotations against an existing cohort (e.g. gnomAD) and surfacing variants that are outliers relative to it.",
+            "The workflow undergoes multiple rounds of variant matching in order to determine matched pairs: (1) Exact match across CHROM, POS, REF and ALT. (2) Truvari match with overlap percentages of 90%, 70% and 50%. (3) Matching based on `bedtools closest`, finetuned for SVs. Here the callset and truth variants are split by type and converted to a symbolic representation, after which separate `bedtools closest` passes are run - one tuned for deletions and duplications via reciprocal positional overlap, and one tuned for insertions via breakpoint proximity - so that each callset variant is paired with the nearest same-type truth variant above the per-callset minimum SV-length thresholds.",
+            "Note: When converting to symbolic representation, only canonical DUPs (allele_type = `DUP` exactly) are treated as DUP; other DUP subtypes (e.g., `dup_interspersed`, `inv_dup`) are treated as insertions.",
+            "Note: Callset DUPs are compared twice, because the two matching rules need different coordinates. Against truth DUPs they are repositioned to their `ORIGIN` coordinates and compared by reciprocal overlap; against truth insertions they are held at their insertion site and compared by breakpoint proximity and length ratio.",
+            "Both the exact-match and Truvari rounds can be sharded within a contig. Truvari shard boundaries are snapped forward to the next gap wider than the `min_shard_gap_truvari_match` input of `TruvariMatch`, which keeps results identical to an unsharded run because Truvari only groups records into a new comparison chunk once the next record clears the running end by more than its chunk size. Fixed-width bins alone would split colocated record pairs and silently lose matches."
+        ]
+    }
+
+    parameter_meta {
+        vcf: "Callset VCF being annotated."
+        vcf_idx: "Index for `vcf`."
+        truth_snv_indel_vcf: "Truth VCF containing SNVs & indels to match against."
+        truth_snv_indel_vcf_idx: "Index for `truth_snv_indel_vcf`."
+        truth_sv_vcf: "Truth VCF containing SVs to match against."
+        truth_sv_vcf_idx: "Index for `truth_sv_vcf`."
+        contigs: "Contigs to evaluate."
+        min_sv_length_truvari_vcf: "Minimum length for a callset variant to enter the Truvari matching round."
+        min_sv_length_truvari_truth_vcf: "Minimum length for a truth variant to enter the Truvari matching round."
+        min_sv_length_bedtools_closest_vcf: "Minimum length for a callset variant to enter the `bedtools closest` matching round."
+        min_sv_length_bedtools_closest_truth_vcf: "Minimum length for a truth variant to enter the `bedtools closest` matching round."
+        shard_bin_size_exact_match: "If set, shards the exact-match round into contig regions of roughly this many base pairs, run in parallel."
+        shard_bin_size_truvari_match: "If set, shards the Truvari round into contig regions of at least this many base pairs, run in parallel. Each region is extended to the next safe gap, so a value of 1000000 or more is recommended."
+        type_field_vcf: "INFO field in the callset VCF giving each variant's allele type."
+        length_field_vcf: "INFO field in the callset VCF giving each variant's allele length."
+        source_tag_truth_snv_indel_vcf: "Label used to tag matches against the SNV & indel truth VCF."
+        source_tag_truth_sv_vcf: "Label used to tag matches against the SV truth VCF."
+        args_string_vcf: "`bcftools view` arguments used to pre-subset the callset VCF."
+        args_string_truth_snv_indel_vcf: "`bcftools view` arguments used to pre-subset the SNV & indel truth VCF."
+        args_string_truth_sv_vcf: "`bcftools view` arguments used to pre-subset the SV truth VCF."
+        rename_id_string_vcf: "Expression used to rename variant IDs in the callset VCF prior to matching."
+        rename_id_string_truth_snv_indel_vcf: "Expression used to rename variant IDs in the SNV & indel truth VCF prior to matching."
+        rename_id_string_truth_sv_vcf: "Expression used to rename variant IDs in the SV truth VCF prior to matching."
+        rename_id_strip_chr_vcf: "Whether to strip the `chr` prefix when renaming callset variant IDs."
+        rename_id_strip_chr_truth_snv_indel_vcf: "Whether to strip the `chr` prefix when renaming SNV & indel truth variant IDs."
+        rename_id_strip_chr_truth_sv_vcf: "Whether to strip the `chr` prefix when renaming SV truth variant IDs."
+        ref_fa: "From references. Only needed when either VCF represents alleles symbolically, since Truvari uses it solely to resolve those alleles to sequence."
+        ref_fai: "From references."
+        annotations_tsv_benchmark: "TSV mapping callset variants to their matched truth variants, match type, and the truth callset's AC/AF/AN and genotype-count fields."
+        annotations_header_benchmark: "Header listing the extra annotation columns present in `annotations_tsv_benchmark`."
+    }
+
     input {
         File vcf
         File vcf_idx

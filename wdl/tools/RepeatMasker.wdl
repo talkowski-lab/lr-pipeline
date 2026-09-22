@@ -4,6 +4,20 @@ import "../utils/Helpers.wdl"
 import "../utils/Structs.wdl"
 
 workflow RepeatMasker {
+    meta {
+        description: [
+            "This workflow leverages RepeatMasker (https://github.com/Dfam-consortium/RepeatMasker) in order to annotate repeated and mobile-element content in the insertions of an input VCF. It extracts each insertion's inserted sequence to a FASTA, optionally restricted to a minimum length, and runs RepeatMasker over it."
+        ]
+    }
+
+    parameter_meta {
+        vcf: "VCF whose insertions are masked."
+        vcf_idx: "Index for VCF."
+        min_length: "Minimum insertion length to extract and mask."
+        rm_out: "RepeatMasker output table."
+        rm_fa: "FASTA of the masked insertion sequences."
+    }
+
     input {
         File vcf
         File vcf_idx

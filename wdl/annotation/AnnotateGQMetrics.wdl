@@ -4,6 +4,26 @@ import "../utils/Helpers.wdl"
 import "../utils/Structs.wdl"
 
 workflow AnnotateGQMetrics {
+    meta {
+        description: [
+            "This workflow computes binned distributions of genotype-quality metrics across the carriers of each variant. For every configured FORMAT field it counts the genotypes whose value falls into each bin - optionally restricted to a variant filter and respecting whether larger or smaller values of that field are better - and can additionally bin allele-balance values. It emits a per-variant TSV of these distribution counts."
+        ]
+    }
+
+    parameter_meta {
+        vcf: "VCF to annotate."
+        vcf_idx: "Index for VCF to annotate."
+        contigs: "Contigs to annotate within the input VCF."
+        records_per_shard: "Number of variants to keep within a single shard during annotation."
+        gq_fields: "FORMAT fields whose values are binned, one per field to annotate."
+        gq_bins: "Bin edges for each field in `gq_fields`."
+        gq_variant_filters: "Per-field expression restricting which variants the field is binned over."
+        gq_larger_field: "Per-field flag indicating whether larger values of the field are better."
+        ab_annotation: "Whether to additionally compute allele-balance distributions."
+        ab_bins: "Bin edges for allele-balance values."
+        annotations_tsv_gq: "TSV of per-variant genotype-quality (and optional allele-balance) distribution counts."
+    }
+
     input {
         File vcf
         File vcf_idx

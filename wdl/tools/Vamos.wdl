@@ -4,6 +4,25 @@ import "../utils/Helpers.wdl"
 import "../utils/Structs.wdl"
 
 workflow Vamos {
+    meta {
+        description: [
+            "This tool runs Vamos (https://github.com/ChaissonLab/vamos) in order to genotype tandem repeats against a Vamos repeat catalog, in read mode (from an aligned read BAM) and/or assembly mode (from per-haplotype assembly BAMs). It outputs the resulting Vamos VCFs."
+        ]
+    }
+
+    parameter_meta {
+        read_bam: "Aligned reads to genotype in read mode."
+        read_bai: "Index for `read_bam`."
+        assembly_bams: "Per-haplotype assembly BAMs to genotype in assembly mode."
+        assembly_bais: "Indexes for `assembly_bams`."
+        repeat_catalog_vamos: "Vamos repeat catalog to genotype against."
+        sample_id: "ID of the sample being genotyped."
+        vamos_assembly_vcfs: "Per-haplotype assembly-mode Vamos VCFs."
+        vamos_assembly_vcf_idxs: "Indexes for the assembly-mode VCFs."
+        vamos_reads_vcf: "Read-mode Vamos VCF."
+        vamos_reads_vcf_idx: "Index for the read-mode VCF."
+    }
+
     input {
         File? read_bam
         File? read_bai

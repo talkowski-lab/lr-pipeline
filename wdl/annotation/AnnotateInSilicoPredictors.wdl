@@ -4,6 +4,27 @@ import "../utils/Helpers.wdl"
 import "../utils/Structs.wdl"
 
 workflow AnnotateInSilicoPredictors {
+    meta {
+        description: [
+            "This workflow annotates SNVs and indels with precomputed in-silico predictor scores - CADD, Pangolin, PhyloP, REVEL and SpliceAI - drawn from the gnomAD V4 Hail Tables. It shards the VCF and uses a Hail-based script to look up each variant's scores, emitting a TSV of per-variant predictions."
+        ]
+    }
+
+    parameter_meta {
+        vcf: "VCF to annotate."
+        vcf_idx: "Index for VCF to annotate."
+        contigs: "Contigs to annotate within the input VCF."
+        records_per_shard: "Number of variants to keep within a single shard during annotation."
+        cadd_ht: "From references."
+        pangolin_ht: "From references."
+        phylop_ht: "From references."
+        revel_ht: "From references."
+        spliceai_ht: "From references."
+        annotate_in_silico_predictors_script: "Path to the Hail script that performs the lookups (defaults to this repository's copy on `main`)."
+        genome_build: "Genome build to annotate against."
+        annotations_tsv_insilico: "TSV of per-variant in-silico predictor scores."
+    }
+
     input {
         File vcf
         File vcf_idx

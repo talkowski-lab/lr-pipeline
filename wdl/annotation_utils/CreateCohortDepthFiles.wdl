@@ -3,6 +3,27 @@ version 1.0
 import "../utils/Structs.wdl"
 
 workflow CreateCohortDepthFiles {
+    meta {
+        description: [
+            "This utility ports GATK-SV's `MakeBincovMatrix` and `PloidyEstimation` workflows to build a cohort binned-coverage matrix and per-sample ploidy estimate from per-sample `MosDepth` per-base coverage BEDs. Since mosdepth's per-base output is run-length-encoded at irregular interval widths rather than GATK-SV's fixed-width `CollectReadCounts` bins, each sample's per-base BED is first binned at `bin_size` by taking the median depth per bin (dropping any trailing partial bin), matching the binning convention used by `CreateSampleReadCounts`; because every sample is binned identically, the format-detection/shift logic in upstream `MakeBincovMatrix` (which has to distinguish raw bincov BEDs from GATK `CollectReadCounts` output) is dropped as dead code. The binned files are then run through GATK-SV's `SetBins`/`MakeBincovMatrixColumns`/`ZPaste` logic to build the bincov matrix, and through `BuildPloidyMatrix` (re-binning the bincov matrix to `ploidy_bin_size`, summing depths) and GATK-SV's `estimatePloidy.R` to estimate ploidy. GATK-SV's `estimatePloidy.R` and `estimated_CN_denoising.py` are vendored under `scripts/helper/` and built into the `utils` image, so workflow has no dependency on GATK-SV docker images. Matrix outputs remain separate; `ploidy_plots` tarball contains only PNG figures from `estimatePloidy.R` and `cn_denoising_plots.pdf`. Unlike upstream `MakeBincovMatrix`, this does not support merging into a pre-existing batch's bincov matrix, since only a single one-shot cohort matrix was needed.",
+            "`estimatePloidy.R` hardcodes a 24-contig human karyotype (`chr1`..`chr22`, `chrX`, `chrY`, in that exact order) for sex assignment and per-contig ploidy expectations via positional indexing, and its 'X'/'Y' exclusion checks compare against bare `X`/`Y` rather than `chr`-prefixed names (a no-op against GRCh38-style contig names, with limited practical effect here since sample-batching/PCA (`-k`) is never invoked). `mosdepth_bed_files` must therefore be restricted to exactly those 24 contigs, in that order, or ploidy estimates will be silently wrong."
+        ]
+    }
+
+    parameter_meta {
+        sample_ids: "Cohort sample IDs, parallel to `mosdepth_bed_files`."
+        mosdepth_bed_files: "Per-sample combined mosdepth per-base coverage BEDs, restricted to `chr1`-`chr22`, `chrX`, `chrY` in that order (see caveat above)."
+        bin_size: "Size, in bp, of each coverage bin in the bincov matrix (GATK-SV convention default: 1000)."
+        ploidy_bin_size: "Size, in bp, of each bin in the ploidy matrix (GATK-SV convention default: 1000000)."
+        random_seed: "Seed for the draw, so the selection is reproducible."
+        binned_coverage: "Cohort binned-coverage matrix, bgzipped and tabix-indexed."
+        binned_coverage_idx: "Index for `binned_coverage`."
+        median_coverage: "Per-sample median coverage matrix."
+        binned_estimated_ecn: "Per-sample, per-`ploidy_bin_size`-bin estimated copy number."
+        estimated_cn: "Per-sample, per-chromosome estimated copy number."
+        ploidy_plots: "Tarball containing only ploidy PNG and PDF figures."
+    }
+
     input {
         Array[String] sample_ids
         Array[File] mosdepth_bed_files

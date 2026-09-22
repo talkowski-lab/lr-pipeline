@@ -4,6 +4,23 @@ import "../utils/Helpers.wdl"
 import "../utils/Structs.wdl"
 
 workflow FillPhasedGenotypes {
+    meta {
+        description: [
+            "This utility transfers phasing information from a phased VCF onto the genotypes of an unphased VCF over matching sites, optionally sharding each contig by region. It outputs the phased VCF."
+        ]
+    }
+
+    parameter_meta {
+        phased_vcf: "VCF providing the phasing information."
+        phased_vcf_idx: "Index for `phased_vcf`."
+        unphased_vcf: "VCF whose genotypes are phased."
+        unphased_vcf_idx: "Index for `unphased_vcf`."
+        contigs: "Contigs to process."
+        shard_bin_size: "Region-bin size, in bp, used when sharding each contig."
+        hiphase_phased_vcf: "Phased VCF."
+        hiphase_phased_vcf_idx: "Index for the phased VCF."
+    }
+
     input {
         File phased_vcf
         File phased_vcf_idx

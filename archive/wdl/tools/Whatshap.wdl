@@ -4,6 +4,26 @@ import "../utils/Helpers.wdl"
 import "../utils/Structs.wdl"
 
 workflow Whatshap {
+    meta {
+        description: [
+            "This tool haplotags a sample's BAM against a phased VCF using WhatsHap (https://github.com/whatshap/whatshap), per contig, then merges the tagged reads into a single BAM. It outputs the haplotagged BAM and per-contig haplotag read lists."
+        ]
+    }
+
+    parameter_meta {
+        bam: "Aligned reads to haplotag."
+        bai: "Index for `bam`."
+        phased_vcf: "Phased VCF used to assign haplotypes."
+        phased_vcf_idx: "Index for `phased_vcf`."
+        ref_fa: "From references."
+        ref_fai: "From references."
+        contigs: "Contigs to process."
+        extra_args: "Additional arguments passed to WhatsHap."
+        haplotagged_bam: "Haplotagged BAM."
+        haplotagged_bai: "Index for the haplotagged BAM."
+        haplotag_lists: "Per-contig haplotag read assignments."
+    }
+
     input {
         File bam
         File bai

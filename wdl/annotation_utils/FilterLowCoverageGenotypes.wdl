@@ -4,6 +4,25 @@ import "../utils/Helpers.wdl"
 import "../utils/Structs.wdl"
 
 workflow FilterLowCoverageGenotypes {
+    meta {
+        description: [
+            "This utility sets selected individual genotype calls to missing (`./.`) when `FORMAT/DP` is present and at or below that sample's low-coverage cutoff, while preserving every other FORMAT field. Male chrX/chrY calls use half the sample's cutoff, with sex read from a six-column PED. Every called genotype is eligible, whether homozygous reference or carrying an alternate allele, including partially called genotypes such as `./1`. Calls missing every GT allele or DP are left unchanged. Filtering can be restricted to variants whose INFO field matches a given value. It optionally shards by record count and outputs the filtered VCF plus a report of affected variants."
+        ]
+    }
+
+    parameter_meta {
+        vcf: "Cohort VCF to filter."
+        vcf_idx: "Index for the cohort VCF."
+        sample_cutoffs_tsv: "`sample_cutoffs_tsv` output from `IdentifyLowCoverageRegions`, containing `sample_id` and `cutoff` columns for every VCF sample."
+        ped: "Six-column PED containing every VCF sample and its sex."
+        subset_unfilled_vcf_field: "INFO field used to limit which variants are filtered. Requires `subset_unfilled_vcf_value`."
+        subset_unfilled_vcf_value: "Value that `subset_unfilled_vcf_field` must equal for a variant to be filtered. Variants that don't match are left unfiltered."
+        records_per_shard: "Number of variants per shard. When set, variants are processed in parallel shards and concatenated."
+        filtered_vcf: "VCF with low-coverage genotypes set to missing."
+        filtered_vcf_idx: "Index for `filtered_vcf`."
+        filtered_genotypes_tsv: "TSV with one row per affected variant: `CHROM`, `POS`, `REF`, `ALT`, `ID`, pre- and post-filter allele counts, number of filtered samples, and comma-separated filtered sample IDs."
+    }
+
     input {
         File vcf
         File vcf_idx
@@ -106,7 +125,6 @@ import csv
 
 import pysam
 
-
 VCF = "~{vcf}"
 CUTOFFS = "~{sample_cutoffs_tsv}"
 PED = "~{ped}"
@@ -115,7 +133,6 @@ SUBSET_VALUE = ~{if defined(subset_unfilled_vcf_value) then "'" + subset_unfille
 OUTPUT_VCF = "~{prefix}.vcf.gz"
 OUTPUT_TSV = "~{prefix}.filtered_genotypes.tsv"
 SEX_CHROMS = {"chrX", "chrY"}
-
 
 def read_cutoffs(path):
     with open(path, newline="") as handle:
@@ -135,7 +152,6 @@ def read_cutoffs(path):
             except (TypeError, ValueError) as error:
                 raise ValueError(f"Invalid cutoff for sample {sample_id}") from error
     return cutoffs
-
 
 def read_ped_sexes(path):
     sexes = {}
@@ -160,10 +176,8 @@ def read_ped_sexes(path):
             sexes[sample_id] = sex
     return sexes
 
-
 def is_called(gt):
     return gt is not None and any(allele is not None for allele in gt)
-
 
 def allele_counts(record):
     counts = [0] * len(record.alts)
@@ -176,7 +190,6 @@ def allele_counts(record):
                 counts[allele - 1] += 1
     return ",".join(str(count) for count in counts)
 
-
 def in_subset(record):
     if SUBSET_FIELD is None:
         return True
@@ -186,7 +199,6 @@ def in_subset(record):
     if isinstance(info_val, (list, tuple)):
         return SUBSET_VALUE in [str(v) for v in info_val]
     return str(info_val) == SUBSET_VALUE
-
 
 cutoffs = read_cutoffs(CUTOFFS)
 sexes = read_ped_sexes(PED)
@@ -210,13 +222,11 @@ missing_ped_samples = vcf_samples - set(sexes)
 if missing_ped_samples:
     raise ValueError("Samples missing from PED: " + ", ".join(sorted(missing_ped_samples)))
 
-
 def sample_cutoff(sample_id, chrom):
     base_cutoff = cutoffs[sample_id]
     if sexes[sample_id] == "male" and chrom in SEX_CHROMS:
         return base_cutoff / 2
     return base_cutoff
-
 
 vcf_out = pysam.VariantFile(OUTPUT_VCF, "wz", header=vcf_in.header)
 with open(OUTPUT_TSV, "w", newline="") as report_handle:

@@ -4,6 +4,30 @@ import "../utils/Structs.wdl"
 import "../utils/Helpers.wdl"
 
 workflow MosDepth {
+    meta {
+        description: [
+            "This tool runs mosdepth (https://github.com/brentp/mosdepth) to compute sequencing depth over a sample's BAM per contig. By default it emits per-base coverage; when `bin_size` is set, it instead windows depth into fixed-size bins (`--by`, `--no-per-base`) and emits per-region coverage."
+        ]
+    }
+
+    parameter_meta {
+        bam: "Aligned reads for the sample."
+        bai: "Index for `bam`."
+        contigs: "Contigs over which to compute depth."
+        single_contig: "Whether to run mosdepth once across all contigs instead of once per contig."
+        stream_mode: "Whether each per-contig run streams its region straight from the BAM rather than splitting the BAM by contig first. Ignored when `single_contig` is set."
+        fast_mode: "Use SVCluster fast mode."
+        bin_size: "If set, windows depth into bins of this size (bp) and disables per-base output."
+        ref_fa: "Reference FASTA, required for CRAM input."
+        ref_fai: "Index for `ref_fa`."
+        mosdepth_dist: "Per-contig cumulative coverage distributions."
+        mosdepth_summary: "Per-contig coverage summaries."
+        mosdepth_per_base: "Per-contig per-base coverage (when `bin_size` is unset)."
+        mosdepth_per_base_csi: "Indexes for the per-base coverage."
+        mosdepth_regions_bed: "Per-contig windowed coverage BEDs (when `bin_size` is set)."
+        mosdepth_regions_bed_csi: "Indexes for the windowed coverage BEDs."
+    }
+
     input {
         File bam
         File bai
@@ -172,11 +196,6 @@ task RunMosDepthStream {
         String prefix
         String docker
         RuntimeAttr? runtime_attr_override
-    }
-
-    parameter_meta {
-        bam: { localization_optional: true }
-        bai: { localization_optional: true }
     }
 
     command <<<

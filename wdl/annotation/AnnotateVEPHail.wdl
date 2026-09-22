@@ -5,6 +5,35 @@ import "../utils/ScatterVcf.wdl"
 import "../utils/Structs.wdl"
 
 workflow AnnotateVEPHail {
+    meta {
+        description: [
+            "This workflow leverages the Ensembl Variant Effect Predictor (VEP) (https://useast.ensembl.org/info/docs/tools/vep/index.html) in order to annotate predicted functional effects based on site-level information. It strips genotypes, scatters the VCF into shards, optionally normalizes and splits multiallelics around the VEP call, and uses Hail in order to run this annotation process in a more efficient and scalable manner before concatenating the per-shard annotations into a single TSV."
+        ]
+    }
+
+    parameter_meta {
+        vcf: "VCF to annotate."
+        vcf_idx: "Index for VCF to annotate."
+        ref_fa: "From references."
+        ref_fai: "From references."
+        ref_fa_gz: "bgzipped `ref_fa`, from references."
+        ref_fai_gz: "Index for `ref_fa_gz`, from references."
+        ref_vep_cache: "From references."
+        subset_vcf_string: "`bcftools view` arguments used to pre-subset the VCF before annotation."
+        split_vcf_hail_script: "Path to the Hail script used to scatter the VCF (defaults to this repository's copy on `main`)."
+        vep_annotate_hail_python_script: "Path to the Hail script used to run VEP (defaults to this repository's copy on `main`)."
+        genome_build: "Genome build to annotate against."
+        vep_json_schema: "Hail type schema describing the structure of VEP's JSON output."
+        normalize_check_ref: "`bcftools norm` `--check-ref` mode used when normalizing."
+        normalize_vcf: "Whether to normalize and split multiallelics around the VEP call."
+        localize_vcf: "Whether to localize the VCF before annotation."
+        has_index: "Whether the input VCF is indexed."
+        get_chromosome_sizes: "Whether to compute chromosome sizes."
+        split_by_chromosome: "Whether to scatter the VCF by chromosome."
+        split_into_shards: "Whether to scatter the VCF into fixed-size shards."
+        annotations_tsv_vep: "TSV of VEP functional-effect annotations."
+    }
+
     input {
         File vcf
         File vcf_idx

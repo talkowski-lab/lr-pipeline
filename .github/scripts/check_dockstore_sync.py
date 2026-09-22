@@ -3,8 +3,7 @@
 
 Every top-level workflow file under wdl/annotation, wdl/annotation_utils, and
 wdl/tools must have exactly one corresponding entry in .dockstore.yml, and every
-entry must point to a file that exists, with two named exceptions for workflows
-that are defined in a different repository.
+entry must point to a file that exists.
 """
 import sys
 from pathlib import Path
@@ -14,7 +13,6 @@ import yaml
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DOCKSTORE_YML = REPO_ROOT / ".dockstore.yml"
 WORKFLOW_DIRS = ["wdl/annotation", "wdl/annotation_utils", "wdl/tools"]
-EXTERNAL_REPO_ALLOWLIST = {"AnnotateAF", "QcAnnotations"}
 
 
 def load_dockstore_entries():
@@ -41,8 +39,6 @@ def main():
         entries_by_name[name] = entry
 
     for name, entry in entries_by_name.items():
-        if name in EXTERNAL_REPO_ALLOWLIST:
-            continue
         path = REPO_ROOT / entry["primaryDescriptorPath"].lstrip("/")
         if not path.is_file():
             errors.append(
@@ -65,8 +61,6 @@ def main():
 
     active_names = {p.stem for p in active_files}
     for name in entries_by_name:
-        if name in EXTERNAL_REPO_ALLOWLIST:
-            continue
         if name not in active_names:
             errors.append(f".dockstore.yml entry '{name}' has no matching active workflow file under wdl/")
 

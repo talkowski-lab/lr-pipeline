@@ -4,6 +4,20 @@ import "../utils/Helpers.wdl"
 import "../utils/Structs.wdl"
 
 workflow AnnotateSQMetrics {
+    meta {
+        description: [
+            "This workflow recomputes site-level quality metrics for each variant directly from its genotype-level data. It clears any stale allele-specific INFO fields and recalculates Hardy-Weinberg equilibrium, the inbreeding coefficient, the maximum p(allele balance), and the allele-specific quality approximation, quality-by-depth and variant depth from the per-sample DP, PL and AD fields, emitting a per-variant TSV."
+        ]
+    }
+
+    parameter_meta {
+        vcf: "VCF to annotate."
+        vcf_idx: "Index for VCF to annotate."
+        contigs: "Contigs to annotate within the input VCF."
+        records_per_shard: "Number of variants to keep within a single shard during annotation."
+        annotations_tsv_sq: "TSV of recomputed site-level quality metrics."
+    }
+
     input {
         File vcf
         File vcf_idx
@@ -120,7 +134,6 @@ import scipy.stats as stats
 vcf_in = pysam.VariantFile("stripped.vcf.gz")
 
 tsv_out = open("~{prefix}.annotations.tsv", "w")
-
 
 def format_allele_values(values):
     formatted = ['.' if value is None else str(value) for value in values]

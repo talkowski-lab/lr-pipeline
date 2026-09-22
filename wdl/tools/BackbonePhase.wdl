@@ -4,6 +4,25 @@ import "../utils/Helpers.wdl"
 import "../utils/Structs.wdl"
 
 workflow BackbonePhase {
+    meta {
+        description: [
+            "This tool transfers ('backbone') phasing from a set of base VCFs onto a target VCF for a single contig. It assigns each sample to its base VCF, computes the phase-flip orientation needed to make the target consistent with the backbone, and applies those flips. It outputs the phase-transferred VCF and a list of samples with no matching base VCF."
+        ]
+    }
+
+    parameter_meta {
+        vcf: "Target VCF to phase."
+        vcf_idx: "Index for `vcf`."
+        base_vcfs: "Base VCFs providing the backbone phasing."
+        base_vcf_idxs: "Indexes for `base_vcfs`."
+        contig: "Contig to process."
+        swap_samples_base: "Sample-ID swap map applied to the base VCFs."
+        allow_unphased_match_phase: "Whether to allow unphased genotypes to set the phase orientation."
+        transferred_vcf: "Phase-transferred VCF."
+        transferred_vcf_idx: "Index for the transferred VCF."
+        missing_samples: "Samples with no matching base VCF."
+    }
+
     input {
         File vcf
         File vcf_idx
@@ -237,7 +256,6 @@ from collections import defaultdict
 
 import pysam
 
-
 def normalize_allele(ref, alt):
     r, a = ref.upper(), alt.upper()
     while len(r) > 1 and len(a) > 1 and r[-1] == a[-1]:
@@ -249,7 +267,6 @@ def normalize_allele(ref, alt):
         a = a[1:]
         offset += 1
     return r, a, offset
-
 
 def extract_sample(input_vcf, sample, output_vcf):
     subprocess.run(
@@ -268,7 +285,6 @@ def extract_sample(input_vcf, sample, output_vcf):
         check=True,
     )
     subprocess.run(["bcftools", "index", "-t", output_vcf], check=True)
-
 
 def phase_unphased_gt_by_base_match(rec, gt, base_gts):
     support = {}
@@ -302,7 +318,6 @@ def phase_unphased_gt_by_base_match(rec, gt, base_gts):
             return None
         return (a, b) if a_support == 0 else (b, a)
     return None
-
 
 base_vcf_index = ~{base_vcf_index}
 allow_unphased_match_phase = "~{allow_unphased_match_phase}" == "true"

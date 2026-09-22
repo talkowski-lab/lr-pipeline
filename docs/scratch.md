@@ -14,21 +14,8 @@ In order to rerun _HiPhase_ without TRGT homopolymers.
 - _PostprocessCallset_.
 
 
-## V1
+## Production callset lineage
 - _FillFormatFields_ on _allele_type_annotated_vcf_.
-- _NormalizeDuplicationOrigins_.
-- Annotation: _AnnotateCallsetOverlap_, _AnnotateDbVaR_, _AnnotateGQMetrics_, _AnnotateSQMetrics_, _AnnotateSVAnnotate_, (AoU Only)_AnnotateAgeMetrics_.
-- _AnnotateVcfFunctional_.
-- _AnnotateAF_.
-- _AnnotateVcfDownstream_.
-- _PostprocessCallset_.
-- Untrim variants:
-  - _FindUntrimmedAlleles_.
-  - Annotation: _AnnotateCallsetOverlap_, _AnnotateDbSNP_, _AnnotateDbVaR_, _AnnotateInSilicoPredictors_, _AnnotateVRS_.
-  - _AnnotateVcfCleared_.
-
-
-## V2
 - _NormalizeDuplicationOrigins_ on _allele_type_annotated_filled_vcf_.
 - Annotation: _AnnotateCallsetOverlap_, _AnnotateSVAnnotate_
 - _AnnotateVcfDownstream_.

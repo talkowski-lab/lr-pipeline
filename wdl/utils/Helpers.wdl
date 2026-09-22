@@ -1288,15 +1288,13 @@ for record in vcf_in:
         continue
     if alt not in SUPPORTED_SYMBOLIC_ALTS:
         fail(record, f"unsupported symbolic ALT {alt}")
+
     if alt == "<INS>":
-        if "allele_length" not in record.info:
-            record.info["allele_length"] = get_symbolic_length(record)
-        if "allele_type" not in record.info:
-            record.info["allele_type"] = "ins"
+        record.info["allele_length"] = get_symbolic_length(record)
+        record.info["allele_type"] = "ins"
         vcf_out.write(record)
         continue
-
-    if alt == "<INV>":
+    elif alt == "<INV>":
         record.info["allele_length"] = get_symbolic_length(record)
         record.info["allele_type"] = "inv"
         vcf_out.write(record)
@@ -4190,29 +4188,18 @@ task SubsetVcfToRegionStreaming {
     command <<<
         set -euo pipefail
 
-        for attempt in 1 2 3; do
-            export GCS_OAUTH_TOKEN=$(gcloud auth application-default print-access-token)
+        export GCS_OAUTH_TOKEN=$(gcloud auth application-default print-access-token)
 
-            # Pair -r with -t so records are selected by POS alone while still seeking via the index; -r on its own also
-            # returns records whose REF span reaches into the region, which would duplicate them across adjacent shards
-            if bcftools view \
-                    -r ~{region} \
-                    -t ~{region} \
-                    ~{if defined(include_args) then "-i '~{include_args}'" else ""} \
-                    ~{if drop_genotypes then "-G" else ""} \
-                    --threads $(nproc) \
-                    ~{vcf} \
-                    -Oz -o ~{prefix}.vcf.gz; then
-                break
-            fi
-
-            if [[ $attempt -lt 3 ]]; then
-                sleep $((attempt * 15))
-            else
-                echo "bcftools view failed after 3 attempts" >&2
-                exit 1
-            fi
-        done
+        # Pair -r with -t so records are selected by POS alone while still seeking via the index; -r on its own also
+        # returns records whose REF span reaches into the region, which would duplicate them across adjacent shards
+        bcftools view \
+            -r ~{region} \
+            -t ~{region} \
+            ~{if defined(include_args) then "-i '~{include_args}'" else ""} \
+            ~{if drop_genotypes then "-G" else ""} \
+            --threads $(nproc) \
+            ~{vcf} \
+            -Oz -o ~{prefix}.vcf.gz
 
         tabix -p vcf -f ~{prefix}.vcf.gz
     >>>
@@ -4224,8 +4211,8 @@ task SubsetVcfToRegionStreaming {
 
     RuntimeAttr default_attr = object {
         cpu_cores: 2,
-        mem_gb: 6,
-        disk_gb: ceil(size(vcf, "GB") / 5) + 20,
+        mem_gb: 4,
+        disk_gb: ceil(size(vcf, "GB")) + 20,
         boot_disk_gb: 10,
         preemptible_tries: 1,
         max_retries: 0

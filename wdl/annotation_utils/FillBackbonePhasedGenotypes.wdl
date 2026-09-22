@@ -4,6 +4,24 @@ import "../utils/Helpers.wdl"
 import "../utils/Structs.wdl"
 
 workflow FillBackbonePhasedGenotypes {
+    meta {
+        description: [
+            "This utility merges a backbone-phased VCF with its no-TRGT counterpart (the same backbone-phasing run without TRGT calls included): for each still-unphased heterozygous genotype in `backbone_phased_vcf`, if a matching variant exists in `backbone_phased_notrgt_vcf` with a phased genotype, that phased `GT` (and `PS`) is pulled into the output. Region sharding is optional. It outputs the merged VCF and a per-sample TSV of heterozygous/unphased/pulled genotype counts."
+        ]
+    }
+
+    parameter_meta {
+        backbone_phased_vcf: "Backbone-phased VCF whose remaining unphased het genotypes are filled."
+        backbone_phased_vcf_idx: "Index for `backbone_phased_vcf`."
+        backbone_phased_notrgt_vcf: "Backbone-phased VCF (without TRGT calls) providing phased genotypes to pull from."
+        backbone_phased_notrgt_vcf_idx: "Index for `backbone_phased_notrgt_vcf`."
+        contig: "Contig to process."
+        shard_bin_size: "Region-bin size, in bp, used when sharding the contig."
+        backbone_merged_vcf: "Merged VCF with phased genotypes pulled in where available."
+        backbone_merged_vcf_idx: "Index for the merged VCF."
+        backbone_merged_tsv: "Per-sample TSV of heterozygous, unphased, and post-pull unphased genotype counts."
+    }
+
     input {
         File backbone_phased_vcf
         File backbone_phased_vcf_idx

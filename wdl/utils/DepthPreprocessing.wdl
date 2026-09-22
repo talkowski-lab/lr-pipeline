@@ -5,6 +5,34 @@ import "Helpers.wdl"
 
 # Defragment GATK-gCNV CNVs per sample and merge
 workflow DepthPreprocessing {
+    meta {
+        description: [
+            "This sub-workflow converts per-sample gCNV genotyped-segment VCFs into cohort-level deletion and duplication call sets. Each sample's segments are converted to BED, merged per sample and then across the cohort separately for DEL and DUP, and finally rewritten as a single VCF alongside a ploidy table for downstream genotyping."
+        ]
+    }
+
+    parameter_meta {
+        sample_ids: "Sample IDs in the cohort."
+        genotyped_segments_vcfs: "Per-sample gCNV genotyped-segment VCFs."
+        genotyped_segments_vcf_idxs: "Indexes for `genotyped_segments_vcfs`."
+        contig_ploidy_calls_tar: "Tarred gCNV contig-ploidy calls."
+        contigs: "Contigs to process, given in reference dictionary order."
+        ref_fai: "Reference FASTA index, used for contig ordering."
+        pedigree: "Pedigree supplying per-sample sex."
+        batch_id: "Identifier for the batch."
+        chr_x: "Allosome contig names, when they differ from the defaults."
+        chr_y: "Allosome contig names, when they differ from the defaults."
+        gcnv_qs_cutoff: "Minimum gCNV quality score for a segment to be kept."
+        defragment_max_dist: "Maximum gap, as a fraction of call length, across which adjacent calls are defragmented."
+        del_bed: "Cohort-merged deletion calls."
+        del_bed_idx: "Index for del_bed."
+        dup_bed: "Cohort-merged duplication calls."
+        dup_bed_idx: "Index for dup_bed."
+        merged_vcf: "Combined depth-based CNV VCF."
+        merged_vcf_idx: "Index for merged_vcf."
+        ploidy_table: "Per-sample, per-contig ploidy table consumed by `DepthClustering` and `GenotypeDepth`."
+    }
+
     input {
         Array[String]+ sample_ids
         Array[File]+ genotyped_segments_vcfs

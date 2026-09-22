@@ -4,6 +4,30 @@ import "../utils/Helpers.wdl"
 import "../utils/Structs.wdl"
 
 workflow TruvariMatch {
+    meta {
+        description: [
+            "This sub-workflow performs the second comparison round, matching records left unmatched by `ExactMatch` with Truvari at three decreasing sequence-similarity thresholds (0.9, 0.7, 0.5). Each threshold only sees what the previous one failed to match, so a record is annotated with the strictest threshold that matched it."
+        ]
+    }
+
+    parameter_meta {
+        vcf: "Unmatched callset records from `ExactMatch`."
+        vcf_idx: "Index for vcf."
+        truth_snv_indel_vcf: "Unmatched truth records."
+        truth_snv_indel_vcf_idx: "Index for truth_snv_indel_vcf."
+        contig: "Contig being processed."
+        source_tag: "Tag identifying the truth callset in the annotations."
+        shard_bin_size_truvari_match: "Shard size for the matching step."
+        min_shard_gap_truvari_match: "Minimum gap between records at which a shard boundary may fall."
+        ref_fa: "Reference FASTA and index, when Truvari is run with reference context."
+        ref_fai: "Index for ref_fa."
+        annotation_tsv: "Truvari match annotations across all three thresholds."
+        matched_truth_vcf: "Truth records matched by any threshold."
+        matched_truth_vcf_idx: "Index for matched_truth_vcf."
+        unmatched_vcf: "Records still unmatched after 0.5, passed to `BedtoolsClosestSV`."
+        unmatched_vcf_idx: "Index for unmatched_vcf."
+    }
+
     input {
         File vcf
         File vcf_idx

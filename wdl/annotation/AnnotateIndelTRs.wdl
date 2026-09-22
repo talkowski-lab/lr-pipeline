@@ -4,6 +4,26 @@ import "../utils/Helpers.wdl"
 import "../utils/Structs.wdl"
 
 workflow AnnotateIndelTRs {
+    meta {
+        description: [
+            "This workflow flags short insertions and deletions that represent tandem repeats. Using the str-analysis `filter_vcf_to_tandem_repeats` tool, it inspects each indel's sequence and marks it as a tandem repeat when it meets a minimum total repeat length, minimum number of repeats and minimum repeat-unit length, emitting a TSV of the flagged variants."
+        ]
+    }
+
+    parameter_meta {
+        vcf: "VCF to annotate."
+        vcf_idx: "Index for VCF to annotate."
+        ref_fa: "From references."
+        ref_fai: "From references."
+        contigs: "Contigs to annotate within the input VCF."
+        records_per_shard: "Number of variants to keep within a single shard during annotation."
+        subset_vcf_string: "`bcftools view` arguments used to pre-subset the VCF before tandem-repeat filtering."
+        min_tandem_repeat_length: "Minimum total tandem-repeat length for an indel to be flagged."
+        min_repeats: "Minimum number of repeats for an indel to be flagged."
+        min_repeat_unit_length: "Minimum repeat-unit length for an indel to be flagged."
+        annotations_tsv_trs: "TSV of indels flagged as tandem repeats."
+    }
+
     input {
         File vcf
         File vcf_idx

@@ -4,6 +4,22 @@ import "../utils/Helpers.wdl"
 import "../utils/Structs.wdl"
 
 workflow AnnotateDbSNP {
+    meta {
+        description: [
+            "This workflow annotates each variant in the input VCF with its dbSNP reference SNP identifier (rsID). It matches variants against a per-contig dbSNP VCF on CHROM, POS, REF and ALT, emitting a TSV mapping each matched variant to its `dbSNP_ID`."
+        ]
+    }
+
+    parameter_meta {
+        vcf: "VCF to annotate."
+        vcf_idx: "Index for VCF to annotate."
+        dbsnp_vcf: "From references."
+        dbsnp_vcf_idx: "From references."
+        contigs: "Contigs to annotate within the input VCF."
+        shard_bin_size: "If set, shards each contig into regions each containing roughly this many combined VCF + dbSNP records, run in parallel."
+        annotations_tsv_dbsnp: "TSV mapping variants to their dbSNP identifiers."
+    }
+
     input {
         File vcf
         File vcf_idx

@@ -4,6 +4,22 @@ import "../utils/Helpers.wdl"
 import "../utils/Structs.wdl"
 
 workflow ExtractDisparateTRLoci {
+    meta {
+        description: [
+            "This utility subsets two VCFs to tandem-repeat variants (`INFO/allele_type=trv`) on one contig, then compares their loci. It produces one TSV for identities present in only one VCF, where identity is `CHROM`, `POS` and `len(REF)`, and another TSV for positive-base overlaps with distinct identities. Overlaps are identified with `bedtools intersect`; the overlapping TSV includes the `INFO/TRID` value from both VCFs."
+        ]
+    }
+
+    parameter_meta {
+        vcf_a: "First VCF to compare."
+        vcf_a_idx: "Index for `vcf_a`."
+        vcf_b: "Second VCF to compare."
+        vcf_b_idx: "Index for `vcf_b`."
+        contig: "Contig to compare within both VCFs."
+        missing_variants_tsv: "Locus identities present in one VCF but missing from the other."
+        overlapping_variants_tsv: "Overlapping locus pairs with distinct identities and their `TRID` values."
+    }
+
     input {
         File vcf_a
         File vcf_a_idx

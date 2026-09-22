@@ -4,6 +4,25 @@ import "../utils/Helpers.wdl"
 import "../utils/Structs.wdl"
 
 workflow AnnotateSVAnnotate {
+    meta {
+        description: [
+            "This workflow leverages SVAnnotate (https://gatk.broadinstitute.org/hc/en-us/articles/30332011989659-SVAnnotate) in order to annotate predicted functional effects for SVs. It conditionally only runs SVs through this workflow, ignoring all SNVs and indels, converting each SV to a symbolic representation before annotating it against coding and noncoding panels and extracting the resulting `PREDICTED_` annotations into a TSV.",
+            "Note: When converting to symbolic representation, all DUP allele types (including `dup_interspersed`, `inv_dup`, `complex_dup`, etc.) are treated as DUP."
+        ]
+    }
+
+    parameter_meta {
+        vcf: "VCF to annotate."
+        vcf_idx: "Index for VCF to annotate."
+        contigs: "Contigs to annotate within the input VCF."
+        records_per_shard: "Number of variants to keep within a single shard during annotation."
+        min_length: "Minimum length for a variant to be treated as an SV and annotated."
+        coding_gtf: "From references."
+        noncoding_bed: "From references."
+        annotations_tsv_svannotate: "TSV of SVAnnotate functional-effect annotations."
+        annotations_header_svannotate: "Header lines describing the SVAnnotate annotation fields."
+    }
+
     input {
         File vcf
         File vcf_idx

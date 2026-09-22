@@ -4,6 +4,20 @@ import "../utils/Helpers.wdl"
 import "../utils/Structs.wdl"
 
 workflow StripGenotypes {
+    meta {
+        description: [
+            "This utility strips all genotype (sample) columns from a VCF, optionally sharding by record count for speed. It outputs the resulting sites-only VCF."
+        ]
+    }
+
+    parameter_meta {
+        vcf: "VCF whose genotypes are dropped."
+        vcf_idx: "Index for VCF."
+        records_per_shard: "Number of variants to keep within a single shard during processing."
+        dropped_vcf: "Sites-only VCF."
+        dropped_vcf_idx: "Index for the sites-only VCF."
+    }
+
     input {
         File vcf
         File vcf_idx

@@ -4,6 +4,26 @@ import "../utils/Helpers.wdl"
 import "../utils/Structs.wdl"
 
 workflow MergeHiPhaseCallsets {
+    meta {
+        description: [
+            "This tool merges per-sample HiPhase-phased VCFs into a cohort VCF on a per-contig basis, optionally also merging the TRGT tandem-repeat calls separately - fixing TRGT `END`/`AL` headers and propagating phase-set tags. It outputs the merged integrated VCF and an optional merged TRGT VCF."
+        ]
+    }
+
+    parameter_meta {
+        phased_vcfs: "Per-sample HiPhase-phased VCFs to merge."
+        phased_vcf_idxs: "Indexes for `phased_vcfs`."
+        ref_fa: "From references."
+        ref_fai: "From references."
+        contigs: "Contigs to process."
+        merge_trgt: "Whether to additionally merge the TRGT tandem-repeat calls separately."
+        merge_args: "Arguments controlling the VCF merge."
+        hiphase_merged_integrated_vcf: "Merged integrated cohort VCF."
+        hiphase_merged_integrated_vcf_idx: "Index for the merged integrated VCF."
+        hiphase_merged_trgt_vcf: "Merged TRGT VCF (only when `merge_trgt`)."
+        hiphase_merged_trgt_vcf_idx: "Index for the merged TRGT VCF (only when `merge_trgt`)."
+    }
+
     input {
         Array[File] phased_vcfs
         Array[File] phased_vcf_idxs

@@ -4,6 +4,20 @@ import "../utils/Helpers.wdl"
 import "../utils/Structs.wdl"
 
 workflow SubsetTsvToColumns {
+    meta {
+        description: [
+            "This utility subsets an annotation TSV to a chosen set of columns, optionally filtering rows to those whose columns match specified values. It outputs the subset TSV."
+        ]
+    }
+
+    parameter_meta {
+        annotations_tsv: "Annotation TSV to subset."
+        annotations_header: "Header describing the TSV columns."
+        subset_columns: "Columns to retain."
+        subset_column_values: "Per-column values to filter rows by."
+        subset_tsv: "Column-subset TSV."
+    }
+
     input {
         File annotations_tsv
         File annotations_header

@@ -15,11 +15,14 @@ import re
 import sys
 from pathlib import Path
 
+import wdl_meta
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_PATHS = ["wdl"]
 INDENT_UNIT = 4
 TASK_SECTIONS = ["input", "command", "output", "runtime"]
 REQUIRED_TASK_SECTIONS = ["command", "runtime"]
+DOCUMENTED_BLOCKS = ["meta", "parameter_meta", "input"]
 
 BLOCK_RE = re.compile(r"^(task|workflow|struct)\s+(\w+)")
 COMMAND_OPEN_RE = re.compile(r"^(\s*)command\s*<<<\s*$")
@@ -30,6 +33,16 @@ BLANK_COMMENT_RE = re.compile(r"^\s*#{2,}\s*$")
 PASCAL_CASE_RE = re.compile(r"^[A-Z][A-Za-z0-9]*$")
 CALL_ALIAS_RE = re.compile(r"^\s*call\s+[\w.]+\s+as\s+(\w+)")
 RUNTIME_ATTR_INPUT_RE = re.compile(r"^ {8}RuntimeAttr\?\s+(\w+)\s*$")
+
+# Markdown that docs/workflows.md is generated from, so descriptions must not carry it
+MARKDOWN_LINK_RE = re.compile(r"\]\(")
+MARKDOWN_EMPHASIS_RE = re.compile(r"\*")
+MARKDOWN_PREFIX_RE = re.compile(r"^(>|[-*+] |#{1,6} |\d+[.)] )")
+# A backticked span holds code, where `*` is multiplication rather than emphasis
+CODE_SPAN_RE = re.compile(r"`[^`]*`")
+URL_RE = re.compile(r"https?://")
+# A tool URL is written as `ToolName (https://...)`, the one link form descriptions allow
+TOOL_URL_RE = re.compile(r"\(https?://[^\s()]+\)")
 
 # Tasks whose command block deliberately opens with something other than `set -euo pipefail`.
 # Add an entry only when the standard flags would change runtime behavior, and say why.
@@ -88,7 +101,9 @@ class Checker:
                 self.error(1, "W013", "workflow '{}' must match the file name '{}.wdl'".format(name, stem))
 
         self.check_unused_runtime_attrs()
-        if not workflows:
+        if workflows:
+            self.check_workflow_meta()
+        else:
             self.check_alphabetical_tasks()
 
     def check_alphabetical_tasks(self):
@@ -127,6 +142,91 @@ class Checker:
             uses = len(re.findall(r"\b" + re.escape(name) + r"\b", self.text))
             if uses < 2:
                 self.error(index + 1, "W016", "nothing passes RuntimeAttr? input '{}' to a call".format(name))
+
+    def check_workflow_meta(self):
+        """Enforce the meta and parameter_meta rules that docs/workflows.md is generated from."""
+        if not any(self.path.startswith(directory + "/") for directory in wdl_meta.WORKFLOW_DIRS):
+            return
+        workflow = wdl_meta.parse_workflow(self.path, self.text)
+        if workflow is None:
+            return
+        for line_no, code, message in workflow.errors:
+            self.error(line_no, code, message)
+
+        present = [name for name, _ in workflow.blocks if name in DOCUMENTED_BLOCKS]
+        if present != DOCUMENTED_BLOCKS:
+            self.error(
+                workflow.line_no,
+                "W019",
+                "workflow '{}' must open with {}, found {}".format(
+                    workflow.name, " -> ".join(DOCUMENTED_BLOCKS), " -> ".join(present) or "none"
+                ),
+            )
+        self.check_description(workflow)
+        self.check_parameter_meta(workflow)
+
+    def block_line(self, workflow, name):
+        return next((line_no for block, line_no in workflow.blocks if block == name), workflow.line_no)
+
+    def check_description(self, workflow):
+        line_no = self.block_line(workflow, "meta")
+        if not workflow.description:
+            self.error(line_no, "W018", "workflow '{}' has no meta description".format(workflow.name))
+            return
+        if not workflow.description_is_array:
+            self.error(line_no, "W018", "meta description must be an array of strings, one per paragraph")
+        for index, paragraph in enumerate(workflow.description):
+            self.check_prose(line_no, "description paragraph {}".format(index + 1), paragraph)
+
+    def check_prose(self, line_no, label, text):
+        """Reject the Markdown and quoting that the generator cannot carry into the document."""
+        if not text.strip():
+            self.error(line_no, "W024", "{} is empty".format(label))
+            return
+        prose = CODE_SPAN_RE.sub("", text)
+        if MARKDOWN_LINK_RE.search(prose):
+            self.error(line_no, "W024", "{} must not contain a Markdown link".format(label))
+        if MARKDOWN_EMPHASIS_RE.search(prose):
+            self.error(line_no, "W024", "{} must not contain Markdown emphasis".format(label))
+        if MARKDOWN_PREFIX_RE.match(text):
+            self.error(line_no, "W024", "{} must be a plain paragraph".format(label))
+        if '"' in text:
+            self.error(line_no, "W024", "{} must use single quotes, not escaped double quotes".format(label))
+        if len(URL_RE.findall(text)) != len(TOOL_URL_RE.findall(text)):
+            self.error(line_no, "W024", "{} may only cite a URL as 'ToolName (https://...)'".format(label))
+
+    def check_parameter_meta(self, workflow):
+        """Every non-exempt input and output needs one entry, in declaration order."""
+        exempt = {decl.name for decl in workflow.inputs if wdl_meta.is_exempt(decl)}
+        expected = [decl.name for decl in workflow.inputs if not wdl_meta.is_exempt(decl)]
+        expected += [decl.name for decl in workflow.outputs]
+
+        documented = []
+        for key, value, line_no in workflow.param_meta:
+            self.check_prose(line_no, "parameter_meta '{}'".format(key), value)
+            if key in exempt:
+                self.error(line_no, "W023", "'{}' is documented automatically; remove this entry".format(key))
+            elif key in documented:
+                self.error(line_no, "W020", "duplicate parameter_meta entry '{}'".format(key))
+            elif workflow.declaration(key) is None:
+                self.error(line_no, "W020", "parameter_meta '{}' is not a declared input or output".format(key))
+            else:
+                documented.append(key)
+
+        for name in expected:
+            if name not in documented:
+                self.error(workflow.declaration(name).line_no, "W022", "'{}' has no parameter_meta entry".format(name))
+
+        wanted = [name for name in expected if name in documented]
+        for found, want in zip(documented, wanted):
+            if found != want:
+                line_no = next(entry[2] for entry in workflow.param_meta if entry[0] == found)
+                self.error(
+                    line_no,
+                    "W021",
+                    "parameter_meta '{}' is out of order; expected '{}' here".format(found, want),
+                )
+                break
 
     def check_line(self, index, line):
         line_no = index + 1

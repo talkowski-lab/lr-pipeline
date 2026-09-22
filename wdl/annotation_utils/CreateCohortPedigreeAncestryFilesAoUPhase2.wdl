@@ -3,6 +3,21 @@ version 1.0
 import "../utils/Structs.wdl"
 
 workflow CreateCohortPedigreeAncestryFilesAoUPhase2 {
+    meta {
+        description: [
+            "This utility builds the pedigree and two-column ancestry files consumed by `CreateCohortMetadata` from the All of Us Phase 2 ancestry-prediction table, keeping the `ancestry_pred` label for each requested sample. Every sample becomes a singleton PED row with unknown parents, sex and phenotype, since All of Us releases no pedigree or sex calls. The All of Us `eur` label is renamed to `nfe`, since that is the gnomAD label `compute_AFs.py` accepts; the remaining All of Us labels pass through unchanged. Samples the predictions do not cover are labelled `.`, the sentinel `compute_AFs.py` drops from its population list, so they contribute to the global `AC`/`AF`/`AN` but to no population-specific field. Both directions of mismatch between the cohort and the predictions are reported separately."
+        ]
+    }
+
+    parameter_meta {
+        ancestry_predictions: "All of Us Phase 2 ancestry predictions, keyed by `research_id`."
+        sample_ids: "Sample IDs making up the cohort."
+        ped: "Pedigree file covering every sample in `sample_ids`."
+        ancestry: "Two-column file of sample IDs and ancestry labels."
+        missing_samples: "Samples present in `ancestry_predictions` but not in `sample_ids`."
+        samples_missing_ancestry: "Samples present in `sample_ids` but not in `ancestry_predictions`."
+    }
+
     input {
         File ancestry_predictions
         Array[String] sample_ids

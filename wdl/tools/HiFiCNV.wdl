@@ -3,6 +3,32 @@ version 1.0
 import "../utils/Structs.wdl"
 
 workflow HiFiCNV {
+    meta {
+        description: [
+            "This tool runs PacBio HiFiCNV (https://github.com/PacificBiosciences/HiFiCNV) on a sample's aligned HiFi BAM to call copy number variants from read depth. It outputs the CNV VCF, a copy-number bedgraph, a depth BigWig track and the tool's log."
+        ]
+    }
+
+    parameter_meta {
+        bam: "Aligned reads for the sample."
+        bai: "Index for `bam`."
+        sex: "Sex of sample (one of `M` or `F`), used to select the matching expected-CN file."
+        ref_fa: "Reference sequences FASTA file."
+        ref_fai: "Index for `ref_fa`."
+        exclude_bed: "Regions to exclude from CNV calling (e.g. centromeres)."
+        exclude_bed_idx: "Index for `exclude_bed`."
+        expected_cn_male: "PAR regions and expected copy numbers for sex chromosomes, male."
+        expected_cn_female: "PAR regions and expected copy numbers for sex chromosomes, female."
+        maf: "Optional minor-allele-frequency track passed to HiFiCNV as `--maf`."
+        cov_regex: "Optional regular expression passed to HiFiCNV as `--cov-regex`, selecting the contigs used to estimate expected coverage."
+        disable_vcf_filters: "Whether to pass `--disable-vcf-filters`, emitting every call rather than only those HiFiCNV would keep."
+        hificnv_vcf: "CNV calls VCF."
+        hificnv_vcf_idx: "Index for the CNV calls VCF."
+        hificnv_bedgraph: "Per-window copy number bedgraph."
+        hificnv_depth_bw: "Depth BigWig track."
+        hificnv_log: "HiFiCNV log file."
+    }
+
     input {
         File bam
         File bai

@@ -4,6 +4,22 @@ import "../utils/Helpers.wdl"
 import "../utils/Structs.wdl"
 
 workflow ResolveHaplotypeOverlaps {
+    meta {
+        description: [
+            "This utility detects and resolves haplotype-level overlaps among non-TR, non-TR-enveloped variants in a phased cohort VCF. For each sample, it extracts the sample's non-ref calls (excluding `allele_type='trv'` and `INFO/TR_ENVELOPED` variants), then sweeps each haplotype's variant intervals to find all overlapping pairs. Overlapping pairs are resolved by keeping the variant that spans more reference sequence (larger `len(REF)`) - which always favors DELs over INS or SNVs. When two variants span the same reference length, the higher-GQ call wins; remaining ties are broken by `INFO/allele_length`, then type rank (DEL > INS > SNV), then QUAL, then input-file order. The loser's FORMAT fields (`GT`, `GQ`, `DP`, `EV`, `BEV`, `AD`, `PL`) are cleared in the output VCF. The workflow scatters per-sample detection across all samples, then applies the collected clears to the given contig (with optional record-count sharding) to produce the resolved VCF."
+        ]
+    }
+
+    parameter_meta {
+        vcf: "Phased cohort VCF to resolve."
+        vcf_idx: "Index for `vcf`."
+        contig: "Contig to process."
+        records_per_shard: "When set, shards the contig into chunks of this many records for the clearing step."
+        overlap_resolved_vcf: "VCF with overlapping loser genotypes cleared."
+        overlap_resolved_vcf_idx: "Index for `overlap_resolved_vcf`."
+        overlap_tsv: "TSV of all detected overlap pairs, with columns `sample`, `haplotype`, `variant_id_retained`, `var_type_retained`, `size_bin_retained`, `variant_id_cleared`, `var_type_cleared`, `size_bin_cleared`."
+    }
+
     input {
         File vcf
         File vcf_idx
@@ -146,7 +162,6 @@ import subprocess
 
 TYPE_RANK = {'DEL': 2, 'INS': 1, 'SNV': 0, 'OTHER': -1}
 
-
 def classify_type(at, al_str):
     at = str(at).lower()
     try:
@@ -160,7 +175,6 @@ def classify_type(at, al_str):
     if 'ins' in at or 'dup' in at:
         return 'INS'
     return 'OTHER'
-
 
 def get_length_bin(al_str):
     try:
@@ -182,7 +196,6 @@ def get_length_bin(al_str):
     else:
         return '50kbp+'
 
-
 def wins(iv_i, iv_j):
     """Full tie-breaking cascade: ref span → GQ → allele_length → type rank → QUAL → file order."""
     _, _, t_i, _, _, ref_i, gq_i, al_i, qual_i, idx_i = iv_i
@@ -199,7 +212,6 @@ def wins(iv_i, iv_j):
     if qual_i != qual_j:
         return qual_i > qual_j
     return idx_i < idx_j
-
 
 sample_name = '~{sample}'
 
@@ -261,7 +273,6 @@ proc.wait()
 overlaps_rows = []
 cleared_set = set()
 
-
 def find_overlaps(intervals, haplotype):
     sorted_ivs = sorted(intervals, key=lambda x: x[0])
     n = len(sorted_ivs)
@@ -282,7 +293,6 @@ def find_overlaps(intervals, haplotype):
             overlaps_rows.append([sample_name, haplotype,
                                    winner_id, winner_type, winner_lb,
                                    loser_id, loser_type, loser_lb])
-
 
 if len(hap0) >= 2:
     find_overlaps(hap0, 1)

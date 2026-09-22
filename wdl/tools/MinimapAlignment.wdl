@@ -4,6 +4,28 @@ import "../utils/Helpers.wdl"
 import "../utils/Structs.wdl"
 
 workflow MinimapAlignment {
+    meta {
+        description: [
+            "This workflow leverages Minimap2 (https://github.com/lh3/minimap2) in order to align a sample's maternal and paternal assemblies to a reference."
+        ]
+    }
+
+    parameter_meta {
+        assembly_mat: "Maternal assembly."
+        assembly_pat: "Paternal assembly."
+        ref_fa: "From references."
+        ref_fai: "From references."
+        sample_id: "ID of the sample being aligned."
+        minimap_flags: "Parameters to use when running Minimap2."
+        minimap_threads: "Number of alignment threads."
+        minimap_assembled_bam_mat: "Aligned maternal-assembly BAM."
+        minimap_assembled_bai_mat: "Index for the maternal BAM."
+        minimap_assembled_paf_mat: "Maternal-assembly PAF alignment."
+        minimap_assembled_bam_pat: "Aligned paternal-assembly BAM."
+        minimap_assembled_bai_pat: "Index for the paternal BAM."
+        minimap_assembled_paf_pat: "Paternal-assembly PAF alignment."
+    }
+
     input {
         File assembly_mat
         File assembly_pat

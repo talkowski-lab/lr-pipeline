@@ -3,6 +3,19 @@ version 1.0
 import "../utils/Structs.wdl"
 
 workflow CreateDepthIntervals {
+    meta {
+        description: [
+            "This utility creates an interval file matching the fixed-width bins emitted by `CreateSampleReadCounts`. It writes 1-based, inclusive `contig:start-end` intervals in the requested contig order and omits each contig's trailing partial bin."
+        ]
+    }
+
+    parameter_meta {
+        ref_fai: "From references."
+        contigs: "Contigs for which to create intervals, in output order."
+        bin_size: "Size, in bp, of each interval. Use the same value supplied to `CreateSampleReadCounts`."
+        intervals: "Fixed-width interval file."
+    }
+
     input {
         File ref_fai
         Array[String] contigs

@@ -11,6 +11,51 @@ import "../utils/Structs.wdl"
 import "AnnotateVcf.wdl"
 
 workflow PostProcessTRLociHPRCHGSVC {
+    meta {
+        description: [
+            "This utility reconciles disease-associated `TRExplorerV1` catalog loci with one integrated contig VCF. Only catalog records whose `Diseases` value is a non-empty array are eligible; records with a missing, non-array, or empty value are ignored. It uses only literal `TRExplorerV1` substring matches against `INFO/TRID`, searches unmatched catalog loci in per-sample TRGT VCFs, merges recovered loci with TRGT, drops merged calls with `AC=0`, and replaces overlapping integrated TRVs. It recomputes allele-specific `INFO/AC` after replacement ploidy normalization and again before output; a zero-AC replacement never removes its overlapping input TRV. Replacement calls receive VRS, region, and in-silico annotations; these annotations run directly on only recovered calls and are not sharded.",
+            "For each replaced, non-reference heterozygous TRGT genotype, it finds sample's matching truth/base VCF, reconstructs reference-relative sequence for both phased base haplotypes across replacement locus, and compares those sequences with both possible TRGT genotype orientations. `aligned` compares base haplotype 1 to replacement haplotype 1 and base haplotype 2 to replacement haplotype 2; `unaligned` uses crossed haplotypes. It phases only a unique lower-distance orientation when that orientation's summed edit distance is at most `max_phase_edit_distance` and its length-weighted combined edit-distance percentage is at most `max_phase_edit_distance_pct`; equality passes. It writes phased GT, sets `PS` to locus `POS`, and flags locus with `POSTHOC_BACKBONE_PHASED`. Reference, homozygous-alt, missing, and unresolved heterozygous calls remain unphased. It clears and reapplies `gnomAD_STR`, refreshes TR envelope tags, assigns replacement IDs exactly as `IntegrateTRs.SetTrVariantIds` (`contig-POS-TRV-(len(REF)-1)`, with `_1`, `_2`, ... on duplicates), and emits catalog-match and per-genotype TRV-phasing audit TSVs."
+        ]
+    }
+
+    parameter_meta {
+        vcf: "VCF to post-process."
+        vcf_idx: "Index for `vcf`."
+        contig: "Contig represented by `vcf`."
+        trgt_vcfs: "Per-sample TRGT VCFs whose loci are matched against the callset."
+        trgt_vcf_idxs: "Indexes for `trgt_vcfs`."
+        sample_ids: "Cohort sample IDs in exact main-VCF and TRGT merge order; each parallel TRGT VCF must contain only its corresponding sample."
+        base_vcfs: "Per-sample phased base VCFs used to evaluate tandem-repeat phasing."
+        base_vcf_idxs: "Indexes for `base_vcfs`."
+        run_flag_homopolymer_trvs: "Flag recovered TRVs whose shortest `MOTIFS` element has length one."
+        run_normalize_ploidy: "Whether to normalize ploidy by sex - clearing chrY female calls, making chrX/chrY male calls hemizygous, enforcing diploidy and right-aligning unphased calls (requires `ped`)."
+        replace_gnomad_str: "Assemble `INFO/gnomAD_STR` from the catalog-match report."
+        ped: "Cohort pedigree, used when normalizing ploidy."
+        swap_samples_base: "Optional whitespace-delimited raw-to-canonical sample-ID map applied when assigning cohort samples to `base_vcfs`."
+        max_phase_edit_distance: "Maximum allowed summed edit distance across both haplotype pairs in a unique winning orientation."
+        max_phase_edit_distance_pct: "Maximum allowed length-weighted combined edit-distance percentage across both haplotype pairs in a unique winning orientation: `100 * (distance_1 + distance_2) / (max(len(replacement_haplotype_1), len(base_haplotype_1), 1) + max(len(replacement_haplotype_2), len(base_haplotype_2), 1))`."
+        gnomad_tr_json: "TRExplorer catalog JSON."
+        ref_fa: "From references."
+        ref_fai: "From references."
+        seqrepo_tar: "From references."
+        simple_repeats_bed: "From references."
+        seg_dup_bed: "From references."
+        repeat_masked_bed: "From references."
+        cadd_ht: "From references."
+        pangolin_ht: "From references."
+        phylop_ht: "From references."
+        revel_ht: "From references."
+        spliceai_ht: "From references."
+        annotate_in_silico_predictors_script: "Path to the Hail script that performs the lookups (defaults to this repository's copy on `main`)."
+        genome_build: "Reference genome build passed to the in-silico predictor annotation script."
+        trv_postprocessed_vcf: "Post-processed tandem-repeat VCF."
+        trv_postprocessed_vcf_idx: "Index for `trv_postprocessed_vcf`."
+        trv_subsetted_vcf: "Tandem-repeat VCF subset to the recovered loci."
+        trv_subsetted_vcf_idx: "Index for `trv_subsetted_vcf`."
+        trv_catalog_match_tsv: "Catalog-to-input/TRGT match audit, including numeric matched TRGT allele count (`0` indicates `AC=0`); rows with an input substring match leave all TRGT columns blank."
+        trv_phasing_summary_tsv: "One row per replacement record and sample. Columns are `base_trid`, `replace_trid`, `sample_id`, input `base_gt`/`replace_gt`, base and replacement haplotype sequences, `edit_dist_aligned`, `edit_dist_unaligned`, winning-orientation `edit_dist_pct`, configured maxima, final VCF `final_gt`, and concise `status`. Distances are `sum (base_hap1 pair, base_hap2 pair)`."
+    }
+
     input {
         File vcf
         File vcf_idx
@@ -949,20 +994,16 @@ import os
 import edlib
 import pysam
 
-
 def record_key(rec):  # noqa: E302
     return rec.id if rec.id and rec.id != '.' else f'{rec.chrom}:{rec.pos}:{rec.ref}:{",".join(rec.alts or [])}'
 
-
 def record_end(rec):  # noqa: E302
     return rec.stop if rec.stop is not None else rec.pos + len(rec.ref) - 1
-
 
 def gt_string(gt, phased=False):  # noqa: E302
     if not gt:
         return '.'
     return ('|' if phased else '/').join('.' if allele is None else str(allele) for allele in gt)
-
 
 def trid_text(rec):  # noqa: E302
     value = rec.info.get('TRID')
@@ -970,13 +1011,11 @@ def trid_text(rec):  # noqa: E302
         return '.'
     return ','.join(str(item) for item in value) if isinstance(value, tuple) else str(value)
 
-
 def contig_for(handle, contig):  # noqa: E302
     if contig in handle.header.contigs:
         return contig
     alternate = contig[3:] if contig.startswith('chr') else f'chr{contig}'
     return alternate if alternate in handle.header.contigs else None
-
 
 def normalized_base_gt(call):  # noqa: E302
     """Keep only base calls whose two haplotypes can be unambiguously reconstructed."""
@@ -995,7 +1034,6 @@ def normalized_base_gt(call):  # noqa: E302
         # Unphased heterozygotes have unknown haplotype orientation
         return None, 'base_ambiguous_unphased_gt'
     return tuple(gt), None
-
 
 def reconstruct_haplotypes(base_handle, contig, sample, rec):  # noqa: E302
     """Apply complete, non-overlapping base variants to replacement REF for both haplotypes."""
@@ -1037,7 +1075,6 @@ def reconstruct_haplotypes(base_handle, contig, sample, rec):  # noqa: E302
             cursor = offset + len(base_rec.ref)
         output[haplotype].append(rec.ref[cursor:])
     return ''.join(output[0]), ''.join(output[1]), 'ok'
-
 
 def reconstruct_available_haploid(base_handle, contig, sample, rec):  # noqa: E302
     """Reconstruct one fully observed biological base haplotype for a haploid replacement call."""
@@ -1094,21 +1131,17 @@ def reconstruct_available_haploid(base_handle, contig, sample, rec):  # noqa: E3
     sequence.append(rec.ref[cursor:])
     return ''.join(sequence), haplotype, 'ok'
 
-
 def distance(left, right):  # noqa: E302
     return edlib.align(left.upper(), right.upper(), task='distance')['editDistance']
 
-
 def format_distance(total, first, second):  # noqa: E302
     return f'{total} ({first}, {second})'
-
 
 def combined_edit_distance_pct(first_distance, second_distance, first_left, first_right, second_left, second_right):  # noqa: E302
     """Return the length-weighted percentage across both haplotype pairs."""
     denominator_1 = max(len(first_left), len(first_right), 1)
     denominator_2 = max(len(second_left), len(second_right), 1)
     return 100.0 * (first_distance + second_distance) / (denominator_1 + denominator_2)
-
 
 def format_distance_pct(first_distance, second_distance, first_left, first_right, second_left, second_right):  # noqa: E302
     """Report weighted total percent, followed by per-haplotype percentages."""
@@ -1119,7 +1152,6 @@ def format_distance_pct(first_distance, second_distance, first_left, first_right
     total = combined_edit_distance_pct(
         first_distance, second_distance, first_left, first_right, second_left, second_right)
     return f'{total:.2f}% ({first_pct:.2f}%, {second_pct:.2f}%)'
-
 
 def audit_status(value):  # noqa: E302
     """Keep reconstruction failures readable in the compact per-call audit."""
@@ -1132,7 +1164,6 @@ def audit_status(value):  # noqa: E302
         'base_reference_mismatch': 'base_ref_mismatch',
         'base_overlapping_variants': 'base_overlap',
     }.get(value, value)
-
 
 base_paths = [line.strip() for line in open('~{write_lines(base_vcfs)}') if line.strip()]
 base_idx_paths = [line.strip() for line in open('~{write_lines(base_vcf_idxs)}') if line.strip()]
@@ -1666,7 +1697,6 @@ if 'PS' not in header.formats:
 contig_order = {name: i for i, name in enumerate(header.contigs)}
 replacements.sort(key=lambda rec: (contig_order[rec.contig], rec.pos, record_end(rec)))
 
-
 def merged_records():  # noqa: E302
     """Yield final records in output order: input records minus displaced TRVs,
     interleaved with the position-sorted replacements."""
@@ -1687,7 +1717,6 @@ def merged_records():  # noqa: E302
     while replacement_index < len(replacements):
         yield replacements[replacement_index].copy()
         replacement_index += 1
-
 
 out = pysam.VariantFile('~{prefix}.trv_postprocessed.vcf.gz', 'wz', header=header)
 emitted_gnomad_targets = set()
