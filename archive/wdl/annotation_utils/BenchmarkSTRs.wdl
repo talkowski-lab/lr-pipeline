@@ -3,6 +3,42 @@ version 1.0
 import "../utils/Structs.wdl"
 
 workflow BenchmarkSTRs {
+    meta {
+        description: [
+            "This utility benchmarks per-sample TRGT tandem-repeat genotypes against a Vamos callset. Each sample's TRGT VCF is compared with the shared Vamos VCF, per-sample match statistics are collected, and the results are aggregated into genotype-concordance matrices and plots of sequence similarity, edit distance and length difference."
+        ]
+    }
+
+    parameter_meta {
+        sample_ids: "Sample IDs in the cohort, aligned to `trgt_vcfs`."
+        trgt_vcfs: "Per-sample TRGT VCFs whose loci are matched against the callset."
+        trgt_vcf_idx: "Index for `trgt_vcfs`."
+        vamos_vcf: "Vamos callset the TRGT genotypes are benchmarked against."
+        vamos_vcf_index: "Index for `vamos_vcf`."
+        ref_fa: "From references."
+        ref_fai: "From references."
+        contigs: "Contigs to benchmark."
+        output_prefix: "Prefix for output file names."
+        include_all_regions: "Whether to additionally benchmark every locus rather than only non-reference genotypes."
+        benchmark_strs_per_sample_stats: "Per-sample match statistics."
+        benchmark_strs_processed_sample_ids: "IDs of the samples that were successfully benchmarked."
+        benchmark_strs_processed_samples_file: "File listing the samples that were successfully benchmarked."
+        benchmark_strs_aggregated_match_data_non_ref: "Aggregated match data across samples, restricted to non-reference genotypes."
+        benchmark_strs_genotype_concordance_matrix_non_ref: "Genotype concordance matrix for non-reference genotypes."
+        benchmark_strs_similarity_plot_non_ref: "Sequence-similarity plot for non-reference genotypes."
+        benchmark_strs_edit_distance_plot_non_ref: "Edit-distance plot for non-reference genotypes."
+        benchmark_strs_length_difference_plot_non_ref: "Length-difference plot for non-reference genotypes."
+        benchmark_strs_length_diff_vs_locus_size_non_ref: "Length difference against locus size for non-reference genotypes."
+        benchmark_strs_aggregated_match_data_all: "Aggregated match data across samples over all loci."
+        benchmark_strs_genotype_concordance_matrix_all: "Genotype concordance matrix over all loci."
+        benchmark_strs_similarity_plot_all: "Sequence-similarity plot over all loci."
+        benchmark_strs_edit_distance_plot_all: "Edit-distance plot over all loci."
+        benchmark_strs_length_difference_plot_all: "Length-difference plot over all loci."
+        benchmark_strs_length_diff_vs_locus_size_all: "Length difference against locus size over all loci."
+        benchmark_strs_edit_distance_to_reference_all: "Edit distance to the reference allele over all loci."
+        benchmark_strs_length_difference_to_reference_all: "Length difference from the reference allele over all loci."
+    }
+
     input {
         Array[String] sample_ids
         Array[File] trgt_vcfs

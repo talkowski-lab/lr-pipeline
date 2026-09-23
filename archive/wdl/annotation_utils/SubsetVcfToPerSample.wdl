@@ -4,6 +4,22 @@ import "../utils/Helpers.wdl"
 import "../utils/Structs.wdl"
 
 workflow SubsetVcfToPerSample {
+    meta {
+        description: [
+            "This utility extracts a separate single-sample VCF for each requested sample from a set of cohort VCFs, optionally dropping specified fields first. It outputs the per-sample VCFs."
+        ]
+    }
+
+    parameter_meta {
+        cohort_vcfs: "Cohort VCFs to extract from."
+        cohort_vcf_idxs: "Indexes for `cohort_vcfs`."
+        contigs: "Contigs to process."
+        sample_ids: "Samples to extract."
+        drop_fields: "Fields to drop from each VCF before extraction."
+        subset_vcfs: "Per-sample VCFs."
+        subset_vcf_idxs: "Indexes for the per-sample VCFs."
+    }
+
     input {
         Array[File] cohort_vcfs
         Array[File] cohort_vcf_idxs

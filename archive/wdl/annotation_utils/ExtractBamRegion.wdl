@@ -3,6 +3,22 @@ version 1.0
 import "utils/Structs.wdl"
 
 workflow ExtractBamRegion {
+    meta {
+        description: [
+            "This utility extracts one genomic region from a BAM into a smaller indexed BAM, for inspecting or sharing a locus without moving the whole file."
+        ]
+    }
+
+    parameter_meta {
+        bam: "BAM to extract from."
+        bai: "Index for `bam`."
+        start: "Start position of the region."
+        end: "End position of the region."
+        chrom: "Contig containing the region."
+        regional_bam: "BAM holding only the requested region."
+        regional_bai: "Index for `regional_bam`."
+    }
+
     input {
         File bam
         File bai

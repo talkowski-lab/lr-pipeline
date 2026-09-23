@@ -3,6 +3,29 @@ version 1.0
 import "../utils/Helpers.wdl"
 
 workflow UpdateGenotypes {
+    meta {
+        description: [
+            "This utility rewrites the genotypes of a base VCF. It can transfer genotypes from a phased VCF, unphase or drop selected samples, normalize ploidy so male chrX and chrY calls are hemizygous and female chrY calls are cleared, and optionally drop genotypes altogether."
+        ]
+    }
+
+    parameter_meta {
+        base_vcf: "VCF whose genotypes are updated."
+        base_vcf_idx: "Index for `base_vcf`."
+        phased_vcf: "VCF providing the phasing information."
+        phased_vcf_idx: "Index for `phased_vcf`."
+        contigs: "Contigs to process."
+        shard_bin_size: "If set, shards each contig into regions of roughly this many base pairs, run in parallel."
+        ped: "Six-column PED giving each sample's sex, used to normalize ploidy."
+        transfer_genotypes: "Whether to transfer genotypes from `phased_vcf` onto the base VCF."
+        drop_genotypes: "Whether to strip genotypes before concatenation."
+        decrement_trv_ids: "Whether to decrement the numeric suffix of tandem-repeat variant IDs."
+        unphase_samples: "Samples to unphase when `run_unphase_samples` is set (defaults to empty)."
+        drop_samples: "Sample IDs removed from the base VCF before updating."
+        genotyped_vcf: "VCF with the updated genotypes."
+        genotyped_vcf_idx: "Index for `genotyped_vcf`."
+    }
+
     input {
         File base_vcf
         File base_vcf_idx

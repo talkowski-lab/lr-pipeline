@@ -5,6 +5,7 @@ on:
     branches: [ main ]
     paths:
       - 'wdl/**'
+      - 'archive/wdl/**'
       - '.dockstore.yml'
       - '.github/scripts/wdl_meta.py'
       - '.github/scripts/generate_workflows_doc.py'
@@ -12,6 +13,7 @@ on:
     branches: [ main ]
     paths:
       - 'wdl/**'
+      - 'archive/wdl/**'
       - '.dockstore.yml'
       - '.github/scripts/wdl_meta.py'
       - '.github/scripts/generate_workflows_doc.py'
@@ -36,9 +38,12 @@ jobs:
 
       # The document is regenerated and committed on push to main, so a stale copy on a
       # pull request is not an error; only a document that cannot be built is
-      - name: Confirm docs/workflows.md can be generated
+      # archive/ is excluded from check_wdl_style.py, so the generator parsing its retired
+      # workflows is the only guard that archive/docs/workflows.md still builds
+      - name: Confirm the workflow documents can be generated
         run: |
           python .github/scripts/generate_workflows_doc.py --dry-run
+          python .github/scripts/generate_workflows_doc.py --site archive --dry-run
 
   generate:
     if: github.event_name == 'push'
@@ -55,19 +60,20 @@ jobs:
         with:
           python-version: 3.8
 
-      - name: Regenerate docs/workflows.md
+      - name: Regenerate the workflow documents
         run: |
           python .github/scripts/generate_workflows_doc.py
+          python .github/scripts/generate_workflows_doc.py --site archive
 
       # A push made with GITHUB_TOKEN does not start another workflow run, so this cannot loop
-      - name: Commit docs/workflows.md when it changed
+      - name: Commit the workflow documents when they changed
         run: |
-          if git diff --quiet -- docs/workflows.md; then
-            echo "docs/workflows.md is already up to date."
+          if git diff --quiet -- docs/workflows.md archive/docs/workflows.md; then
+            echo "The workflow documents are already up to date."
             exit 0
           fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add docs/workflows.md
-          git commit -m "Regenerate docs/workflows.md"
+          git add docs/workflows.md archive/docs/workflows.md
+          git commit -m "Regenerate the workflow documents"
           git push

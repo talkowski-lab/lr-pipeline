@@ -4,6 +4,40 @@ import "../utils/Helpers.wdl"
 import "../utils/Structs.wdl"
 
 workflow PopulateSVFormatFields {
+    meta {
+        description: [
+            "This utility fills per-caller support FORMAT fields on a cohort structural-variant VCF. Each sample's call is looked up in every per-caller VCF, the supporting callers and their genotype qualities are written back onto the record, and per-caller counts are tabulated by variant type and length bucket."
+        ]
+    }
+
+    parameter_meta {
+        cohort_vcf: "Cohort VCF to fill."
+        cohort_vcf_idx: "Index for the cohort VCF."
+        sample_ids: "Sample IDs to process."
+        sample_sv_stats: "Per-sample BED listing the callers supporting each variant."
+        cutesv_vcfs: "Per-sample cuteSV VCFs."
+        cutesv_vcf_idxs: "Indexes for `cutesv_vcfs`."
+        sniffles_vcfs: "Per-sample Sniffles VCFs."
+        sniffles_vcf_idxs: "Indexes for `sniffles_vcfs`."
+        delly_vcfs: "Per-sample Delly VCFs."
+        delly_vcf_idxs: "Indexes for `delly_vcfs`."
+        pbsv_vcfs: "Per-sample pbsv VCFs."
+        pbsv_vcf_idxs: "Indexes for `pbsv_vcfs`."
+        sawfish_vcfs: "Per-sample Sawfish VCFs."
+        sawfish_vcf_idxs: "Indexes for `sawfish_vcfs`."
+        dipcall_vcfs: "Per-sample dipcall VCFs."
+        dipcall_vcf_idxs: "Indexes for `dipcall_vcfs`."
+        hapdiff_vcfs: "Per-sample hapdiff VCFs."
+        hapdiff_vcf_idxs: "Indexes for `hapdiff_vcfs`."
+        merge_args: "Arguments passed to the per-sample merge step."
+        fuzzy_match_vcf_to_stats: "Whether to match cohort records to `sample_sv_stats` by proximity rather than by exact variant ID."
+        swap_samples: "Sample-ID swap map applied to the cohort VCF."
+        sv_filled_vcf: "VCF with the per-caller support fields populated."
+        sv_filled_vcf_idx: "Index for `sv_filled_vcf`."
+        sv_caller_counts_tsv: "Per-caller call counts by variant type and length bucket."
+        sv_caller_source_tsv: "Per-call listing of the callers that supported it."
+    }
+
     input {
         File cohort_vcf
         File cohort_vcf_idx

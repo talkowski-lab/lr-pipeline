@@ -32,9 +32,9 @@ The workflow undergoes multiple rounds of variant matching in order to determine
 
 Note: When converting to symbolic representation, only canonical DUPs (allele_type = `DUP` exactly) are treated as DUP; other DUP subtypes (e.g., `dup_interspersed`, `inv_dup`) are treated as insertions.
 
-Note: Callset DUPs are compared twice, because the two matching rules need different coordinates. Against truth DUPs they are repositioned to their `ORIGIN` coordinates and compared by reciprocal overlap; against truth insertions they are held at their insertion site and compared by breakpoint proximity and length ratio.
+Note: Callset DUPs are compared twice, because the two matching rules need different coordinates. Against truth DUPs they are compared by reciprocal overlap, over their `ORIGIN` interval when `move_dup_to_origin` is true and over their own span from POS otherwise; against truth insertions they are always collapsed to a point at their VCF position and compared by breakpoint proximity and length ratio. Setting `move_dup_to_origin` to false is what lets the workflow run on a callset with no `INFO/ORIGIN`.
 
-Note: The SV truth VCF is expected to be symbolic already. Set `convert_symbolic_truth_sv_vcf` when it instead carries sequence alleles in the same format as the callset, in which case it is converted with its DUPs repositioned onto their `ORIGIN` coordinates, matching how truth DUPs are positioned in a symbolic truth callset.
+Note: The SV truth VCF is expected to be symbolic already. Set `convert_symbolic_truth_sv_vcf` when it instead carries sequence alleles in the same format as the callset. Its canonical DUPs then follow the same `move_dup_to_origin` positioning as the callset.
 
 Both the exact-match and Truvari rounds can be sharded within a contig. Truvari shard boundaries are snapped forward to the next gap wider than the `min_shard_gap_truvari_match` input of `TruvariMatch`, which keeps results identical to an unsharded run because Truvari only groups records into a new comparison chunk once the next record clears the running end by more than its chunk size. Fixed-width bins alone would split colocated record pairs and silently lose matches.
 
@@ -53,6 +53,7 @@ Inputs:
 - `Int? shard_bin_size_exact_match`: If set, shards the exact-match round into contig regions of roughly this many base pairs, run in parallel.
 - `Int? shard_bin_size_truvari_match`: If set, shards the Truvari round into contig regions of at least this many base pairs, run in parallel. Each region is extended to the next safe gap, so a value of 1000000 or more is recommended.
 - `Boolean convert_symbolic_truth_sv_vcf`: Whether the SV truth VCF represents alleles as sequence rather than symbolically. When true it is converted to a symbolic representation first, reading the same `type_field_vcf` and `length_field_vcf` INFO fields as the callset. (default `false`)
+- `Boolean move_dup_to_origin`: Whether canonical DUPs are repositioned onto their `INFO/ORIGIN` interval before the DUP-vs-DUP reciprocal-overlap comparison. When false each DUP instead spans its own coordinates, from POS over its allele length, and `INFO/ORIGIN` is not required. (default `true`)
 - `String type_field_vcf`: INFO field in the callset VCF giving each variant's allele type. (default `allele_type`)
 - `String length_field_vcf`: INFO field in the callset VCF giving each variant's allele length. (default `allele_length`)
 - `String source_tag_truth_snv_indel_vcf`: Label used to tag matches against the SNV & indel truth VCF. (default `SNV_indel`)
@@ -453,6 +454,49 @@ Outputs:
 
 ## Annotation Utilities
 
+
+### [AnnotateSvCallerSupport](../wdl/annotation_utils/AnnotateSvCallerSupport.wdl)
+This utility annotates each SV in a cohort VCF with the set of raw callers that independently support it. For every sample it matches the cohort calls against that sample's per-caller VCFs (Kanpig, cuteSV, Sniffles, Delly, pbsv, Sawfish, dipcall and hapdiff) using reciprocal-overlap, size- and sequence-similarity and a breakpoint window, then merges the support back into the cohort VCF. It outputs the annotated VCF and a TSV of per-caller match counts.
+
+Inputs:
+- `File sv_vcf`: Cohort SV VCF to annotate.
+- `File sv_vcf_idx`: Index for `sv_vcf`.
+- `Array[File] kanpig_vcfs`: Per-sample Kanpig VCFs.
+- `Array[File] kanpig_vcf_idxs`: Indexes for `kanpig_vcfs`.
+- `Array[String] sample_ids`: Samples to process.
+- `Array[File?]? sample_sv_stats`: Optional per-sample BED listing the callers supporting each variant.
+- `Array[File?]? cutesv_vcfs`: Per-sample cuteSV VCFs.
+- `Array[File?]? cutesv_vcf_idxs`: Indexes for `cutesv_vcfs`.
+- `Array[File?]? sniffles_vcfs`: Per-sample Sniffles VCFs.
+- `Array[File?]? sniffles_vcf_idxs`: Indexes for `sniffles_vcfs`.
+- `Array[File?]? delly_vcfs`: Per-sample Delly VCFs.
+- `Array[File?]? delly_vcf_idxs`: Indexes for `delly_vcfs`.
+- `Array[File?]? pbsv_vcfs`: Per-sample pbsv VCFs.
+- `Array[File?]? pbsv_vcf_idxs`: Indexes for `pbsv_vcfs`.
+- `Array[File?]? sawfish_vcfs`: Per-sample Sawfish VCFs.
+- `Array[File?]? sawfish_vcf_idxs`: Indexes for `sawfish_vcfs`.
+- `Array[File?]? dipcall_vcfs`: Per-sample dipcall VCFs.
+- `Array[File?]? dipcall_vcf_idxs`: Indexes for `dipcall_vcfs`.
+- `Array[File?]? hapdiff_vcfs`: Per-sample hapdiff VCFs.
+- `Array[File?]? hapdiff_vcf_idxs`: Indexes for `hapdiff_vcfs`.
+- `Int truvari_breakpoint_window`: Breakpoint window, in bp, for matching a raw call. (default `500`)
+- `Float truvari_reciprocal_overlap`: Minimum reciprocal overlap for matching a raw call. (default `0.0`)
+- `Float truvari_sequence_similarity`: Minimum sequence similarity for matching a raw call. (default `0.7`)
+- `Float truvari_size_similarity`: Minimum size similarity for matching a raw call. (default `0.7`)
+- `Boolean fuzzy_match_vcf_to_stats`: Whether to match cohort records to `sample_sv_stats` by proximity rather than by exact variant ID. (default `true`)
+- `Int fuzzy_match_breakpoint_window`: Breakpoint window, in bp, for fuzzy-matching a raw call to per-caller stats. (default `500`)
+- `Boolean match_gt_kanpig`: Whether a Kanpig record must have a matching genotype to count as support. (default `true`)
+- `Boolean match_gt_non_kanpig`: Whether a non-Kanpig caller record must have a matching genotype to count as support. (default `true`)
+- `File? swap_samples`: Sample-ID swap map applied to the cohort VCF.
+- `File? null_file`: Placeholder file used where an optional per-caller input is absent.
+- `String prefix`: Prefix for output file names.
+- `String utils_docker`: Container image.
+- `RuntimeAttr? runtime_attr_*`: Optional per-task runtime overrides (6).
+
+Outputs:
+- `File sv_added_vcf`: Cohort VCF annotated with raw-caller support.
+- `File sv_added_vcf_idx`: Index for the annotated VCF.
+- `File sv_match_counts_tsv`: TSV of per-caller match counts.
 
 ### [AnnotateTREndTags](../wdl/annotation_utils/AnnotateTREndTags.wdl)
 This utility adds an `END` INFO tag to the tandem-repeat records of a VCF, computed per contig, so that downstream tools correctly interpret the span of each TR call. It outputs the updated VCF.
@@ -986,6 +1030,22 @@ Outputs:
 - `File hiphase_phased_vcf`: Phased VCF.
 - `File hiphase_phased_vcf_idx`: Index for the phased VCF.
 
+### [FindUntrimmedAlleles](../wdl/annotation_utils/FindUntrimmedAlleles.wdl)
+This utility identifies variants in a VCF whose REF and ALT alleles retain untrimmed shared bases, producing a subset VCF of those records for use in restoring full allele representations downstream. It outputs the subset VCF.
+
+Inputs:
+- `File vcf`: VCF to scan.
+- `File vcf_idx`: Index for `vcf`.
+- `Array[String] contigs`: Contigs to scan within the input VCF.
+- `Int? records_per_shard`: Number of variants to keep within a single shard during scanning.
+- `String prefix`: Prefix for output file names.
+- `String utils_docker`: Container image.
+- `RuntimeAttr? runtime_attr_*`: Optional per-task runtime overrides (5).
+
+Outputs:
+- `File untrimmed_vcf`: VCF holding the variants whose alleles are not left-trimmed.
+- `File untrimmed_vcf_idx`: Index for `untrimmed_vcf`.
+
 ### [CreateTRGTHistograms](../wdl/annotation_utils/CreateTRGTHistograms.wdl)
 This utility generates per-locus tandem repeat allele-frequency histograms, stratified by population and sex, from a multisample LPS (longest polymer sequence) table for use in the TR browser. It outputs a single combined histograms TSV.
 
@@ -1269,6 +1329,22 @@ Outputs:
 - `File transformed_vcf`: VCF with revised `allele_type`/`allele_subtype`.
 - `File transformed_vcf_idx`: Index for `transformed_vcf`.
 
+### [NormalizeDuplicationOrigins](../wdl/annotation_utils/NormalizeDuplicationOrigins.wdl)
+This utility resolves the relative `ORIGIN` coordinates of duplications and NUMTs into absolute genomic coordinates and annotates them back onto the VCF. `ORIGIN` values prefixed with `flank_` encode coordinates relative to a flanking window and are converted to genome-absolute positions; values already in absolute form are kept as-is. When multiple comma-separated `ORIGIN` values are present - whether flank-relative, absolute, or mixed - each is processed individually and the resulting absolute values are written back in their original order. It outputs the VCF with absolute-origin annotations.
+
+Inputs:
+- `File vcf`: VCF to process.
+- `File vcf_idx`: Index for `vcf`.
+- `Int? records_per_shard`: Number of variants to keep within a single shard during processing.
+- `Boolean modify_origin_header_number`: Whether to rewrite the `ORIGIN` header Number so multi-valued entries validate. (default `false`)
+- `String prefix`: Prefix for output file names.
+- `String utils_docker`: Container image.
+- `RuntimeAttr? runtime_attr_*`: Optional per-task runtime overrides (5).
+
+Outputs:
+- `File absolute_origin_vcf`: VCF with absolute `ORIGIN` coordinates.
+- `File absolute_origin_vcf_idx`: Index for `absolute_origin_vcf`.
+
 ### [ConvertVcfToBed](../wdl/annotation_utils/ConvertVcfToBed.wdl)
 This utility converts per-contig VCFs to one BED-like table with `svtk vcf2bed`. It can filter by variant length, rewrite selected INFO fields, convert records to insertion/deletion classes, shard large inputs, and control INFO, sample, filter, BND, CPX, compression, and output-extension behavior.
 
@@ -1386,6 +1462,26 @@ Outputs:
 - `Array[File] resource_usage_logs`: Per-shard diagnostic outputs.
 - `Array[File] resource_usage_visualizations`: Per-shard diagnostic outputs.
 - `Array[File] visual_reports`: Per-shard diagnostic outputs.
+
+### [Hifiasm](../wdl/tools/Hifiasm.wdl)
+This tool assembles a sample's long reads into a haplotype-resolved de novo assembly using hifiasm (https://github.com/chhylp123/hifiasm). Reads are converted to FASTQ, assembled in bubble-phasing mode and the resulting assembly graphs are converted to bgzipped FASTA.
+
+Without parental or Hi-C data the two haplotype assignments are arbitrary and switch between bubbles, so 'hap1' and 'hap2' do not correspond to the maternal and paternal haplotypes. Downstream callers that assume parental phase should not rely on which output a contig came from.
+
+Inputs:
+- `Array[File] bams`: Unaligned BAMs for the sample, one per SMRT cell.
+- `String prefix`: Prefix for output file names.
+- `String hifiasm_docker`: Container image.
+- `RuntimeAttr? runtime_attr_*`: Optional per-task runtime overrides.
+
+Outputs:
+- `File hifiasm_hap1_fa`: Bgzipped FASTA of the first haplotype assembly.
+- `File hifiasm_hap2_fa`: Bgzipped FASTA of the second haplotype assembly.
+- `File hifiasm_primary_fa`: Bgzipped FASTA of the primary contig assembly.
+- `File hifiasm_hap1_gfa`: Assembly graph for the first haplotype assembly.
+- `File hifiasm_hap2_gfa`: Assembly graph for the second haplotype assembly.
+- `File hifiasm_primary_gfa`: Assembly graph for the primary contig assembly.
+- `File hifiasm_log`: Console log from the hifiasm run, including the inferred coverage histogram.
 
 ### [HiFiCNV](../wdl/tools/HiFiCNV.wdl)
 This tool runs PacBio HiFiCNV (https://github.com/PacificBiosciences/HiFiCNV) on a sample's aligned HiFi BAM to call copy number variants from read depth. It outputs the CNV VCF, a copy-number bedgraph, a depth BigWig track and the tool's log.
@@ -1680,6 +1776,26 @@ Outputs:
 - `File minimap_assembled_bai_pat`: Index for the paternal BAM.
 - `File minimap_assembled_paf_pat`: Paternal-assembly PAF alignment.
 
+### [MinimapReadAlignment](../wdl/tools/MinimapReadAlignment.wdl)
+This tool aligns a sample's unaligned long reads to a reference using Minimap2 (https://github.com/lh3/minimap2). Every unaligned BAM for the sample is converted to FASTQ, streamed through Minimap2 in a single pass and coordinate-sorted into one indexed BAM.
+
+Base modification tags are carried across from the unaligned BAM, since `samtools fastq` drops all tags by default and downstream methylation profiling needs them. Assemblies are aligned by `MinimapAlignment` instead.
+
+Inputs:
+- `Array[File] bams`: Unaligned BAMs for the sample, one per SMRT cell.
+- `String sample_id`: ID of the sample being aligned, used for the read group ID and sample name.
+- `String map_preset`: Minimap2 preset passed to '-x'. (default `map-hifi`)
+- `Array[String] tags_to_preserve`: SAM tags carried over from the unaligned BAMs into the aligned BAM. (default `["MM", "ML"]`)
+- `File ref_fa`: From references.
+- `File ref_fai`: From references.
+- `String prefix`: Prefix for output file names.
+- `String minimap2_docker`: Container image.
+- `RuntimeAttr? runtime_attr_*`: Optional per-task runtime overrides.
+
+Outputs:
+- `File aligned_bam`: Coordinate-sorted aligned reads.
+- `File aligned_bai`: Index for the aligned reads.
+
 ### [MosDepth](../wdl/tools/MosDepth.wdl)
 This tool runs mosdepth (https://github.com/brentp/mosdepth) to compute sequencing depth over a sample's BAM per contig. By default it emits per-base coverage; when `bin_size` is set, it instead windows depth into fixed-size bins (`--by`, `--no-per-base`) and emits per-region coverage.
 
@@ -1783,6 +1899,25 @@ Outputs:
 - `File palmer_merged_vcf`: Merged PALMER VCF.
 - `File palmer_merged_vcf_idx`: Index for the merged VCF.
 
+### [MergeWithTruvari](../wdl/tools/MergeWithTruvari.wdl)
+This tool merges VCFs by combining them with `bcftools merge` and then collapsing redundant records with Truvari (https://github.com/ACEnglish/truvari). An optional preprocessing script can reshape the merged VCF before collapsing.
+
+Inputs:
+- `Array[File] vcfs`: VCFs to merge.
+- `Array[File] vcf_idxs`: Index for `vcfs`.
+- `String? truvari_params`: Arguments passed to `truvari collapse`.
+- `String? bcftools_merge_params`: Arguments passed to `bcftools merge`.
+- `File? preprocess_script`: Script run on the merged VCF before collapsing.
+- `File ref_fa`: From references.
+- `File ref_fai`: From references.
+- `String prefix`: Prefix for output file names.
+- `String merge_docker`, `String truvari_docker`: Container images.
+- `RuntimeAttr? runtime_attr_*`: Optional per-task runtime overrides.
+
+Outputs:
+- `File truvari_collapsed_vcf`: Merged and collapsed callset.
+- `File truvari_collapsed_vcf_idx`: Index for `truvari_collapsed_vcf`.
+
 ### [PAV](../wdl/tools/PAV.wdl)
 This tool runs PAV (https://github.com/EichlerLab/pav) in batch mode across multiple samples' phased haplotype assemblies to call variants against the reference. It outputs per-sample VCFs, along with tarballs of the full PAV results and log directories.
 
@@ -1803,6 +1938,27 @@ Outputs:
 - `Array[File] pav_vcf_idx`: Indexes for the per-sample VCFs.
 - `File? debug_sam`: Optional debug alignment file.
 - `Array[File]? debug_temp`: Optional debug intermediate files.
+
+### [PBSV](../wdl/tools/PBSV.wdl)
+This tool calls structural variants from a sample's aligned long reads using pbsv (https://github.com/PacificBiosciences/pbsv). Signatures of structural variation are discovered from the alignments and then genotyped into a bgzipped, indexed VCF.
+
+Supplying a tandem repeat BED lets pbsv collapse the alignment noise inside repeats, which reduces false calls at those loci.
+
+Inputs:
+- `File bam`: Aligned reads for the sample.
+- `File bai`: Index for the aligned reads.
+- `Boolean is_hifi`: Whether the reads are HiFi, which enables the pbsv optimisations for low-error reads. (default `true`)
+- `File ref_fa`: From references.
+- `File ref_fai`: From references.
+- `File? tandem_repeat_bed`: Tandem repeat intervals used to suppress alignment noise inside repeats.
+- `String prefix`: Prefix for output file names.
+- `String pbsv_docker`: Container image.
+- `RuntimeAttr? runtime_attr_*`: Optional per-task runtime overrides (2).
+
+Outputs:
+- `File pbsv_vcf`: Structural variant calls for the sample.
+- `File pbsv_vcf_idx`: Index for the structural variant calls.
+- `File pbsv_svsig`: Structural variant signatures discovered from the alignments.
 
 ### [RepeatMasker](../wdl/tools/RepeatMasker.wdl)
 This workflow leverages RepeatMasker (https://github.com/Dfam-consortium/RepeatMasker) in order to annotate repeated and mobile-element content in the insertions of an input VCF. It extracts each insertion's inserted sequence to a FASTA, optionally restricted to a minimum length, and runs RepeatMasker over it.
@@ -1850,6 +2006,28 @@ Outputs:
 - `Array[File] sawfish_depth_bws`: Per-sample depth bigWig files.
 - `File sawfish_log`: Joint-calling log.
 - `File? sawfish_supporting_reads`: Supporting reads per call, emitted only when `report_supporting_reads` is set.
+
+### [Sniffles](../wdl/tools/Sniffles.wdl)
+This tool calls structural variants from a sample's aligned long reads using Sniffles2 (https://github.com/fritzsedlazeck/Sniffles). It emits both a bgzipped, indexed single-sample VCF and the sample's SNF file.
+
+The SNF file holds the sample's raw structural variant candidates and is what Sniffles2 population mode re-genotypes across a cohort, so it is retained even though this pipeline merges callsets by other means.
+
+Inputs:
+- `File bam`: Aligned reads for the sample.
+- `File bai`: Index for the aligned reads.
+- `String sample_id`: ID of the sample being called, written to the VCF sample column.
+- `Int min_sv_len`: Minimum structural variant length in base pairs to report. (default `50`)
+- `File ref_fa`: From references.
+- `File ref_fai`: From references.
+- `File? tandem_repeat_bed`: Tandem repeat intervals used to suppress alignment noise inside repeats.
+- `String prefix`: Prefix for output file names.
+- `String sniffles_docker`: Container image.
+- `RuntimeAttr? runtime_attr_*`: Optional per-task runtime overrides.
+
+Outputs:
+- `File sniffles_vcf`: Structural variant calls for the sample.
+- `File sniffles_vcf_idx`: Index for the structural variant calls.
+- `File sniffles_snf`: Structural variant candidates for the sample, for later population-mode calling.
 
 ### [TRGT](../wdl/tools/TRGT.wdl)
 This workflow leverages TRGT (https://github.com/PacificBiosciences/trgt) in order to genotype short-tandem repeats.
@@ -2166,6 +2344,7 @@ Inputs:
 - `Int min_sv_length_truth`: Minimum SV length applied to each callset.
 - `String type_field`: INFO field holding variant type.
 - `String length_field`: INFO field holding allele length.
+- `Boolean move_dup_to_origin`: Whether canonical DUPs are repositioned onto their `INFO/ORIGIN` interval before the DUP-vs-DUP reciprocal-overlap comparison. When false each DUP instead spans its own coordinates, from POS over its allele length, and `INFO/ORIGIN` is not required. (default `true`)
 - `String source_tag`: Tag identifying the truth callset in the annotations. (default `SV`)
 - `String prefix`: Prefix for output file names.
 - `String gatk_sv_lr_docker`, `String utils_docker`: Container images.

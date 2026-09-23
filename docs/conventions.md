@@ -105,6 +105,7 @@ These rules apply to WDL, Python, R and Bash alike, including code embedded in a
 - Descriptions should use single quotes rather than escaped double quotes, which keeps the WDL string readable.
 - An index input should be described as `Index for <name>.`, and a shared reference file from [references.md](references.md) as `From references.`, which the generated document expands into a pointer to that document.
 - After changing any workflow's `meta`, `parameter_meta`, `input` or `output` block, run `python .github/scripts/check_wdl_style.py`. Regenerating the document is not necessary: CI regenerates and commits it on push to `main`.
+- The retired workflows under `archive/wdl` follow the same `meta` and `parameter_meta` rules and generate `archive/docs/workflows.md`, which is likewise never edited by hand. `check_wdl_style.py` does not cover `archive/`, so the generator parsing those files is the only check on them.
 
 
 ## Python

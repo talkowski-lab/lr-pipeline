@@ -22,6 +22,7 @@ docs/                # Extended documentation (this file included)
   workflows/         # Active GitHub Actions CI
   scripts/           # Helper scripts invoked by CI
 archive/             # Retired workflows, scripts, Dockerfiles and their reference docs
+  docs/workflows.md  # Generated from the retired workflows, the counterpart to docs/workflows.md
 .dockstore.yml       # Dockstore registration for every directly-run workflow
 AGENTS.md            # Canonical agent instructions; .claude/CLAUDE.md and .github/copilot-instructions.md are symlinks to it
 ```

@@ -3,6 +3,20 @@ version 1.0
 import "../utils/Structs.wdl"
 
 workflow CreateCramIndex {
+    meta {
+        description: [
+            "This tool indexes a CRAM with samtools and copies the resulting index next to it in Cloud Storage, for CRAMs delivered without one."
+        ]
+    }
+
+    parameter_meta {
+        cram: "CRAM to index."
+        ref_fa: "From references."
+        ref_fai: "From references."
+        gcs_output_dir: "Cloud Storage directory the index is written to."
+        crai_gcs_path: "Cloud Storage path of the written index."
+    }
+
     input {
         File cram
         File ref_fa

@@ -4,6 +4,36 @@ import "../utils/Helpers.wdl"
 import "../utils/Structs.wdl"
 
 workflow ParseSVFormatFields {
+    meta {
+        description: [
+            "This utility reports the per-caller genotype qualities behind each structural variant call. For one contig it extracts each sample from the cohort VCF, looks that sample's record up in every per-caller VCF, and writes one row per call and supporting caller."
+        ]
+    }
+
+    parameter_meta {
+        cohort_vcf: "Cohort VCF whose calls are parsed."
+        cohort_vcf_idx: "Index for the cohort VCF."
+        sample_ids: "Sample IDs to process."
+        sample_sv_stats: "Per-sample BED listing the callers supporting each variant."
+        cutesv_vcfs: "Per-sample cuteSV VCFs."
+        cutesv_vcf_idxs: "Indexes for `cutesv_vcfs`."
+        sniffles_vcfs: "Per-sample Sniffles VCFs."
+        sniffles_vcf_idxs: "Indexes for `sniffles_vcfs`."
+        delly_vcfs: "Per-sample Delly VCFs."
+        delly_vcf_idxs: "Indexes for `delly_vcfs`."
+        pbsv_vcfs: "Per-sample pbsv VCFs."
+        pbsv_vcf_idxs: "Indexes for `pbsv_vcfs`."
+        sawfish_vcfs: "Per-sample Sawfish VCFs."
+        sawfish_vcf_idxs: "Indexes for `sawfish_vcfs`."
+        dipcall_vcfs: "Per-sample dipcall VCFs."
+        dipcall_vcf_idxs: "Indexes for `dipcall_vcfs`."
+        hapdiff_vcfs: "Per-sample hapdiff VCFs."
+        hapdiff_vcf_idxs: "Indexes for `hapdiff_vcfs`."
+        contig: "Contig being processed."
+        swap_samples: "Sample-ID swap map applied to the cohort VCF."
+        gq_calls_tsv: "TSV with one row per call and supporting caller, carrying that caller's genotype quality."
+    }
+
     input {
         File cohort_vcf
         File cohort_vcf_idx

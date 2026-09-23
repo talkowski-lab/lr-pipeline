@@ -15,7 +15,11 @@ A parameter with no bullet in the snapshot gets a mechanical stub where its name
 implies one - an index file, or a pass-through of a GATK gCNV command-line flag - and
 `TODO.` otherwise, which the style checker then surfaces for an author to replace.
 
-Usage: migrate_workflows_doc.py SNAPSHOT [--report]
+Rerunning rebuilds each block from the snapshot, which would discard any description
+written by hand since the migration. A workflow that already carries a description is
+therefore skipped unless --force is given.
+
+Usage: migrate_workflows_doc.py SNAPSHOT [--report] [--force]
 """
 import argparse
 import re
@@ -226,12 +230,16 @@ def section_descriptions(section, names):
     return described
 
 
-def shared_descriptions(sections, workflows):
-    """Collect descriptions for parameter names that every section agrees on.
+def shared_descriptions(sections, workflows, seed_dirs=None):
+    """Collect descriptions for parameter names that every source agrees on.
 
     Workflows in this repository reuse parameter names for the same thing, and the
     hand-written document often described a shared input in one section only. A name
-    whose sections disagree is left out, so it surfaces as a TODO for an author.
+    whose sources disagree is left out, so it surfaces as a TODO for an author.
+
+    Workflows under seed_dirs contribute their existing `parameter_meta`, which lets an
+    already-migrated tree supply descriptions for the shared names of one still being
+    migrated.
     """
     seen = {}
     for name, section in sections.items():
@@ -241,22 +249,36 @@ def shared_descriptions(sections, workflows):
         declared = [decl.name for decl in entry[0].declarations()]
         for parameter, description in section_descriptions(section, declared).items():
             seen.setdefault(parameter, set()).add(description)
+    for path in wdl_meta.find_workflow_files(seed_dirs) if seed_dirs else []:
+        workflow = wdl_meta.parse_workflow(path)
+        if workflow is None:
+            continue
+        for parameter, description, _ in workflow.param_meta:
+            seen.setdefault(parameter, set()).add(description)
     return {parameter: texts.pop() for parameter, texts in seen.items() if len(texts) == 1}
 
 
 def describe(section, workflow, shared):
-    """Map every documented parameter of a workflow to its description text."""
+    """Map every documented parameter of a workflow to its description text.
+
+    Sources are tried in descending order of authority: the document section, any
+    `parameter_meta` the workflow already carries, a description shared by every other
+    source that names the parameter, and finally a mechanical stub.
+    """
     names = [decl.name for decl in workflow.declarations()]
     described = section_descriptions(section, names)
+    existing = {key: value for key, value, _ in workflow.param_meta if value != "TODO."}
 
+    documented = [decl for decl in workflow.inputs if not wdl_meta.is_exempt(decl)] + workflow.outputs
     ordered = {}
     todo = []
-    for decl in workflow.inputs:
-        if wdl_meta.is_exempt(decl):
-            continue
-        ordered[decl.name] = described.get(decl.name) or shared.get(decl.name) or stub(decl.name, described)
-    for decl in workflow.outputs:
-        ordered[decl.name] = described.get(decl.name) or shared.get(decl.name) or stub(decl.name, described)
+    for decl in documented:
+        ordered[decl.name] = (
+            described.get(decl.name)
+            or existing.get(decl.name)
+            or shared.get(decl.name)
+            or stub(decl.name, described)
+        )
     for name, text in ordered.items():
         if text == "TODO.":
             todo.append(name)
@@ -277,58 +299,65 @@ def render_blocks(description, described):
 
 
 def rewrite(path, blocks):
-    """Replace any existing meta and parameter_meta blocks with the rendered ones."""
+    """Replace any existing meta and parameter_meta blocks with the rendered ones.
+
+    Only the workflow header is touched. Blank lines elsewhere are left alone, since a
+    command block legitimately carries the two blank lines PEP 8 wants around embedded
+    Python definitions.
+    """
     lines = Path(path).read_text().split("\n")
     output = []
-    skipping = False
+    skipping_indent = None
     inserted = False
     for line in lines:
-        if skipping:
-            if wdl_meta.BLOCK_CLOSE_RE.match(line):
-                skipping = False
+        if skipping_indent is not None:
+            if line.rstrip() == " " * skipping_indent + "}":
+                skipping_indent = None
             continue
         opened = wdl_meta.BLOCK_OPEN_RE.match(line)
-        if opened and opened.group(1) in ("meta", "parameter_meta"):
-            skipping = True
+        if inserted and opened and opened.group(2) in ("meta", "parameter_meta"):
+            skipping_indent = len(opened.group(1))
+            # Drop the blank line the removed block left behind
+            if output and output[-1] == "":
+                output.pop()
             continue
         output.append(line)
         if not inserted and wdl_meta.WORKFLOW_RE.match(line):
             output.extend(blocks)
             inserted = True
-    while len(output) > 1 and output[-1] == "" and output[-2] == "":
-        output.pop()
-    # A replaced block leaves the blank line that followed it, so collapse any run
-    collapsed = []
-    for line in output:
-        if line == "" and collapsed and collapsed[-1] == "":
-            continue
-        collapsed.append(line)
-    return "\n".join(collapsed)
+    return "\n".join(output)
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
-    parser.add_argument("snapshot", help="hand-written docs/workflows.md to migrate from")
+    parser.add_argument("snapshot", help="hand-written workflows.md to migrate from")
     parser.add_argument("--report", action="store_true", help="report what would change without writing")
+    parser.add_argument("--dirs", nargs="+", help="workflow directories to migrate (default: the active pipeline)")
+    parser.add_argument("--seed-dirs", nargs="+", help="directories whose parameter_meta supplies shared descriptions")
+    parser.add_argument("--force", action="store_true", help="rewrite workflows that already carry a description")
     args = parser.parse_args()
 
     sections = {s.name: s for s in parse_snapshot(Path(args.snapshot).read_text())}
     workflows = {}
-    for path in wdl_meta.find_workflow_files():
+    for path in wdl_meta.find_workflow_files(args.dirs):
         workflow = wdl_meta.parse_workflow(path)
         if workflow is not None:
             workflows[workflow.name] = (workflow, path)
 
     unmatched = sorted(set(sections) - set(workflows))
     missing = sorted(set(workflows) - set(sections))
-    shared = shared_descriptions(sections, workflows)
+    shared = shared_descriptions(sections, workflows, args.seed_dirs)
     todos = {}
     written = 0
+    skipped = []
     for name, (workflow, path) in sorted(workflows.items()):
-        section = sections.get(name)
-        if section is None:
+        if workflow.description and workflow.description != ["TODO."] and not args.force:
+            skipped.append(name)
             continue
-        description = build_description(section)
+        # A workflow the snapshot never covered still gets its parameters filled in from
+        # the shared descriptions; only its own prose has to be written by hand
+        section = sections.get(name) or Section(name, "")
+        description = build_description(section) or workflow.description or ["TODO."]
         described, todo = describe(section, workflow, shared)
         if todo:
             todos[name] = todo
@@ -336,6 +365,8 @@ def main():
             Path(path).write_text(rewrite(path, render_blocks(description, described)))
             written += 1
 
+    if skipped:
+        print(f"Already documented, left untouched ({len(skipped)}); pass --force to rebuild them.\n")
     if unmatched:
         print("Sections with no workflow in this repository (dropped):")
         for name in unmatched:

@@ -4,6 +4,44 @@ import "../utils/Helpers.wdl"
 import "../utils/Structs.wdl"
 
 workflow PhaseCallsetCommon {
+    meta {
+        description: [
+            "This tool statistically phases one contig of a callset with SHAPEIT. The VCF is split and filtered, given unique IDs and normalized, optionally deduplicated by phased fraction and resolved for variant collisions, then phased either with SHAPEIT4 alone or with a SHAPEIT4 common-variant scaffold that SHAPEIT5 fills in with rare variants. Phase sets from the input are transferred back onto the phased output."
+        ]
+    }
+
+    parameter_meta {
+        vcf: "Callset VCF to phase."
+        vcf_idx: "Index for `vcf`."
+        contig: "Contig being phased."
+        operation: "Collision-resolution mode: `0` removes an entire VCF record, `1` removes single alleles from a genotype."
+        weight_tag: "ID of the field holding each record's collision weight, so preferred records survive a collision."
+        is_weight_format_field: "Where `weight_tag` is read from: `0` for the INFO field, `1` for the sample column."
+        default_weight: "Weight assigned when `weight_tag` is absent from a record."
+        do_shapeit5: "Whether to phase rare variants with SHAPEIT5 against a SHAPEIT4 common-variant scaffold, rather than phasing everything with SHAPEIT4."
+        remove_duplicates_by_phased_fraction: "Whether to drop duplicate records, keeping the copy phased in the most samples."
+        min_af_common: "Minimum allele frequency for a variant to enter the common-variant scaffold."
+        variant_filter_args: "Arguments used to filter variants before phasing."
+        filter_common_args: "Arguments used to select the common variants for the scaffold."
+        chunk_extra_args: "Extra arguments passed when creating the SHAPEIT chunks."
+        shapeit4_extra_args: "Extra arguments passed to SHAPEIT4."
+        shapeit5_extra_args: "Extra arguments passed to SHAPEIT5."
+        genetic_maps_tsv: "TSV mapping each contig to its genetic map."
+        fix_variant_collisions_java: "Compiled Java program that resolves variant collisions."
+        uqids_split_vcf: "Split VCF with unique variant IDs and normalized records."
+        uqids_split_vcf_idx: "Index for `uqids_split_vcf`."
+        removed_duplicates_split_vcf: "Split VCF after duplicate records were dropped."
+        removed_duplicates_split_vcf_idx: "Index for `removed_duplicates_split_vcf`."
+        collisionless_split_vcf: "Split VCF after variant collisions were resolved."
+        collisionless_split_vcf_idx: "Index for `collisionless_split_vcf`."
+        ps_anchors_vcf: "VCF of the phase-set anchor variants."
+        ps_anchors_vcf_idx: "Index for `ps_anchors_vcf`."
+        shapeit_phased_vcf: "Statistically phased callset."
+        shapeit_phased_vcf_idx: "Index for `shapeit_phased_vcf`."
+        shapeit_phased_ps_transferred_vcf: "Phased callset with the input phase sets transferred back on."
+        shapeit_phased_ps_transferred_vcf_idx: "Index for `shapeit_phased_ps_transferred_vcf`."
+    }
+
     input {
         File vcf
         File vcf_idx

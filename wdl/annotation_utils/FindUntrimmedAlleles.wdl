@@ -4,6 +4,21 @@ import "../utils/Helpers.wdl"
 import "../utils/Structs.wdl"
 
 workflow FindUntrimmedAlleles {
+    meta {
+        description: [
+            "This utility identifies variants in a VCF whose REF and ALT alleles retain untrimmed shared bases, producing a subset VCF of those records for use in restoring full allele representations downstream. It outputs the subset VCF."
+        ]
+    }
+
+    parameter_meta {
+        vcf: "VCF to scan."
+        vcf_idx: "Index for `vcf`."
+        contigs: "Contigs to scan within the input VCF."
+        records_per_shard: "Number of variants to keep within a single shard during scanning."
+        untrimmed_vcf: "VCF holding the variants whose alleles are not left-trimmed."
+        untrimmed_vcf_idx: "Index for `untrimmed_vcf`."
+    }
+
     input {
         File vcf
         File vcf_idx

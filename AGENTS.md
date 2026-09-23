@@ -13,5 +13,5 @@
 - After changing any `.md` file, run `python .github/scripts/check_markdown_style.py` (checks `README.md`, `AGENTS.md` and `docs/`; the same script runs in CI) and fix what it reports.
 - New directly-run workflows need a `.dockstore.yml` entry — match the format of existing entries.
 - New annotation/tool checklist: implement in `wdl/`, adding to `scripts/` only if inline Python in the workflow isn't enough → add/update Dockerfile if new deps needed → register in `.dockstore.yml` → write `meta` and `parameter_meta` covering every input and output → update any other affected `docs/`.
-- `archive/` contains retired workflows, scripts, Dockerfiles, and reference documentation. It is not active pipeline code and is excluded from active validation and Dockstore registration; do not use it for new work.
+- `archive/` contains retired workflows, scripts, Dockerfiles, and reference documentation. It is not active pipeline code and is excluded from active validation and Dockstore registration; do not use it for new work. Its workflows still carry `meta` and `parameter_meta` blocks, which generate `archive/docs/workflows.md` via `python .github/scripts/generate_workflows_doc.py --site archive`; never hand-edit that document either.
 - Don't hardcode Docker image URIs in WDL — always pass as a `String` input.

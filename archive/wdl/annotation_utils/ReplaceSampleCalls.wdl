@@ -4,6 +4,21 @@ import "../utils/Helpers.wdl"
 import "../utils/Structs.wdl"
 
 workflow ReplaceSampleCalls {
+    meta {
+        description: [
+            "This utility replaces the genotype calls of samples in a cohort VCF with the calls from a set of per-sample VCFs. It outputs the updated cohort VCF."
+        ]
+    }
+
+    parameter_meta {
+        sample_vcfs: "Per-sample VCFs providing the replacement calls."
+        sample_vcf_idxs: "Indexes for `sample_vcfs`."
+        cohort_vcf: "Cohort VCF whose calls are replaced."
+        cohort_vcf_idx: "Index for the cohort VCF."
+        replaced_vcf: "Cohort VCF with replaced sample calls."
+        replaced_vcf_idx: "Index for the updated VCF."
+    }
+
     input {
         Array[File] sample_vcfs
         Array[File] sample_vcf_idxs

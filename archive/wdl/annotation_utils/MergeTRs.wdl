@@ -4,6 +4,22 @@ import "../utils/Helpers.wdl"
 import "../utils/Structs.wdl"
 
 workflow MergeTRs {
+    meta {
+        description: [
+            "This utility merges a tandem-repeat callset into a base VCF one contig at a time and concatenates the contigs. It is an earlier form of `IntegrateTRs`."
+        ]
+    }
+
+    parameter_meta {
+        vcf: "Base VCF the tandem repeats are merged into."
+        vcf_idx: "Index for `vcf`."
+        tr_vcf: "Tandem-repeat VCF to integrate."
+        tr_vcf_idx: "Index for the TR VCF."
+        contigs: "Contigs to process."
+        merged_vcf: "VCF combining the base and tandem-repeat callsets."
+        merged_vcf_idx: "Index for `merged_vcf`."
+    }
+
     input {
         File vcf
         File vcf_idx

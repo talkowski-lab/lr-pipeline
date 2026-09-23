@@ -4,6 +4,19 @@ import "../utils/Helpers.wdl"
 import "../utils/Structs.wdl"
 
 workflow CreatePedigreeAncestryFilesAoUPhase1 {
+    meta {
+        description: [
+            "This utility generates a minimal pedigree file and an ancestry-assignment file from a list of sample IDs and their sexes, assigning every sample the `afr` ancestry of the All of Us Phase 1 cohort. It outputs both files."
+        ]
+    }
+
+    parameter_meta {
+        sample_ids: "Sample IDs to include."
+        sexes: "Sex of each sample in `sample_ids`."
+        ped: "Generated pedigree file."
+        ancestry: "Generated ancestry-assignment file."
+    }
+
     input {
         Array[String] sample_ids
         Array[String] sexes

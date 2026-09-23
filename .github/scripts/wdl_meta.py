@@ -21,11 +21,12 @@ META_BLOCKS = ["meta", "parameter_meta", "input", "output"]
 
 WORKFLOW_RE = re.compile(r"^workflow (\w+)\s*\{")
 WORKFLOW_SEARCH_RE = re.compile(r"^workflow (\w+)\s*\{", re.MULTILINE)
-BLOCK_OPEN_RE = re.compile(r"^ {4}(\w+)\s*\{\s*$")
-BLOCK_CLOSE_RE = re.compile(r"^ {4}\}\s*$")
-DECL_RE = re.compile(r"^ {8}(\S+) (\w+)(?: = (.*))?$")
-PARAM_META_RE = re.compile(r"^ {8}(\w+): (.*)$")
-DESCRIPTION_OPEN_RE = re.compile(r"^ {8}description: (.*)$")
+# Indentation is captured rather than fixed, so the retired 2-space files under archive/
+# parse the same way as the 4-space files the style checker enforces under wdl/
+BLOCK_OPEN_RE = re.compile(r"^( +)(\w+)\s*\{\s*$")
+DECL_RE = re.compile(r"^ +(\S+) (\w+)(?: = (.*))?$")
+PARAM_META_RE = re.compile(r"^ +(\w+): (.*)$")
+DESCRIPTION_OPEN_RE = re.compile(r"^ +description: (.*)$")
 STRING_RE = re.compile(r'^"((?:[^"\\]|\\.)*)",?$')
 
 # Inputs the generator documents with a standard bullet, so authors never describe them
@@ -58,6 +59,7 @@ class Workflow:
         self.path = path
         self.name = name
         self.line_no = line_no
+        self.indent = 4
         self.description = []
         self.description_is_array = False
         self.param_meta = []
@@ -104,6 +106,7 @@ def parse_workflow(path, text=None):
 
     workflow = None
     block = None
+    indent = None
     in_description = False
     for index, line in enumerate(lines):
         line_no = index + 1
@@ -125,11 +128,13 @@ def parse_workflow(path, text=None):
             continue
         if block is None:
             opened = BLOCK_OPEN_RE.match(line)
-            if opened and opened.group(1) in META_BLOCKS:
-                block = opened.group(1)
+            if opened and opened.group(2) in META_BLOCKS:
+                block = opened.group(2)
+                indent = len(opened.group(1))
+                workflow.indent = indent
                 workflow.blocks.append((block, line_no))
             continue
-        if BLOCK_CLOSE_RE.match(line):
+        if line.rstrip() == " " * indent + "}":
             block = None
             continue
         if not line.strip() or line.strip().startswith("#"):
@@ -141,6 +146,11 @@ def parse_workflow(path, text=None):
             _read_param_meta_line(workflow, line, line_no)
         else:
             _read_decl_line(workflow, block, line, line_no)
+
+    if workflow is not None:
+        found = [name for name, _ in workflow.blocks]
+        if "input" not in found:
+            workflow.error(workflow.line_no, "W025", f"no workflow-level input block found in '{workflow.name}'")
 
     return workflow
 
@@ -200,10 +210,10 @@ def _read_decl_line(workflow, block, line, line_no):
         workflow.outputs.append(decl)
 
 
-def find_workflow_files():
-    """Return every WDL file under WORKFLOW_DIRS that declares a workflow, sorted by name."""
+def find_workflow_files(directories=None):
+    """Return every WDL file in the given directories that declares a workflow."""
     files = []
-    for directory in WORKFLOW_DIRS:
+    for directory in directories or WORKFLOW_DIRS:
         for path in sorted((REPO_ROOT / directory).glob("*.wdl")):
             if WORKFLOW_SEARCH_RE.search(path.read_text()):
                 files.append(path)

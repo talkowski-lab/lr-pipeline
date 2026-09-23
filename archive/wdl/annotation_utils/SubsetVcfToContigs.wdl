@@ -4,6 +4,20 @@ import "../utils/Helpers.wdl"
 import "../utils/Structs.wdl"
 
 workflow SubsetVcfToContigs {
+    meta {
+        description: [
+            "This utility subsets a VCF to a chosen set of contigs and concatenates the result. It outputs the subset VCF."
+        ]
+    }
+
+    parameter_meta {
+        vcf: "VCF to subset."
+        vcf_idx: "Index for VCF."
+        contigs: "Contigs to retain."
+        subset_contigs_vcf: "Contig-subset VCF."
+        subset_contigs_vcf_idx: "Index for the subset VCF."
+    }
+
     input {
         File vcf
         File vcf_idx

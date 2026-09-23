@@ -4,6 +4,21 @@ import "../utils/Helpers.wdl"
 import "../utils/Structs.wdl"
 
 workflow NormalizeDuplicationOrigins {
+    meta {
+        description: [
+            "This utility resolves the relative `ORIGIN` coordinates of duplications and NUMTs into absolute genomic coordinates and annotates them back onto the VCF. `ORIGIN` values prefixed with `flank_` encode coordinates relative to a flanking window and are converted to genome-absolute positions; values already in absolute form are kept as-is. When multiple comma-separated `ORIGIN` values are present - whether flank-relative, absolute, or mixed - each is processed individually and the resulting absolute values are written back in their original order. It outputs the VCF with absolute-origin annotations."
+        ]
+    }
+
+    parameter_meta {
+        vcf: "VCF to process."
+        vcf_idx: "Index for `vcf`."
+        records_per_shard: "Number of variants to keep within a single shard during processing."
+        modify_origin_header_number: "Whether to rewrite the `ORIGIN` header Number so multi-valued entries validate."
+        absolute_origin_vcf: "VCF with absolute `ORIGIN` coordinates."
+        absolute_origin_vcf_idx: "Index for `absolute_origin_vcf`."
+    }
+
     input {
         File vcf
         File vcf_idx

@@ -4,6 +4,34 @@ import "../utils/Helpers.wdl"
 import "../utils/Structs.wdl"
 
 workflow VcfDist {
+    meta {
+        description: [
+            "This tool runs vcfdist (https://github.com/TimD1/vcfdist) in order to benchmark an evaluation VCF against a truth VCF per contig, computing alignment-based precision/recall and phasing accuracy. It outputs vcfdist's precision-recall, phasing, switch-flip, phase-block and supercluster reports."
+        ]
+    }
+
+    parameter_meta {
+        vcf_eval: "VCF being evaluated."
+        vcf_eval_idx: "Index for `vcf_eval`."
+        vcf_truth: "Truth VCF to evaluate against."
+        vcf_truth_idx: "Index for `vcf_truth`."
+        ref_fa: "From references."
+        contigs: "Contigs to evaluate."
+        bed_regions: "BED of regions to restrict the evaluation to."
+        mode: "vcfdist evaluation mode."
+        threshold: "vcfdist matching threshold."
+        vcfdist_args: "Additional arguments passed to vcfdist."
+        vcfdist_phasing_summary_tsv: "Per-contig phasing summaries."
+        vcfdist_switchflips_tsv: "Per-contig switch and flip errors."
+        vcfdist_precision_recall_tsv: "Per-contig precision-recall curves."
+        vcfdist_precision_recall_summary_tsv: "Per-contig precision-recall summaries."
+        vcfdist_phase_blocks_tsv: "Per-contig phase blocks."
+        vcfdist_superclusters_tsv: "Per-contig variant superclusters."
+        vcfdist_query_tsv: "Per-contig query-variant results."
+        vcfdist_truth_tsv: "Per-contig truth-variant results."
+        vcfdist_summary_vcf: "Per-contig annotated summary VCFs."
+    }
+
     input {
         File vcf_eval
         File vcf_eval_idx

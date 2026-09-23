@@ -4,6 +4,32 @@ import "../utils/Helpers.wdl"
 import "../utils/Structs.wdl"
 
 workflow IntegrateHGSVCReference {
+    meta {
+        description: [
+            "This utility merges the HGSVC SNV, indel and SV reference callsets into one VCF. Each input is optionally sample-swapped, checked for a consistent sample list, subset per contig and tagged with its own source label before the three are merged."
+        ]
+    }
+
+    parameter_meta {
+        snv_vcf: "HGSVC SNV callset."
+        snv_vcf_idx: "Index for `snv_vcf`."
+        indel_vcf: "HGSVC indel callset."
+        indel_vcf_idx: "Index for `indel_vcf`."
+        sv_vcf: "HGSVC SV callset."
+        sv_vcf_idx: "Index for `sv_vcf`."
+        contigs: "Contigs to process."
+        sample_ids: "Sample IDs expected in every input callset."
+        sample_swap_list: "Two-column file mapping original sample IDs to their replacements."
+        snv_source_tag: "Source label applied to variants from `snv_vcf`."
+        snv_source_tag_description: "Header description for `snv_source_tag`."
+        indel_source_tag: "Source label applied to variants from `indel_vcf`."
+        indel_source_tag_description: "Header description for `indel_source_tag`."
+        sv_source_tag: "Source label applied to variants from `sv_vcf`."
+        sv_source_tag_description: "Header description for `sv_source_tag`."
+        integrated_reference_vcf: "Merged reference callset."
+        integrated_reference_vcf_idx: "Index for `integrated_reference_vcf`."
+    }
+
     input {
         File snv_vcf
         File snv_vcf_idx

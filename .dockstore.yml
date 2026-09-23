@@ -178,6 +178,15 @@ workflows:
   # Annotation Utilities
   # --------------------
   - subclass: WDL
+    name: AnnotateSvCallerSupport
+    primaryDescriptorPath: /wdl/annotation_utils/AnnotateSvCallerSupport.wdl
+    filters:
+      branches:
+        - main
+      tags:
+        - /.*/
+
+  - subclass: WDL
     name: AnnotateTREndTags
     primaryDescriptorPath: /wdl/annotation_utils/AnnotateTREndTags.wdl
     filters:
@@ -421,6 +430,15 @@ workflows:
         - /.*/
 
   - subclass: WDL
+    name: FindUntrimmedAlleles
+    primaryDescriptorPath: /wdl/annotation_utils/FindUntrimmedAlleles.wdl
+    filters:
+      branches:
+        - main
+      tags:
+        - /.*/
+
+  - subclass: WDL
     name: CreateTRGTHistograms
     primaryDescriptorPath: /wdl/annotation_utils/CreateTRGTHistograms.wdl
     filters:
@@ -522,6 +540,15 @@ workflows:
   - subclass: WDL
     name: NormalizeAlleleTypes
     primaryDescriptorPath: /wdl/annotation_utils/NormalizeAlleleTypes.wdl
+    filters:
+      branches:
+        - main
+      tags:
+        - /.*/
+
+  - subclass: WDL
+    name: NormalizeDuplicationOrigins
+    primaryDescriptorPath: /wdl/annotation_utils/NormalizeDuplicationOrigins.wdl
     filters:
       branches:
         - main
@@ -696,6 +723,15 @@ workflows:
   - subclass: WDL
     name: MergePALMERCallsets
     primaryDescriptorPath: /wdl/tools/MergePALMERCallsets.wdl
+    filters:
+      branches:
+        - main
+      tags:
+        - /.*/
+
+  - subclass: WDL
+    name: MergeWithTruvari
+    primaryDescriptorPath: /wdl/tools/MergeWithTruvari.wdl
     filters:
       branches:
         - main

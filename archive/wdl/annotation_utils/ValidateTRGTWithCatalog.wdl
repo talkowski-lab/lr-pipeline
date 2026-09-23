@@ -4,6 +4,22 @@ import "../utils/Helpers.wdl"
 import "../utils/Structs.wdl"
 
 workflow ValidateTRGTWithCatalog {
+    meta {
+        description: [
+            "This utility finds TRGT calls whose coordinates or motifs disagree with the catalog they were genotyped against. Each contig is sharded, checked against the catalog, and the incongruent records are concatenated into one VCF."
+        ]
+    }
+
+    parameter_meta {
+        trgt_vcf: "TRGT callset to validate."
+        trgt_vcf_idx: "Index for `trgt_vcf`."
+        contigs: "Contigs to process."
+        trgt_catalog_bed_gz: "TRGT catalog BED (gzipped) the calls are validated against."
+        records_per_shard: "Number of variants to keep within a single shard during validation."
+        incongruent_vcf: "VCF holding the calls that disagree with the catalog."
+        incongruent_vcf_idx: "Index for `incongruent_vcf`."
+    }
+
     input {
         File trgt_vcf
         File trgt_vcf_idx

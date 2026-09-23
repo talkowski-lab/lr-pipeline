@@ -4,6 +4,31 @@ import "../utils/Helpers.wdl"
 import "../utils/Structs.wdl"
 
 workflow GQCutoffs {
+    meta {
+        description: [
+            "This utility derives genotype-quality cutoffs by comparing a callset against trio and truth-set expectations. Trio children are identified from a PED, the callset and truth VCFs are subset to those samples, and precision and recall are tabulated across genotype-quality thresholds and variant length bins to produce a cutoff table."
+        ]
+    }
+
+    parameter_meta {
+        vcfs: "Per-contig callset VCFs to evaluate."
+        vcf_idxs: "Index for `vcfs`."
+        truth_vcfs: "Truth VCFs the callset is compared against."
+        truth_vcf_idxs: "Index for `truth_vcfs`."
+        subset_vcf_string: "`bcftools view` arguments used to pre-subset the callset."
+        ped: "Six-column PED used to identify trio children."
+        swap_samples_truth: "Optional sample-swap list applied to the truth VCFs."
+        skip_trv: "Whether to skip tandem-repeat variants."
+        length_bins: "Allele-length bin boundaries defining the size buckets."
+        min_length_heuristic_comparison: "Minimum variant length at which heuristic matching replaces exact matching."
+        del_size_similarity: "Minimum size similarity for matching deletions."
+        del_reciprocal_overlap: "Minimum reciprocal overlap for matching deletions."
+        del_breakpoint_window: "Breakpoint window, in bp, for matching deletions."
+        ins_size_similarity: "Minimum size similarity for matching insertions."
+        ins_breakpoint_window: "Breakpoint window, in bp, for matching insertions."
+        gq_cutoffs_tsv: "Table of genotype-quality cutoffs per variant class and length bin."
+    }
+
     input {
         Array[File] vcfs
         Array[File] vcf_idxs

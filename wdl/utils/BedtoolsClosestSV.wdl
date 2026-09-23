@@ -19,6 +19,7 @@ workflow BedtoolsClosestSV {
         min_sv_length_truth: "Minimum SV length applied to each callset."
         type_field: "INFO field holding variant type."
         length_field: "INFO field holding allele length."
+        move_dup_to_origin: "Whether canonical DUPs are repositioned onto their `INFO/ORIGIN` interval before the DUP-vs-DUP reciprocal-overlap comparison. When false each DUP instead spans its own coordinates, from POS over its allele length, and `INFO/ORIGIN` is not required."
         source_tag: "Tag identifying the truth callset in the annotations."
         annotation_tsv: "Nearest-neighbour annotations for the remaining records."
     }
@@ -34,6 +35,7 @@ workflow BedtoolsClosestSV {
         Int min_sv_length_truth
         String type_field
         String length_field
+        Boolean move_dup_to_origin = true
         String source_tag = "SV"
 
         String gatk_sv_lr_docker
@@ -61,30 +63,7 @@ workflow BedtoolsClosestSV {
             runtime_attr_override = runtime_attr_subset_vcf
     }
 
-    # Convert the callset to symbolic alleles and split it by type, repositioning DUPs onto their ORIGIN coordinates
-    call Helpers.ConvertToSymbolic as ConvertEvalMoved {
-        input:
-            vcf = SubsetEval.subset_vcf,
-            vcf_idx = SubsetEval.subset_vcf_idx,
-            move_dup_to_origin = true,
-            type_field = type_field,
-            length_field = length_field,
-            prefix = "~{prefix}.eval.symbolic.moved",
-            docker = utils_docker,
-            runtime_attr_override = runtime_attr_convert_to_symbolic
-    }
-
-    call SplitVcf as SplitEvalMoved {
-        input:
-            vcf = ConvertEvalMoved.processed_vcf,
-            vcf_idx = ConvertEvalMoved.processed_vcf_idx,
-            split_cpx = false,
-            prefix = "~{prefix}.eval.moved",
-            docker = gatk_sv_lr_docker,
-            runtime_attr_override = runtime_attr_split_vcf
-    }
-
-    # Convert and split the callset again with DUPs left at their own insertion site, for the DUP against INS comparison
+    # Convert the callset to symbolic alleles and split it by type, leaving each DUP on its own coordinates
     call Helpers.ConvertToSymbolic as ConvertEvalUnmoved {
         input:
             vcf = SubsetEval.subset_vcf,
@@ -106,6 +85,34 @@ workflow BedtoolsClosestSV {
             docker = gatk_sv_lr_docker,
             runtime_attr_override = runtime_attr_split_vcf
     }
+
+    # Convert and split the callset again with canonical DUPs repositioned onto their ORIGIN coordinates. Only the DUP
+    # records move, so every other comparison reads the unmoved split and this round is skipped when ORIGIN is absent
+    if (move_dup_to_origin) {
+        call Helpers.ConvertToSymbolic as ConvertEvalMoved {
+            input:
+                vcf = SubsetEval.subset_vcf,
+                vcf_idx = SubsetEval.subset_vcf_idx,
+                move_dup_to_origin = true,
+                type_field = type_field,
+                length_field = length_field,
+                prefix = "~{prefix}.eval.symbolic.moved",
+                docker = utils_docker,
+                runtime_attr_override = runtime_attr_convert_to_symbolic
+        }
+
+        call SplitVcf as SplitEvalMoved {
+            input:
+                vcf = ConvertEvalMoved.processed_vcf,
+                vcf_idx = ConvertEvalMoved.processed_vcf_idx,
+                split_cpx = false,
+                prefix = "~{prefix}.eval.moved",
+                docker = gatk_sv_lr_docker,
+                runtime_attr_override = runtime_attr_split_vcf
+        }
+    }
+
+    File eval_dup_bed = select_first([SplitEvalMoved.dup_bed, SplitEvalUnmoved.dup_bed])
 
     # Subset the truth callset to variants at or above its own minimum SV length
     call Helpers.SubsetVcfByLength as SubsetTruth {
@@ -133,7 +140,7 @@ workflow BedtoolsClosestSV {
     # Compare DEL in the callset to DEL in the truth callset by reciprocal overlap
     call Helpers.BedtoolsClosest as CompareDEL {
         input:
-            bed_a = SplitEvalMoved.del_bed,
+            bed_a = SplitEvalUnmoved.del_bed,
             bed_b = SplitTruth.del_bed,
             prefix = "~{prefix}.DEL",
             docker = utils_docker,
@@ -151,7 +158,7 @@ workflow BedtoolsClosestSV {
     # Compare INS in the callset to INS in the truth callset by breakpoint proximity and length ratio
     call Helpers.BedtoolsClosest as CompareINS {
         input:
-            bed_a = SplitEvalMoved.ins_bed,
+            bed_a = SplitEvalUnmoved.ins_bed,
             bed_b = SplitTruth.ins_bed,
             prefix = "~{prefix}.INS",
             docker = utils_docker,
@@ -166,10 +173,10 @@ workflow BedtoolsClosestSV {
             runtime_attr_override = runtime_attr_calculate
     }
 
-    # Compare DUP in the callset to DUP in the truth callset by reciprocal overlap, both on ORIGIN coordinates
+    # Compare DUP in the callset to DUP in the truth callset by reciprocal overlap, on ORIGIN coordinates when moved
     call Helpers.BedtoolsClosest as CompareDUP {
         input:
-            bed_a = SplitEvalMoved.dup_bed,
+            bed_a = eval_dup_bed,
             bed_b = SplitTruth.dup_bed,
             prefix = "~{prefix}.DUP",
             docker = utils_docker,
@@ -195,7 +202,7 @@ workflow BedtoolsClosestSV {
 
     call Helpers.BedtoolsClosest as CompareINSDUP {
         input:
-            bed_a = SplitEvalMoved.ins_bed,
+            bed_a = SplitEvalUnmoved.ins_bed,
             bed_b = CollapseTruthDUP.point_bed,
             prefix = "~{prefix}.INS_DUP",
             docker = utils_docker,

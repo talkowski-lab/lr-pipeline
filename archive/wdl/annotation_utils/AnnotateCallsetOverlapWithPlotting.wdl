@@ -6,6 +6,57 @@ import "../utils/Structs.wdl"
 import "../utils/TruvariMatch.wdl"
 
 workflow AnnotateCallsetOverlapWithPlotting {
+    meta {
+        description: [
+            "This utility is an earlier form of `AnnotateCallsetOverlap` that also produces summary statistics and plots. It matches a callset VCF against SNV/indel and SV truth VCFs using exact, Truvari and `bedtools closest` rounds, each of which can be enabled on its own, and can normalize the callset, derive variant attributes and compare VEP annotations before matching."
+        ]
+    }
+
+    parameter_meta {
+        vcf: "Callset VCF being annotated."
+        vcf_idx: "Index for `vcf`."
+        truth_snv_indel_vcf: "Truth VCF containing SNVs & indels to match against."
+        truth_snv_indel_vcf_idx: "Index for `truth_snv_indel_vcf`."
+        truth_sv_vcf: "Truth VCF containing SVs to match against."
+        truth_sv_vcf_idx: "Index for `truth_sv_vcf`."
+        ref_fa: "From references."
+        ref_fai: "From references."
+        contigs: "Contigs to evaluate."
+        records_per_shard: "Number of variants to keep within a single shard during matching."
+        normalize_vcf: "Whether to normalize and split multiallelics around the VEP call."
+        create_variant_attributes: "Whether to derive variant attributes on the callset before matching."
+        compare_annotations: "Whether to compare VEP annotations between the callset and the truth callsets."
+        do_exact: "Whether to run the exact-match round."
+        do_truvari: "Whether to run the Truvari matching round."
+        do_bedtools_closest: "Whether to run the `bedtools closest` matching round."
+        min_sv_length_truvari: "Minimum length for a callset variant to enter the Truvari matching round."
+        min_sv_length_truth_truvari: "Minimum length for a truth variant to enter the Truvari matching round."
+        min_sv_length_bedtools_closest: "Minimum length for a callset variant to enter the `bedtools closest` matching round."
+        min_sv_length_truth_bedtools_closest: "Minimum length for a truth variant to enter the `bedtools closest` matching round."
+        type_field: "INFO field in the callset VCF giving each variant's allele type."
+        length_field: "INFO field in the callset VCF giving each variant's allele length."
+        source_tag_truth_snv_indel_vcf: "Label used to tag matches against the SNV & indel truth VCF."
+        source_tag_truth_sv_vcf: "Label used to tag matches against the SV truth VCF."
+        normalize_check_ref: "`bcftools norm` `--check-ref` mode used when normalizing."
+        skip_vep_categories: "VEP consequence categories excluded when comparing annotations."
+        af_field_sv_truth: "INFO field in the SV truth VCF holding the allele frequency."
+        ac_field_sv_truth: "INFO field in the SV truth VCF holding the allele count."
+        an_field_sv_truth: "INFO field in the SV truth VCF holding the allele number."
+        args_string_vcf: "`bcftools view` arguments used to pre-subset the callset VCF."
+        args_string_truth_snv_indel_vcf: "`bcftools view` arguments used to pre-subset the SNV & indel truth VCF."
+        args_string_truth_sv_vcf: "`bcftools view` arguments used to pre-subset the SV truth VCF."
+        rename_id_string_vcf: "Expression used to rename variant IDs in the callset VCF prior to matching."
+        rename_id_string_truth_snv_indel_vcf: "Expression used to rename variant IDs in the SNV & indel truth VCF prior to matching."
+        rename_id_string_truth_sv_vcf: "Expression used to rename variant IDs in the SV truth VCF prior to matching."
+        rename_id_strip_chr_vcf: "Whether to strip the `chr` prefix when renaming callset variant IDs."
+        rename_id_strip_chr_truth_snv_indel_vcf: "Whether to strip the `chr` prefix when renaming SNV & indel truth variant IDs."
+        rename_id_strip_chr_truth_sv_vcf: "Whether to strip the `chr` prefix when renaming SV truth variant IDs."
+        annotations_tsv_benchmark: "TSV mapping callset variants to their matched truth variants, match type, and the truth callset's AC/AF/AN and genotype-count fields."
+        benchmark_annotations_summary_tsv: "Summary counts of matched and unmatched variants."
+        benchmark_annotations_stats_tsv: "Match statistics underlying the plots."
+        benchmark_annotations_plots_tarball: "Tarball of the generated benchmarking plots."
+    }
+
     input {
         File vcf
         File vcf_idx

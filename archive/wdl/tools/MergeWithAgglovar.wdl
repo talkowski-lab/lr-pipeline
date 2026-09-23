@@ -3,6 +3,27 @@ version 1.0
 import "utils/Structs.wdl"
 
 workflow MergeWithAgglovar {
+    meta {
+        description: [
+            "This tool merges structural variant VCFs with agglovar, which clusters records by reciprocal overlap, size similarity and breakpoint offset, with optional allele matching."
+        ]
+    }
+
+    parameter_meta {
+        vcfs: "VCFs to merge."
+        vcf_idxs: "Index for `vcfs`."
+        run_agglovar_merge_script: "Path to the agglovar merge script run by the task."
+        ro_min: "Minimum reciprocal overlap for two records to cluster."
+        size_ro_min: "Minimum size reciprocal overlap for two records to cluster."
+        offset_max: "Maximum breakpoint offset, in bp, for two records to cluster."
+        offset_prop_max: "Maximum breakpoint offset as a proportion of variant length."
+        match_ref: "Whether the reference alleles must match."
+        match_alt: "Whether the alternate alleles must match."
+        match_prop_min: "Minimum proportion of matching allele sequence."
+        merged_vcf: "Merged callset."
+        merged_vcf_index: "Index for `merged_vcf`."
+    }
+
     input {
         Array[File] vcfs
         Array[File] vcf_idxs

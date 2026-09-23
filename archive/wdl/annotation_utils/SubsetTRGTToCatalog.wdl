@@ -4,6 +4,21 @@ import "../utils/Helpers.wdl"
 import "../utils/Structs.wdl"
 
 workflow SubsetTRGTToCatalog {
+    meta {
+        description: [
+            "This utility subsets a merged TRGT VCF down to the loci present in a given TRGT catalog BED, per contig. It outputs the catalog-restricted TRGT VCF."
+        ]
+    }
+
+    parameter_meta {
+        trgt_full_merged_vcf: "Merged TRGT VCF to subset."
+        trgt_full_merged_vcf_idx: "Index for the TRGT VCF."
+        trgt_catalog_bed_gz: "bgzipped TRGT catalog BED of loci to retain."
+        contigs: "Contigs to process."
+        trgt_merged_vcf: "Catalog-restricted TRGT VCF."
+        trgt_merged_vcf_idx: "Index for the subset VCF."
+    }
+
     input {
         File trgt_full_merged_vcf
         File trgt_full_merged_vcf_idx

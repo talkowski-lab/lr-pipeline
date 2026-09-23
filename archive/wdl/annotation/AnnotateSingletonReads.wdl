@@ -4,6 +4,20 @@ import "../utils/Structs.wdl"
 import "../utils/Helpers.wdl"
 
 workflow AnnotateSingletonReads {
+    meta {
+        description: [
+            "This utility flags variants that look like single-read artifacts. Working one contig at a time it recomputes `AC`, then adds a `SINGLE_READ_SUPPORT` FILTER to any variant whose allele count is at or below two and whose alternate allele is supported by exactly one read in exactly one sample, and concatenates the per-contig results."
+        ]
+    }
+
+    parameter_meta {
+        vcf: "Cohort VCF to flag."
+        vcf_idx: "Index for `vcf`."
+        contigs: "Contigs to process."
+        singleton_filtered_vcf: "VCF whose single-read-supported variants carry the `SINGLE_READ_SUPPORT` FILTER."
+        singleton_filtered_vcf_idx: "Index for `singleton_filtered_vcf`."
+    }
+
     input {
         File vcf
         File vcf_idx

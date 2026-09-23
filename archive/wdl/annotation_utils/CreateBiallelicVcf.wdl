@@ -4,6 +4,21 @@ import "../utils/Helpers.wdl"
 import "../utils/Structs.wdl"
 
 workflow CreateBiallelicVcf {
+    meta {
+        description: [
+            "This utility normalizes a VCF into a streamlined biallelic callset. It splits multiallelic records and left-aligns variants against the reference, sorts the result, adds the `allele_length` and `allele_type` INFO fields, and rewrites each variant ID to `CHROM-POS-REF-ALT` for SNVs or `CHROM-POS-TYPE-LENGTH` otherwise, suffixing any colliding IDs to keep them unique. It outputs the biallelic VCF."
+        ]
+    }
+
+    parameter_meta {
+        vcf: "VCF to process."
+        vcf_idx: "Index for VCF to process."
+        ref_fa: "Reference FASTA used for normalization."
+        ref_fai: "Index for `ref_fa`."
+        biallelic_vcf: "Normalized, sorted biallelic VCF with streamlined variant IDs and `allele_length`/`allele_type` annotations."
+        biallelic_vcf_idx: "Index for the biallelic VCF."
+    }
+
     input {
         File vcf
         File vcf_idx

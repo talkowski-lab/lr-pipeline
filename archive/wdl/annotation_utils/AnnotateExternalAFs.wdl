@@ -3,6 +3,22 @@ version 1.0
 import "../utils/Structs.wdl"
 
 workflow AnnotateExternalAFs {
+    meta {
+        description: [
+            "This utility annotates a cohort VCF with allele frequencies drawn from external reference BEDs. Each contig is subset, duplications are converted to insertions with their original type kept in a tag, the reference BEDs are matched with `bedtools closest`, and the selected matches are written back as INFO fields before the contigs are concatenated."
+        ]
+    }
+
+    parameter_meta {
+        vcf: "Cohort VCF to annotate."
+        vcf_index: "Index for `vcf`."
+        ref_beds: "External reference BEDs supplying the allele frequencies to transfer."
+        ref_prefixes: "INFO field prefix for each entry in `ref_beds`, in the same order."
+        contigs: "Contigs to annotate."
+        external_af_annotated_vcf: "VCF annotated with the external allele frequencies."
+        external_af_annotated_vcf_index: "Index for `external_af_annotated_vcf`."
+    }
+
     input {
         File vcf
         File vcf_index

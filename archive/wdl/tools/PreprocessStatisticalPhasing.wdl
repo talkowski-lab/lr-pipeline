@@ -4,6 +4,23 @@ import "../utils/Helpers.wdl"
 import "../utils/Structs.wdl"
 
 workflow PreprocessStatisticalPhasing {
+    meta {
+        description: [
+            "This tool prepares a callset for statistical phasing. Kanpig score annotations are added so collision resolution can prefer those records, selected INFO annotations are optionally removed, and calls overlapping TRGT loci are dropped."
+        ]
+    }
+
+    parameter_meta {
+        vcf: "Callset VCF to prepare."
+        vcf_idx: "Index for `vcf`."
+        remove_annotations: "Whether to remove the INFO fields named in `annotations_to_remove`."
+        annotations_to_remove: "Comma-separated INFO fields removed when `remove_annotations` is set."
+        annotated_vcf: "Annotated VCF."
+        annotated_vcf_idx: "Index for the annotated VCF."
+        filtered_vcf: "VCF with low-coverage genotypes set to missing."
+        filtered_vcf_idx: "Index for `filtered_vcf`."
+    }
+
     input {
         File vcf
         File vcf_idx

@@ -3,6 +3,22 @@ version 1.0
 import "../utils/Structs.wdl"
 
 workflow CompareVcfSamples {
+    meta {
+        description: [
+            "This utility compares the sample list of a VCF against a supplied list of sample IDs, reporting how many samples are shared, how many appear only in the VCF and how many appear only in the supplied list, along with the IDs in each category."
+        ]
+    }
+
+    parameter_meta {
+        vcf: "VCF whose samples are compared."
+        vcf_idx: "Index for `vcf`."
+        sample_ids: "Sample IDs to compare the VCF against."
+        samples_summary_counts: "Counts of shared and unique samples."
+        samples_common: "Sample IDs present in both the VCF and the supplied list."
+        samples_vcf_only: "Sample IDs present only in the VCF."
+        samples_sample_list_only: "Sample IDs present only in the supplied list."
+    }
+
     input {
         File vcf
         File vcf_idx

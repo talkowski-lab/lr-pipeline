@@ -4,6 +4,26 @@ import "../utils/Helpers.wdl"
 import "../utils/Structs.wdl"
 
 workflow TransferMethylationTags {
+    meta {
+        description: [
+            "This tool transfers methylation base-modification tags (MM/ML) from unaligned BAMs onto an aligned BAM. It extracts the tags per read, then per contig re-attaches them to the aligned reads and sorts, merging the result into a single tagged BAM. It outputs the methylation-tagged BAM and a TSV of the transferred tags."
+        ]
+    }
+
+    parameter_meta {
+        aligned_bam: "Aligned BAM to receive the tags."
+        aligned_bai: "Index for `aligned_bam`."
+        contigs: "Contigs to process."
+        unaligned_bam_paths: "Paths to the unaligned BAMs carrying the methylation tags."
+        gcs_paths: "Whether `unaligned_bam_paths` are GCS paths."
+        recreate_bam: "Whether to rebuild the aligned BAM from the tagged reads rather than tagging it in place."
+        mm_tag: "Base-modification tag name."
+        ml_tag: "Modification-likelihood tag name."
+        methylation_tagged_bam: "Aligned BAM with methylation tags transferred."
+        methylation_tagged_bai: "Index for the tagged BAM."
+        methylation_tags: "TSV of the transferred methylation tags."
+    }
+
     input {
         File aligned_bam
         File aligned_bai

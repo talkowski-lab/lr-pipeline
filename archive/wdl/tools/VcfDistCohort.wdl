@@ -6,6 +6,29 @@ import "BackbonePhase.wdl"
 import "VcfDist.wdl"
 
 workflow VcfDistCohort {
+    meta {
+        description: [
+            "This tool runs vcfdist (https://github.com/TimD1/vcfdist) across a cohort by pairing each evaluation VCF with its corresponding truth VCF and benchmarking every assigned sample, then aggregating the per-sample results. It outputs cohort-level precision/recall and phasing summaries."
+        ]
+    }
+
+    parameter_meta {
+        eval_vcfs: "Evaluation VCFs, one per group."
+        eval_vcf_idxs: "Indexes for `eval_vcfs`."
+        truth_vcfs: "Truth VCFs, aligned to `eval_vcfs`."
+        truth_vcf_idxs: "Indexes for `truth_vcfs`."
+        ref_fa: "From references."
+        contigs: "Contigs to evaluate."
+        subset_samples: "Samples to restrict the evaluation to."
+        vcfdist_args: "Additional arguments passed to vcfdist."
+        vcfdist_phasing_summary_tsv: "Cohort phasing summary."
+        vcfdist_precision_recall_summary_tsv: "Cohort precision-recall summary."
+        vcfdist_precision_recall_tsv: "Cohort precision-recall curves."
+        vcfdist_switchflips_tsv: "Cohort switch and flip errors."
+        vcfdist_phase_blocks_tsv: "Cohort phase blocks."
+        vcfdist_missing_samples: "Samples with no matching truth VCF."
+    }
+
     input {
         Array[File] eval_vcfs
         Array[File] eval_vcf_idxs

@@ -1,8 +1,26 @@
 version 1.0
 
-import "utils/Structs.wdl"
+import "../utils/Structs.wdl"
 
 workflow MergeWithTruvari {
+    meta {
+        description: [
+            "This tool merges VCFs by combining them with `bcftools merge` and then collapsing redundant records with Truvari (https://github.com/ACEnglish/truvari). An optional preprocessing script can reshape the merged VCF before collapsing."
+        ]
+    }
+
+    parameter_meta {
+        vcfs: "VCFs to merge."
+        vcf_idxs: "Index for `vcfs`."
+        truvari_params: "Arguments passed to `truvari collapse`."
+        bcftools_merge_params: "Arguments passed to `bcftools merge`."
+        preprocess_script: "Script run on the merged VCF before collapsing."
+        ref_fa: "From references."
+        ref_fai: "From references."
+        truvari_collapsed_vcf: "Merged and collapsed callset."
+        truvari_collapsed_vcf_idx: "Index for `truvari_collapsed_vcf`."
+    }
+
     input {
         Array[File] vcfs
         Array[File] vcf_idxs
@@ -17,10 +35,10 @@ workflow MergeWithTruvari {
 
         String merge_docker
         String truvari_docker
-        
+
         RuntimeAttr? runtime_attr_override
     }
-    
+
     call BcftoolsMerge {
         input:
             vcfs = vcfs,
@@ -64,7 +82,7 @@ task BcftoolsMerge {
 
     command <<<
         set -euo pipefail
-      
+
         N_SOCKETS="$(lscpu | grep '^Socket(s):' | awk '{print $NF}')"
         N_CORES_PER_SOCKET="$(lscpu | grep '^Core(s) per socket:' | awk '{print $NF}')"
         N_THREADS=$(( ${N_SOCKETS} * ${N_CORES_PER_SOCKET} ))
@@ -84,7 +102,7 @@ task BcftoolsMerge {
             done
             bcftools merge ~{params} --threads ${N_THREADS} -m none *preprocessed.vcf.gz | bgzip > tmp.vcf.gz
         fi
-        
+
         bcftools norm --multiallelics - --output-type z tmp.vcf.gz > ~{prefix}.bcftools_merge.vcf.gz
         tabix ~{prefix}.bcftools_merge.vcf.gz
         rm -f tmp.vcf.gz*
@@ -124,10 +142,10 @@ task Truvari {
         String docker
         RuntimeAttr? runtime_attr_override
     }
-    
+
     command <<<
         set -euo pipefail
-        
+
         N_SOCKETS="$(lscpu | grep '^Socket(s):' | awk '{print $NF}')"
         N_CORES_PER_SOCKET="$(lscpu | grep '^Core(s) per socket:' | awk '{print $NF}')"
         N_THREADS=$(( ${N_SOCKETS} * ${N_CORES_PER_SOCKET} ))
@@ -144,7 +162,7 @@ task Truvari {
             | bcftools sort --max-mem ${MEM}G -Oz -o ~{prefix}.truvari_collapsed.vcf.gz
         tabix ~{prefix}.truvari_collapsed.vcf.gz
     >>>
-    
+
     output {
         File truvari_collapsed_vcf = "~{prefix}.truvari_collapsed.vcf.gz"
         File truvari_collapsed_vcf_idx = "~{prefix}.truvari_collapsed.vcf.gz.tbi"

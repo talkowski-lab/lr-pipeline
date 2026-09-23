@@ -4,6 +4,32 @@ import "../utils/Helpers.wdl"
 import "../utils/Structs.wdl"
 
 workflow MergeVcfs {
+    meta {
+        description: [
+            "This utility merges multiple per-contig VCFs covering the same contig into one, handling tandem-repeat and non-tandem-repeat variants separately. Non-TR variants are merged with Truvari using reciprocal-overlap, sequence-, size- and sample-similarity, a breakpoint distance and size bounds, while TR variants are merged on their identifiers, with optional region sharding. It outputs the merged VCF and a merge-summary TSV."
+        ]
+    }
+
+    parameter_meta {
+        contig_vcfs: "Per-callset VCFs for the contig being merged."
+        contig_vcf_idxs: "Indexes for `contig_vcfs`."
+        contig: "Contig being merged."
+        min_truvari_match: "Minimum variant length for Truvari matching."
+        truvari_breakpoint_window: "Maximum breakpoint distance, in bp, for merging non-TR variants."
+        truvari_reciprocal_overlap: "Minimum reciprocal overlap for merging non-TR variants."
+        truvari_sample_similarity: "Minimum sample similarity for merging non-TR variants."
+        truvari_sequence_similarity: "Minimum sequence similarity for merging non-TR variants."
+        truvari_size_similarity: "Minimum size similarity for merging non-TR variants."
+        truvari_size_max: "Maximum variant length Truvari will consider when collapsing."
+        truvari_size_min: "Minimum variant length Truvari will consider when collapsing."
+        ref_fa: "From references."
+        ref_fai: "From references."
+        shard_bin_size: "Region-bin size, in bp, used when sharding the contig."
+        merged_vcf: "Merged VCF."
+        merged_vcf_idx: "Index for the merged VCF."
+        merge_summary_tsv: "TSV summarizing the merge."
+    }
+
     input {
         Array[File] contig_vcfs
         Array[File] contig_vcf_idxs

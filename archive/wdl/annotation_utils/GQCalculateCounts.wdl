@@ -4,6 +4,36 @@ import "../utils/Helpers.wdl"
 import "../utils/Structs.wdl"
 
 workflow GQCalculateCounts {
+    meta {
+        description: [
+            "This utility computes GQ-stratified count tables used to derive GQ filtering cutoffs, from both a trio de novo analysis and a truth-set concordance analysis. Counts are bucketed by variant type, allele-length bin and supporting caller. For structural variants (`abs(allele_length) >= 50`), the `CALLER` column expands each call by its supporting callers using the `EV`/`BEV` FORMAT fields written by `AnnotateSvCallerSupport`: `kanpig`-backed calls are recorded under `CALLER=kanpig` with their own GQ, calls backed by other callers are split into one row per caller carrying an allelic depth in `EV` (with a per-caller GQ recomputed from that depth), and calls with no `BEV` are recorded with a blank `CALLER`. It outputs one TSV per analysis."
+        ]
+    }
+
+    parameter_meta {
+        vcfs: "Cohort VCFs to analyze."
+        vcf_idxs: "Indexes for the cohort VCFs."
+        truth_vcfs: "Truth-set VCFs, one per input VCF, for the concordance analysis."
+        truth_vcf_idxs: "Indexes for the truth-set VCFs."
+        length_bins: "Allele-length bin boundaries defining the size buckets."
+        subset_vcf_string: "Optional `bcftools view` argument string to pre-subset each VCF."
+        ped: "Pedigree used to identify trios for the de novo analysis."
+        swap_samples_truth: "Optional sample-swap list applied to the truth VCFs."
+        run_trio_qc: "Whether to run the trio de novo analysis."
+        run_truth_qc: "Whether to run the truth-set concordance analysis."
+        skip_trv: "Whether to skip tandem-repeat variants."
+        drop_kanpig_supported_gq: "Whether a Kanpig-supported call also expands its `EV` callers, so co-supporting callers contribute their own genotype-quality rows."
+        min_fuzzy_match: "Minimum variant length to perform fuzzy matching for truth concordance."
+        del_breakpoint_window: "Breakpoint window, in bp, for matching deletions during truth concordance."
+        del_reciprocal_overlap: "Minimum reciprocal overlap for matching deletions during truth concordance."
+        del_size_similarity: "Minimum size similarity for matching deletions during truth concordance."
+        ins_breakpoint_window: "Breakpoint window, in bp, for matching insertions during truth concordance."
+        ins_reciprocal_overlap: "Minimum reciprocal overlap for matching insertions during truth concordance."
+        ins_size_similarity: "Minimum size similarity for matching insertions during truth concordance."
+        trio_denovo_tsv: "GQ-stratified trio de novo count table."
+        truth_concordance_tsv: "GQ-stratified truth-set concordance count table."
+    }
+
     input {
         Array[File] vcfs
         Array[File] vcf_idxs

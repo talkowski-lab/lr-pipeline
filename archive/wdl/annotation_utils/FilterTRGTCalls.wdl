@@ -4,6 +4,22 @@ import "../utils/Helpers.wdl"
 import "../utils/Structs.wdl"
 
 workflow FilterTRGTCalls {
+    meta {
+        description: [
+            "This utility filters a TRGT tandem-repeat VCF, optionally dropping calls below a minimum repeat-unit length or length difference, or above a maximum catalog length. It outputs the filtered VCF."
+        ]
+    }
+
+    parameter_meta {
+        trgt_vcf: "TRGT VCF to filter."
+        trgt_vcf_idx: "Index for the TRGT VCF."
+        min_repeat_unit: "Minimum repeat-unit length to retain a call."
+        min_length_diff: "Minimum length difference from the reference to retain a call."
+        max_catalog_length: "Maximum catalog locus length to retain a call."
+        trgt_filtered_vcf: "Filtered TRGT VCF."
+        trgt_filtered_vcf_idx: "Index for the filtered VCF."
+    }
+
     input {
         File trgt_vcf
         File trgt_vcf_idx

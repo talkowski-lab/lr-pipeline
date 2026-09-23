@@ -5,6 +5,36 @@ import "../utils/Structs.wdl"
 import "PhaseCallsetCommon.wdl"
 
 workflow PhaseCallsetWithBackbone {
+    meta {
+        description: [
+            "This tool transfers phasing from a backbone VCF onto a callset. Both callsets are reduced to their overlapping samples and to SNVs, the callset is split, deduplicated and resolved for variant collisions, and each phase set is oriented to whichever assignment agrees with the backbone's phased heterozygous calls."
+        ]
+    }
+
+    parameter_meta {
+        vcf: "Callset VCF to phase."
+        vcf_idx: "Index for `vcf`."
+        base_vcf: "Phased backbone VCF supplying the haplotype assignments."
+        base_vcf_idx: "Index for `base_vcf`."
+        operation: "Collision-resolution mode: `0` removes an entire VCF record, `1` removes single alleles from a genotype."
+        weight_tag: "ID of the field holding each record's collision weight, so preferred records survive a collision."
+        is_weight_format_field: "Where `weight_tag` is read from: `0` for the INFO field, `1` for the sample column."
+        default_weight: "Weight assigned when `weight_tag` is absent from a record."
+        remove_duplicates_by_phased_fraction: "Whether to drop duplicate records, keeping the copy phased in the most samples."
+        variant_filter_args: "Arguments used to filter variants before phasing."
+        fix_variant_collisions_java: "Compiled Java program that resolves variant collisions."
+        uqids_split_vcf: "Split VCF with unique variant IDs and normalized records."
+        uqids_split_vcf_idx: "Index for `uqids_split_vcf`."
+        removed_duplicates_split_vcf: "Split VCF after duplicate records were dropped."
+        removed_duplicates_split_vcf_idx: "Index for `removed_duplicates_split_vcf`."
+        collisionless_split_vcf: "Split VCF after variant collisions were resolved."
+        collisionless_split_vcf_idx: "Index for `collisionless_split_vcf`."
+        base_prepared_vcf: "Backbone VCF reduced to the overlapping samples and SNVs."
+        base_prepared_vcf_idx: "Index for `base_prepared_vcf`."
+        base_transferred_vcf: "Callset with the backbone haplotypes transferred on."
+        base_transferred_vcf_idx: "Index for `base_transferred_vcf`."
+    }
+
     input {
         File vcf
         File vcf_idx

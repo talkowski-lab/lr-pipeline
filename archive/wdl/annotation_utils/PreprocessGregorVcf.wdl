@@ -4,6 +4,25 @@ import "../utils/Helpers.wdl"
 import "../utils/Structs.wdl"
 
 workflow PreprocessGregorVcf {
+    meta {
+        description: [
+            "This utility prepares a GREGoR callset for annotation. Each contig is optionally sharded, normalized against the reference, given variant attributes and renamed variant IDs, and emitted both with genotypes and as a sites-only VCF."
+        ]
+    }
+
+    parameter_meta {
+        vcf: "GREGoR callset to preprocess."
+        vcf_idx: "Index for `vcf`."
+        contigs: "Contigs to process."
+        records_per_shard: "Number of variants to keep within a single shard during preprocessing."
+        ref_fa: "From references."
+        ref_fai: "From references."
+        full_vcf: "Per-contig preprocessed VCFs retaining genotypes."
+        full_vcf_idx: "Index for `full_vcf`."
+        stripped_vcf: "Per-contig preprocessed VCFs with genotypes removed."
+        stripped_vcf_idx: "Index for `stripped_vcf`."
+    }
+
     input {
         File vcf
         File vcf_idx

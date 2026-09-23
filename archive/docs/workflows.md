@@ -1,8 +1,211 @@
 # Long-Read Annotation
+This document describes each retired WDL workflow, including its purpose, inputs and outputs. Archived workflows are retained as historical reference only. They are not active pipeline entry points, and they are excluded from Dockstore registration and from the validation and style checks that run over `wdl/`.
+
+This file is generated from the `meta` and `parameter_meta` blocks of each workflow by [`generate_workflows_doc.py`](../../.github/scripts/generate_workflows_doc.py). Edit those blocks rather than this document. Inputs described as `From references.` are the shared reference files listed in [references](../../docs/references.md).
+
+
+## Annotations
+
+
+### [AnnotateSingletonReads](../wdl/annotation/AnnotateSingletonReads.wdl)
+This utility flags variants that look like single-read artifacts. Working one contig at a time it recomputes `AC`, then adds a `SINGLE_READ_SUPPORT` FILTER to any variant whose allele count is at or below two and whose alternate allele is supported by exactly one read in exactly one sample, and concatenates the per-contig results.
+
+Inputs:
+- `File vcf`: Cohort VCF to flag.
+- `File vcf_idx`: Index for `vcf`.
+- `Array[String] contigs`: Contigs to process.
+- `String prefix`: Prefix for output file names.
+- `String utils_docker`: Container image.
+- `RuntimeAttr? runtime_attr_*`: Optional per-task runtime overrides (3).
+
+Outputs:
+- `File singleton_filtered_vcf`: VCF whose single-read-supported variants carry the `SINGLE_READ_SUPPORT` FILTER.
+- `File singleton_filtered_vcf_idx`: Index for `singleton_filtered_vcf`.
+
 
 ## Annotation Utilities
 
-> Archived workflows are retained as historical reference only. They are not active pipeline entry points and are excluded from active WDL validation and Dockstore registration.
+
+### [AnnotateCallsetOverlapWithPlotting](../wdl/annotation_utils/AnnotateCallsetOverlapWithPlotting.wdl)
+This utility is an earlier form of `AnnotateCallsetOverlap` that also produces summary statistics and plots. It matches a callset VCF against SNV/indel and SV truth VCFs using exact, Truvari and `bedtools closest` rounds, each of which can be enabled on its own, and can normalize the callset, derive variant attributes and compare VEP annotations before matching.
+
+Inputs:
+- `File vcf`: Callset VCF being annotated.
+- `File vcf_idx`: Index for `vcf`.
+- `File truth_snv_indel_vcf`: Truth VCF containing SNVs & indels to match against.
+- `File truth_snv_indel_vcf_idx`: Index for `truth_snv_indel_vcf`.
+- `File truth_sv_vcf`: Truth VCF containing SVs to match against.
+- `File truth_sv_vcf_idx`: Index for `truth_sv_vcf`.
+- `File ref_fa`: From references.
+- `File ref_fai`: From references.
+- `Array[String] contigs`: Contigs to evaluate.
+- `Int? records_per_shard`: Number of variants to keep within a single shard during matching.
+- `Boolean normalize_vcf`: Whether to normalize and split multiallelics around the VEP call. (default `false`)
+- `Boolean create_variant_attributes`: Whether to derive variant attributes on the callset before matching. (default `false`)
+- `Boolean compare_annotations`: Whether to compare VEP annotations between the callset and the truth callsets. (default `true`)
+- `Boolean do_exact`: Whether to run the exact-match round. (default `true`)
+- `Boolean do_truvari`: Whether to run the Truvari matching round. (default `true`)
+- `Boolean do_bedtools_closest`: Whether to run the `bedtools closest` matching round. (default `true`)
+- `Int min_sv_length_truvari`: Minimum length for a callset variant to enter the Truvari matching round.
+- `Int min_sv_length_truth_truvari`: Minimum length for a truth variant to enter the Truvari matching round.
+- `Int min_sv_length_bedtools_closest`: Minimum length for a callset variant to enter the `bedtools closest` matching round.
+- `Int min_sv_length_truth_bedtools_closest`: Minimum length for a truth variant to enter the `bedtools closest` matching round.
+- `String type_field`: INFO field in the callset VCF giving each variant's allele type. (default `allele_type`)
+- `String length_field`: INFO field in the callset VCF giving each variant's allele length. (default `allele_length`)
+- `String source_tag_truth_snv_indel_vcf`: Label used to tag matches against the SNV & indel truth VCF. (default `SNV_indel`)
+- `String source_tag_truth_sv_vcf`: Label used to tag matches against the SV truth VCF. (default `SV`)
+- `String normalize_check_ref`: `bcftools norm` `--check-ref` mode used when normalizing. (default `w`)
+- `String skip_vep_categories`: VEP consequence categories excluded when comparing annotations. (default empty)
+- `String af_field_sv_truth`: INFO field in the SV truth VCF holding the allele frequency. (default `AF`)
+- `String ac_field_sv_truth`: INFO field in the SV truth VCF holding the allele count. (default `AC`)
+- `String an_field_sv_truth`: INFO field in the SV truth VCF holding the allele number. (default `AN`)
+- `String? args_string_vcf`: `bcftools view` arguments used to pre-subset the callset VCF.
+- `String? args_string_truth_snv_indel_vcf`: `bcftools view` arguments used to pre-subset the SNV & indel truth VCF.
+- `String? args_string_truth_sv_vcf`: `bcftools view` arguments used to pre-subset the SV truth VCF.
+- `String? rename_id_string_vcf`: Expression used to rename variant IDs in the callset VCF prior to matching.
+- `String? rename_id_string_truth_snv_indel_vcf`: Expression used to rename variant IDs in the SNV & indel truth VCF prior to matching.
+- `String? rename_id_string_truth_sv_vcf`: Expression used to rename variant IDs in the SV truth VCF prior to matching.
+- `Boolean? rename_id_strip_chr_vcf`: Whether to strip the `chr` prefix when renaming callset variant IDs.
+- `Boolean? rename_id_strip_chr_truth_snv_indel_vcf`: Whether to strip the `chr` prefix when renaming SNV & indel truth variant IDs.
+- `Boolean? rename_id_strip_chr_truth_sv_vcf`: Whether to strip the `chr` prefix when renaming SV truth variant IDs.
+- `String prefix`: Prefix for output file names.
+- `String benchmark_annotations_docker`, `String utils_docker`: Container images.
+- `RuntimeAttr? runtime_attr_*`: Optional per-task runtime overrides (37).
+
+Outputs:
+- `File annotations_tsv_benchmark`: TSV mapping callset variants to their matched truth variants, match type, and the truth callset's AC/AF/AN and genotype-count fields.
+- `File? benchmark_annotations_summary_tsv`: Summary counts of matched and unmatched variants.
+- `File? benchmark_annotations_stats_tsv`: Match statistics underlying the plots.
+- `File? benchmark_annotations_plots_tarball`: Tarball of the generated benchmarking plots.
+
+### [AnnotateExternalAFs](../wdl/annotation_utils/AnnotateExternalAFs.wdl)
+This utility annotates a cohort VCF with allele frequencies drawn from external reference BEDs. Each contig is subset, duplications are converted to insertions with their original type kept in a tag, the reference BEDs are matched with `bedtools closest`, and the selected matches are written back as INFO fields before the contigs are concatenated.
+
+Inputs:
+- `File vcf`: Cohort VCF to annotate.
+- `File vcf_index`: Index for `vcf`.
+- `Array[File] ref_beds`: External reference BEDs supplying the allele frequencies to transfer.
+- `Array[String] ref_prefixes`: INFO field prefix for each entry in `ref_beds`, in the same order.
+- `Array[String] contigs`: Contigs to annotate.
+- `String prefix`: Prefix for output file names.
+- `String pipeline_docker`: Container image.
+- `RuntimeAttr? runtime_attr_*`: Optional per-task runtime overrides (5).
+
+Outputs:
+- `File external_af_annotated_vcf`: VCF annotated with the external allele frequencies.
+- `File external_af_annotated_vcf_index`: Index for `external_af_annotated_vcf`.
+
+### [AnnotateExternalVariants](../wdl/annotation_utils/AnnotateExternalVariants.wdl)
+This utility matches an evaluation VCF against a truth VCF by structural variant type. Both callsets are converted to BED and split into deletions, duplications and insertions, compared with `bedtools` both within type and across the duplication and insertion types, and the per-type results are combined into one TSV of matched variants.
+
+Inputs:
+- `File vcf_eval`: VCF being evaluated.
+- `File vcf_eval_idx`: Index for `vcf_eval`.
+- `File vcf_truth`: Truth VCF to evaluate against.
+- `File vcf_truth_idx`: Index for `vcf_truth`.
+- `Array[String] population`: Population labels whose allele frequencies are carried across from the truth callset.
+- `String prefix`: Prefix for output file names.
+- `String sv_pipeline_docker`, `String sv_base_mini_docker`: Container images.
+- `RuntimeAttr? runtime_attr_*`: Optional per-task runtime overrides (5).
+
+Outputs:
+- `File matched_variants_tsv`: TSV pairing each evaluation variant with its matched truth variant.
+
+### [AnnotateSvCallerSupport](../wdl/annotation_utils/AnnotateSvCallerSupport.wdl)
+This utility annotates each SV in a cohort VCF with the set of raw callers that independently support it. For every sample it matches the cohort calls against that sample's per-caller VCFs (Kanpig, cuteSV, Sniffles, Delly, pbsv, Sawfish, dipcall and hapdiff) using reciprocal-overlap, size- and sequence-similarity and a breakpoint window, then merges the support back into the cohort VCF. It outputs the annotated VCF and a TSV of per-caller match counts.
+
+Inputs:
+- `File sv_vcf`: Cohort SV VCF to annotate.
+- `File sv_vcf_idx`: Index for `sv_vcf`.
+- `Array[File] kanpig_vcfs`: Per-sample Kanpig VCFs.
+- `Array[File] kanpig_vcf_idxs`: Indexes for `kanpig_vcfs`.
+- `Array[String] sample_ids`: Samples to process.
+- `Array[File?]? sample_sv_stats`: Optional per-sample BED listing the callers supporting each variant.
+- `Array[File?]? cutesv_vcfs`: Per-sample cuteSV VCFs.
+- `Array[File?]? cutesv_vcf_idxs`: Indexes for `cutesv_vcfs`.
+- `Array[File?]? sniffles_vcfs`: Per-sample Sniffles VCFs.
+- `Array[File?]? sniffles_vcf_idxs`: Indexes for `sniffles_vcfs`.
+- `Array[File?]? delly_vcfs`: Per-sample Delly VCFs.
+- `Array[File?]? delly_vcf_idxs`: Indexes for `delly_vcfs`.
+- `Array[File?]? pbsv_vcfs`: Per-sample pbsv VCFs.
+- `Array[File?]? pbsv_vcf_idxs`: Indexes for `pbsv_vcfs`.
+- `Array[File?]? sawfish_vcfs`: Per-sample Sawfish VCFs.
+- `Array[File?]? sawfish_vcf_idxs`: Indexes for `sawfish_vcfs`.
+- `Array[File?]? dipcall_vcfs`: Per-sample dipcall VCFs.
+- `Array[File?]? dipcall_vcf_idxs`: Indexes for `dipcall_vcfs`.
+- `Array[File?]? hapdiff_vcfs`: Per-sample hapdiff VCFs.
+- `Array[File?]? hapdiff_vcf_idxs`: Indexes for `hapdiff_vcfs`.
+- `Int truvari_breakpoint_window`: Breakpoint window, in bp, for matching a raw call. (default `500`)
+- `Float truvari_reciprocal_overlap`: Minimum reciprocal overlap for matching a raw call. (default `0.0`)
+- `Float truvari_sequence_similarity`: Minimum sequence similarity for matching a raw call. (default `0.7`)
+- `Float truvari_size_similarity`: Minimum size similarity for matching a raw call. (default `0.7`)
+- `Boolean fuzzy_match_vcf_to_stats`: Whether to match cohort records to `sample_sv_stats` by proximity rather than by exact variant ID. (default `true`)
+- `Int fuzzy_match_breakpoint_window`: Breakpoint window, in bp, for fuzzy-matching a raw call to per-caller stats. (default `500`)
+- `Boolean match_gt_kanpig`: Whether a Kanpig record must have a matching genotype to count as support. (default `true`)
+- `Boolean match_gt_non_kanpig`: Whether a non-Kanpig caller record must have a matching genotype to count as support. (default `true`)
+- `File? swap_samples`: Sample-ID swap map applied to the cohort VCF.
+- `File? null_file`: Placeholder file used where an optional per-caller input is absent.
+- `String prefix`: Prefix for output file names.
+- `String utils_docker`: Container image.
+- `RuntimeAttr? runtime_attr_*`: Optional per-task runtime overrides (6).
+
+Outputs:
+- `File sv_added_vcf`: Cohort VCF annotated with raw-caller support.
+- `File sv_added_vcf_idx`: Index for the annotated VCF.
+- `File sv_match_counts_tsv`: TSV of per-caller match counts.
+
+### [BenchmarkSTRs](../wdl/annotation_utils/BenchmarkSTRs.wdl)
+This utility benchmarks per-sample TRGT tandem-repeat genotypes against a Vamos callset. Each sample's TRGT VCF is compared with the shared Vamos VCF, per-sample match statistics are collected, and the results are aggregated into genotype-concordance matrices and plots of sequence similarity, edit distance and length difference.
+
+Inputs:
+- `Array[String] sample_ids`: Sample IDs in the cohort, aligned to `trgt_vcfs`.
+- `Array[File] trgt_vcfs`: Per-sample TRGT VCFs whose loci are matched against the callset.
+- `Array[File] trgt_vcf_idx`: Index for `trgt_vcfs`.
+- `File vamos_vcf`: Vamos callset the TRGT genotypes are benchmarked against.
+- `File vamos_vcf_index`: Index for `vamos_vcf`.
+- `File ref_fa`: From references.
+- `File ref_fai`: From references.
+- `Array[String] contigs`: Contigs to benchmark.
+- `String output_prefix`: Prefix for output file names.
+- `Boolean include_all_regions`: Whether to additionally benchmark every locus rather than only non-reference genotypes. (default `false`)
+- `String benchmark_strs_docker`: Container image.
+- `RuntimeAttr? runtime_attr_*`: Optional per-task runtime overrides (3).
+
+Outputs:
+- `Array[File] benchmark_strs_per_sample_stats`: Per-sample match statistics.
+- `Array[String] benchmark_strs_processed_sample_ids`: IDs of the samples that were successfully benchmarked.
+- `File benchmark_strs_processed_samples_file`: File listing the samples that were successfully benchmarked.
+- `File benchmark_strs_aggregated_match_data_non_ref`: Aggregated match data across samples, restricted to non-reference genotypes.
+- `File benchmark_strs_genotype_concordance_matrix_non_ref`: Genotype concordance matrix for non-reference genotypes.
+- `File benchmark_strs_similarity_plot_non_ref`: Sequence-similarity plot for non-reference genotypes.
+- `File benchmark_strs_edit_distance_plot_non_ref`: Edit-distance plot for non-reference genotypes.
+- `File benchmark_strs_length_difference_plot_non_ref`: Length-difference plot for non-reference genotypes.
+- `File benchmark_strs_length_diff_vs_locus_size_non_ref`: Length difference against locus size for non-reference genotypes.
+- `File? benchmark_strs_aggregated_match_data_all`: Aggregated match data across samples over all loci.
+- `File? benchmark_strs_genotype_concordance_matrix_all`: Genotype concordance matrix over all loci.
+- `File? benchmark_strs_similarity_plot_all`: Sequence-similarity plot over all loci.
+- `File? benchmark_strs_edit_distance_plot_all`: Edit-distance plot over all loci.
+- `File? benchmark_strs_length_difference_plot_all`: Length-difference plot over all loci.
+- `File? benchmark_strs_length_diff_vs_locus_size_all`: Length difference against locus size over all loci.
+- `File? benchmark_strs_edit_distance_to_reference_all`: Edit distance to the reference allele over all loci.
+- `File? benchmark_strs_length_difference_to_reference_all`: Length difference from the reference allele over all loci.
+
+### [CombineVcfs](../wdl/annotation_utils/CombineVcfs.wdl)
+This utility concatenates two VCFs holding different variants for the same samples. The sample lists are checked for a match, each contig is subset from both inputs, and the per-contig results are concatenated into one VCF.
+
+Inputs:
+- `File a_vcf`: First VCF to combine.
+- `File a_vcf_idx`: Index for `a_vcf`.
+- `File b_vcf`: Second VCF to combine.
+- `File b_vcf_idx`: Index for `b_vcf`.
+- `Array[String] contigs`: Contigs to process.
+- `String prefix`: Prefix for output file names.
+- `String utils_docker`: Container image.
+- `RuntimeAttr? runtime_attr_*`: Optional per-task runtime overrides (7).
+
+Outputs:
+- `File concat_vcf`: Combined VCF.
+- `File concat_vcf_idx`: Index for the combined VCF.
 
 ### [CompareBams](../wdl/annotation_utils/CompareBams.wdl)
 This utility compares two unaligned BAMs by read identity, sequence length, and sequence content. It reports total read counts, the number of reads whose IDs match across BAMs, the number of matched-ID pairs with identical sequence lengths, and the number with identical sequences (compared via MD5). It also emits a per-read TSV covering all reads from both files.
@@ -13,11 +216,29 @@ Inputs:
 - `String bam1_name`: Label for `bam1`, used as column/metric prefix in outputs.
 - `String bam2_name`: Label for `bam2`, used as column/metric prefix in outputs.
 - `String prefix`: Prefix for output file names.
+- `String utils_docker`: Container image.
+- `RuntimeAttr? runtime_attr_*`: Optional per-task runtime overrides.
 
 Outputs:
-- `comparison_tsv`: TSV with columns `metric` and `value` reporting `{bam1_name}_total_reads`, `{bam2_name}_total_reads`, `matched_id_reads`, `matched_id_reads_same_sequence_length`, and `matched_id_reads_same_sequence`.
-- `per_read_tsv`: TSV with columns `read_id`, `{bam1_name}_len`, `{bam2_name}_len` for all reads across both BAMs. Length is empty for reads absent from that BAM.
+- `File comparison_tsv`: TSV with columns `metric` and `value` reporting `{bam1_name}_total_reads`, `{bam2_name}_total_reads`, `matched_id_reads`, `matched_id_reads_same_sequence_length`, and `matched_id_reads_same_sequence`.
+- `File per_read_tsv`: TSV with columns `read_id`, `{bam1_name}_len`, `{bam2_name}_len` for all reads across both BAMs. Length is empty for reads absent from that BAM.
 
+### [CompareVcfSamples](../wdl/annotation_utils/CompareVcfSamples.wdl)
+This utility compares the sample list of a VCF against a supplied list of sample IDs, reporting how many samples are shared, how many appear only in the VCF and how many appear only in the supplied list, along with the IDs in each category.
+
+Inputs:
+- `File vcf`: VCF whose samples are compared.
+- `File vcf_idx`: Index for `vcf`.
+- `Array[String] sample_ids`: Sample IDs to compare the VCF against.
+- `String prefix`: Prefix for output file names.
+- `String utils_docker`: Container image.
+- `RuntimeAttr? runtime_attr_*`: Optional per-task runtime overrides.
+
+Outputs:
+- `File samples_summary_counts`: Counts of shared and unique samples.
+- `File samples_common`: Sample IDs present in both the VCF and the supplied list.
+- `File samples_vcf_only`: Sample IDs present only in the VCF.
+- `File samples_sample_list_only`: Sample IDs present only in the supplied list.
 
 ### [CreateBiallelicVcf](../wdl/annotation_utils/CreateBiallelicVcf.wdl)
 This utility normalizes a VCF into a streamlined biallelic callset. It splits multiallelic records and left-aligns variants against the reference, sorts the result, adds the `allele_length` and `allele_type` INFO fields, and rewrites each variant ID to `CHROM-POS-REF-ALT` for SNVs or `CHROM-POS-TYPE-LENGTH` otherwise, suffixing any colliding IDs to keep them unique. It outputs the biallelic VCF.
@@ -27,11 +248,42 @@ Inputs:
 - `File vcf_idx`: Index for VCF to process.
 - `File ref_fa`: Reference FASTA used for normalization.
 - `File ref_fai`: Index for `ref_fa`.
+- `String prefix`: Prefix for output file names.
+- `String utils_docker`: Container image.
+- `RuntimeAttr? runtime_attr_*`: Optional per-task runtime overrides (3).
 
 Outputs:
-- `biallelic_vcf`: Normalized, sorted biallelic VCF with streamlined variant IDs and `allele_length`/`allele_type` annotations.
-- `biallelic_vcf_idx`: Index for the biallelic VCF.
+- `File biallelic_vcf`: Normalized, sorted biallelic VCF with streamlined variant IDs and `allele_length`/`allele_type` annotations.
+- `File biallelic_vcf_idx`: Index for the biallelic VCF.
 
+### [CreateDepthProfile](../wdl/annotation_utils/CreateDepthProfile.wdl)
+This utility builds a read-depth profile across one genomic window. Each sample's mosdepth BED is queried for the window and the extracted depths are combined into a single matrix with one column per sample.
+
+Inputs:
+- `Array[String] sample_ids`: Sample IDs in the cohort, aligned to `mosdepth_bed_files`.
+- `Array[File] mosdepth_bed_files`: Per-sample mosdepth depth BEDs.
+- `Array[File] mosdepth_bed_idx`: Indexes for `mosdepth_bed_files`.
+- `String contig`: Contig containing the window.
+- `Int window_start`: Start position of the window.
+- `Int window_end`: End position of the window.
+- `String prefix`: Prefix for output file names.
+- `String utils_docker`: Container image.
+- `RuntimeAttr? runtime_attr_*`: Optional per-task runtime overrides (2).
+
+Outputs:
+- `File region_depth_profile`: Depth matrix over the window, with one column per sample.
+
+### [CreateFastqFromS3Reads](../wdl/annotation_utils/CreateFastqFromS3Reads.wdl)
+This utility downloads BAM or FASTQ files from S3 in parallel, converts BAMs to FASTQ format preserving methylation tags, and merges all outputs into a single FASTQ.gz file.
+
+Inputs:
+- `Array[String] addresses`: S3 addresses of files to download. Supports `.bam`, `.fastq.gz`, and `.fastq` inputs.
+- `String prefix`: Prefix for output file names.
+- `String utils_docker`: Container image.
+- `RuntimeAttr? runtime_attr_*`: Optional per-task runtime overrides (2).
+
+Outputs:
+- `File merged_fastq_gz`: Merged FASTQ.gz file containing reads from all input files.
 
 ### [CreatePedigreeAncestryFilesAoUPhase1](../wdl/annotation_utils/CreatePedigreeAncestryFilesAoUPhase1.wdl)
 This utility generates a minimal pedigree file and an ancestry-assignment file from a list of sample IDs and their sexes, assigning every sample the `afr` ancestry of the All of Us Phase 1 cohort. It outputs both files.
@@ -39,11 +291,13 @@ This utility generates a minimal pedigree file and an ancestry-assignment file f
 Inputs:
 - `Array[String] sample_ids`: Sample IDs to include.
 - `Array[String] sexes`: Sex of each sample in `sample_ids`.
+- `String prefix`: Prefix for output file names.
+- `String utils_docker`: Container image.
+- `RuntimeAttr? runtime_attr_*`: Optional per-task runtime overrides.
 
 Outputs:
-- `ped`: Generated pedigree file.
-- `ancestry`: Generated ancestry-assignment file.
-
+- `File ped`: Generated pedigree file.
+- `File ancestry`: Generated ancestry-assignment file.
 
 ### [DownloadAWSFile](../wdl/annotation_utils/DownloadAWSFile.wdl)
 This utility downloads a single file from S3 and copies it to GCS, mirroring the S3 path structure relative to a configurable base prefix.
@@ -52,21 +306,49 @@ Inputs:
 - `String aws_path`: S3 URI of the file to download.
 - `String gcs_folder`: GCS destination folder.
 - `String base_path`: S3 base prefix to strip when constructing the destination GCS path.
+- `String utils_docker`: Container image.
+- `RuntimeAttr? runtime_attr_*`: Optional per-task runtime overrides.
 
 Outputs:
 - `String gcs_path`: GCS URI of the transferred file.
 
-
-### [CreateFastqFromS3Reads](../wdl/annotation_utils/CreateFastqFromS3Reads.wdl)
-This utility downloads BAM or FASTQ files from S3 in parallel, converts BAMs to FASTQ format preserving methylation tags, and merges all outputs into a single FASTQ.gz file.
+### [ExtractBamRegion](../wdl/annotation_utils/ExtractBamRegion.wdl)
+This utility extracts one genomic region from a BAM into a smaller indexed BAM, for inspecting or sharing a locus without moving the whole file.
 
 Inputs:
-- `Array[String] addresses`: S3 addresses of files to download. Supports `.bam`, `.fastq.gz`, and `.fastq` inputs.
-- `String prefix`: Prefix for output file names.
+- `File bam`: BAM to extract from.
+- `File bai`: Index for `bam`.
+- `Int start`: Start position of the region.
+- `Int end`: End position of the region.
+- `String chrom`: Contig containing the region.
+- `String gatk_docker`, `String sv_pipeline_docker`: Container images.
+- `RuntimeAttr? runtime_attr_*`: Optional per-task runtime overrides.
 
 Outputs:
-- `merged_fastq_gz`: Merged FASTQ.gz file containing reads from all input files.
+- `File regional_bam`: BAM holding only the requested region.
+- `File regional_bai`: Index for `regional_bam`.
 
+### [FillFormatFieldsBcfTools](../wdl/annotation_utils/FillFormatFieldsBcfTools.wdl)
+This utility transfers FORMAT fields from a filled VCF back onto an unfilled VCF using `bcftools`, optionally unphasing genotypes, adding a `PL` field and adjusting the `EV` header Number. It is the `bcftools` counterpart to `FillFormatFields`.
+
+Inputs:
+- `File unfilled_vcf`: VCF whose FORMAT fields are filled.
+- `File unfilled_vcf_idx`: Index for `unfilled_vcf`.
+- `File filled_vcf`: VCF providing the FORMAT field values.
+- `File filled_vcf_idx`: Index for `filled_vcf`.
+- `Array[String] format_fields`: FORMAT fields to transfer from the filled VCF.
+- `String? include_field`: INFO field used to limit which variants are filled. Requires `include_value`.
+- `String? include_value`: Value that `include_field` must equal for a variant to be filled.
+- `Boolean modify_ev_number`: Whether to rewrite the `EV` header Number so multi-caller values validate. (default `false`)
+- `Boolean unphase_gts`: Whether to unphase genotypes while filling. (default `false`)
+- `Boolean add_pl`: Whether to add a `PL` FORMAT field. (default `false`)
+- `String prefix`: Prefix for output file names.
+- `String utils_docker`: Container image.
+- `RuntimeAttr? runtime_attr_*`: Optional per-task runtime overrides.
+
+Outputs:
+- `File refilled_vcf`: VCF with FORMAT fields filled.
+- `File refilled_vcf_idx`: Index for the refilled VCF.
 
 ### [FilterTRGTCalls](../wdl/annotation_utils/FilterTRGTCalls.wdl)
 This utility filters a TRGT tandem-repeat VCF, optionally dropping calls below a minimum repeat-unit length or length difference, or above a maximum catalog length. It outputs the filtered VCF.
@@ -77,53 +359,113 @@ Inputs:
 - `Int? min_repeat_unit`: Minimum repeat-unit length to retain a call.
 - `Int? min_length_diff`: Minimum length difference from the reference to retain a call.
 - `Int? max_catalog_length`: Maximum catalog locus length to retain a call.
+- `String prefix`: Prefix for output file names.
+- `String utils_docker`: Container image.
+- `RuntimeAttr? runtime_attr_*`: Optional per-task runtime overrides.
 
 Outputs:
-- `trgt_filtered_vcf`: Filtered TRGT VCF.
-- `trgt_filtered_vcf_idx`: Index for the filtered VCF.
-
-
-### [FindUntrimmedAlleles](../wdl/annotation_utils/FindUntrimmedAlleles.wdl)
-This utility identifies variants in a VCF whose REF and ALT alleles retain untrimmed shared bases, producing a subset VCF of those records for use in restoring full allele representations downstream. It outputs the subset VCF.
-
-Inputs:
-- `File vcf`: VCF to scan.
-- `File vcf_idx`: Index for VCF.
-- `Array[String] contigs`: Contigs to scan within the input VCF.
-- `Int? records_per_shard`: Number of variants to keep within a single shard during scanning.
-
-Outputs:
-- `subset_untrimmed_vcf`: VCF of records with untrimmed alleles.
-- `subset_untrimmed_vcf_idx`: Index for the subset VCF.
-
+- `File trgt_filtered_vcf`: Filtered TRGT VCF.
+- `File trgt_filtered_vcf_idx`: Index for the filtered VCF.
 
 ### [GQCalculateCounts](../wdl/annotation_utils/GQCalculateCounts.wdl)
-This utility computes GQ-stratified count tables used to derive GQ filtering cutoffs, from both a trio de novo analysis and a truth-set concordance analysis. Counts are bucketed by variant type, allele-length bin and supporting caller. For structural variants (`abs(allele_length) >= 50`), the `CALLER` column expands each call by its supporting callers using the `EV`/`BEV` FORMAT fields written by [AnnotateSvCallerSupport](#annotatesvcallersupport): `kanpig`-backed calls are recorded under `CALLER=kanpig` with their own GQ, calls backed by other callers are split into one row per caller carrying an allelic depth in `EV` (with a per-caller GQ recomputed from that depth), and calls with no `BEV` are recorded with a blank `CALLER`. It outputs one TSV per analysis.
+This utility computes GQ-stratified count tables used to derive GQ filtering cutoffs, from both a trio de novo analysis and a truth-set concordance analysis. Counts are bucketed by variant type, allele-length bin and supporting caller. For structural variants (`abs(allele_length) >= 50`), the `CALLER` column expands each call by its supporting callers using the `EV`/`BEV` FORMAT fields written by `AnnotateSvCallerSupport`: `kanpig`-backed calls are recorded under `CALLER=kanpig` with their own GQ, calls backed by other callers are split into one row per caller carrying an allelic depth in `EV` (with a per-caller GQ recomputed from that depth), and calls with no `BEV` are recorded with a blank `CALLER`. It outputs one TSV per analysis.
 
 Inputs:
 - `Array[File] vcfs`: Cohort VCFs to analyze.
 - `Array[File] vcf_idxs`: Indexes for the cohort VCFs.
 - `Array[File]? truth_vcfs`: Truth-set VCFs, one per input VCF, for the concordance analysis.
 - `Array[File]? truth_vcf_idxs`: Indexes for the truth-set VCFs.
-- `Array[Int] length_bins`: Allele-length bin boundaries defining the size buckets.
+- `Array[Int] length_bins`: Allele-length bin boundaries defining the size buckets. (default `[0, 1, 10, 30, 50, 100, 500, 5000, 50000]`)
 - `String? subset_vcf_string`: Optional `bcftools view` argument string to pre-subset each VCF.
 - `File? ped`: Pedigree used to identify trios for the de novo analysis.
 - `File? swap_samples_truth`: Optional sample-swap list applied to the truth VCFs.
-- `Boolean run_trio_qc`: Whether to run the trio de novo analysis.
-- `Boolean run_truth_qc`: Whether to run the truth-set concordance analysis.
-- `Boolean skip_trv`: Whether to skip tandem-repeat variants.
-- `Int min_fuzzy_match`: Minimum variant length to perform fuzzy matching for truth concordance (default `20`).
-- `Int del_breakpoint_window`: Breakpoint window, in bp, for matching deletions during truth concordance (default `500`).
-- `Float del_reciprocal_overlap`: Minimum reciprocal overlap for matching deletions during truth concordance (default `0.7`).
-- `Float del_size_similarity`: Minimum size similarity for matching deletions during truth concordance (default `0.7`).
-- `Int ins_breakpoint_window`: Breakpoint window, in bp, for matching insertions during truth concordance (default `200`).
-- `Float ins_reciprocal_overlap`: Minimum reciprocal overlap for matching insertions during truth concordance (default `0.0`).
-- `Float ins_size_similarity`: Minimum size similarity for matching insertions during truth concordance (default `0.5`).
+- `Boolean run_trio_qc`: Whether to run the trio de novo analysis. (default `true`)
+- `Boolean run_truth_qc`: Whether to run the truth-set concordance analysis. (default `true`)
+- `Boolean skip_trv`: Whether to skip tandem-repeat variants. (default `true`)
+- `Boolean drop_kanpig_supported_gq`: Whether a Kanpig-supported call also expands its `EV` callers, so co-supporting callers contribute their own genotype-quality rows. (default `false`)
+- `Int min_fuzzy_match`: Minimum variant length to perform fuzzy matching for truth concordance. (default `20`)
+- `Int del_breakpoint_window`: Breakpoint window, in bp, for matching deletions during truth concordance. (default `500`)
+- `Float del_reciprocal_overlap`: Minimum reciprocal overlap for matching deletions during truth concordance. (default `0.7`)
+- `Float del_size_similarity`: Minimum size similarity for matching deletions during truth concordance. (default `0.7`)
+- `Int ins_breakpoint_window`: Breakpoint window, in bp, for matching insertions during truth concordance. (default `200`)
+- `Float ins_reciprocal_overlap`: Minimum reciprocal overlap for matching insertions during truth concordance. (default `0.0`)
+- `Float ins_size_similarity`: Minimum size similarity for matching insertions during truth concordance. (default `0.5`)
+- `String prefix`: Prefix for output file names.
+- `String utils_docker`: Container image.
+- `RuntimeAttr? runtime_attr_*`: Optional per-task runtime overrides (7).
 
 Outputs:
-- `trio_denovo_tsv`: GQ-stratified trio de novo count table.
-- `truth_concordance_tsv`: GQ-stratified truth-set concordance count table.
+- `File? trio_denovo_tsv`: GQ-stratified trio de novo count table.
+- `File? truth_concordance_tsv`: GQ-stratified truth-set concordance count table.
 
+### [GQCutoffs](../wdl/annotation_utils/GQCutoffs.wdl)
+This utility derives genotype-quality cutoffs by comparing a callset against trio and truth-set expectations. Trio children are identified from a PED, the callset and truth VCFs are subset to those samples, and precision and recall are tabulated across genotype-quality thresholds and variant length bins to produce a cutoff table.
+
+Inputs:
+- `Array[File] vcfs`: Per-contig callset VCFs to evaluate.
+- `Array[File] vcf_idxs`: Index for `vcfs`.
+- `Array[File] truth_vcfs`: Truth VCFs the callset is compared against.
+- `Array[File] truth_vcf_idxs`: Index for `truth_vcfs`.
+- `String? subset_vcf_string`: `bcftools view` arguments used to pre-subset the callset.
+- `File ped`: Six-column PED used to identify trio children.
+- `File? swap_samples_truth`: Optional sample-swap list applied to the truth VCFs.
+- `Boolean skip_trv`: Whether to skip tandem-repeat variants. (default `true`)
+- `Array[Int] length_bins`: Allele-length bin boundaries defining the size buckets. (default `[0, 1, 2, 6, 10, 30, 50, 100, 500, 5000, 50000]`)
+- `Int min_length_heuristic_comparison`: Minimum variant length at which heuristic matching replaces exact matching. (default `30`)
+- `Float del_size_similarity`: Minimum size similarity for matching deletions. (default `0.8`)
+- `Float del_reciprocal_overlap`: Minimum reciprocal overlap for matching deletions. (default `0.8`)
+- `Int del_breakpoint_window`: Breakpoint window, in bp, for matching deletions. (default `500`)
+- `Float ins_size_similarity`: Minimum size similarity for matching insertions. (default `0.8`)
+- `Int ins_breakpoint_window`: Breakpoint window, in bp, for matching insertions. (default `100`)
+- `String prefix`: Prefix for output file names.
+- `String utils_docker`: Container image.
+- `RuntimeAttr? runtime_attr_*`: Optional per-task runtime overrides (6).
+
+Outputs:
+- `File gq_cutoffs_tsv`: Table of genotype-quality cutoffs per variant class and length bin.
+
+### [IntegrateHGSVCReference](../wdl/annotation_utils/IntegrateHGSVCReference.wdl)
+This utility merges the HGSVC SNV, indel and SV reference callsets into one VCF. Each input is optionally sample-swapped, checked for a consistent sample list, subset per contig and tagged with its own source label before the three are merged.
+
+Inputs:
+- `File snv_vcf`: HGSVC SNV callset.
+- `File snv_vcf_idx`: Index for `snv_vcf`.
+- `File indel_vcf`: HGSVC indel callset.
+- `File indel_vcf_idx`: Index for `indel_vcf`.
+- `File sv_vcf`: HGSVC SV callset.
+- `File sv_vcf_idx`: Index for `sv_vcf`.
+- `Array[String] contigs`: Contigs to process.
+- `Array[String] sample_ids`: Sample IDs expected in every input callset.
+- `File? sample_swap_list`: Two-column file mapping original sample IDs to their replacements.
+- `String snv_source_tag`: Source label applied to variants from `snv_vcf`.
+- `String snv_source_tag_description`: Header description for `snv_source_tag`.
+- `String indel_source_tag`: Source label applied to variants from `indel_vcf`.
+- `String indel_source_tag_description`: Header description for `indel_source_tag`.
+- `String sv_source_tag`: Source label applied to variants from `sv_vcf`.
+- `String sv_source_tag_description`: Header description for `sv_source_tag`.
+- `String prefix`: Prefix for output file names.
+- `String utils_docker`: Container image.
+- `RuntimeAttr? runtime_attr_*`: Optional per-task runtime overrides (7).
+
+Outputs:
+- `File integrated_reference_vcf`: Merged reference callset.
+- `File integrated_reference_vcf_idx`: Index for `integrated_reference_vcf`.
+
+### [MakeDepthMetrics](../wdl/annotation_utils/MakeDepthMetrics.wdl)
+This utility builds the cohort depth inputs used by depth-based CNV calling. Per-sample binned read counts are merged into one bgzipped matrix, and each sample's median coverage is computed from its mosdepth per-base BED with DuckDB and collected into a single table.
+
+Inputs:
+- `Array[String] sample_ids`: Sample IDs in the cohort, aligned to the per-sample inputs.
+- `Array[File] binned_read_counts`: Binned read-counts file for the sample.
+- `Array[File] mosdepth_per_base`: Per-contig per-base coverage (when `bin_size` is unset).
+- `File duckdb`: DuckDB binary used to compute each sample's median coverage.
+- `String output_prefix`: Prefix for output file names.
+- `String unzip_docker`, `String sv_base_mini_docker`: Container images.
+
+Outputs:
+- `File merged_bincov`: Merged read-depth evidence and its tabix index for depth genotyping.
+- `File merged_bincov_index`: Index for `merged_bincov`.
+- `File median_cov`: Per-sample median coverage table.
 
 ### [MergeSites](../wdl/annotation_utils/MergeSites.wdl)
 This utility merges redundant records at the site level within a VCF by collapsing near-identical deletions and insertions. Deletions are collapsed using size-, reciprocal-overlap, sequence- and sample-similarity thresholds plus a breakpoint distance, insertions using size-, sequence- and sample-similarity plus a breakpoint distance, while all other variants pass through untouched. It outputs the merged VCF.
@@ -131,25 +473,64 @@ This utility merges redundant records at the site level within a VCF by collapsi
 Inputs:
 - `File vcf`: VCF to merge.
 - `File vcf_idx`: Index for VCF.
-- `Int del_breakpoint_window`: Maximum breakpoint distance, in bp, for collapsing deletions (default `500`).
-- `Float del_reciprocal_overlap`: Minimum reciprocal overlap for collapsing deletions (default `0.0`).
-- `Float del_sample_similarity`: Minimum sample similarity for collapsing deletions (default `0.5`).
-- `Float del_sequence_similarity`: Minimum sequence similarity for collapsing deletions (default `0.7`).
-- `Float del_size_similarity`: Minimum size similarity for collapsing deletions (default `0.7`).
-- `Int del_size_max`: Maximum deletion size to collapse, or `-1` for no maximum (default `-1`).
-- `Int del_size_min`: Minimum deletion size to collapse (default `0`).
-- `Int ins_breakpoint_window`: Maximum breakpoint distance, in bp, for collapsing insertions (default `200`).
-- `Float ins_reciprocal_overlap`: Minimum reciprocal overlap for collapsing insertions (default `0.0`).
-- `Float ins_sample_similarity`: Minimum sample similarity for collapsing insertions (default `0.5`).
-- `Float ins_sequence_similarity`: Minimum sequence similarity for collapsing insertions (default `0.7`).
-- `Float ins_size_similarity`: Minimum size similarity for collapsing insertions (default `0.7`).
-- `Int ins_size_max`: Maximum insertion size to collapse, or `-1` for no maximum (default `-1`).
-- `Int ins_size_min`: Minimum insertion size to collapse (default `0`).
+- `Float del_sample_similarity`: Minimum sample similarity for collapsing deletions. (default `0.5`)
+- `Float ins_sample_similarity`: Minimum sample similarity for collapsing insertions. (default `0.5`)
+- `Int del_breakpoint_window`: Maximum breakpoint distance, in bp, for collapsing deletions. (default `500`)
+- `Float del_reciprocal_overlap`: Minimum reciprocal overlap for collapsing deletions. (default `0.0`)
+- `Float del_sequence_similarity`: Minimum sequence similarity for collapsing deletions. (default `0.5`)
+- `Float del_size_similarity`: Minimum size similarity for collapsing deletions. (default `0.5`)
+- `Int del_size_max`: Maximum deletion size to collapse, or `-1` for no maximum. (default `50000`)
+- `Int del_size_min`: Minimum deletion size to collapse. (default `0`)
+- `Int ins_breakpoint_window`: Maximum breakpoint distance, in bp, for collapsing insertions. (default `200`)
+- `Float ins_reciprocal_overlap`: Minimum reciprocal overlap for collapsing insertions. (default `0.0`)
+- `Float ins_sequence_similarity`: Minimum sequence similarity for collapsing insertions. (default `0.5`)
+- `Float ins_size_similarity`: Minimum size similarity for collapsing insertions. (default `0.5`)
+- `Int ins_size_max`: Maximum insertion size to collapse, or `-1` for no maximum. (default `50000`)
+- `Int ins_size_min`: Minimum insertion size to collapse. (default `0`)
+- `Int? shard_bin_size`: If set, shards each contig into regions of roughly this many base pairs, run in parallel.
+- `File? ref_fai`: From references.
+- `String prefix`: Prefix for output file names.
+- `String utils_docker`: Container image.
+- `RuntimeAttr? runtime_attr_*`: Optional per-task runtime overrides (7).
 
 Outputs:
-- `merged_vcf`: Site-merged VCF.
-- `merged_vcf_idx`: Index for the merged VCF.
+- `File merged_vcf`: Site-merged VCF.
+- `File merged_vcf_idx`: Index for the merged VCF.
 
+### [MergeTRs](../wdl/annotation_utils/MergeTRs.wdl)
+This utility merges a tandem-repeat callset into a base VCF one contig at a time and concatenates the contigs. It is an earlier form of `IntegrateTRs`.
+
+Inputs:
+- `File vcf`: Base VCF the tandem repeats are merged into.
+- `File vcf_idx`: Index for `vcf`.
+- `File tr_vcf`: Tandem-repeat VCF to integrate.
+- `File tr_vcf_idx`: Index for the TR VCF.
+- `Array[String] contigs`: Contigs to process.
+- `String prefix`: Prefix for output file names.
+- `String utils_docker`: Container image.
+- `RuntimeAttr? runtime_attr_*`: Optional per-task runtime overrides (4).
+
+Outputs:
+- `File merged_vcf`: VCF combining the base and tandem-repeat callsets.
+- `File merged_vcf_idx`: Index for `merged_vcf`.
+
+### [MergeVEPAF](../wdl/annotation_utils/MergeVEPAF.wdl)
+This utility combines a VEP-annotated VCF with an allele-frequency-annotated VCF, transferring the VEP consequence field onto the allele-frequency callset one contig at a time and merging the results.
+
+Inputs:
+- `File af_annotation_vcf`: VCF carrying the allele-frequency annotations.
+- `File af_annotation_vcf_idx`: Index for `af_annotation_vcf`.
+- `File vep_annotation_vcf`: VCF carrying the VEP annotations.
+- `File vep_annotation_vcf_idx`: Index for `vep_annotation_vcf`.
+- `Array[String] contigs`: Contigs to process.
+- `String vep_info_field_name`: INFO field holding the VEP consequence string.
+- `String prefix`: Prefix for output file names.
+- `String utils_docker`: Container image.
+- `RuntimeAttr? runtime_attr_*`: Optional per-task runtime overrides (4).
+
+Outputs:
+- `File merged_vcf`: VCF carrying both annotation sets.
+- `File merged_vcf_idx`: Index for `merged_vcf`.
 
 ### [MergeVcfs](../wdl/annotation_utils/MergeVcfs.wdl)
 This utility merges multiple per-contig VCFs covering the same contig into one, handling tandem-repeat and non-tandem-repeat variants separately. Non-TR variants are merged with Truvari using reciprocal-overlap, sequence-, size- and sample-similarity, a breakpoint distance and size bounds, while TR variants are merged on their identifiers, with optional region sharding. It outputs the merged VCF and a merge-summary TSV.
@@ -158,119 +539,50 @@ Inputs:
 - `Array[File] contig_vcfs`: Per-callset VCFs for the contig being merged.
 - `Array[File] contig_vcf_idxs`: Indexes for `contig_vcfs`.
 - `String contig`: Contig being merged.
+- `Int min_truvari_match`: Minimum variant length for Truvari matching. (default `20`)
+- `Int truvari_breakpoint_window`: Maximum breakpoint distance, in bp, for merging non-TR variants. (default `500`)
+- `Float truvari_reciprocal_overlap`: Minimum reciprocal overlap for merging non-TR variants. (default `0.0`)
+- `Float truvari_sample_similarity`: Minimum sample similarity for merging non-TR variants. (default `0.0`)
+- `Float truvari_sequence_similarity`: Minimum sequence similarity for merging non-TR variants. (default `0.7`)
+- `Float truvari_size_similarity`: Minimum size similarity for merging non-TR variants. (default `0.7`)
+- `Int truvari_size_max`: Maximum variant length Truvari will consider when collapsing. (default `50000`)
+- `Int truvari_size_min`: Minimum variant length Truvari will consider when collapsing. (default `20`)
+- `File ref_fa`: From references.
+- `File ref_fai`: From references.
 - `Int? shard_bin_size`: Region-bin size, in bp, used when sharding the contig.
-- `Int min_truvari_match`: Minimum variant length for Truvari matching (default `20`).
-- `Int truvari_breakpoint_window`: Maximum breakpoint distance, in bp, for merging non-TR variants (default `500`).
-- `Float truvari_reciprocal_overlap`: Minimum reciprocal overlap for merging non-TR variants (default `0.0`).
-- `Float truvari_sample_similarity`: Minimum sample similarity for merging non-TR variants (default `0.0`).
-- `Float truvari_sequence_similarity`: Minimum sequence similarity for merging non-TR variants (default `0.7`).
-- `Float truvari_size_similarity`: Minimum size similarity for merging non-TR variants (default `0.7`).
-- `Int size_min`: Minimum variant size to merge (default `20`).
-- `Int size_max`: Maximum variant size to merge (default `50000`).
-- `File ref_fa`: From [references](references.md).
-- `File ref_fai`: From [references](references.md).
+- `String prefix`: Prefix for output file names.
+- `String utils_docker`: Container image.
+- `RuntimeAttr? runtime_attr_*`: Optional per-task runtime overrides (10).
 
 Outputs:
-- `merged_vcf`: Merged VCF.
-- `merged_vcf_idx`: Index for the merged VCF.
-- `merge_summary_tsv`: TSV summarizing the merge.
+- `File merged_vcf`: Merged VCF.
+- `File merged_vcf_idx`: Index for the merged VCF.
+- `File merge_summary_tsv`: TSV summarizing the merge.
 
-
-### [NormalizeDuplicationOrigins](../wdl/annotation_utils/NormalizeDuplicationOrigins.wdl)
-This utility resolves the relative `ORIGIN` coordinates of duplications and NUMTs into absolute genomic coordinates and annotates them back onto the VCF. `ORIGIN` values prefixed with `flank_` encode coordinates relative to a flanking window and are converted to genome-absolute positions; values already in absolute form are kept as-is. When multiple comma-separated `ORIGIN` values are present - whether flank-relative, absolute, or mixed - each is processed individually and the resulting absolute values are written back in their original order. It outputs the VCF with absolute-origin annotations.
+### [PALMERToVcf](../wdl/annotation_utils/PALMERToVcf.wdl)
+This utility converts a sample's PALMER mobile-element calls into a VCF. Each mobile-element type is converted separately, and the per-type records are concatenated and sorted into one indexed VCF.
 
 Inputs:
-- `File vcf`: VCF to process.
-- `File vcf_idx`: Index for VCF.
-- `Int? records_per_shard`: Number of variants to keep within a single shard during processing.
+- `Array[File] PALMER_calls`: PALMER call files, one per entry in `mei_types`.
+- `Array[String] mei_types`: Mobile-element type for each entry in `PALMER_calls`, in the same order.
+- `String sample`: ID of the sample being processed.
+- `File ref_fai`: From references.
+- `String prefix`: Prefix for output file names.
+- `String pipeline_docker`: Container image.
+- `RuntimeAttr? runtime_attr_*`: Optional per-task runtime overrides (2).
 
 Outputs:
-- `absolute_origin_vcf`: VCF with absolute `ORIGIN` coordinates.
-- `absolute_origin_vcf_idx`: Index for the annotated VCF.
+- `File PALMER_combined_vcf`: PALMER calls converted to VCF.
+- `File PALMER_combined_vcf_idx`: Index for `PALMER_combined_vcf`.
 
-
-### [RenameVcfInfoFields](../wdl/annotation_utils/RenameVcfInfoFields.wdl)
-This utility renames INFO fields in a VCF, replacing each given field string and its header description with a new one, optionally sharding by record count. It outputs the VCF with renamed INFO fields.
-
-Inputs:
-- `File vcf`: VCF to process.
-- `File vcf_idx`: Index for VCF.
-- `Array[String] current_info_strings`: INFO field strings to replace.
-- `Array[String] replace_info_strings`: Replacement INFO field strings, aligned to `current_info_strings`.
-- `Array[String] replace_info_descriptions`: Replacement header descriptions, aligned to `replace_info_strings`.
-- `Int? records_per_shard`: Number of variants to keep within a single shard during processing.
-
-Outputs:
-- `renamed_vcf`: VCF with renamed INFO fields.
-- `renamed_vcf_idx`: Index for the renamed VCF.
-
-
-### [ReplaceSampleCalls](../wdl/annotation_utils/ReplaceSampleCalls.wdl)
-This utility replaces the genotype calls of samples in a cohort VCF with the calls from a set of per-sample VCFs. It outputs the updated cohort VCF.
+### [ParseSVFormatFields](../wdl/annotation_utils/ParseSVFormatFields.wdl)
+This utility reports the per-caller genotype qualities behind each structural variant call. For one contig it extracts each sample from the cohort VCF, looks that sample's record up in every per-caller VCF, and writes one row per call and supporting caller.
 
 Inputs:
-- `Array[File] sample_vcfs`: Per-sample VCFs providing the replacement calls.
-- `Array[File] sample_vcf_idxs`: Indexes for `sample_vcfs`.
-- `File cohort_vcf`: Cohort VCF whose calls are replaced.
+- `File cohort_vcf`: Cohort VCF whose calls are parsed.
 - `File cohort_vcf_idx`: Index for the cohort VCF.
-
-Outputs:
-- `replaced_vcf`: Cohort VCF with replaced sample calls.
-- `replaced_vcf_idx`: Index for the updated VCF.
-
-
-### [SubsetTRGTToCatalog](../wdl/annotation_utils/SubsetTRGTToCatalog.wdl)
-This utility subsets a merged TRGT VCF down to the loci present in a given TRGT catalog BED, per contig. It outputs the catalog-restricted TRGT VCF.
-
-Inputs:
-- `File trgt_full_merged_vcf`: Merged TRGT VCF to subset.
-- `File trgt_full_merged_vcf_idx`: Index for the TRGT VCF.
-- `File trgt_catalog_bed_gz`: bgzipped TRGT catalog BED of loci to retain.
-- `Array[String] contigs`: Contigs to process.
-
-Outputs:
-- `trgt_merged_vcf`: Catalog-restricted TRGT VCF.
-- `trgt_merged_vcf_idx`: Index for the subset VCF.
-
-
-### [SubsetVcfToContigs](../wdl/annotation_utils/SubsetVcfToContigs.wdl)
-This utility subsets a VCF to a chosen set of contigs and concatenates the result. It outputs the subset VCF.
-
-Inputs:
-- `File vcf`: VCF to subset.
-- `File vcf_idx`: Index for VCF.
-- `Array[String] contigs`: Contigs to retain.
-
-Outputs:
-- `subset_contigs_vcf`: Contig-subset VCF.
-- `subset_contigs_vcf_idx`: Index for the subset VCF.
-
-
-### [SubsetVcfToPerSample](../wdl/annotation_utils/SubsetVcfToPerSample.wdl)
-This utility extracts a separate single-sample VCF for each requested sample from a set of cohort VCFs, optionally dropping specified fields first. It outputs the per-sample VCFs.
-
-Inputs:
-- `Array[File] cohort_vcfs`: Cohort VCFs to extract from.
-- `Array[File] cohort_vcf_idxs`: Indexes for `cohort_vcfs`.
-- `Array[String] contigs`: Contigs to process.
-- `Array[String] sample_ids`: Samples to extract.
-- `String? drop_fields`: Fields to drop from each VCF before extraction.
-
-Outputs:
-- `subset_vcfs`: Per-sample VCFs.
-- `subset_vcf_idxs`: Indexes for the per-sample VCFs.
-
-
-### [AnnotateSvCallerSupport](../wdl/annotation_utils/AnnotateSvCallerSupport.wdl)
-This utility annotates each SV in a cohort VCF with the set of raw callers that independently support it. For every sample it matches the cohort calls against that sample's per-caller VCFs (Kanpig, cuteSV, Sniffles, Delly, pbsv, Sawfish, dipcall and hapdiff) using reciprocal-overlap, size- and sequence-similarity and a breakpoint window, then merges the support back into the cohort VCF. It outputs the annotated VCF and a TSV of per-caller match counts.
-
-Inputs:
-- `File sv_vcf`: Cohort SV VCF to annotate.
-- `File sv_vcf_idx`: Index for `sv_vcf`.
-- `Array[String] sample_ids`: Samples to process.
-- `Array[String] sexes`: Sex of each sample in `sample_ids`.
-- `Array[File] kanpig_vcfs`: Per-sample Kanpig VCFs.
-- `Array[File] kanpig_vcf_idxs`: Indexes for `kanpig_vcfs`.
+- `Array[String] sample_ids`: Sample IDs to process.
+- `Array[File] sample_sv_stats`: Per-sample BED listing the callers supporting each variant.
 - `Array[File?] cutesv_vcfs`: Per-sample cuteSV VCFs.
 - `Array[File?] cutesv_vcf_idxs`: Indexes for `cutesv_vcfs`.
 - `Array[File?] sniffles_vcfs`: Per-sample Sniffles VCFs.
@@ -285,83 +597,465 @@ Inputs:
 - `Array[File?] dipcall_vcf_idxs`: Indexes for `dipcall_vcfs`.
 - `Array[File?] hapdiff_vcfs`: Per-sample hapdiff VCFs.
 - `Array[File?] hapdiff_vcf_idxs`: Indexes for `hapdiff_vcfs`.
+- `String contig`: Contig being processed.
 - `File? swap_samples`: Sample-ID swap map applied to the cohort VCF.
-- `Int truvari_breakpoint_window`: Breakpoint window, in bp, for matching a raw call (default `500`).
-- `Float truvari_reciprocal_overlap`: Minimum reciprocal overlap for matching a raw call (default `0.0`).
-- `Float truvari_sequence_similarity`: Minimum sequence similarity for matching a raw call (default `0.7`).
-- `Float truvari_size_similarity`: Minimum size similarity for matching a raw call (default `0.7`).
-- `Int fuzzy_match_breakpoint_window`: Breakpoint window, in bp, for fuzzy-matching a raw call to per-caller stats (default `500`).
+- `String prefix`: Prefix for output file names.
+- `String utils_docker`: Container image.
+- `RuntimeAttr? runtime_attr_*`: Optional per-task runtime overrides (5).
 
 Outputs:
-- `sv_added_vcf`: Cohort VCF annotated with raw-caller support.
-- `sv_added_vcf_idx`: Index for the annotated VCF.
-- `sv_match_counts_tsv`: TSV of per-caller match counts.
+- `File gq_calls_tsv`: TSV with one row per call and supporting caller, carrying that caller's genotype quality.
+
+### [PopulateSVFormatFields](../wdl/annotation_utils/PopulateSVFormatFields.wdl)
+This utility fills per-caller support FORMAT fields on a cohort structural-variant VCF. Each sample's call is looked up in every per-caller VCF, the supporting callers and their genotype qualities are written back onto the record, and per-caller counts are tabulated by variant type and length bucket.
+
+Inputs:
+- `File cohort_vcf`: Cohort VCF to fill.
+- `File cohort_vcf_idx`: Index for the cohort VCF.
+- `Array[String] sample_ids`: Sample IDs to process.
+- `Array[File] sample_sv_stats`: Per-sample BED listing the callers supporting each variant.
+- `Array[File?] cutesv_vcfs`: Per-sample cuteSV VCFs.
+- `Array[File?] cutesv_vcf_idxs`: Indexes for `cutesv_vcfs`.
+- `Array[File?] sniffles_vcfs`: Per-sample Sniffles VCFs.
+- `Array[File?] sniffles_vcf_idxs`: Indexes for `sniffles_vcfs`.
+- `Array[File?] delly_vcfs`: Per-sample Delly VCFs.
+- `Array[File?] delly_vcf_idxs`: Indexes for `delly_vcfs`.
+- `Array[File?] pbsv_vcfs`: Per-sample pbsv VCFs.
+- `Array[File?] pbsv_vcf_idxs`: Indexes for `pbsv_vcfs`.
+- `Array[File?] sawfish_vcfs`: Per-sample Sawfish VCFs.
+- `Array[File?] sawfish_vcf_idxs`: Indexes for `sawfish_vcfs`.
+- `Array[File?] dipcall_vcfs`: Per-sample dipcall VCFs.
+- `Array[File?] dipcall_vcf_idxs`: Indexes for `dipcall_vcfs`.
+- `Array[File?] hapdiff_vcfs`: Per-sample hapdiff VCFs.
+- `Array[File?] hapdiff_vcf_idxs`: Indexes for `hapdiff_vcfs`.
+- `String merge_args`: Arguments passed to the per-sample merge step. (default `--merge id`)
+- `Boolean fuzzy_match_vcf_to_stats`: Whether to match cohort records to `sample_sv_stats` by proximity rather than by exact variant ID. (default `true`)
+- `File? swap_samples`: Sample-ID swap map applied to the cohort VCF.
+- `String prefix`: Prefix for output file names.
+- `String utils_docker`: Container image.
+- `RuntimeAttr? runtime_attr_*`: Optional per-task runtime overrides (8).
+
+Outputs:
+- `File sv_filled_vcf`: VCF with the per-caller support fields populated.
+- `File sv_filled_vcf_idx`: Index for `sv_filled_vcf`.
+- `File sv_caller_counts_tsv`: Per-caller call counts by variant type and length bucket.
+- `File sv_caller_source_tsv`: Per-call listing of the callers that supported it.
+
+### [PreprocessGregorVcf](../wdl/annotation_utils/PreprocessGregorVcf.wdl)
+This utility prepares a GREGoR callset for annotation. Each contig is optionally sharded, normalized against the reference, given variant attributes and renamed variant IDs, and emitted both with genotypes and as a sites-only VCF.
+
+Inputs:
+- `File vcf`: GREGoR callset to preprocess.
+- `File vcf_idx`: Index for `vcf`.
+- `Array[String] contigs`: Contigs to process.
+- `Int? records_per_shard`: Number of variants to keep within a single shard during preprocessing.
+- `File ref_fa`: From references.
+- `File ref_fai`: From references.
+- `String prefix`: Prefix for output file names.
+- `String utils_docker`: Container image.
+- `RuntimeAttr? runtime_attr_*`: Optional per-task runtime overrides (8).
+
+Outputs:
+- `Array[File] full_vcf`: Per-contig preprocessed VCFs retaining genotypes.
+- `Array[File] full_vcf_idx`: Index for `full_vcf`.
+- `Array[File] stripped_vcf`: Per-contig preprocessed VCFs with genotypes removed.
+- `Array[File] stripped_vcf_idx`: Index for `stripped_vcf`.
+
+### [RenameVcfInfoFields](../wdl/annotation_utils/RenameVcfInfoFields.wdl)
+This utility renames INFO fields in a VCF, replacing each given field string and its header description with a new one, optionally sharding by record count. It outputs the VCF with renamed INFO fields.
+
+Inputs:
+- `File vcf`: VCF to process.
+- `File vcf_idx`: Index for VCF.
+- `Array[String] current_info_strings`: INFO field strings to replace.
+- `Array[String] replace_info_strings`: Replacement INFO field strings, aligned to `current_info_strings`.
+- `Array[String] replace_info_descriptions`: Replacement header descriptions, aligned to `replace_info_strings`.
+- `Int? records_per_shard`: Number of variants to keep within a single shard during processing.
+- `String prefix`: Prefix for output file names.
+- `String utils_docker`: Container image.
+- `RuntimeAttr? runtime_attr_*`: Optional per-task runtime overrides (3).
+
+Outputs:
+- `File renamed_vcf`: VCF with renamed INFO fields.
+- `File renamed_vcf_idx`: Index for the renamed VCF.
+
+### [ReplaceKanpigGT](../wdl/annotation_utils/ReplaceKanpigGT.wdl)
+This utility replaces the genotypes in a cohort VCF with the corresponding per-sample Kanpig calls for one contig, restricted to variants at or above a minimum length, and reports how many calls were matched.
+
+Inputs:
+- `File vcf`: Cohort VCF whose genotypes are replaced.
+- `File vcf_idx`: Index for `vcf`.
+- `Array[String] sample_ids`: Sample IDs to replace, aligned to `sample_vcfs`.
+- `Array[File] sample_vcfs`: Per-sample VCFs providing the replacement calls.
+- `Array[File] sample_vcf_idxs`: Indexes for `sample_vcfs`.
+- `String contig`: Contig being processed.
+- `Int min_sv_length`: Minimum variant length for a genotype to be replaced.
+- `String prefix`: Prefix for output file names.
+- `String utils_docker`: Container image.
+- `RuntimeAttr? runtime_attr_*`: Optional per-task runtime overrides (3).
+
+Outputs:
+- `File replaced_vcf`: Cohort VCF with replaced sample calls.
+- `File replaced_vcf_idx`: Index for the updated VCF.
+- `File match_counts_tsv`: Counts of replaced and unmatched calls per sample.
+
+### [ReplaceSampleCalls](../wdl/annotation_utils/ReplaceSampleCalls.wdl)
+This utility replaces the genotype calls of samples in a cohort VCF with the calls from a set of per-sample VCFs. It outputs the updated cohort VCF.
+
+Inputs:
+- `Array[File] sample_vcfs`: Per-sample VCFs providing the replacement calls.
+- `Array[File] sample_vcf_idxs`: Indexes for `sample_vcfs`.
+- `File cohort_vcf`: Cohort VCF whose calls are replaced.
+- `File cohort_vcf_idx`: Index for the cohort VCF.
+- `String prefix`: Prefix for output file names.
+- `String docker`: Container image.
+- `RuntimeAttr? runtime_attr_*`: Optional per-task runtime overrides.
+
+Outputs:
+- `File replaced_vcf`: Cohort VCF with replaced sample calls.
+- `File replaced_vcf_idx`: Index for the updated VCF.
+
+### [SubsetTRGTToCatalog](../wdl/annotation_utils/SubsetTRGTToCatalog.wdl)
+This utility subsets a merged TRGT VCF down to the loci present in a given TRGT catalog BED, per contig. It outputs the catalog-restricted TRGT VCF.
+
+Inputs:
+- `File trgt_full_merged_vcf`: Merged TRGT VCF to subset.
+- `File trgt_full_merged_vcf_idx`: Index for the TRGT VCF.
+- `File trgt_catalog_bed_gz`: bgzipped TRGT catalog BED of loci to retain.
+- `Array[String] contigs`: Contigs to process.
+- `String prefix`: Prefix for output file names.
+- `String utils_docker`: Container image.
+- `RuntimeAttr? runtime_attr_*`: Optional per-task runtime overrides (4).
+
+Outputs:
+- `File trgt_merged_vcf`: Catalog-restricted TRGT VCF.
+- `File trgt_merged_vcf_idx`: Index for the subset VCF.
+
+### [SubsetVcfToContigs](../wdl/annotation_utils/SubsetVcfToContigs.wdl)
+This utility subsets a VCF to a chosen set of contigs and concatenates the result. It outputs the subset VCF.
+
+Inputs:
+- `File vcf`: VCF to subset.
+- `File vcf_idx`: Index for VCF.
+- `Array[String] contigs`: Contigs to retain.
+- `String prefix`: Prefix for output file names.
+- `String utils_docker`: Container image.
+- `RuntimeAttr? runtime_attr_*`: Optional per-task runtime overrides (2).
+
+Outputs:
+- `File subset_contigs_vcf`: Contig-subset VCF.
+- `File subset_contigs_vcf_idx`: Index for the subset VCF.
+
+### [SubsetVcfToPerSample](../wdl/annotation_utils/SubsetVcfToPerSample.wdl)
+This utility extracts a separate single-sample VCF for each requested sample from a set of cohort VCFs, optionally dropping specified fields first. It outputs the per-sample VCFs.
+
+Inputs:
+- `Array[File] cohort_vcfs`: Cohort VCFs to extract from.
+- `Array[File] cohort_vcf_idxs`: Indexes for `cohort_vcfs`.
+- `Array[String] contigs`: Contigs to process.
+- `Array[String] sample_ids`: Samples to extract.
+- `String? drop_fields`: Fields to drop from each VCF before extraction.
+- `String prefix`: Prefix for output file names.
+- `String utils_docker`: Container image.
+- `RuntimeAttr? runtime_attr_*`: Optional per-task runtime overrides (3).
+
+Outputs:
+- `Array[File] subset_vcfs`: Per-sample VCFs.
+- `Array[File] subset_vcf_idxs`: Indexes for the per-sample VCFs.
+
+### [SubsetVcfToSamples](../wdl/annotation_utils/SubsetVcfToSamples.wdl)
+This utility subsets a cohort VCF to a list of samples, one contig at a time, and concatenates the results.
+
+Inputs:
+- `File vcf`: Cohort VCF to subset.
+- `File vcf_idx`: Index for `vcf`.
+- `Array[String] samples`: Sample IDs to retain.
+- `Array[String] contigs`: Contigs to process.
+- `String prefix`: Prefix for output file names.
+- `String utils_docker`: Container image.
+- `RuntimeAttr? runtime_attr_*`: Optional per-task runtime overrides (2).
+
+Outputs:
+- `File subset_samples_vcf`: VCF containing only the requested samples.
+- `File subset_samples_vcf_idx`: Index for `subset_samples_vcf`.
+
+### [UpdateGenotypes](../wdl/annotation_utils/UpdateGenotypes.wdl)
+This utility rewrites the genotypes of a base VCF. It can transfer genotypes from a phased VCF, unphase or drop selected samples, normalize ploidy so male chrX and chrY calls are hemizygous and female chrY calls are cleared, and optionally drop genotypes altogether.
+
+Inputs:
+- `File base_vcf`: VCF whose genotypes are updated.
+- `File base_vcf_idx`: Index for `base_vcf`.
+- `File? phased_vcf`: VCF providing the phasing information.
+- `File? phased_vcf_idx`: Index for `phased_vcf`.
+- `Array[String] contigs`: Contigs to process.
+- `Int? shard_bin_size`: If set, shards each contig into regions of roughly this many base pairs, run in parallel.
+- `File ped`: Six-column PED giving each sample's sex, used to normalize ploidy.
+- `Boolean transfer_genotypes`: Whether to transfer genotypes from `phased_vcf` onto the base VCF. (default `false`)
+- `Boolean drop_genotypes`: Whether to strip genotypes before concatenation. (default `false`)
+- `Boolean decrement_trv_ids`: Whether to decrement the numeric suffix of tandem-repeat variant IDs. (default `false`)
+- `Array[String]? unphase_samples`: Samples to unphase when `run_unphase_samples` is set (defaults to empty).
+- `Array[String]? drop_samples`: Sample IDs removed from the base VCF before updating.
+- `String prefix`: Prefix for output file names.
+- `String utils_docker`: Container image.
+- `RuntimeAttr? runtime_attr_*`: Optional per-task runtime overrides (7).
+
+Outputs:
+- `File genotyped_vcf`: VCF with the updated genotypes.
+- `File genotyped_vcf_idx`: Index for `genotyped_vcf`.
+
+### [ValidateTRGTWithCatalog](../wdl/annotation_utils/ValidateTRGTWithCatalog.wdl)
+This utility finds TRGT calls whose coordinates or motifs disagree with the catalog they were genotyped against. Each contig is sharded, checked against the catalog, and the incongruent records are concatenated into one VCF.
+
+Inputs:
+- `File trgt_vcf`: TRGT callset to validate.
+- `File trgt_vcf_idx`: Index for `trgt_vcf`.
+- `Array[String] contigs`: Contigs to process.
+- `File trgt_catalog_bed_gz`: TRGT catalog BED (gzipped) the calls are validated against.
+- `Int? records_per_shard`: Number of variants to keep within a single shard during validation.
+- `String prefix`: Prefix for output file names.
+- `String utils_docker`: Container image.
+- `RuntimeAttr? runtime_attr_*`: Optional per-task runtime overrides (6).
+
+Outputs:
+- `File incongruent_vcf`: VCF holding the calls that disagree with the catalog.
+- `File incongruent_vcf_idx`: Index for `incongruent_vcf`.
 
 
 ## Tools
+
+
+### [CreateCramIndex](../wdl/tools/CreateCramIndex.wdl)
+This tool indexes a CRAM with samtools and copies the resulting index next to it in Cloud Storage, for CRAMs delivered without one.
+
+Inputs:
+- `File cram`: CRAM to index.
+- `File ref_fa`: From references.
+- `File ref_fai`: From references.
+- `String gcs_output_dir`: Cloud Storage directory the index is written to.
+- `String utils_docker`: Container image.
+- `RuntimeAttr? runtime_attr_*`: Optional per-task runtime overrides.
+
+Outputs:
+- `String crai_gcs_path`: Cloud Storage path of the written index.
+
+### [MergeWithAgglovar](../wdl/tools/MergeWithAgglovar.wdl)
+This tool merges structural variant VCFs with agglovar, which clusters records by reciprocal overlap, size similarity and breakpoint offset, with optional allele matching.
+
+Inputs:
+- `Array[File] vcfs`: VCFs to merge.
+- `Array[File] vcf_idxs`: Index for `vcfs`.
+- `String run_agglovar_merge_script`: Path to the agglovar merge script run by the task. (default `https://raw.githubusercontent.com/talkowski-lab/gnomad-lr/main/scripts/agglovar/run_agglovar_merge.py`)
+- `Float? ro_min`: Minimum reciprocal overlap for two records to cluster.
+- `Float? size_ro_min`: Minimum size reciprocal overlap for two records to cluster.
+- `Int? offset_max`: Maximum breakpoint offset, in bp, for two records to cluster.
+- `Float? offset_prop_max`: Maximum breakpoint offset as a proportion of variant length.
+- `Boolean match_ref`: Whether the reference alleles must match. (default `false`)
+- `Boolean match_alt`: Whether the alternate alleles must match. (default `false`)
+- `Float? match_prop_min`: Minimum proportion of matching allele sequence.
+- `String prefix`: Prefix for output file names.
+- `String agglovar_docker`: Container image.
+- `RuntimeAttr? runtime_attr_*`: Optional per-task runtime overrides.
+
+Outputs:
+- `File merged_vcf`: Merged callset.
+- `File merged_vcf_index`: Index for `merged_vcf`.
+
+### [PhaseCallsetCommon](../wdl/tools/PhaseCallsetCommon.wdl)
+This tool statistically phases one contig of a callset with SHAPEIT. The VCF is split and filtered, given unique IDs and normalized, optionally deduplicated by phased fraction and resolved for variant collisions, then phased either with SHAPEIT4 alone or with a SHAPEIT4 common-variant scaffold that SHAPEIT5 fills in with rare variants. Phase sets from the input are transferred back onto the phased output.
+
+Inputs:
+- `File vcf`: Callset VCF to phase.
+- `File vcf_idx`: Index for `vcf`.
+- `String contig`: Contig being phased.
+- `Int operation`: Collision-resolution mode: `0` removes an entire VCF record, `1` removes single alleles from a genotype.
+- `String weight_tag`: ID of the field holding each record's collision weight, so preferred records survive a collision.
+- `Int is_weight_format_field`: Where `weight_tag` is read from: `0` for the INFO field, `1` for the sample column.
+- `Float default_weight`: Weight assigned when `weight_tag` is absent from a record.
+- `Boolean do_shapeit5`: Whether to phase rare variants with SHAPEIT5 against a SHAPEIT4 common-variant scaffold, rather than phasing everything with SHAPEIT4.
+- `Boolean remove_duplicates_by_phased_fraction`: Whether to drop duplicate records, keeping the copy phased in the most samples.
+- `Float min_af_common`: Minimum allele frequency for a variant to enter the common-variant scaffold.
+- `String variant_filter_args`: Arguments used to filter variants before phasing. (default `-i 'MAC>=2'`)
+- `String filter_common_args`: Arguments used to select the common variants for the scaffold. (default `-i 'MAF>=0.001'`)
+- `String chunk_extra_args`: Extra arguments passed when creating the SHAPEIT chunks. (default `--thread $(nproc) --window-size 2000000 --buffer-size 200000`)
+- `String shapeit4_extra_args`: Extra arguments passed to SHAPEIT4. (default `--thread $(nproc) --use-PS 0.0001`)
+- `String shapeit5_extra_args`: Extra arguments passed to SHAPEIT5. (default `--thread $(nproc)`)
+- `File genetic_maps_tsv`: TSV mapping each contig to its genetic map.
+- `File fix_variant_collisions_java`: Compiled Java program that resolves variant collisions.
+- `String prefix`: Prefix for output file names.
+- `String utils_docker`, `String pysam_docker`: Container images.
+- `RuntimeAttr? runtime_attr_*`: Optional per-task runtime overrides (14).
+
+Outputs:
+- `File uqids_split_vcf`: Split VCF with unique variant IDs and normalized records.
+- `File uqids_split_vcf_idx`: Index for `uqids_split_vcf`.
+- `File? removed_duplicates_split_vcf`: Split VCF after duplicate records were dropped.
+- `File? removed_duplicates_split_vcf_idx`: Index for `removed_duplicates_split_vcf`.
+- `File collisionless_split_vcf`: Split VCF after variant collisions were resolved.
+- `File collisionless_split_vcf_idx`: Index for `collisionless_split_vcf`.
+- `File ps_anchors_vcf`: VCF of the phase-set anchor variants.
+- `File ps_anchors_vcf_idx`: Index for `ps_anchors_vcf`.
+- `File shapeit_phased_vcf`: Statistically phased callset.
+- `File shapeit_phased_vcf_idx`: Index for `shapeit_phased_vcf`.
+- `File shapeit_phased_ps_transferred_vcf`: Phased callset with the input phase sets transferred back on.
+- `File shapeit_phased_ps_transferred_vcf_idx`: Index for `shapeit_phased_ps_transferred_vcf`.
+
+### [PhaseCallsetWithBackbone](../wdl/tools/PhaseCallsetWithBackbone.wdl)
+This tool transfers phasing from a backbone VCF onto a callset. Both callsets are reduced to their overlapping samples and to SNVs, the callset is split, deduplicated and resolved for variant collisions, and each phase set is oriented to whichever assignment agrees with the backbone's phased heterozygous calls.
+
+Inputs:
+- `File vcf`: Callset VCF to phase.
+- `File vcf_idx`: Index for `vcf`.
+- `File base_vcf`: Phased backbone VCF supplying the haplotype assignments.
+- `File base_vcf_idx`: Index for `base_vcf`.
+- `Int operation`: Collision-resolution mode: `0` removes an entire VCF record, `1` removes single alleles from a genotype.
+- `String weight_tag`: ID of the field holding each record's collision weight, so preferred records survive a collision.
+- `Int is_weight_format_field`: Where `weight_tag` is read from: `0` for the INFO field, `1` for the sample column.
+- `Float default_weight`: Weight assigned when `weight_tag` is absent from a record.
+- `Boolean remove_duplicates_by_phased_fraction`: Whether to drop duplicate records, keeping the copy phased in the most samples.
+- `String variant_filter_args`: Arguments used to filter variants before phasing. (default `-i 'MAC>=2'`)
+- `File fix_variant_collisions_java`: Compiled Java program that resolves variant collisions.
+- `String prefix`: Prefix for output file names.
+- `String utils_docker`, `String pysam_docker`: Container images.
+- `RuntimeAttr? runtime_attr_*`: Optional per-task runtime overrides (9).
+
+Outputs:
+- `File uqids_split_vcf`: Split VCF with unique variant IDs and normalized records.
+- `File uqids_split_vcf_idx`: Index for `uqids_split_vcf`.
+- `File? removed_duplicates_split_vcf`: Split VCF after duplicate records were dropped.
+- `File? removed_duplicates_split_vcf_idx`: Index for `removed_duplicates_split_vcf`.
+- `File collisionless_split_vcf`: Split VCF after variant collisions were resolved.
+- `File collisionless_split_vcf_idx`: Index for `collisionless_split_vcf`.
+- `File base_prepared_vcf`: Backbone VCF reduced to the overlapping samples and SNVs.
+- `File base_prepared_vcf_idx`: Index for `base_prepared_vcf`.
+- `File base_transferred_vcf`: Callset with the backbone haplotypes transferred on.
+- `File base_transferred_vcf_idx`: Index for `base_transferred_vcf`.
+
+### [PreprocessStatisticalPhasing](../wdl/tools/PreprocessStatisticalPhasing.wdl)
+This tool prepares a callset for statistical phasing. Kanpig score annotations are added so collision resolution can prefer those records, selected INFO annotations are optionally removed, and calls overlapping TRGT loci are dropped.
+
+Inputs:
+- `File vcf`: Callset VCF to prepare.
+- `File vcf_idx`: Index for `vcf`.
+- `Boolean remove_annotations`: Whether to remove the INFO fields named in `annotations_to_remove`.
+- `String? annotations_to_remove`: Comma-separated INFO fields removed when `remove_annotations` is set.
+- `String prefix`: Prefix for output file names.
+- `String docker`: Container image.
+- `RuntimeAttr? runtime_attr_*`: Optional per-task runtime overrides (3).
+
+Outputs:
+- `File annotated_vcf`: Annotated VCF.
+- `File annotated_vcf_idx`: Index for the annotated VCF.
+- `File filtered_vcf`: VCF with low-coverage genotypes set to missing.
+- `File filtered_vcf_idx`: Index for `filtered_vcf`.
+
+### [TRGTMerge](../wdl/tools/TRGTMerge.wdl)
+This tool merges per-sample TRGT VCFs into a cohort callset with `trgt merge`, one contig at a time, then concatenates the contigs.
+
+Inputs:
+- `Array[File] vcfs`: Per-sample TRGT VCFs to merge.
+- `Array[File] vcf_idxs`: Index for `vcfs`.
+- `Array[String] contigs`: Contigs to process.
+- `File ref_fa`: From references.
+- `File ref_fai`: From references.
+- `String prefix`: Prefix for output file names.
+- `String trgt_docker`, `String utils_docker`: Container images.
+- `RuntimeAttr? runtime_attr_*`: Optional per-task runtime overrides (2).
+
+Outputs:
+- `File trgt_merged_vcf`: Catalog-restricted TRGT VCF.
+- `File trgt_merged_vcf_idx`: Index for the subset VCF.
 
 ### [TransferMethylationTags](../wdl/tools/TransferMethylationTags.wdl)
 This tool transfers methylation base-modification tags (MM/ML) from unaligned BAMs onto an aligned BAM. It extracts the tags per read, then per contig re-attaches them to the aligned reads and sorts, merging the result into a single tagged BAM. It outputs the methylation-tagged BAM and a TSV of the transferred tags.
 
 Inputs:
-- `Array[String] unaligned_bam_paths`: Paths to the unaligned BAMs carrying the methylation tags.
 - `File aligned_bam`: Aligned BAM to receive the tags.
 - `File aligned_bai`: Index for `aligned_bam`.
 - `Array[String] contigs`: Contigs to process.
-- `Boolean gcs_paths`: Whether `unaligned_bam_paths` are GCS paths (default `false`).
-- `String mm_tag`: Base-modification tag name (default `MM`).
-- `String ml_tag`: Modification-likelihood tag name (default `ML`).
+- `Array[String] unaligned_bam_paths`: Paths to the unaligned BAMs carrying the methylation tags.
+- `Boolean gcs_paths`: Whether `unaligned_bam_paths` are GCS paths. (default `false`)
+- `Boolean recreate_bam`: Whether to rebuild the aligned BAM from the tagged reads rather than tagging it in place. (default `false`)
+- `String mm_tag`: Base-modification tag name. (default `MM`)
+- `String ml_tag`: Modification-likelihood tag name. (default `ML`)
+- `String prefix`: Prefix for output file names.
+- `String utils_docker`: Container image.
+- `RuntimeAttr? runtime_attr_*`: Optional per-task runtime overrides (7).
 
 Outputs:
-- `methylation_tagged_bam`: Aligned BAM with methylation tags transferred.
-- `methylation_tagged_bai`: Index for the tagged BAM.
-- `methylation_tags`: TSV of the transferred methylation tags.
-
+- `File methylation_tagged_bam`: Aligned BAM with methylation tags transferred.
+- `File methylation_tagged_bai`: Index for the tagged BAM.
+- `File? methylation_tags`: TSV of the transferred methylation tags.
 
 ### [VcfDist](../wdl/tools/VcfDist.wdl)
-This tool runs [vcfdist](https://github.com/TimD1/vcfdist) in order to benchmark an evaluation VCF against a truth VCF per contig, computing alignment-based precision/recall and phasing accuracy. It outputs vcfdist's precision-recall, phasing, switch-flip, phase-block and supercluster reports.
+This tool runs vcfdist (https://github.com/TimD1/vcfdist) in order to benchmark an evaluation VCF against a truth VCF per contig, computing alignment-based precision/recall and phasing accuracy. It outputs vcfdist's precision-recall, phasing, switch-flip, phase-block and supercluster reports.
 
 Inputs:
 - `File vcf_eval`: VCF being evaluated.
 - `File vcf_eval_idx`: Index for `vcf_eval`.
 - `File vcf_truth`: Truth VCF to evaluate against.
 - `File vcf_truth_idx`: Index for `vcf_truth`.
+- `File ref_fa`: From references.
 - `Array[String] contigs`: Contigs to evaluate.
 - `File? bed_regions`: BED of regions to restrict the evaluation to.
 - `String? mode`: vcfdist evaluation mode.
 - `Float? threshold`: vcfdist matching threshold.
 - `String? vcfdist_args`: Additional arguments passed to vcfdist.
-- `File ref_fa`: From [references](references.md).
+- `String prefix`: Prefix for output file names.
+- `String utils_docker`, `String vcfdist_docker`: Container images.
+- `RuntimeAttr? runtime_attr_*`: Optional per-task runtime overrides (3).
 
 Outputs:
-- `vcfdist_phasing_summary_tsv`: Per-contig phasing summaries.
-- `vcfdist_switchflips_tsv`: Per-contig switch and flip errors.
-- `vcfdist_precision_recall_tsv`: Per-contig precision-recall curves.
-- `vcfdist_precision_recall_summary_tsv`: Per-contig precision-recall summaries.
-- `vcfdist_phase_blocks_tsv`: Per-contig phase blocks.
-- `vcfdist_superclusters_tsv`: Per-contig variant superclusters.
-- `vcfdist_query_tsv`: Per-contig query-variant results.
-- `vcfdist_truth_tsv`: Per-contig truth-variant results.
-- `vcfdist_summary_vcf`: Per-contig annotated summary VCFs.
-
+- `Array[File] vcfdist_phasing_summary_tsv`: Per-contig phasing summaries.
+- `Array[File] vcfdist_switchflips_tsv`: Per-contig switch and flip errors.
+- `Array[File] vcfdist_precision_recall_tsv`: Per-contig precision-recall curves.
+- `Array[File] vcfdist_precision_recall_summary_tsv`: Per-contig precision-recall summaries.
+- `Array[File] vcfdist_phase_blocks_tsv`: Per-contig phase blocks.
+- `Array[File] vcfdist_superclusters_tsv`: Per-contig variant superclusters.
+- `Array[File] vcfdist_query_tsv`: Per-contig query-variant results.
+- `Array[File] vcfdist_truth_tsv`: Per-contig truth-variant results.
+- `Array[File] vcfdist_summary_vcf`: Per-contig annotated summary VCFs.
 
 ### [VcfDistCohort](../wdl/tools/VcfDistCohort.wdl)
-This tool runs [vcfdist](https://github.com/TimD1/vcfdist) across a cohort by pairing each evaluation VCF with its corresponding truth VCF and benchmarking every assigned sample, then aggregating the per-sample results. It outputs cohort-level precision/recall and phasing summaries.
+This tool runs vcfdist (https://github.com/TimD1/vcfdist) across a cohort by pairing each evaluation VCF with its corresponding truth VCF and benchmarking every assigned sample, then aggregating the per-sample results. It outputs cohort-level precision/recall and phasing summaries.
 
 Inputs:
 - `Array[File] eval_vcfs`: Evaluation VCFs, one per group.
 - `Array[File] eval_vcf_idxs`: Indexes for `eval_vcfs`.
 - `Array[File] truth_vcfs`: Truth VCFs, aligned to `eval_vcfs`.
 - `Array[File] truth_vcf_idxs`: Indexes for `truth_vcfs`.
+- `File ref_fa`: From references.
 - `Array[String] contigs`: Contigs to evaluate.
 - `Array[String]? subset_samples`: Samples to restrict the evaluation to.
 - `String? vcfdist_args`: Additional arguments passed to vcfdist.
-- `File ref_fa`: From [references](references.md).
+- `String prefix`: Prefix for output file names.
+- `String utils_docker`, `String vcfdist_docker`: Container images.
+- `RuntimeAttr? runtime_attr_*`: Optional per-task runtime overrides (11).
 
 Outputs:
-- `vcfdist_phasing_summary_tsv`: Cohort phasing summary.
-- `vcfdist_precision_recall_summary_tsv`: Cohort precision-recall summary.
-- `vcfdist_precision_recall_tsv`: Cohort precision-recall curves.
-- `vcfdist_switchflips_tsv`: Cohort switch and flip errors.
-- `vcfdist_phase_blocks_tsv`: Cohort phase blocks.
-- `vcfdist_missing_samples`: Samples with no matching truth VCF.
+- `File vcfdist_phasing_summary_tsv`: Cohort phasing summary.
+- `File vcfdist_precision_recall_summary_tsv`: Cohort precision-recall summary.
+- `File vcfdist_precision_recall_tsv`: Cohort precision-recall curves.
+- `File vcfdist_switchflips_tsv`: Cohort switch and flip errors.
+- `File vcfdist_phase_blocks_tsv`: Cohort phase blocks.
+- `File vcfdist_missing_samples`: Samples with no matching truth VCF.
+
+### [Whatshap](../wdl/tools/Whatshap.wdl)
+This tool haplotags a sample's BAM against a phased VCF using WhatsHap (https://github.com/whatshap/whatshap), per contig, then merges the tagged reads into a single BAM. It outputs the haplotagged BAM and per-contig haplotag read lists.
+
+Inputs:
+- `File bam`: Aligned reads to haplotag.
+- `File bai`: Index for `bam`.
+- `File phased_vcf`: Phased VCF used to assign haplotypes.
+- `File phased_vcf_idx`: Index for `phased_vcf`.
+- `File ref_fa`: From references.
+- `File ref_fai`: From references.
+- `Array[String] contigs`: Contigs to process.
+- `String? extra_args`: Additional arguments passed to WhatsHap.
+- `String prefix`: Prefix for output file names.
+- `String utils_docker`, `String whatshap_docker`: Container images.
+- `RuntimeAttr? runtime_attr_*`: Optional per-task runtime overrides (4).
+
+Outputs:
+- `File haplotagged_bam`: Haplotagged BAM.
+- `File haplotagged_bai`: Index for the haplotagged BAM.
+- `Array[File] haplotag_lists`: Per-contig haplotag read assignments.

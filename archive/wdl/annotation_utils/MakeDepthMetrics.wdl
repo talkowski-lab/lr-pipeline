@@ -1,6 +1,23 @@
 version 1.0
 
 workflow MakeDepthMetrics {
+    meta {
+        description: [
+            "This utility builds the cohort depth inputs used by depth-based CNV calling. Per-sample binned read counts are merged into one bgzipped matrix, and each sample's median coverage is computed from its mosdepth per-base BED with DuckDB and collected into a single table."
+        ]
+    }
+
+    parameter_meta {
+        sample_ids: "Sample IDs in the cohort, aligned to the per-sample inputs."
+        binned_read_counts: "Binned read-counts file for the sample."
+        mosdepth_per_base: "Per-contig per-base coverage (when `bin_size` is unset)."
+        duckdb: "DuckDB binary used to compute each sample's median coverage."
+        output_prefix: "Prefix for output file names."
+        merged_bincov: "Merged read-depth evidence and its tabix index for depth genotyping."
+        merged_bincov_index: "Index for `merged_bincov`."
+        median_cov: "Per-sample median coverage table."
+    }
+
   input {
     Array[String] sample_ids
     Array[File] binned_read_counts

@@ -4,6 +4,22 @@ import "../utils/Helpers.wdl"
 import "../utils/Structs.wdl"
 
 workflow CombineVcfs {
+    meta {
+        description: [
+            "This utility concatenates two VCFs holding different variants for the same samples. The sample lists are checked for a match, each contig is subset from both inputs, and the per-contig results are concatenated into one VCF."
+        ]
+    }
+
+    parameter_meta {
+        a_vcf: "First VCF to combine."
+        a_vcf_idx: "Index for `a_vcf`."
+        b_vcf: "Second VCF to combine."
+        b_vcf_idx: "Index for `b_vcf`."
+        contigs: "Contigs to process."
+        concat_vcf: "Combined VCF."
+        concat_vcf_idx: "Index for the combined VCF."
+    }
+
     input {
         File a_vcf
         File a_vcf_idx

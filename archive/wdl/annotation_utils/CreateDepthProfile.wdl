@@ -3,6 +3,22 @@ version 1.0
 import "../utils/Structs.wdl"
 
 workflow CreateDepthProfile {
+    meta {
+        description: [
+            "This utility builds a read-depth profile across one genomic window. Each sample's mosdepth BED is queried for the window and the extracted depths are combined into a single matrix with one column per sample."
+        ]
+    }
+
+    parameter_meta {
+        sample_ids: "Sample IDs in the cohort, aligned to `mosdepth_bed_files`."
+        mosdepth_bed_files: "Per-sample mosdepth depth BEDs."
+        mosdepth_bed_idx: "Indexes for `mosdepth_bed_files`."
+        contig: "Contig containing the window."
+        window_start: "Start position of the window."
+        window_end: "End position of the window."
+        region_depth_profile: "Depth matrix over the window, with one column per sample."
+    }
+
     input {
         Array[String] sample_ids
         Array[File] mosdepth_bed_files

@@ -4,6 +4,48 @@ import "../utils/Helpers.wdl"
 import "../utils/Structs.wdl"
 
 workflow AnnotateSvCallerSupport {
+    meta {
+        description: [
+            "This utility annotates each SV in a cohort VCF with the set of raw callers that independently support it. For every sample it matches the cohort calls against that sample's per-caller VCFs (Kanpig, cuteSV, Sniffles, Delly, pbsv, Sawfish, dipcall and hapdiff) using reciprocal-overlap, size- and sequence-similarity and a breakpoint window, then merges the support back into the cohort VCF. It outputs the annotated VCF and a TSV of per-caller match counts."
+        ]
+    }
+
+    parameter_meta {
+        sv_vcf: "Cohort SV VCF to annotate."
+        sv_vcf_idx: "Index for `sv_vcf`."
+        kanpig_vcfs: "Per-sample Kanpig VCFs."
+        kanpig_vcf_idxs: "Indexes for `kanpig_vcfs`."
+        sample_ids: "Samples to process."
+        sample_sv_stats: "Optional per-sample BED listing the callers supporting each variant."
+        cutesv_vcfs: "Per-sample cuteSV VCFs."
+        cutesv_vcf_idxs: "Indexes for `cutesv_vcfs`."
+        sniffles_vcfs: "Per-sample Sniffles VCFs."
+        sniffles_vcf_idxs: "Indexes for `sniffles_vcfs`."
+        delly_vcfs: "Per-sample Delly VCFs."
+        delly_vcf_idxs: "Indexes for `delly_vcfs`."
+        pbsv_vcfs: "Per-sample pbsv VCFs."
+        pbsv_vcf_idxs: "Indexes for `pbsv_vcfs`."
+        sawfish_vcfs: "Per-sample Sawfish VCFs."
+        sawfish_vcf_idxs: "Indexes for `sawfish_vcfs`."
+        dipcall_vcfs: "Per-sample dipcall VCFs."
+        dipcall_vcf_idxs: "Indexes for `dipcall_vcfs`."
+        hapdiff_vcfs: "Per-sample hapdiff VCFs."
+        hapdiff_vcf_idxs: "Indexes for `hapdiff_vcfs`."
+        truvari_breakpoint_window: "Breakpoint window, in bp, for matching a raw call."
+        truvari_reciprocal_overlap: "Minimum reciprocal overlap for matching a raw call."
+        truvari_sequence_similarity: "Minimum sequence similarity for matching a raw call."
+        truvari_size_similarity: "Minimum size similarity for matching a raw call."
+        fuzzy_match_vcf_to_stats: "Whether to match cohort records to `sample_sv_stats` by proximity rather than by exact variant ID."
+        fuzzy_match_breakpoint_window: "Breakpoint window, in bp, for fuzzy-matching a raw call to per-caller stats."
+        match_gt_kanpig: "Whether a Kanpig record must have a matching genotype to count as support."
+        match_gt_non_kanpig: "Whether a non-Kanpig caller record must have a matching genotype to count as support."
+        swap_samples: "Sample-ID swap map applied to the cohort VCF."
+        null_file: "Placeholder file used where an optional per-caller input is absent."
+        sv_added_vcf: "Cohort VCF annotated with raw-caller support."
+        sv_added_vcf_idx: "Index for the annotated VCF."
+        sv_match_counts_tsv: "TSV of per-caller match counts."
+    }
+
     input {
         File sv_vcf
         File sv_vcf_idx
@@ -27,7 +69,7 @@ workflow AnnotateSvCallerSupport {
         Array[File?]? dipcall_vcf_idxs
         Array[File?]? hapdiff_vcfs
         Array[File?]? hapdiff_vcf_idxs
-        
+
         Int truvari_breakpoint_window = 500
         Float truvari_reciprocal_overlap = 0.0
         Float truvari_sequence_similarity = 0.7
@@ -600,7 +642,7 @@ for rec in vcf_in:
                 else:
                     ev_entries.append(f"{name}_({ad[0]}_{ad[1]})")
             s["EV"] = tuple(ev_entries)
-        
+
         if bev is not None:
             s["BEV"] = bev
             if best_pls is None:

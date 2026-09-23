@@ -4,6 +4,21 @@ import "../utils/Structs.wdl"
 import "../utils/Helpers.wdl"
 
 workflow SubsetVcfToSamples {
+    meta {
+        description: [
+            "This utility subsets a cohort VCF to a list of samples, one contig at a time, and concatenates the results."
+        ]
+    }
+
+    parameter_meta {
+        vcf: "Cohort VCF to subset."
+        vcf_idx: "Index for `vcf`."
+        samples: "Sample IDs to retain."
+        contigs: "Contigs to process."
+        subset_samples_vcf: "VCF containing only the requested samples."
+        subset_samples_vcf_idx: "Index for `subset_samples_vcf`."
+    }
+
     input {
         File vcf
         File vcf_idx

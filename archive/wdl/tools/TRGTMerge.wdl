@@ -4,6 +4,22 @@ import "../utils/Helpers.wdl"
 import "../utils/Structs.wdl"
 
 workflow TRGTMerge {
+    meta {
+        description: [
+            "This tool merges per-sample TRGT VCFs into a cohort callset with `trgt merge`, one contig at a time, then concatenates the contigs."
+        ]
+    }
+
+    parameter_meta {
+        vcfs: "Per-sample TRGT VCFs to merge."
+        vcf_idxs: "Index for `vcfs`."
+        contigs: "Contigs to process."
+        ref_fa: "From references."
+        ref_fai: "From references."
+        trgt_merged_vcf: "Catalog-restricted TRGT VCF."
+        trgt_merged_vcf_idx: "Index for the subset VCF."
+    }
+
     input {
         Array[File] vcfs
         Array[File] vcf_idxs

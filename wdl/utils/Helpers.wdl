@@ -1461,13 +1461,11 @@ task ConvertToSymbolic {
     command <<<
         set -euo pipefail
 
-        # Collect the distinct allele types and the ORIGIN contigs in one pass, so the records are only decoded once
+        # Collect the distinct allele types before converting records to symbolic representation
         bcftools query \
-            -f '%INFO/~{type_field}\t%INFO/ORIGIN\n' \
+            -f '%INFO/~{type_field}\n' \
             ~{vcf} \
-        | sort -u > raw_types_origins.txt
-
-        cut -f1 raw_types_origins.txt | sort -u > raw_types.txt
+        | sort -u > raw_types.txt
 
         python3 <<CODE
 import pysam
@@ -1509,26 +1507,14 @@ def extract_origin_info(origin):
 with open("raw_types.txt") as f:
     present_types = {map_type(line.strip()) for line in f if line.strip()}
 
-# Collect origin contigs needed for DUP records
-origin_contigs = set()
-if move_dup:
-    with open("raw_types_origins.txt") as f:
-        for line in f:
-            raw, _, origin = line.rstrip('\n').partition('\t')
-            raw = raw.split(',')[0]
-            if not raw or map_type(raw) != 'DUP':
-                continue
-            origin_chrom, _, _ = extract_origin_info(origin if origin != '.' else None)
-            if origin_chrom is not None:
-                origin_contigs.add(origin_chrom)
-
 # Build updated header
 vcf_in = pysam.VariantFile("~{vcf}")
 header = vcf_in.header
 
-for contig in origin_contigs:
-    if contig not in header.contigs:
-        header.add_line(f'##contig=<ID={contig}>')
+# ORIGIN is only needed when DUPs are repositioned onto it, so a callset without the field still converts otherwise
+if move_dup and 'ORIGIN' not in header.info:
+    print("Error: move_dup_to_origin is true but the VCF header has no INFO/ORIGIN field", file=sys.stderr)
+    sys.exit(1)
 
 if 'END' not in header.info:
     header.add_line('##INFO=<ID=END,Number=.,Type=Integer,Description="End position of the variant">')
@@ -1563,20 +1549,23 @@ for record in vcf_in:
     svlen = abs(allele_length)
     record.info['SVLEN'] = svlen
 
-    # Set END, repositioning DUPs onto their source coordinate only when asked; left in place a DUP stays a point
-    # insertion at its own breakpoint, which is what comparing it against truth insertions needs
+    # Set END, repositioning DUPs onto their source coordinate only when asked; left in place a DUP spans its own
+    # coordinates from POS over its length, so a callset without ORIGIN still gets an interval to compare by overlap.
+    # ORIGIN is assumed to sit on the record's own contig
     if move_dup and allele_type == 'DUP':
         origin_chrom, origin_pos, origin_end = extract_origin_info(record.info.get('ORIGIN', None))
         if origin_chrom is None or origin_pos is None or origin_end is None:
             print(f"Error: cannot extract ORIGIN for DUP {record.id} at {record.chrom}:{record.pos} (ORIGIN={record.info.get('ORIGIN')})", file=sys.stderr)
             sys.exit(1)
+        if origin_chrom != record.chrom:
+            print(f"Error: ORIGIN contig {origin_chrom} differs from record contig for DUP {record.id} at {record.chrom}:{record.pos} (ORIGIN={record.info.get('ORIGIN')})", file=sys.stderr)
+            sys.exit(1)
         record.info['ORIGINAL_POS'] = record.pos
         record.info['ORIGINAL_CHROM'] = record.chrom
-        record.chrom = origin_chrom
         record.pos = origin_pos
         record.stop = origin_end
         record.info['SVLEN'] = origin_end - origin_pos
-    elif allele_type == 'INS' or allele_type == 'DUP':
+    elif allele_type == 'INS':
         record.stop = record.pos + 1
     else:
         record.stop = record.pos + svlen

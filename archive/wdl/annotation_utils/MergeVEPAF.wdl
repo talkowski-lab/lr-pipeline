@@ -4,6 +4,23 @@ import "../utils/Structs.wdl"
 import "../utils/Helpers.wdl" as Helpers
 
 workflow MergeVEPAF {
+    meta {
+        description: [
+            "This utility combines a VEP-annotated VCF with an allele-frequency-annotated VCF, transferring the VEP consequence field onto the allele-frequency callset one contig at a time and merging the results."
+        ]
+    }
+
+    parameter_meta {
+        af_annotation_vcf: "VCF carrying the allele-frequency annotations."
+        af_annotation_vcf_idx: "Index for `af_annotation_vcf`."
+        vep_annotation_vcf: "VCF carrying the VEP annotations."
+        vep_annotation_vcf_idx: "Index for `vep_annotation_vcf`."
+        contigs: "Contigs to process."
+        vep_info_field_name: "INFO field holding the VEP consequence string."
+        merged_vcf: "VCF carrying both annotation sets."
+        merged_vcf_idx: "Index for `merged_vcf`."
+    }
+
     input {
         File af_annotation_vcf
         File af_annotation_vcf_idx

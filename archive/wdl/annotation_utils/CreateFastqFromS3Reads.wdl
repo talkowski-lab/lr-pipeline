@@ -4,6 +4,17 @@ import "../utils/Helpers.wdl"
 import "../utils/Structs.wdl"
 
 workflow CreateFastqFromS3Reads {
+    meta {
+        description: [
+            "This utility downloads BAM or FASTQ files from S3 in parallel, converts BAMs to FASTQ format preserving methylation tags, and merges all outputs into a single FASTQ.gz file."
+        ]
+    }
+
+    parameter_meta {
+        addresses: "S3 addresses of files to download. Supports `.bam`, `.fastq.gz`, and `.fastq` inputs."
+        merged_fastq_gz: "Merged FASTQ.gz file containing reads from all input files."
+    }
+
     input {
         Array[String] addresses
         String prefix

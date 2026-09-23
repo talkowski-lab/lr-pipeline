@@ -4,6 +4,25 @@ import "../utils/Helpers.wdl"
 import "../utils/Structs.wdl"
 
 workflow ReplaceKanpigGT {
+    meta {
+        description: [
+            "This utility replaces the genotypes in a cohort VCF with the corresponding per-sample Kanpig calls for one contig, restricted to variants above a minimum length, and reports how many calls matched."
+        ]
+    }
+
+    parameter_meta {
+        vcf: "Cohort VCF for a single contig."
+        vcf_idx: "Index for the cohort VCF."
+        sample_ids: "Samples whose genotypes are replaced, aligned by index to 'sample_vcfs'."
+        sample_vcfs: "Per-sample Kanpig VCFs supplying the replacement genotypes."
+        sample_vcf_idxs: "Indices for the per-sample Kanpig VCFs."
+        contig: "Contig the per-sample VCFs are subset to before replacement."
+        min_sv_length: "Minimum variant length for a genotype to be replaced."
+        replaced_vcf: "Cohort VCF with replaced sample calls."
+        replaced_vcf_idx: "Index for the updated VCF."
+        match_counts_tsv: "Counts of replaced and unmatched calls per sample."
+    }
+
     input {
         File vcf
         File vcf_idx

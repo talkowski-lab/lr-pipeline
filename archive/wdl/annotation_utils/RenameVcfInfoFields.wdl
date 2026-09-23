@@ -4,6 +4,23 @@ import "../utils/Helpers.wdl"
 import "../utils/Structs.wdl"
 
 workflow RenameVcfInfoFields {
+    meta {
+        description: [
+            "This utility renames INFO fields in a VCF, replacing each given field string and its header description with a new one, optionally sharding by record count. It outputs the VCF with renamed INFO fields."
+        ]
+    }
+
+    parameter_meta {
+        vcf: "VCF to process."
+        vcf_idx: "Index for VCF."
+        current_info_strings: "INFO field strings to replace."
+        replace_info_strings: "Replacement INFO field strings, aligned to `current_info_strings`."
+        replace_info_descriptions: "Replacement header descriptions, aligned to `replace_info_strings`."
+        records_per_shard: "Number of variants to keep within a single shard during processing."
+        renamed_vcf: "VCF with renamed INFO fields."
+        renamed_vcf_idx: "Index for the renamed VCF."
+    }
+
     input {
         File vcf
         File vcf_idx

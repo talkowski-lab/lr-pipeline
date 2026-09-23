@@ -3,6 +3,21 @@ version 1.0
 import "utils/Structs.wdl"
 
 workflow PALMERToVcf {
+    meta {
+        description: [
+            "This utility converts a sample's PALMER mobile-element calls into a VCF. Each mobile-element type is converted separately, and the per-type records are concatenated and sorted into one indexed VCF."
+        ]
+    }
+
+    parameter_meta {
+        PALMER_calls: "PALMER call files, one per entry in `mei_types`."
+        mei_types: "Mobile-element type for each entry in `PALMER_calls`, in the same order."
+        sample: "ID of the sample being processed."
+        ref_fai: "From references."
+        PALMER_combined_vcf: "PALMER calls converted to VCF."
+        PALMER_combined_vcf_idx: "Index for `PALMER_combined_vcf`."
+    }
+
     input {
         Array[File] PALMER_calls
         Array[String] mei_types

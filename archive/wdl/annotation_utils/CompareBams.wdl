@@ -3,6 +3,21 @@ version 1.0
 import "../utils/Structs.wdl"
 
 workflow CompareBams {
+    meta {
+        description: [
+            "This utility compares two unaligned BAMs by read identity, sequence length, and sequence content. It reports total read counts, the number of reads whose IDs match across BAMs, the number of matched-ID pairs with identical sequence lengths, and the number with identical sequences (compared via MD5). It also emits a per-read TSV covering all reads from both files."
+        ]
+    }
+
+    parameter_meta {
+        bam1: "First unaligned BAM."
+        bam2: "Second unaligned BAM."
+        bam1_name: "Label for `bam1`, used as column/metric prefix in outputs."
+        bam2_name: "Label for `bam2`, used as column/metric prefix in outputs."
+        comparison_tsv: "TSV with columns `metric` and `value` reporting `{bam1_name}_total_reads`, `{bam2_name}_total_reads`, `matched_id_reads`, `matched_id_reads_same_sequence_length`, and `matched_id_reads_same_sequence`."
+        per_read_tsv: "TSV with columns `read_id`, `{bam1_name}_len`, `{bam2_name}_len` for all reads across both BAMs. Length is empty for reads absent from that BAM."
+    }
+
     input {
         File bam1
         File bam2

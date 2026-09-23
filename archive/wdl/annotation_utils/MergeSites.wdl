@@ -4,6 +4,35 @@ import "../utils/Helpers.wdl"
 import "../utils/Structs.wdl"
 
 workflow MergeSites {
+    meta {
+        description: [
+            "This utility merges redundant records at the site level within a VCF by collapsing near-identical deletions and insertions. Deletions are collapsed using size-, reciprocal-overlap, sequence- and sample-similarity thresholds plus a breakpoint distance, insertions using size-, sequence- and sample-similarity plus a breakpoint distance, while all other variants pass through untouched. It outputs the merged VCF."
+        ]
+    }
+
+    parameter_meta {
+        vcf: "VCF to merge."
+        vcf_idx: "Index for VCF."
+        del_sample_similarity: "Minimum sample similarity for collapsing deletions."
+        ins_sample_similarity: "Minimum sample similarity for collapsing insertions."
+        del_breakpoint_window: "Maximum breakpoint distance, in bp, for collapsing deletions."
+        del_reciprocal_overlap: "Minimum reciprocal overlap for collapsing deletions."
+        del_sequence_similarity: "Minimum sequence similarity for collapsing deletions."
+        del_size_similarity: "Minimum size similarity for collapsing deletions."
+        del_size_max: "Maximum deletion size to collapse, or `-1` for no maximum."
+        del_size_min: "Minimum deletion size to collapse."
+        ins_breakpoint_window: "Maximum breakpoint distance, in bp, for collapsing insertions."
+        ins_reciprocal_overlap: "Minimum reciprocal overlap for collapsing insertions."
+        ins_sequence_similarity: "Minimum sequence similarity for collapsing insertions."
+        ins_size_similarity: "Minimum size similarity for collapsing insertions."
+        ins_size_max: "Maximum insertion size to collapse, or `-1` for no maximum."
+        ins_size_min: "Minimum insertion size to collapse."
+        shard_bin_size: "If set, shards each contig into regions of roughly this many base pairs, run in parallel."
+        ref_fai: "From references."
+        merged_vcf: "Site-merged VCF."
+        merged_vcf_idx: "Index for the merged VCF."
+    }
+
     input {
         File vcf
         File vcf_idx

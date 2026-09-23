@@ -3,6 +3,27 @@ version 1.0
 import "../utils/Structs.wdl"
 
 workflow FillFormatFieldsBcfTools {
+    meta {
+        description: [
+            "This utility transfers FORMAT fields from a filled VCF back onto an unfilled VCF using `bcftools`, optionally unphasing genotypes, adding a `PL` field and adjusting the `EV` header Number. It is the `bcftools` counterpart to `FillFormatFields`."
+        ]
+    }
+
+    parameter_meta {
+        unfilled_vcf: "VCF whose FORMAT fields are filled."
+        unfilled_vcf_idx: "Index for `unfilled_vcf`."
+        filled_vcf: "VCF providing the FORMAT field values."
+        filled_vcf_idx: "Index for `filled_vcf`."
+        format_fields: "FORMAT fields to transfer from the filled VCF."
+        include_field: "INFO field used to limit which variants are filled. Requires `include_value`."
+        include_value: "Value that `include_field` must equal for a variant to be filled."
+        modify_ev_number: "Whether to rewrite the `EV` header Number so multi-caller values validate."
+        unphase_gts: "Whether to unphase genotypes while filling."
+        add_pl: "Whether to add a `PL` FORMAT field."
+        refilled_vcf: "VCF with FORMAT fields filled."
+        refilled_vcf_idx: "Index for the refilled VCF."
+    }
+
     input {
         File unfilled_vcf
         File unfilled_vcf_idx

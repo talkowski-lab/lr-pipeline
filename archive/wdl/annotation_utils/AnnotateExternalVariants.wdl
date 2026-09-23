@@ -3,6 +3,21 @@ version 1.0
 import "../utils/Structs.wdl"
 
 workflow AnnotateExternalVariants {
+    meta {
+        description: [
+            "This utility matches an evaluation VCF against a truth VCF by structural variant type. Both callsets are converted to BED and split into deletions, duplications and insertions, compared with `bedtools` both within type and across the duplication and insertion types, and the per-type results are combined into one TSV of matched variants."
+        ]
+    }
+
+    parameter_meta {
+        vcf_eval: "VCF being evaluated."
+        vcf_eval_idx: "Index for `vcf_eval`."
+        vcf_truth: "Truth VCF to evaluate against."
+        vcf_truth_idx: "Index for `vcf_truth`."
+        population: "Population labels whose allele frequencies are carried across from the truth callset."
+        matched_variants_tsv: "TSV pairing each evaluation variant with its matched truth variant."
+    }
+
 
     input {
         File vcf_eval
