@@ -30,12 +30,14 @@
 
 version 1.0
 
+import "Helpers.wdl"
 import "Structs.wdl"
 
 workflow LRCNVs {
     meta {
         description: [
-            "This component calls copy-number variants across a cohort using GATK germline CNV (gCNV) cohort mode. From per-sample depth profiles over a shared interval list it annotates and filters intervals, determines contig ploidy, fits gCNV across scattered interval shards, post-processes per-sample calls into genotyped interval and segment VCFs, and collects sample- and model-level QC."
+            "This component calls copy-number variants across a cohort using GATK germline CNV (gCNV) cohort mode. From per-sample depth profiles over a shared interval list it annotates and filters intervals, determines contig ploidy, fits gCNV across scattered interval shards, post-processes per-sample calls into genotyped interval and segment VCFs, and collects sample- and model-level QC.",
+            "Setting `num_training_samples` below the cohort size switches the component to a hybrid case-cohort mode: that many samples are drawn at random and used to fit the contig-ploidy and gCNV models in cohort mode, and every remaining sample is then called against those models in case mode. Interval annotation, interval filtering and the fitted models therefore derive from the training samples alone, while the per-sample genotyped VCFs, denoised copy ratios, sample QC and contig-ploidy calls still cover the whole cohort in `sample_ids` order."
         ]
     }
 
@@ -49,6 +51,8 @@ workflow LRCNVs {
         ref_fai: "From references."
         ref_dict: "From references."
         num_intervals_per_scatter: "Number of intervals processed per gCNV scatter shard. GermlineCNVCaller memory grows with samples times intervals per shard, so raising this above the default needs more memory in `runtime_attr_germline_cnv_caller`."
+        num_training_samples: "Number of samples drawn at random to fit the contig-ploidy and gCNV models in cohort mode, with every remaining sample called against those models in case mode. Left unset, or set to at least the cohort size, every sample is called in cohort mode. Interval filtering percentages then apply over the training samples only, so a training set of fewer than a few dozen samples degrades the fitted models."
+        subsample_seed: "Random seed used to draw the training samples."
         gatk4_jar_override: "Override GATK4 jar."
         mappability_track_bed: "Mappability track used to annotate intervals."
         mappability_track_bed_idx: "Index for `mappability_track_bed`."
@@ -106,20 +110,20 @@ workflow LRCNVs {
         allosomal_contigs: "Contigs treated as allosomal."
         maximum_number_events_per_sample: "Maximum number of events permitted per sample."
         annotated_intervals: "Intervals annotated with GC content and tracks."
-        filtered_intervals: "Intervals retained after filtering."
-        contig_ploidy_model_tar: "Fitted contig-ploidy model."
-        contig_ploidy_calls_tar: "Per-sample contig-ploidy calls."
-        gcnv_model_tars: "Fitted gCNV models, one per scatter shard."
-        gcnv_calls_tars: "Per-shard per-sample gCNV calls."
-        gcnv_tracking_tars: "Per-shard model-fitting tracking files."
+        filtered_intervals: "Intervals retained after filtering the training samples."
+        contig_ploidy_model_tar: "Contig-ploidy model fitted on the training samples."
+        contig_ploidy_calls_tar: "Per-sample contig-ploidy calls for every sample, ordered as `sample_ids`."
+        gcnv_model_tars: "gCNV models fitted on the training samples, one per scatter shard."
+        gcnv_calls_tars: "Per-shard gCNV calls for the training samples."
+        gcnv_tracking_tars: "Per-shard model-fitting tracking files for the training samples."
         genotyped_intervals_vcfs: "Per-sample genotyped interval VCFs."
         genotyped_intervals_vcf_idxs: "Indexes for `genotyped_intervals_vcfs`."
         genotyped_segments_vcfs: "Per-sample genotyped segment VCFs."
         genotyped_segments_vcf_idxs: "Indexes for `genotyped_segments_vcfs`."
         sample_qc_status_files: "Per-sample QC status files."
         sample_qc_status_strings: "Per-sample QC status strings."
-        model_qc_status_file: "Model-level QC status file."
-        model_qc_string: "Model-level QC status string."
+        model_qc_status_file: "Model-level QC status file for the models fitted on the training samples."
+        model_qc_string: "Model-level QC status string for the models fitted on the training samples."
         denoised_copy_ratios: "Per-sample denoised copy ratios."
     }
 
@@ -135,8 +139,11 @@ workflow LRCNVs {
         File ref_fai
         File ref_dict
         String gatk_docker
+        String sv_pipeline_docker
 
         Int num_intervals_per_scatter
+        Int? num_training_samples
+        Int subsample_seed = 42
 
         File? gatk4_jar_override
 
@@ -211,14 +218,40 @@ workflow LRCNVs {
         # CollectSampleQualityMetrics
         Int maximum_number_events_per_sample = 1000
 
+        RuntimeAttr? runtime_attr_subsample_indices
         RuntimeAttr? runtime_attr_annotate_intervals
         RuntimeAttr? runtime_attr_filter_intervals
         RuntimeAttr? runtime_attr_scatter_intervals
         RuntimeAttr? runtime_attr_determine_contig_ploidy
+        RuntimeAttr? runtime_attr_determine_contig_ploidy_case
         RuntimeAttr? runtime_attr_germline_cnv_caller
+        RuntimeAttr? runtime_attr_germline_cnv_caller_case
         RuntimeAttr? runtime_attr_postprocess_germline_cnv_calls
         RuntimeAttr? runtime_attr_collect_sample_quality_metrics
         RuntimeAttr? runtime_attr_collect_model_quality_metrics
+        RuntimeAttr? runtime_attr_merge_contig_ploidy_calls
+    }
+
+    Int num_training_samples_ = select_first([num_training_samples, length(sample_ids)])
+    Boolean run_case_mode = num_training_samples_ < length(sample_ids)
+
+    if (run_case_mode) {
+        call Helpers.SubsampleIndices {
+            input:
+                num_items = length(sample_ids),
+                num_subsampled = num_training_samples_,
+                seed = subsample_seed,
+                prefix = prefix,
+                docker = sv_pipeline_docker,
+                runtime_attr_override = runtime_attr_subsample_indices
+        }
+    }
+
+    Array[Int] training_indices = select_first([SubsampleIndices.subsampled_indices, range(length(sample_ids))])
+
+    scatter (training_index in training_indices) {
+        String training_sample_ids = sample_ids[training_index]
+        File training_depth_profiles = depth_profiles[training_index]
     }
 
     call AnnotateIntervals {
@@ -244,7 +277,7 @@ workflow LRCNVs {
             prefix = prefix,
             annotated_intervals = AnnotateIntervals.annotated_intervals,
             blacklist_intervals = blacklist_intervals,
-            read_count_files = depth_profiles,
+            read_count_files = training_depth_profiles,
             low_count_filter_count_threshold = low_count_filter_count_threshold,
             low_count_filter_percentage_of_samples = low_count_filter_percentage_of_samples,
             extreme_count_filter_minimum_percentile = extreme_count_filter_minimum_percentile,
@@ -260,7 +293,7 @@ workflow LRCNVs {
             cohort_id = cohort_id,
             prefix = prefix,
             intervals = FilterIntervals.filtered_intervals,
-            read_count_files = depth_profiles,
+            read_count_files = training_depth_profiles,
             contig_ploidy_priors = contig_ploidy_priors,
             gatk4_jar_override = gatk4_jar_override,
             docker = gatk_docker,
@@ -286,7 +319,7 @@ workflow LRCNVs {
                 scatter_index = scatter_index,
                 cohort_id = cohort_id,
                 prefix = prefix,
-                read_count_files = depth_profiles,
+                read_count_files = training_depth_profiles,
                 contig_ploidy_calls_tar = DetermineGermlineContigPloidyCohortMode.contig_ploidy_calls_tar,
                 intervals = ScatterIntervals.scattered_interval_lists[scatter_index],
                 annotated_intervals = AnnotateIntervals.annotated_intervals,
@@ -335,10 +368,10 @@ workflow LRCNVs {
 
     Array[Array[File]] call_tars_sample_by_shard = transpose(GermlineCNVCallerCohortMode.gcnv_call_tars)
 
-    scatter (sample_index in range(length(sample_ids))) {
+    scatter (sample_index in range(length(training_indices))) {
         call PostprocessGermlineCNVCalls {
             input:
-                prefix = prefix + "." + sample_ids[sample_index],
+                prefix = prefix + "." + training_sample_ids[sample_index],
                 gcnv_calls_tars = call_tars_sample_by_shard[sample_index],
                 gcnv_model_tars = GermlineCNVCallerCohortMode.gcnv_model_tar,
                 calling_configs = GermlineCNVCallerCohortMode.calling_config_json,
@@ -357,7 +390,7 @@ workflow LRCNVs {
         call CollectSampleQualityMetrics {
             input:
                 genotyped_segments_vcf = PostprocessGermlineCNVCalls.genotyped_segments_vcf,
-                prefix = prefix + "." + sample_ids[sample_index],
+                prefix = prefix + "." + training_sample_ids[sample_index],
                 maximum_number_events = maximum_number_events_per_sample,
                 docker = gatk_docker,
                 runtime_attr_override = runtime_attr_collect_sample_quality_metrics
@@ -372,23 +405,149 @@ workflow LRCNVs {
             runtime_attr_override = runtime_attr_collect_model_quality_metrics
     }
 
+    if (run_case_mode) {
+        Array[Int] case_indices = select_first([SubsampleIndices.remaining_indices])
+
+        scatter (case_index in case_indices) {
+            String case_sample_ids = sample_ids[case_index]
+            File case_depth_profiles = depth_profiles[case_index]
+        }
+
+        call DetermineGermlineContigPloidyCaseMode {
+            input:
+                prefix = prefix,
+                read_count_files = case_depth_profiles,
+                contig_ploidy_model_tar = DetermineGermlineContigPloidyCohortMode.contig_ploidy_model_tar,
+                gatk4_jar_override = gatk4_jar_override,
+                docker = gatk_docker,
+                mapping_error_rate = ploidy_mapping_error_rate,
+                sample_psi_scale = ploidy_sample_psi_scale,
+                runtime_attr_override = runtime_attr_determine_contig_ploidy_case
+        }
+
+        scatter (scatter_index in range(length(GermlineCNVCallerCohortMode.gcnv_model_tar))) {
+            call GermlineCNVCallerCaseMode {
+                input:
+                    scatter_index = scatter_index,
+                    prefix = prefix,
+                    sample_ids = case_sample_ids,
+                    read_count_files = case_depth_profiles,
+                    contig_ploidy_calls_tar = DetermineGermlineContigPloidyCaseMode.contig_ploidy_calls_tar,
+                    gcnv_model_tar = GermlineCNVCallerCohortMode.gcnv_model_tar[scatter_index],
+                    gatk4_jar_override = gatk4_jar_override,
+                    docker = gatk_docker,
+                    p_alt = gcnv_p_alt,
+                    cnv_coherence_length = gcnv_cnv_coherence_length,
+                    max_copy_number = gcnv_max_copy_number,
+                    mapping_error_rate = gcnv_mapping_error_rate,
+                    sample_psi_scale = gcnv_sample_psi_scale,
+                    depth_correction_tau = gcnv_depth_correction_tau,
+                    copy_number_posterior_expectation_mode = gcnv_copy_number_posterior_expectation_mode,
+                    active_class_padding_hybrid_mode = gcnv_active_class_padding_hybrid_mode,
+                    learning_rate = gcnv_learning_rate,
+                    adamax_beta_1 = gcnv_adamax_beta_1,
+                    adamax_beta_2 = gcnv_adamax_beta_2,
+                    log_emission_samples_per_round = gcnv_log_emission_samples_per_round,
+                    log_emission_sampling_median_rel_error = gcnv_log_emission_sampling_median_rel_error,
+                    log_emission_sampling_rounds = gcnv_log_emission_sampling_rounds,
+                    max_advi_iter_first_epoch = gcnv_max_advi_iter_first_epoch,
+                    max_advi_iter_subsequent_epochs = gcnv_max_advi_iter_subsequent_epochs,
+                    min_training_epochs = gcnv_min_training_epochs,
+                    max_training_epochs = gcnv_max_training_epochs,
+                    initial_temperature = gcnv_initial_temperature,
+                    num_thermal_advi_iters = gcnv_num_thermal_advi_iters,
+                    convergence_snr_averaging_window = gcnv_convergence_snr_averaging_window,
+                    convergence_snr_trigger_threshold = gcnv_convergence_snr_trigger_threshold,
+                    convergence_snr_countdown_window = gcnv_convergence_snr_countdown_window,
+                    max_calling_iters = gcnv_max_calling_iters,
+                    caller_update_convergence_threshold = gcnv_caller_update_convergence_threshold,
+                    caller_internal_admixing_rate = gcnv_caller_internal_admixing_rate,
+                    caller_external_admixing_rate = gcnv_caller_external_admixing_rate,
+                    disable_annealing = gcnv_disable_annealing,
+                    runtime_attr_override = runtime_attr_germline_cnv_caller_case
+            }
+        }
+
+        Array[Array[File]] case_call_tars_sample_by_shard = transpose(GermlineCNVCallerCaseMode.gcnv_call_tars)
+
+        scatter (case_sample_index in range(length(case_indices))) {
+            call PostprocessGermlineCNVCalls as PostprocessGermlineCNVCallsCase {
+                input:
+                    prefix = prefix + "." + case_sample_ids[case_sample_index],
+                    gcnv_calls_tars = case_call_tars_sample_by_shard[case_sample_index],
+                    gcnv_model_tars = GermlineCNVCallerCohortMode.gcnv_model_tar,
+                    calling_configs = GermlineCNVCallerCaseMode.calling_config_json,
+                    denoising_configs = GermlineCNVCallerCaseMode.denoising_config_json,
+                    gcnvkernel_version = GermlineCNVCallerCaseMode.gcnvkernel_version_json,
+                    sharded_interval_lists = GermlineCNVCallerCaseMode.sharded_interval_list,
+                    contig_ploidy_calls_tar = DetermineGermlineContigPloidyCaseMode.contig_ploidy_calls_tar,
+                    allosomal_contigs = allosomal_contigs,
+                    ref_copy_number_autosomal_contigs = ref_copy_number_autosomal_contigs,
+                    sample_index = case_sample_index,
+                    gatk4_jar_override = gatk4_jar_override,
+                    docker = gatk_docker,
+                    runtime_attr_override = runtime_attr_postprocess_germline_cnv_calls
+            }
+
+            call CollectSampleQualityMetrics as CollectSampleQualityMetricsCase {
+                input:
+                    genotyped_segments_vcf = PostprocessGermlineCNVCallsCase.genotyped_segments_vcf,
+                    prefix = prefix + "." + case_sample_ids[case_sample_index],
+                    maximum_number_events = maximum_number_events_per_sample,
+                    docker = gatk_docker,
+                    runtime_attr_override = runtime_attr_collect_sample_quality_metrics
+            }
+        }
+
+        call MergeContigPloidyCalls {
+            input:
+                prefix = prefix,
+                training_contig_ploidy_calls_tar = DetermineGermlineContigPloidyCohortMode.contig_ploidy_calls_tar,
+                case_contig_ploidy_calls_tar = DetermineGermlineContigPloidyCaseMode.contig_ploidy_calls_tar,
+                training_indices = training_indices,
+                case_indices = case_indices,
+                docker = sv_pipeline_docker,
+                runtime_attr_override = runtime_attr_merge_contig_ploidy_calls
+        }
+    }
+
+    Array[Int] concatenated_positions = select_first([SubsampleIndices.concatenated_positions, range(length(sample_ids))])
+    Array[File] concatenated_genotyped_intervals_vcfs = flatten([PostprocessGermlineCNVCalls.genotyped_intervals_vcf, select_first([PostprocessGermlineCNVCallsCase.genotyped_intervals_vcf, []])])
+    Array[File] concatenated_genotyped_intervals_vcf_idxs = flatten([PostprocessGermlineCNVCalls.genotyped_intervals_vcf_idx, select_first([PostprocessGermlineCNVCallsCase.genotyped_intervals_vcf_idx, []])])
+    Array[File] concatenated_genotyped_segments_vcfs = flatten([PostprocessGermlineCNVCalls.genotyped_segments_vcf, select_first([PostprocessGermlineCNVCallsCase.genotyped_segments_vcf, []])])
+    Array[File] concatenated_genotyped_segments_vcf_idxs = flatten([PostprocessGermlineCNVCalls.genotyped_segments_vcf_idx, select_first([PostprocessGermlineCNVCallsCase.genotyped_segments_vcf_idx, []])])
+    Array[File] concatenated_denoised_copy_ratios = flatten([PostprocessGermlineCNVCalls.denoised_copy_ratios, select_first([PostprocessGermlineCNVCallsCase.denoised_copy_ratios, []])])
+    Array[File] concatenated_qc_status_files = flatten([CollectSampleQualityMetrics.qc_status_file, select_first([CollectSampleQualityMetricsCase.qc_status_file, []])])
+    Array[String] concatenated_qc_status_strings = flatten([CollectSampleQualityMetrics.qc_status_string, select_first([CollectSampleQualityMetricsCase.qc_status_string, []])])
+
+    scatter (output_index in range(length(sample_ids))) {
+        Int concatenated_position = concatenated_positions[output_index]
+        File ordered_genotyped_intervals_vcf = concatenated_genotyped_intervals_vcfs[concatenated_position]
+        File ordered_genotyped_intervals_vcf_idx = concatenated_genotyped_intervals_vcf_idxs[concatenated_position]
+        File ordered_genotyped_segments_vcf = concatenated_genotyped_segments_vcfs[concatenated_position]
+        File ordered_genotyped_segments_vcf_idx = concatenated_genotyped_segments_vcf_idxs[concatenated_position]
+        File ordered_denoised_copy_ratios = concatenated_denoised_copy_ratios[concatenated_position]
+        File ordered_qc_status_file = concatenated_qc_status_files[concatenated_position]
+        String ordered_qc_status_string = concatenated_qc_status_strings[concatenated_position]
+    }
+
     output {
         File annotated_intervals = AnnotateIntervals.annotated_intervals
         File filtered_intervals = FilterIntervals.filtered_intervals
         File contig_ploidy_model_tar = DetermineGermlineContigPloidyCohortMode.contig_ploidy_model_tar
-        File contig_ploidy_calls_tar = DetermineGermlineContigPloidyCohortMode.contig_ploidy_calls_tar
+        File contig_ploidy_calls_tar = select_first([MergeContigPloidyCalls.contig_ploidy_calls_tar, DetermineGermlineContigPloidyCohortMode.contig_ploidy_calls_tar])
         Array[File] gcnv_model_tars = GermlineCNVCallerCohortMode.gcnv_model_tar
         Array[Array[File]] gcnv_calls_tars = GermlineCNVCallerCohortMode.gcnv_call_tars
         Array[File] gcnv_tracking_tars = GermlineCNVCallerCohortMode.gcnv_tracking_tar
-        Array[File] genotyped_intervals_vcfs = PostprocessGermlineCNVCalls.genotyped_intervals_vcf
-        Array[File] genotyped_intervals_vcf_idxs = PostprocessGermlineCNVCalls.genotyped_intervals_vcf_idx
-        Array[File] genotyped_segments_vcfs = PostprocessGermlineCNVCalls.genotyped_segments_vcf
-        Array[File] genotyped_segments_vcf_idxs = PostprocessGermlineCNVCalls.genotyped_segments_vcf_idx
-        Array[File] sample_qc_status_files = CollectSampleQualityMetrics.qc_status_file
-        Array[String] sample_qc_status_strings = CollectSampleQualityMetrics.qc_status_string
+        Array[File] genotyped_intervals_vcfs = ordered_genotyped_intervals_vcf
+        Array[File] genotyped_intervals_vcf_idxs = ordered_genotyped_intervals_vcf_idx
+        Array[File] genotyped_segments_vcfs = ordered_genotyped_segments_vcf
+        Array[File] genotyped_segments_vcf_idxs = ordered_genotyped_segments_vcf_idx
+        Array[File] sample_qc_status_files = ordered_qc_status_file
+        Array[String] sample_qc_status_strings = ordered_qc_status_string
         File model_qc_status_file = CollectModelQualityMetrics.qc_status_file
         String model_qc_string = CollectModelQualityMetrics.qc_status_string
-        Array[File] denoised_copy_ratios = PostprocessGermlineCNVCalls.denoised_copy_ratios
+        Array[File] denoised_copy_ratios = ordered_denoised_copy_ratios
     }
 }
 
@@ -1010,7 +1169,289 @@ task GermlineCNVCallerCohortMode {
         mem_gb: 10,
         disk_gb: ceil((size(read_count_files, "GB") + size([contig_ploidy_calls_tar, intervals], "GB")) * 2) + 50,
         boot_disk_gb: 10,
-        preemptible_tries: 3,
+        preemptible_tries: 1,
+        max_retries: 0
+    }
+    RuntimeAttr runtime_attr = select_first([runtime_attr_override, default_attr])
+    runtime {
+        cpu: select_first([runtime_attr.cpu_cores, default_attr.cpu_cores])
+        memory: select_first([runtime_attr.mem_gb, default_attr.mem_gb]) + " GiB"
+        disks: "local-disk " + select_first([runtime_attr.disk_gb, default_attr.disk_gb]) + " HDD"
+        bootDiskSizeGb: select_first([runtime_attr.boot_disk_gb, default_attr.boot_disk_gb])
+        docker: docker
+        preemptible: select_first([runtime_attr.preemptible_tries, default_attr.preemptible_tries])
+        maxRetries: select_first([runtime_attr.max_retries, default_attr.max_retries])
+    }
+}
+
+task DetermineGermlineContigPloidyCaseMode {
+    input {
+        String prefix
+        Array[File] read_count_files
+        File contig_ploidy_model_tar
+        String? output_dir
+        File? gatk4_jar_override
+        Float? mapping_error_rate
+        Float? sample_psi_scale
+        String docker
+        RuntimeAttr? runtime_attr_override
+    }
+
+    Int command_mem_mb = ceil(select_first([runtime_attr.mem_gb, default_attr.mem_gb]) * 0.8 * 1024)
+
+    # Default the output directory to "out"
+    String output_dir_ = select_first([output_dir, "out"])
+
+    command <<<
+        set -euo pipefail
+
+        export GATK_LOCAL_JAR=~{default="/root/gatk.jar" gatk4_jar_override}
+        export MKL_NUM_THREADS=~{select_first([runtime_attr.cpu_cores, default_attr.cpu_cores])}
+        export OMP_NUM_THREADS=~{select_first([runtime_attr.cpu_cores, default_attr.cpu_cores])}
+
+        mkdir contig-ploidy-model
+        tar xzf ~{contig_ploidy_model_tar} -C contig-ploidy-model
+
+        # Case mode takes its intervals and ploidy priors from the fitted model, so neither may be passed again
+        gatk --java-options "-Xmx~{command_mem_mb}m"  DetermineGermlineContigPloidy \
+            --input ~{sep=" --input " read_count_files} \
+            --model contig-ploidy-model \
+            --output ~{output_dir_} \
+            --output-prefix case \
+            --verbosity DEBUG \
+            --mapping-error-rate ~{default="0.01" mapping_error_rate} \
+            --sample-psi-scale ~{default="0.0001" sample_psi_scale}
+
+        tar czf ~{prefix}.case_contig_ploidy_calls.tar.gz -C ~{output_dir_}/case-calls .
+
+        rm -rf contig-ploidy-model
+    >>>
+
+    output {
+        File contig_ploidy_calls_tar = "~{prefix}.case_contig_ploidy_calls.tar.gz"
+    }
+
+    RuntimeAttr default_attr = object {
+        cpu_cores: 8,
+        mem_gb: 7,
+        disk_gb: ceil(size(read_count_files, "GB") * 2 + size(contig_ploidy_model_tar, "GB")) + 50,
+        boot_disk_gb: 10,
+        preemptible_tries: 1,
+        max_retries: 0
+    }
+    RuntimeAttr runtime_attr = select_first([runtime_attr_override, default_attr])
+    runtime {
+        cpu: select_first([runtime_attr.cpu_cores, default_attr.cpu_cores])
+        memory: select_first([runtime_attr.mem_gb, default_attr.mem_gb]) + " GiB"
+        disks: "local-disk " + select_first([runtime_attr.disk_gb, default_attr.disk_gb]) + " HDD"
+        bootDiskSizeGb: select_first([runtime_attr.boot_disk_gb, default_attr.boot_disk_gb])
+        docker: docker
+        preemptible: select_first([runtime_attr.preemptible_tries, default_attr.preemptible_tries])
+        maxRetries: select_first([runtime_attr.max_retries, default_attr.max_retries])
+    }
+}
+
+task GermlineCNVCallerCaseMode {
+    input {
+        Int scatter_index
+        String prefix
+        Array[String] sample_ids
+        Array[File] read_count_files
+        File contig_ploidy_calls_tar
+        File gcnv_model_tar
+        String? output_dir
+        File? gatk4_jar_override
+        Float? p_alt
+        Float? cnv_coherence_length
+        Int? max_copy_number
+        Float? mapping_error_rate
+        Float? sample_psi_scale
+        Float? depth_correction_tau
+        String? copy_number_posterior_expectation_mode
+        Int? active_class_padding_hybrid_mode
+        Float? learning_rate
+        Float? adamax_beta_1
+        Float? adamax_beta_2
+        Int? log_emission_samples_per_round
+        Float? log_emission_sampling_median_rel_error
+        Int? log_emission_sampling_rounds
+        Int? max_advi_iter_first_epoch
+        Int? max_advi_iter_subsequent_epochs
+        Int? min_training_epochs
+        Int? max_training_epochs
+        Float? initial_temperature
+        Int? num_thermal_advi_iters
+        Int? convergence_snr_averaging_window
+        Float? convergence_snr_trigger_threshold
+        Int? convergence_snr_countdown_window
+        Int? max_calling_iters
+        Float? caller_update_convergence_threshold
+        Float? caller_internal_admixing_rate
+        Float? caller_external_admixing_rate
+        Boolean? disable_annealing
+        String docker
+        RuntimeAttr? runtime_attr_override
+    }
+
+    Int command_mem_mb = ceil(select_first([runtime_attr.mem_gb, default_attr.mem_gb]) * 0.8 * 1024)
+
+    # Default the output directory to "out"
+    String output_dir_ = select_first([output_dir, "out"])
+    Int num_samples = length(read_count_files)
+
+    command <<<
+        set -euo pipefail
+
+        export GATK_LOCAL_JAR=~{default="/root/gatk.jar" gatk4_jar_override}
+        export MKL_NUM_THREADS=~{select_first([runtime_attr.cpu_cores, default_attr.cpu_cores])}
+        export OMP_NUM_THREADS=~{select_first([runtime_attr.cpu_cores, default_attr.cpu_cores])}
+
+        mkdir contig-ploidy-calls
+        tar xzf ~{contig_ploidy_calls_tar} -C contig-ploidy-calls
+
+        mkdir gcnv-model
+        tar xzf ~{gcnv_model_tar} -C gcnv-model
+
+        # Case mode takes its intervals and denoising hyperparameters from the fitted model, so neither may be passed again
+        gatk --java-options "-Xmx~{command_mem_mb}m"  GermlineCNVCaller \
+            --run-mode CASE \
+            --input ~{sep=" --input " read_count_files} \
+            --contig-ploidy-calls contig-ploidy-calls \
+            --model gcnv-model \
+            --output ~{output_dir_} \
+            --output-prefix case \
+            --verbosity DEBUG \
+            --p-alt ~{default="1e-6" p_alt} \
+            --cnv-coherence-length ~{default="10000.0" cnv_coherence_length} \
+            --max-copy-number ~{default="5" max_copy_number} \
+            --mapping-error-rate ~{default="0.01" mapping_error_rate} \
+            --sample-psi-scale ~{default="0.0001" sample_psi_scale} \
+            --depth-correction-tau ~{default="10000.0" depth_correction_tau} \
+            --copy-number-posterior-expectation-mode ~{default="HYBRID" copy_number_posterior_expectation_mode} \
+            --active-class-padding-hybrid-mode ~{default="50000" active_class_padding_hybrid_mode} \
+            --learning-rate ~{default="0.05" learning_rate} \
+            --adamax-beta-1 ~{default="0.9" adamax_beta_1} \
+            --adamax-beta-2 ~{default="0.99" adamax_beta_2} \
+            --log-emission-samples-per-round ~{default="50" log_emission_samples_per_round} \
+            --log-emission-sampling-median-rel-error ~{default="0.005" log_emission_sampling_median_rel_error} \
+            --log-emission-sampling-rounds ~{default="10" log_emission_sampling_rounds} \
+            --max-advi-iter-first-epoch ~{default="5000" max_advi_iter_first_epoch} \
+            --max-advi-iter-subsequent-epochs ~{default="100" max_advi_iter_subsequent_epochs} \
+            --min-training-epochs ~{default="10" min_training_epochs} \
+            --max-training-epochs ~{default="100" max_training_epochs} \
+            --initial-temperature ~{default="2.0" initial_temperature} \
+            --num-thermal-advi-iters ~{default="2500" num_thermal_advi_iters} \
+            --convergence-snr-averaging-window ~{default="500" convergence_snr_averaging_window} \
+            --convergence-snr-trigger-threshold ~{default="0.1" convergence_snr_trigger_threshold} \
+            --convergence-snr-countdown-window ~{default="10" convergence_snr_countdown_window} \
+            --max-calling-iters ~{default="10" max_calling_iters} \
+            --caller-update-convergence-threshold ~{default="0.001" caller_update_convergence_threshold} \
+            --caller-internal-admixing-rate ~{default="0.75" caller_internal_admixing_rate} \
+            --caller-external-admixing-rate ~{default="1.00" caller_external_admixing_rate} \
+            --disable-annealing ~{default="false" disable_annealing}
+
+        tar czf ~{prefix}.case_gcnv_tracking.shard_~{scatter_index}.tar.gz -C ~{output_dir_}/case-tracking .
+
+        # Fail loudly if the call directories are not in the order the read counts were given, which downstream indexing assumes
+        expected_sample_ids=(~{sep=" " sample_ids})
+        for index in ${!expected_sample_ids[@]}; do
+            actual_sample_id="$(cat ~{output_dir_}/case-calls/SAMPLE_$index/sample_name.txt)"
+            if [[ "${expected_sample_ids[$index]}" != "${actual_sample_id}" ]]; then
+                printf 'Expected sample ID does not match actual sample ID for SAMPLE_%s\n' "$index" >&2
+                printf 'Expected: %s\n' "${expected_sample_ids[$index]}" >&2
+                printf 'Actual: %s\n' "${actual_sample_id}" >&2
+                exit 1
+            fi
+        done
+
+        CURRENT_SAMPLE=0
+        NUM_SAMPLES=~{num_samples}
+        NUM_DIGITS=${#NUM_SAMPLES}
+        while [ $CURRENT_SAMPLE -lt $NUM_SAMPLES ]; do
+            CURRENT_SAMPLE_WITH_LEADING_ZEROS=$(printf "%0${NUM_DIGITS}d" $CURRENT_SAMPLE)
+            tar czf ~{prefix}.case_gcnv_calls.shard_~{scatter_index}.sample_$CURRENT_SAMPLE_WITH_LEADING_ZEROS.tar.gz -C ~{output_dir_}/case-calls/SAMPLE_$CURRENT_SAMPLE .
+            CURRENT_SAMPLE=$((CURRENT_SAMPLE+1))
+        done
+
+        rm -rf contig-ploidy-calls
+        rm -rf gcnv-model
+    >>>
+
+    output {
+        Array[File] gcnv_call_tars = glob("~{prefix}.case_gcnv_calls.shard_~{scatter_index}.sample_*.tar.gz")
+        File gcnv_tracking_tar = "~{prefix}.case_gcnv_tracking.shard_~{scatter_index}.tar.gz"
+        File calling_config_json = "~{output_dir_}/case-calls/calling_config.json"
+        File denoising_config_json = "~{output_dir_}/case-calls/denoising_config.json"
+        File gcnvkernel_version_json = "~{output_dir_}/case-calls/gcnvkernel_version.json"
+        File sharded_interval_list = "~{output_dir_}/case-calls/interval_list.tsv"
+    }
+
+    RuntimeAttr default_attr = object {
+        cpu_cores: 8,
+        mem_gb: 10,
+        disk_gb: ceil((size(read_count_files, "GB") + size([contig_ploidy_calls_tar, gcnv_model_tar], "GB")) * 2) + 50,
+        boot_disk_gb: 10,
+        preemptible_tries: 1,
+        max_retries: 0
+    }
+    RuntimeAttr runtime_attr = select_first([runtime_attr_override, default_attr])
+    runtime {
+        cpu: select_first([runtime_attr.cpu_cores, default_attr.cpu_cores])
+        memory: select_first([runtime_attr.mem_gb, default_attr.mem_gb]) + " GiB"
+        disks: "local-disk " + select_first([runtime_attr.disk_gb, default_attr.disk_gb]) + " HDD"
+        bootDiskSizeGb: select_first([runtime_attr.boot_disk_gb, default_attr.boot_disk_gb])
+        docker: docker
+        preemptible: select_first([runtime_attr.preemptible_tries, default_attr.preemptible_tries])
+        maxRetries: select_first([runtime_attr.max_retries, default_attr.max_retries])
+    }
+}
+
+task MergeContigPloidyCalls {
+    input {
+        String prefix
+        File training_contig_ploidy_calls_tar
+        File case_contig_ploidy_calls_tar
+        Array[Int] training_indices
+        Array[Int] case_indices
+        String docker
+        RuntimeAttr? runtime_attr_override
+    }
+
+    command <<<
+        set -euo pipefail
+
+        mkdir training case merged
+        tar xzf ~{training_contig_ploidy_calls_tar} -C training
+        tar xzf ~{case_contig_ploidy_calls_tar} -C case
+
+        # Renumber each call directory from its position within its own run to its position in the full sample list
+        training_indices=(~{sep=" " training_indices})
+        for index in ${!training_indices[@]}; do
+            mv training/SAMPLE_$index merged/SAMPLE_${training_indices[$index]}
+        done
+        case_indices=(~{sep=" " case_indices})
+        for index in ${!case_indices[@]}; do
+            mv case/SAMPLE_$index merged/SAMPLE_${case_indices[$index]}
+        done
+
+        # Carry over the run-level files that sit alongside the call directories
+        find training -maxdepth 1 -type f -exec cp {} merged/ \;
+
+        tar czf ~{prefix}.contig_ploidy_calls.tar.gz -C merged .
+
+        rm -rf training case merged
+    >>>
+
+    output {
+        File contig_ploidy_calls_tar = "~{prefix}.contig_ploidy_calls.tar.gz"
+    }
+
+    RuntimeAttr default_attr = object {
+        cpu_cores: 1,
+        mem_gb: 2,
+        disk_gb: ceil(size([training_contig_ploidy_calls_tar, case_contig_ploidy_calls_tar], "GB") * 4) + 20,
+        boot_disk_gb: 10,
+        preemptible_tries: 1,
         max_retries: 0
     }
     RuntimeAttr runtime_attr = select_first([runtime_attr_override, default_attr])

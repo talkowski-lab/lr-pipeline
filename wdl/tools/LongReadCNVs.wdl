@@ -10,7 +10,8 @@ import "../utils/Structs.wdl"
 workflow LongReadCNVs {
     meta {
         description: [
-            "This workflow calls cohort CNVs from long-read depth profiles with GATK gCNV, then converts, clusters and genotypes the depth calls. It outputs merged CNV calls, ploidy, and genotyped depth VCFs."
+            "This workflow calls cohort CNVs from long-read depth profiles with GATK gCNV, then converts, clusters and genotypes the depth calls. It outputs merged CNV calls, ploidy, and genotyped depth VCFs.",
+            "By default every sample is called in gCNV cohort mode. Setting `num_training_samples` below the cohort size instead runs a hybrid case-cohort mode, fitting the contig-ploidy and gCNV models on that many randomly drawn samples and calling every remaining sample against those models in case mode. All downstream steps and outputs still cover the whole cohort either way."
         ]
     }
 
@@ -34,6 +35,8 @@ workflow LongReadCNVs {
         variant_prefix: "Prefix used for generated variant IDs."
         gcnv_qs_cutoff: "Minimum gCNV quality score for a segment to be kept."
         num_intervals_per_scatter: "Number of intervals processed per gCNV scatter shard. GermlineCNVCaller memory grows with samples times intervals per shard, so raising this above the default needs more memory in `runtime_attr_germline_cnv_caller`."
+        num_training_samples: "Number of samples drawn at random to fit the contig-ploidy and gCNV models in cohort mode, with every remaining sample called against those models in case mode. Left unset, or set to at least the cohort size, every sample is called in cohort mode. Interval filtering percentages then apply over the training samples only, so a training set of fewer than a few dozen samples degrades the fitted models."
+        subsample_seed: "Random seed used to draw the training samples."
         chr_x: "Name of the X contig in the reference."
         chr_y: "Name of the Y contig in the reference."
         gatk4_jar_override: "Override GATK4 jar."
@@ -141,6 +144,8 @@ workflow LongReadCNVs {
 
         Int gcnv_qs_cutoff = 30
         Int num_intervals_per_scatter = 1500
+        Int? num_training_samples
+        Int subsample_seed = 42
         String chr_x = "chrX"
         String chr_y = "chrY"
 
@@ -223,14 +228,18 @@ workflow LongReadCNVs {
         Boolean svtk_set_pass = false
 
         RuntimeAttr? runtime_attr_sort_depth_profiles
+        RuntimeAttr? runtime_attr_subsample_indices
         RuntimeAttr? runtime_attr_annotate_intervals
         RuntimeAttr? runtime_attr_filter_intervals
         RuntimeAttr? runtime_attr_scatter_intervals
         RuntimeAttr? runtime_attr_determine_contig_ploidy
+        RuntimeAttr? runtime_attr_determine_contig_ploidy_case
         RuntimeAttr? runtime_attr_germline_cnv_caller
+        RuntimeAttr? runtime_attr_germline_cnv_caller_case
         RuntimeAttr? runtime_attr_postprocess_germline_cnv_calls
         RuntimeAttr? runtime_attr_collect_sample_quality_metrics
         RuntimeAttr? runtime_attr_collect_model_quality_metrics
+        RuntimeAttr? runtime_attr_merge_contig_ploidy_calls
         RuntimeAttr? runtime_attr_gcnv_vcf_to_bed
         RuntimeAttr? runtime_attr_merge_sample
         RuntimeAttr? runtime_attr_merge_set
@@ -269,10 +278,13 @@ workflow LongReadCNVs {
             cohort_id = batch_id,
             contig_ploidy_priors = contig_ploidy_priors,
             num_intervals_per_scatter = num_intervals_per_scatter,
+            num_training_samples = num_training_samples,
+            subsample_seed = subsample_seed,
             ref_fa = ref_fa,
             ref_fai = ref_fai,
             ref_dict = ref_dict,
             gatk_docker = gatk_docker,
+            sv_pipeline_docker = sv_pipeline_docker,
             gatk4_jar_override = gatk4_jar_override,
             mappability_track_bed = mappability_track_bed,
             mappability_track_bed_idx = mappability_track_bed_idx,
@@ -329,14 +341,18 @@ workflow LongReadCNVs {
             ref_copy_number_autosomal_contigs = ref_copy_number_autosomal_contigs,
             allosomal_contigs = allosomal_contigs,
             maximum_number_events_per_sample = maximum_number_events_per_sample,
+            runtime_attr_subsample_indices = runtime_attr_subsample_indices,
             runtime_attr_annotate_intervals = runtime_attr_annotate_intervals,
             runtime_attr_filter_intervals = runtime_attr_filter_intervals,
             runtime_attr_scatter_intervals = runtime_attr_scatter_intervals,
             runtime_attr_determine_contig_ploidy = runtime_attr_determine_contig_ploidy,
+            runtime_attr_determine_contig_ploidy_case = runtime_attr_determine_contig_ploidy_case,
             runtime_attr_germline_cnv_caller = runtime_attr_germline_cnv_caller,
+            runtime_attr_germline_cnv_caller_case = runtime_attr_germline_cnv_caller_case,
             runtime_attr_postprocess_germline_cnv_calls = runtime_attr_postprocess_germline_cnv_calls,
             runtime_attr_collect_sample_quality_metrics = runtime_attr_collect_sample_quality_metrics,
-            runtime_attr_collect_model_quality_metrics = runtime_attr_collect_model_quality_metrics
+            runtime_attr_collect_model_quality_metrics = runtime_attr_collect_model_quality_metrics,
+            runtime_attr_merge_contig_ploidy_calls = runtime_attr_merge_contig_ploidy_calls
     }
 
     call DepthPreprocessing.DepthPreprocessing {
