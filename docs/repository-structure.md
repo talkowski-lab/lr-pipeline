@@ -19,7 +19,7 @@ data/                # Local-only analysis inputs, outputs and scratch work; git
 docs/                # Extended documentation (this file included)
 .github/
   workflows/         # Active GitHub Actions CI
-  scripts/           # Helper scripts invoked by CI
+  scripts/           # CI check scripts, also run locally, plus merge_branch.sh for the branch merge sequence
 archive/             # Retired workflows, scripts, Dockerfiles, notebooks and their reference docs
   docs/workflows.md  # Generated from the retired workflows, the counterpart to docs/workflows.md
   notebooks/         # Retired ad hoc Jupyter notebooks (Terra cost analysis via the API and BigQuery)

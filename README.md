@@ -11,6 +11,7 @@ The pipeline covers three broad stages.
 
 ## Running and Contributing
 - Workflows are imported into Terra from Dockstore, which syncs from the `main` branch via [`.dockstore.yml`](.dockstore.yml). Every directly-run workflow needs an entry there.
+- Work on a branch rather than on `main`, registering the branch in `.dockstore.yml` to test a workflow from it - see [Branches](docs/conventions.md#branches).
 - Docker images and reference files are supplied per workspace rather than hardcoded - see [Docker images](docs/dockers.md) and [References](docs/references.md).
 - Before pushing, run the checks that match what you changed; the commands are listed in [CI/CD](docs/ci-cd.md).
 - Style rules for WDL, Python and Markdown are in [Conventions](docs/conventions.md), and the checklist for adding a workflow or tool is in [AGENTS.md](AGENTS.md).

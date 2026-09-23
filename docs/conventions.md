@@ -132,3 +132,11 @@ These rules apply to WDL, Python, R and Bash alike, including code embedded in a
 ## Workspace
 - All reference files - i.e. those not specific to an input callset - should be passed in via workspace data.
 - All dockers should be passed in via workspace data.
+
+
+## Branches
+- Development should never happen directly on `main`. Every change starts on a branch cut from an up-to-date `origin/main`, named `kj-<kebab-topic>` - e.g. `kj-annotate-dbvar-mem`.
+- When a branch changes a directly-run workflow - or a task library or `wdl/utils/` sub-workflow that one imports - the branch name should be added under `filters.branches` in that workflow's [`.dockstore.yml`](../.dockstore.yml) entry, after `main`. Dockstore reads the `.dockstore.yml` on the pushed branch, so the branch must be pushed for the test version to appear and be importable into Terra.
+- Only the entries of the workflows actually being tested should list the branch. `main` must stay listed in every entry.
+- The branch should be merged into `main` only on explicit instruction, following the sequence in [Feature branch test versions](ci-cd.md#feature-branch-test-versions), which removes the branch filter before the merge and deletes the branch after it. Merges are done locally rather than through a pull request, and a rebase or merge conflict is the one point where the merge stops for human review.
+- On `main`, every entry should list `main` and nothing else; `check_dockstore_sync.py --main-only` enforces this on push.

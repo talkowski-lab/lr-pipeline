@@ -12,7 +12,7 @@ Seven workflows run on push and pull request to `main`, each gated on the paths 
 | [`workflows-doc-sync.yml`](../.github/workflows/workflows-doc-sync.yml) | `wdl/**`, `archive/wdl/**`, `.dockstore.yml`, `.github/scripts/wdl_meta.py`, `.github/scripts/generate_workflows_doc.py` | On a pull request, checks the WDL style rules and confirms [workflows.md](workflows.md) and its archive counterpart can be generated. On push to `main`, regenerates both with [`generate_workflows_doc.py`](../.github/scripts/generate_workflows_doc.py) and commits the result when it changed. This is the only job granted `contents: write`; because the push uses `GITHUB_TOKEN`, it does not trigger another run. |
 | [`markdown-style-check.yml`](../.github/workflows/markdown-style-check.yml) | `**.md`, `.github/scripts/check_markdown_style.py` | Runs [`check_markdown_style.py`](../.github/scripts/check_markdown_style.py), which enforces the Markdown rules in [conventions.md](conventions.md) - whitespace, blank-line spacing around headings, thematic dividers, and nested list indentation. Only `README.md`, `AGENTS.md` and `docs/` are checked; `archive/` and the `AGENTS.md` symlinks are skipped. |
 | [`python-linting.yaml`](../.github/workflows/python-linting.yaml) | `scripts/**`, `.github/scripts/**` | Runs `flake8` over `scripts/` and `.github/scripts/`. |
-| [`dockstore-sync.yml`](../.github/workflows/dockstore-sync.yml) | `wdl/**`, `.dockstore.yml` | Runs [`check_dockstore_sync.py`](../.github/scripts/check_dockstore_sync.py), which fails if any active workflow in `wdl/annotation`, `wdl/annotation_utils` or `wdl/tools` is missing a `.dockstore.yml` entry (or vice versa). |
+| [`dockstore-sync.yml`](../.github/workflows/dockstore-sync.yml) | `wdl/**`, `.dockstore.yml` | Runs [`check_dockstore_sync.py`](../.github/scripts/check_dockstore_sync.py), which fails if any active workflow in `wdl/annotation`, `wdl/annotation_utils` or `wdl/tools` is missing a `.dockstore.yml` entry (or vice versa), or if an entry does not list `main` under `filters.branches`. On push to `main` only, it runs again with `--main-only`, which fails if a feature branch is still listed. |
 | [`agents-sync-check.yml`](../.github/workflows/agents-sync-check.yml) | `AGENTS.md`, `.claude/CLAUDE.md`, `.github/copilot-instructions.md` | Runs [`check_agents_sync.py`](../.github/scripts/check_agents_sync.py), which fails if either instruction mirror has drifted from the canonical `AGENTS.md`. |
 
 
@@ -25,16 +25,34 @@ Run the checks that match what you changed before pushing. These mirror the inst
 - Changed anything under `wdl/`: validate syntax with `find wdl -type f -name "*.wdl" -exec java -jar womtool.jar validate {} \;` and style with `python .github/scripts/check_wdl_style.py`.
 - Changed any `.md` file: run `python .github/scripts/check_markdown_style.py`. `docs/workflows.md` is generated, so edit the `meta` and `parameter_meta` blocks of the workflow instead; `python .github/scripts/generate_workflows_doc.py` previews the result locally, and CI regenerates and commits it on push to `main`. `archive/docs/workflows.md` is generated the same way from the retired workflows, with `--site archive`.
 - Changed anything under `scripts/` or `.github/scripts/`: run `flake8 scripts/ .github/scripts/`. Configuration lives in `.flake8` - maximum line length 130, `E203` and `W503` ignored. `pyproject.toml` pins Black to `line-length = 88` for optional local formatting, but Black is not enforced in CI.
-- Added, renamed or deleted a workflow under `wdl/annotation`, `wdl/annotation_utils` or `wdl/tools`: run `python .github/scripts/check_dockstore_sync.py`, which needs `pip install pyyaml`.
+- Added, renamed or deleted a workflow under `wdl/annotation`, `wdl/annotation_utils` or `wdl/tools`, or edited `.dockstore.yml`: run `python .github/scripts/check_dockstore_sync.py`, which needs `pip install pyyaml`. Before merging a feature branch into `main`, run it again with `--main-only` to confirm no branch filter was left behind.
 - Changed `AGENTS.md`: run `python .github/scripts/check_agents_sync.py`. `.claude/CLAUDE.md` and `.github/copilot-instructions.md` are symlinks to `../AGENTS.md`, so only the canonical file should ever be edited.
 - Optional deeper audit: `miniwdl check --strict <file>.wdl` reports unused declarations and name collisions. It is deliberately not part of CI, because it also flags the index localization inputs and the sub-workflow namespace collisions that [conventions.md](conventions.md) documents as intentional.
 
 
 ## Dockstore Registration
-Terra imports workflows from Dockstore, which syncs from `main` on push. There is no release tagging step.
+Terra imports workflows from Dockstore, which syncs on push from every branch listed in an entry's `filters.branches`. There is no release tagging step.
 - Every directly-run workflow needs an entry in [`.dockstore.yml`](../.dockstore.yml), placed under its matching `# Annotation Workflows`, `# Annotation Utilities` or `# Tools` comment block.
-- An entry sets `subclass: WDL`, `name` to the file stem, and `primaryDescriptorPath` to `/wdl/<directory>/<Name>.wdl`, with filters `branches: [main]` and `tags: /.*/`.
+- An entry sets `subclass: WDL`, `name` to the file stem, and `primaryDescriptorPath` to `/wdl/<directory>/<Name>.wdl`, with filters `branches: [main]` - plus any feature branch currently under test - and `tags: /.*/`.
+- `main` is what Terra runs in production and must be listed in every entry at all times.
 - Task libraries and the sub-workflows under `wdl/utils/` are never registered, since they are imported rather than run directly.
+
+
+### Feature branch test versions
+Development happens on a `kj-<kebab-topic>` branch rather than on `main` - see [Branches](conventions.md#branches). To test a changed workflow from that branch, add the branch name under `filters.branches` in that workflow's entry and push; Dockstore reads the `.dockstore.yml` on the pushed branch, so the version appears under the branch name and can be imported into Terra. Only the workflows being tested should list the branch.
+
+Once the changes are validated and a merge has been explicitly approved, merge locally - no pull request - with [`merge_branch.sh`](../.github/scripts/merge_branch.sh), run from a clean working tree.
+```bash
+.github/scripts/merge_branch.sh          # merges the current branch
+.github/scripts/merge_branch.sh kj-topic # merges a named branch
+```
+The script performs the whole sequence, and each step is what to do by hand if it is ever run one piece at a time.
+1. Removes the branch from every `filters.branches` list it was added to and commits that, after `check_dockstore_sync.py --main-only` confirms nothing else was left behind. Doing this before the merge keeps the filter off `main` entirely.
+2. Rebases onto `origin/main`. A conflict stops the script with the rebase still in progress and nothing merged, because conflicts are resolved by a human, never automatically. Resolve them, `git rebase --continue`, and run the script again, or `git rebase --abort` to back out.
+3. Fast-forwards `main` and pushes it. The merge is `--ff-only`, so it fails rather than quietly creating a merge commit if `main` moved in between.
+4. Deletes the branch on the remote and locally. Deleting the remote branch is what removes its Dockstore version. The rebased branch is never force-pushed, since it is deleted moments later anyway.
+
+The repository also has `delete_branch_on_merge` enabled, which covers the occasional pull request; a local merge is not a merged pull request as far as GitHub is concerned, so the script deletes the branch explicitly. There is deliberately no CI job that bulk-deletes merged branches, since the repository carries long-lived collaborator branches that such a job would remove.
 
 
 ## Docker Images

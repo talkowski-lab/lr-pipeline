@@ -3,8 +3,11 @@
 
 Every top-level workflow file under wdl/annotation, wdl/annotation_utils, and
 wdl/tools must have exactly one corresponding entry in .dockstore.yml, and every
-entry must point to a file that exists.
+entry must point to a file that exists. Every entry must also list main under
+filters.branches; --main-only additionally fails on any feature branch left
+listed there, and is run before merging a feature branch into main.
 """
+import argparse
 import sys
 from pathlib import Path
 
@@ -28,7 +31,32 @@ def find_active_workflow_files():
     return files
 
 
+def check_branch_filters(name, entry, main_only):
+    branches = entry.get("filters", {}).get("branches")
+    if not isinstance(branches, list):
+        return [f".dockstore.yml entry '{name}' has no filters.branches list"]
+    errors = []
+    if "main" not in branches:
+        errors.append(f".dockstore.yml entry '{name}' does not list 'main' under filters.branches")
+    if main_only:
+        extra = [b for b in branches if b != "main"]
+        if extra:
+            errors.append(
+                f".dockstore.yml entry '{name}' still lists feature branch(es) under filters.branches: "
+                f"{', '.join(extra)}"
+            )
+    return errors
+
+
 def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--main-only",
+        action="store_true",
+        help="also fail if any entry lists a branch other than main",
+    )
+    args = parser.parse_args()
+
     errors = []
     entries = load_dockstore_entries()
     entries_by_name = {}
@@ -44,6 +72,7 @@ def main():
             errors.append(
                 f".dockstore.yml entry '{name}' points to missing file: {entry['primaryDescriptorPath']}"
             )
+        errors.extend(check_branch_filters(name, entry, args.main_only))
 
     active_files = find_active_workflow_files()
     for path in sorted(active_files):

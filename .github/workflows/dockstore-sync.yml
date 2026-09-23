@@ -33,3 +33,8 @@ jobs:
       - name: Check .dockstore.yml <-> wdl/ sync
         run: |
           python .github/scripts/check_dockstore_sync.py
+
+      - name: Check no feature branch filters remain on main
+        if: github.event_name == 'push'
+        run: |
+          python .github/scripts/check_dockstore_sync.py --main-only
