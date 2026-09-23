@@ -1,7 +1,7 @@
 # Pipeline
-This document describes how to run the pipeline end-to-end on a new cohort, starting from raw unaligned lrGS reads and finishing with an annotated cohort VCF. It is organized into three steps: building the cohort-level callsets, phasing them, and annotating them.
+This document describes how to run the pipeline end-to-end on a new cohort, starting from raw unaligned lrGS reads and finishing with an annotated cohort VCF. It is organized into three steps: preprocessing the cohort-level callsets, phasing them, and annotating them.
 
-Numbered lists are sequential; bulleted lists run in parallel. For the specific sequence of steps used to build the existing HPRC/HGSVC and All of Us callsets, including the ad-hoc reruns and one-off fixes those callsets required, see [Steps](steps.md).
+Numbered lists are sequential; bulleted lists run in parallel. For the specific sequence of steps used to build the existing HPRC/HGSVC and All of Us callsets, including the ad-hoc reruns and one-off fixes those callsets required, see [Trace](trace.md).
 
 ![Pipeline overview](images/combined.png)
 
@@ -16,7 +16,7 @@ Everything below is cohort-specific and must be supplied per run. Reference file
 - **Sample age data** _(optional)_ - per-sample ages. Supplying this enables age-bin carrier annotation in step 3.
 
 
-## 1. Cohort Callset Generation
+## 1. Preprocessing
 Reads are aligned and assembled, three variant callsets (SNV/indel, SV and TR) are generated per sample and integrated across the cohort, and the depth and mobile element files that later steps depend on are built alongside them.
 
 

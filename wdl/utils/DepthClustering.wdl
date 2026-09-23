@@ -15,7 +15,8 @@ workflow DepthClustering {
         depth_vcf_idx: "Index for depth_vcf."
         ploidy_table: "Ploidy table from `DepthPreprocessing`."
         variant_prefix: "Prefix applied to generated variant IDs."
-        contigs: "Contigs to cluster over, given in reference dictionary order. These also become the `##contig` lines of the svtk-formatted output."
+        contig_list: "Primary contigs, one per line in reference dictionary order. These also become the `##contig` lines of the svtk-formatted output."
+        contig_subset_list: "Optional subset of `contig_list` to cluster over."
         ref_fa: "Reference FASTA, index and sequence dictionary."
         ref_fai: "Reference FASTA, index and sequence dictionary."
         ref_dict: "Reference FASTA, index and sequence dictionary."
@@ -46,7 +47,8 @@ workflow DepthClustering {
         String prefix
         String variant_prefix
 
-        Array[String] contigs
+        File contig_list
+        File? contig_subset_list
 
         File ref_fa
         File ref_fai
@@ -84,6 +86,7 @@ workflow DepthClustering {
         RuntimeAttr? runtime_attr_concat_vcfs
     }
 
+    Array[String] contigs = read_lines(select_first([contig_subset_list, contig_list]))
     scatter (contig in contigs) {
         call SVCluster {
             input:
@@ -132,7 +135,7 @@ workflow DepthClustering {
                 vcf_idx = select_first([ExcludeIntervalsByIntervalOverlap.filtered_vcf_idx, SVCluster.clustered_vcf_idx]),
                 prefix = "~{prefix}-~{contig}-depth-svtk_formatted",
                 script = gatk_to_svtk_script,
-                contigs = contigs,
+                contig_list = contig_list,
                 set_pass = svtk_set_pass,
                 docker = sv_pipeline_docker,
                 runtime_attr_override = runtime_attr_gatk_to_svtk_vcf
@@ -193,6 +196,10 @@ task SVCluster {
         String? variant_prefix
         String docker
         RuntimeAttr? runtime_attr_override
+    }
+
+    parameter_meta {
+        vcf: { localization_optional: true }
     }
 
     Int command_mem_mb = ceil(select_first([runtime_attr.mem_gb, default_attr.mem_gb]) * 0.8 * 1024)
@@ -303,7 +310,7 @@ task GatkToSvtkVcf {
         File vcf
         File vcf_idx
         File? script
-        Array[String] contigs
+        File contig_list
         Boolean set_pass
         String prefix
         String docker
@@ -317,7 +324,7 @@ task GatkToSvtkVcf {
             --vcf '~{vcf}' \
             --out '~{prefix}.vcf.gz' \
             --source depth \
-            --contigs '~{write_lines(contigs)}' \
+            --contigs '~{contig_list}' \
             --remove-formats CN \
             ~{if set_pass then "--set-pass" else ""}
         tabix '~{prefix}.vcf.gz'

@@ -18,7 +18,6 @@ workflow LongReadCNVs {
         intervals: "Interval list over which CNVs are called."
         sample_ids: "Sample IDs in the cohort."
         depth_profiles: "Per-sample read-depth profiles, aligned to `sample_ids`."
-        contigs: "Contigs to process, given in reference dictionary order. `intervals` is subset to these before gCNV runs, and depth preprocessing, clustering and genotyping are likewise restricted, so genome-wide `intervals`, `merged_bincov`, `training_intervals` and `contig_ploidy_priors` are accepted."
         sort_depth_profiles: "Whether to sort each depth profile by contig and position first, for profiles that are not already coordinate sorted."
         batch_id: "Identifier for the cohort batch."
         contig_ploidy_priors: "Contig ploidy priors used to determine per-sample contig ploidy."
@@ -28,11 +27,13 @@ workflow LongReadCNVs {
         ref_fai: "From references."
         ref_dict: "From references."
         pedigree: "Cohort pedigree used by depth genotyping."
+        primary_contigs_list: "Primary contigs, one per line in reference dictionary order, used for the ploidy table, VCF headers, clustering and genotyping."
         training_intervals: "Intervals used to train the depth genotyping model."
         median_coverage: "Per-sample median coverage table used by depth genotyping."
+        contig_subset_list: "Optional subset of `primary_contigs_list` to restrict depth clustering and genotyping to."
         variant_prefix: "Prefix used for generated variant IDs."
         gcnv_qs_cutoff: "Minimum gCNV quality score for a segment to be kept."
-        num_intervals_per_scatter: "Number of intervals processed per scatter shard."
+        num_intervals_per_scatter: "Number of intervals processed per gCNV scatter shard. GermlineCNVCaller memory grows with samples times intervals per shard, so raising this above the default needs more memory in `runtime_attr_germline_cnv_caller`."
         chr_x: "Name of the X contig in the reference."
         chr_y: "Name of the Y contig in the reference."
         gatk4_jar_override: "Override GATK4 jar."
@@ -120,7 +121,6 @@ workflow LongReadCNVs {
         File intervals
         Array[String]+ sample_ids
         Array[File]+ depth_profiles
-        Array[String] contigs
         Boolean sort_depth_profiles
         String batch_id
         File contig_ploidy_priors
@@ -131,8 +131,10 @@ workflow LongReadCNVs {
         File ref_dict
 
         File pedigree
+        File primary_contigs_list
         File training_intervals
         File median_coverage
+        File? contig_subset_list
 
         String prefix
         String variant_prefix
@@ -221,7 +223,6 @@ workflow LongReadCNVs {
         Boolean svtk_set_pass = false
 
         RuntimeAttr? runtime_attr_sort_depth_profiles
-        RuntimeAttr? runtime_attr_subset_intervals
         RuntimeAttr? runtime_attr_annotate_intervals
         RuntimeAttr? runtime_attr_filter_intervals
         RuntimeAttr? runtime_attr_scatter_intervals
@@ -264,7 +265,6 @@ workflow LongReadCNVs {
             intervals = intervals,
             sample_ids = sample_ids,
             depth_profiles = depth_profiles_,
-            contigs = contigs,
             prefix = prefix,
             cohort_id = batch_id,
             contig_ploidy_priors = contig_ploidy_priors,
@@ -273,7 +273,6 @@ workflow LongReadCNVs {
             ref_fai = ref_fai,
             ref_dict = ref_dict,
             gatk_docker = gatk_docker,
-            sv_base_mini_docker = sv_base_mini_docker,
             gatk4_jar_override = gatk4_jar_override,
             mappability_track_bed = mappability_track_bed,
             mappability_track_bed_idx = mappability_track_bed_idx,
@@ -330,7 +329,6 @@ workflow LongReadCNVs {
             ref_copy_number_autosomal_contigs = ref_copy_number_autosomal_contigs,
             allosomal_contigs = allosomal_contigs,
             maximum_number_events_per_sample = maximum_number_events_per_sample,
-            runtime_attr_subset_intervals = runtime_attr_subset_intervals,
             runtime_attr_annotate_intervals = runtime_attr_annotate_intervals,
             runtime_attr_filter_intervals = runtime_attr_filter_intervals,
             runtime_attr_scatter_intervals = runtime_attr_scatter_intervals,
@@ -347,7 +345,7 @@ workflow LongReadCNVs {
             genotyped_segments_vcfs = LRCNVs.genotyped_segments_vcfs,
             genotyped_segments_vcf_idxs = LRCNVs.genotyped_segments_vcf_idxs,
             contig_ploidy_calls_tar = LRCNVs.contig_ploidy_calls_tar,
-            contigs = contigs,
+            primary_contigs_list = primary_contigs_list,
             ref_fai = ref_fai,
             pedigree = pedigree,
             batch_id = batch_id,
@@ -373,7 +371,8 @@ workflow LongReadCNVs {
             ploidy_table = DepthPreprocessing.ploidy_table,
             prefix = prefix,
             variant_prefix = variant_prefix,
-            contigs = contigs,
+            contig_list = primary_contigs_list,
+            contig_subset_list = contig_subset_list,
             ref_fa = ref_fa,
             ref_fai = ref_fai,
             ref_dict = ref_dict,
@@ -413,7 +412,8 @@ workflow LongReadCNVs {
             rd_file_idx = merged_bincov_idx,
             ref_dict = ref_dict,
             ploidy_table = DepthPreprocessing.ploidy_table,
-            contigs = contigs,
+            contig_list = primary_contigs_list,
+            contig_subset_list = contig_subset_list,
             chr_x = chr_x,
             chr_y = chr_y,
             gatk_docker = gatk_docker,

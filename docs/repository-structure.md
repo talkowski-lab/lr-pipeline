@@ -15,14 +15,14 @@ scripts/
   mei/               # MEI analysis scripts
   benchmark/         # Benchmarking scripts
 dockerfiles/         # Dockerfile.<image-name> (lowercase) for each container, plus build_docker.sh and versions.env
-notebooks/           # Tracked ad hoc Jupyter notebooks (Terra cost analysis via the API and BigQuery)
 data/                # Local-only analysis inputs, outputs and scratch work; gitignored and never referenced by WDL
 docs/                # Extended documentation (this file included)
 .github/
   workflows/         # Active GitHub Actions CI
   scripts/           # Helper scripts invoked by CI
-archive/             # Retired workflows, scripts, Dockerfiles and their reference docs
+archive/             # Retired workflows, scripts, Dockerfiles, notebooks and their reference docs
   docs/workflows.md  # Generated from the retired workflows, the counterpart to docs/workflows.md
+  notebooks/         # Retired ad hoc Jupyter notebooks (Terra cost analysis via the API and BigQuery)
 .dockstore.yml       # Dockstore registration for every directly-run workflow
 AGENTS.md            # Canonical agent instructions; .claude/CLAUDE.md and .github/copilot-instructions.md are symlinks to it
 ```

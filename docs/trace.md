@@ -1,26 +1,38 @@
-# Steps
-This document is the ordered record of the steps actually run to produce the two released long-read callsets - the combined HPRC/HGSVC set of 292 samples and Phase 1 of All of Us (1027 samples). It is a companion to [Pipeline](pipeline.md), which describes how to run the pipeline on a new cohort; where the two disagree, `pipeline.md` reflects current intent and this document reflects what was run.
+# Trace
+This document represents the trace of steps that was actually run to produce the two released long-read callsets - the combined HPRC/HGSVC set of 292 samples and Phase 1 of All of Us of 1027 samples. It is a companion to [Pipeline](pipeline.md), which describes how to run the pipeline on a new cohort; where the two disagree, `pipeline.md` reflects current intent and this document reflects what was run.
 
-Steps are listed in the order they were run. Inputs and outputs are Terra data table columns, in `code`. Workflows are named as they appear in this repository and linked to their WDL; the Terra method configuration that ran a step is often named differently and is not recorded here. Workflows that are no longer part of the pipeline are linked under [`archive/`](../archive/wdl). Several stages were executed more than once as upstream inputs were regenerated - only the run that survives in the release is listed, noted where relevant.
+Steps are listed in the order they were run; where a section is split into subsections, the subsections are independent of one another and ran concurrently. Inputs and outputs are Terra data table columns, in `code`. Workflows are named as they appear in this repository and linked to their WDL; the Terra method configuration that ran a step is often named differently and is not recorded here. Workflows that are no longer part of the pipeline are linked under [`archive/`](../archive/wdl). Several stages were executed more than once as upstream inputs were regenerated - only the run that survives in the release is listed, noted where relevant.
 
 The two callsets share sections 1 to 3 apart from the steps tagged _(HPRC/HGSVC)_ or _(All of Us)_, which ran for that cohort only. They diverge substantially in section 4, so [Release](#4-release) gives each step's output per cohort side by side. [Cohort Divergences](#cohort-divergences) summarizes every divergence in one place.
 
 
-## 1. Cohort Callsets
-Both callsets entered this pipeline as finished cohort-level VCFs - `snv_indel_vcf` and `sv_vcf` - produced in other workspaces; for HPRC/HGSVC these were a joint-called short variant VCF and `GRCh38_INSDEL_1218.vcf.gz`, both read straight out of the upstream workspace bucket. Everything below prepares the remaining per-sample evidence and integrates it into the single cohort VCF that phasing consumes.
-1. **[PALMERDiploid](../wdl/tools/PALMERDiploid.wdl)** and **[PALMERAssembly](../wdl/tools/PALMERAssembly.wdl)** - per-sample MEI calls, the latter from assembly BAMs produced by **[MinimapAlignment](../wdl/tools/MinimapAlignment.wdl)**.
-2. **[MergePALMERCallsets](../wdl/tools/MergePALMERCallsets.wdl)** - `palmer_merged_vcf`.
-3. **[MosDepth](../wdl/tools/MosDepth.wdl)** - per-base coverage per sample, per contig.
-4. **[ConcatenateMosDepth](../wdl/annotation_utils/ConcatenateMosDepth.wdl)** - `mosdepth_per_base_combined`.
-5. **[CreateCohortMetadata](../wdl/annotation_utils/CreateCohortMetadata.wdl)** - PED and ancestry combined into the cohort metadata TSV.
-6. **[TRGT](../wdl/tools/TRGT.wdl)** - TR genotyping per sample against both catalogs, giving `trgt_trexplorer_vcf` and `trgt_vamos_vcf`.
-7. **[CombineTRs](../wdl/annotation_utils/CombineTRs.wdl)** - deduplicated overlapping loci into `trgt_combined_vcf`.
-8. **[AnnotateTREndTags](../wdl/annotation_utils/AnnotateTREndTags.wdl)** - added `INFO/END`, giving `trgt_vcf`.
-9. **[PreprocessVcfs](../wdl/annotation_utils/PreprocessVcfs.wdl)** - normalized multiallelics, flagged short variant calls at or above 50bp and merged `snv_indel_vcf` with `sv_vcf` into `integrated_vcf`.
+## 1. Preprocessing
+Both callsets entered this pipeline as finished cohort-level VCFs - `snv_indel_vcf` and `sv_vcf` - produced in other workspaces; for HPRC/HGSVC these were a joint-called short variant VCF and `GRCh38_INSDEL_1218.vcf.gz`, both read straight out of the upstream workspace bucket. Preprocessing normalized and merged those two VCFs into the single cohort VCF that phasing consumes, and built the TR calls, depth files, mobile element calls and cohort metadata that later steps depend on.
+
+
+### SNV/Indel and SV Callsets
+1. **[PreprocessVcfs](../wdl/annotation_utils/PreprocessVcfs.wdl)** - run once on `snv_indel_vcf` and `sv_vcf` in tandem: normalized multiallelics, harmonized sample IDs, source-tagged and length-filtered each input, flagged short variant calls at or above 50bp, added the core `allele_type` and `allele_length` INFO fields, renamed the variant IDs and merged the two into `integrated_vcf`.
+2. **[SplitVcfPerContig](../wdl/annotation_utils/SplitVcfPerContig.wdl)** - sharded `integrated_vcf` per contig.
+
+### TRGT Callset
+1. **[TRGT](../wdl/tools/TRGT.wdl)** - TR genotyping per sample against both catalogs, giving `trgt_trexplorer_vcf` and `trgt_vamos_vcf`.
+2. **[CombineTRs](../wdl/annotation_utils/CombineTRs.wdl)** - deduplicated overlapping loci into `trgt_combined_vcf`.
+3. **[AnnotateTREndTags](../wdl/annotation_utils/AnnotateTREndTags.wdl)** - added `INFO/END`, giving `trgt_vcf`.
+
+### Depth Summary
+1. **[MosDepth](../wdl/tools/MosDepth.wdl)** - per-base coverage per sample, per contig.
+2. **[ConcatenateMosDepth](../wdl/annotation_utils/ConcatenateMosDepth.wdl)** - `mosdepth_per_base_combined`.
+
+### Mobile Element Calls
+1. Per-sample MEI calls, one caller per cohort: **[PALMERDiploid](../wdl/tools/PALMERDiploid.wdl)** _(All of Us)_ from the aligned reads, and **[PALMERAssembly](../wdl/tools/PALMERAssembly.wdl)** _(HPRC/HGSVC)_ from the assembly BAMs produced by **[MinimapAlignment](../wdl/tools/MinimapAlignment.wdl)**.
+2. **[MergePALMERCallsets](../wdl/tools/MergePALMERCallsets.wdl)** - run for both cohorts over whichever caller's per-sample calls they had, giving `palmer_merged_vcf`, which **[SplitVcfPerContig](../wdl/annotation_utils/SplitVcfPerContig.wdl)** also sharded per contig.
+
+### Cohort Metadata
+**[CreateCohortMetadata](../wdl/annotation_utils/CreateCohortMetadata.wdl)** - PED and ancestry combined into the cohort metadata TSV.
 
 
 ## 2. Phasing
-The whole chain below was run twice, the second pass rerunning HiPhase to exclude TRGT homopolymers. The steps below are the runs whose output survives in the release: tracing the released VCF back shows its sites came through the first pass, and the second pass reaches the release only through the phased genotypes that [PostprocessCallset](../wdl/annotation_utils/PostprocessCallset.wdl) transfers from `backbone_merged_vcf` in [Annotation](#3-annotation) step 12.
+The chain below was run twice, and the run that matters is the one that excludes TRGT homopolymers: its phased genotypes are what reaches the callset, through the transfer that [PostprocessCallset](../wdl/annotation_utils/PostprocessCallset.wdl) performs from `backbone_merged_vcf` in [Annotation](#3-annotation) step 12. The earlier run, before that exclusion, is still part of the record because the released sites came through it - tracing the released VCF back reaches the shards that step 6 produced on that earlier run, not the later one.
 1. **[ExtractSampleVcfs](../wdl/annotation_utils/ExtractSampleVcfs.wdl)** - `integrated_vcf` into `subset_snv_indel_vcf` and `subset_sv_vcf`.
 2. **[HiPhase](../wdl/tools/HiPhase.wdl)** - phased each sample's short variants, SVs and TR calls against its reads. Run with and without the TR VCF, giving `hiphase_vcf` and `hiphase_notrgt_vcf`.
 3. **[MergeHiPhaseCallsets](../wdl/tools/MergeHiPhaseCallsets.wdl)** - `bcftools merge` for short variants and SVs, `trgt merge` for TR calls, giving `hiphase_merged_integrated_vcf` and `hiphase_merged_trgt_vcf`.
@@ -29,8 +41,10 @@ The whole chain below was run twice, the second pass rerunning HiPhase to exclud
 6. **[SplitVcfPerContig](../wdl/annotation_utils/SplitVcfPerContig.wdl)** - sharded per contig into `full_vcf`; all downstream steps run per contig.
 7. **[BackbonePhase](../wdl/tools/BackbonePhase.wdl)** _(HPRC/HGSVC)_ - transferred phase from `truth_hgsvc_vcf` and `truth_hprc_vcf`, giving `backbone_phased_vcf` and `backbone_phased_notrgt_vcf`.
 8. **[FillBackbonePhasedGenotypes](../wdl/annotation_utils/FillBackbonePhasedGenotypes.wdl)** _(HPRC/HGSVC)_ - filled still-unphased genotypes from the no-TRGT shard, giving `backbone_merged_vcf`.
-9. **[MethylationProfiling](../wdl/tools/MethylationProfiling.wdl)** - 5mC profiling with pb-CpG-tools, from reads haplotagged by **[Whatshap](../archive/wdl/tools/Whatshap.wdl)**, since archived.
-10. **[CreateCohortMethylationFile](../wdl/annotation_utils/CreateCohortMethylationFile.wdl)** - per-contig cohort methylation matrices.
+9. **[TransferMethylationTags](../archive/wdl/tools/TransferMethylationTags.wdl)** - transferred the 5mC base modification tags from the unaligned reads onto the aligned BAMs, which had been produced without them. Since archived.
+10. **[Whatshap](../archive/wdl/tools/Whatshap.wdl)** - haplotagged those BAMs against the phased calls. Since archived.
+11. **[MethylationProfiling](../wdl/tools/MethylationProfiling.wdl)** - 5mC profiling with pb-CpG-tools from the haplotagged BAMs, giving the combined and per-haplotype CpG BEDs.
+12. **[CreateCohortMethylationFile](../wdl/annotation_utils/CreateCohortMethylationFile.wdl)** - per-contig cohort methylation matrices.
 
 
 ## 3. Annotation
@@ -81,6 +95,7 @@ Steps 2 and 8 to 12 are HPRC/HGSVC only, which is why its chain reaches `V10` wh
 ## Cohort Divergences
 | Step | HPRC/HGSVC | All of Us |
 | --- | --- | --- |
+| PALMER MEI calls | [PALMERAssembly](../wdl/tools/PALMERAssembly.wdl), from the assembly BAMs | [PALMERDiploid](../wdl/tools/PALMERDiploid.wdl), from the aligned reads |
 | SV FORMAT fields | Absent on reference and empty calls in the supplied `sv_vcf`, so [Kanpig](../wdl/tools/Kanpig.wdl) was run locally and its calls merged back by [AnnotateSvCallerSupport](../archive/wdl/annotation_utils/AnnotateSvCallerSupport.wdl) | Already present |
 | Backbone phasing | Applied | Not applied - no haplotype-resolved base VCFs |
 | `AnnotateAgeMetrics` | Not run - no age data | Run |
@@ -100,11 +115,11 @@ Reconstructed from the Terra job history export at `data/archive/migration/LR_GN
 
 - **All of Us lineage is evidence-light.** The Terra sources cover the HPRC/HGSVC callset only; despite its name, that workspace holds 292 samples and only `hprc_hgsvc_vcf_*` columns. Every All of Us column name and per-step divergence above comes from [`scratch.md`](scratch.md) rather than a verified data table. Sections 1 to 3 are assumed shared except where tagged, since those notes only begin at the release chain.
 - **All of Us supporting steps are inferred.** `CreateCohortDepthFiles` and `IdentifyLowCoverageRegions` are marked as run for All of Us because `FilterLowCoverageRegions`, which did run, cannot proceed without them; the notes do not name them. The GLNexus regeneration is marked as not run because its only consumer, the release-chain `FillFormatFields` rerun, is HPRC/HGSVC only.
-- **SNV/indel and SV calling are not covered.** Both callsets were built in workspaces not inspected here and arrive as `snv_indel_vcf` and `sv_vcf`, so nothing upstream of [Cohort Callsets](#1-cohort-callsets) is recorded - including how the SV callset was filtered.
+- **SNV/indel and SV calling are not covered.** Both callsets were built in workspaces not inspected here and arrive as `snv_indel_vcf` and `sv_vcf`, so nothing upstream of [Preprocessing](#1-preprocessing) is recorded - including how the SV callset was filtered.
 - **The HPRC/HGSVC chain is verified by lineage trace.** Every step above was confirmed by taking a released `hprc_hgsvc_vcf_V10` shard - `chr20.chr20.annotated.vcf.gz` from the final `AnnotateVcf` submission - and walking its input VCF back 27 hops to the upstream cohort VCFs, using the Terra submission API for the later runs and the `inputs` column of the job history export for the earlier ones. Paths under the current bucket and the older `fc-fd42e80c` bucket both resolve, since the copy preserved the `submissions/<id>/` layout and therefore the submission IDs.
 - **Two Kanpig transfer attempts did not survive.** `ReplaceKanpigGT`, still in [`archive/`](../archive/wdl/annotation_utils/ReplaceKanpigGT.wdl), ran three times on chr22 alone and nothing ever consumed its output; a `FillSVFormatFields` configuration consumed Kanpig output once and likewise does not appear in the traced lineage. Neither is listed as a step.
 - **Method configurations were edited in place**, with versions as high as 26, so a configuration's current input mapping does not necessarily match what a given historical run consumed.
 - **The job history export is not complete.** It begins partway through the project, and anything before its first recorded run is not covered here.
 - **Workflow renames.** Several steps ran under Terra method configuration names that no longer match any workflow, and some workflows have been renamed since. Matches above were inferred from inputs, tasks and purpose. In particular `UpdateGenotypes`, used for these callsets and now archived, is superseded by [PostprocessCallset](../wdl/annotation_utils/PostprocessCallset.wdl), which performs the same operations behind its `run_*` flags, so `PostprocessCallset` is named for those steps.
-- **`Whatshap` is still archived.** It haplotagged the reads for methylation profiling, but [HiPhase](../wdl/tools/HiPhase.wdl) now emits haplotagged BAMs, so it was deliberately retired rather than restored; section 2 links it in place.
+- **The methylation workflows are still archived.** `TransferMethylationTags` and `Whatshap` prepared and haplotagged the BAMs that methylation profiling consumed, but [HiPhase](../wdl/tools/HiPhase.wdl) now emits haplotagged BAMs directly, so both were deliberately retired rather than restored; section 2 links them in place.
 - **QC and analysis workflows are excluded**, along with unrelated work sharing the same workspace (Paraphase, LPA and SMN1 assembly, Himito, Immuannot) and the depth-based CNV workflows.

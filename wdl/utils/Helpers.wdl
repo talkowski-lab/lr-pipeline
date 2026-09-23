@@ -819,13 +819,14 @@ task ConcatVcfs {
         VCFS_FILE="~{write_lines(vcfs)}"
 
         if [[ "~{sort_output}" == "true" ]]; then
+            # Give bcftools sort its memory limit in megabytes because a bare --max-mem value is read as bytes
             bcftools concat \
                 ~{if no_version then "--no-version" else ""} \
                 ~{if allow_overlaps then "--allow-overlaps" else ""} \
                 --file-list ${VCFS_FILE} \
                 -Ou \
                 | bcftools sort \
-                    ~{if defined(sort_mem_mb) then "--max-mem " + select_first([sort_mem_mb]) else ""} \
+                    ~{if defined(sort_mem_mb) then "--max-mem " + select_first([sort_mem_mb]) + "M" else ""} \
                     -T ./bcftools-sort.XXXXXX \
                     -Oz -o "~{prefix}.vcf.gz"
         else

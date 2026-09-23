@@ -19,7 +19,8 @@ workflow GenotypeDepth {
         rd_file_idx: "Index for rd_file."
         ref_dict: "Reference sequence dictionary."
         ploidy_table: "Ploidy table from `DepthPreprocessing`."
-        contigs: "Contigs to genotype over, given in reference dictionary order. Model training is also restricted to these, so `training_intervals` and `rd_file` may be genome-wide."
+        contig_list: "Primary contigs, one per line in reference dictionary order, to genotype over."
+        contig_subset_list: "Optional subset of `contig_list` to genotype over."
         chr_x: "Allosome contig names (defaults `chrX` and `chrY`)."
         chr_y: "Allosome contig names (defaults `chrX` and `chrY`)."
         genotyped_depth_vcf: "Genotyped depth CNV VCF."
@@ -39,7 +40,8 @@ workflow GenotypeDepth {
         File ref_dict
         File ploidy_table
 
-        Array[String] contigs
+        File contig_list
+        File? contig_subset_list
 
         String chr_x = "chrX"
         String chr_y = "chrY"
@@ -65,11 +67,11 @@ workflow GenotypeDepth {
             rd_file_idx = rd_file_idx,
             ref_dict = ref_dict,
             ploidy_table = ploidy_table,
-            contigs = contigs,
             docker = gatk_docker,
             runtime_attr_override = runtime_attr_train_sv_genotyping
     }
 
+    Array[String] contigs = read_lines(select_first([contig_subset_list, contig_list]))
     scatter (contig in contigs) {
         call GenotypeSVs {
             input:
@@ -130,10 +132,13 @@ task TrainSVGenotyping {
         String chr_y
         File ref_dict
         File ploidy_table
-        Array[String] contigs
         String prefix
         String docker
         RuntimeAttr? runtime_attr_override
+    }
+
+    parameter_meta {
+        rd_file: { localization_optional: true }
     }
 
     Int java_mem_mib = ceil(select_first([runtime_attr.mem_gb, default_attr.mem_gb]) * 0.8 * 1024)
@@ -142,7 +147,6 @@ task TrainSVGenotyping {
         set -euo pipefail
 
         gatk --java-options "-Xmx~{java_mem_mib}M" TrainSVGenotyping \
-            -L ~{sep=" -L " contigs} \
             -XL '~{chr_x}' \
             -XL '~{chr_y}' \
             -V '~{vcf}' \
@@ -194,6 +198,10 @@ task GenotypeSVs {
         String? contig
         String docker
         RuntimeAttr? runtime_attr_override
+    }
+
+    parameter_meta {
+        rd_file: { localization_optional: true }
     }
 
     Int java_mem_mib = ceil(select_first([runtime_attr.mem_gb, default_attr.mem_gb]) * 0.8 * 1024)

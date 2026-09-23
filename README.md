@@ -25,5 +25,5 @@ The pipeline covers three broad stages.
 - [Pipeline](docs/pipeline.md) - how to run the pipeline end-to-end on a new cohort, covering callset generation, phasing and annotation.
 - [References](docs/references.md) - all reference files and their GCS locations.
 - [Repository Structure](docs/repository-structure.md) - directory layout, the scripts inventory, and where each kind of code lives.
-- [Steps](docs/steps.md) - the steps actually run to produce the HPRC/HGSVC and All of Us callsets, with data table columns, dates and cohort divergences.
+- [Trace](docs/trace.md) - the steps actually run to produce the HPRC/HGSVC and All of Us callsets, with data table columns and cohort divergences.
 - [Workflows](docs/workflows.md) - annotation workflows, annotation utilities, tool wrappers and shared sub-workflows, with inputs and outputs.

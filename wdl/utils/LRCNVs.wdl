@@ -43,13 +43,12 @@ workflow LRCNVs {
         intervals: "Interval list over which CNVs are called."
         sample_ids: "Sample IDs in the cohort."
         depth_profiles: "Per-sample read-depth profiles, aligned to `sample_ids`."
-        contigs: "Contigs to call CNVs on. `intervals` is subset to these before annotation and filtering, so a genome-wide interval list may be supplied. GATK copy-number tools reject a non-UNION `--interval-set-rule`, so the subset is taken as a separate step rather than by interval intersection."
         cohort_id: "Identifier for the cohort."
-        contig_ploidy_priors: "Contig ploidy priors used to determine per-sample contig ploidy. May cover more contigs than `contigs`."
+        contig_ploidy_priors: "Contig ploidy priors used to determine per-sample contig ploidy."
         ref_fa: "From references."
         ref_fai: "From references."
         ref_dict: "From references."
-        num_intervals_per_scatter: "Number of intervals processed per scatter shard."
+        num_intervals_per_scatter: "Number of intervals processed per gCNV scatter shard. GermlineCNVCaller memory grows with samples times intervals per shard, so raising this above the default needs more memory in `runtime_attr_germline_cnv_caller`."
         gatk4_jar_override: "Override GATK4 jar."
         mappability_track_bed: "Mappability track used to annotate intervals."
         mappability_track_bed_idx: "Index for `mappability_track_bed`."
@@ -128,7 +127,6 @@ workflow LRCNVs {
         File intervals
         Array[String]+ sample_ids
         Array[File]+ depth_profiles
-        Array[String] contigs
         String prefix
         String cohort_id
 
@@ -137,7 +135,6 @@ workflow LRCNVs {
         File ref_fai
         File ref_dict
         String gatk_docker
-        String sv_base_mini_docker
 
         Int num_intervals_per_scatter
 
@@ -214,7 +211,6 @@ workflow LRCNVs {
         # CollectSampleQualityMetrics
         Int maximum_number_events_per_sample = 1000
 
-        RuntimeAttr? runtime_attr_subset_intervals
         RuntimeAttr? runtime_attr_annotate_intervals
         RuntimeAttr? runtime_attr_filter_intervals
         RuntimeAttr? runtime_attr_scatter_intervals
@@ -225,18 +221,9 @@ workflow LRCNVs {
         RuntimeAttr? runtime_attr_collect_model_quality_metrics
     }
 
-    call SubsetIntervals {
-        input:
-            intervals = intervals,
-            contigs = contigs,
-            prefix = prefix,
-            docker = sv_base_mini_docker,
-            runtime_attr_override = runtime_attr_subset_intervals
-    }
-
     call AnnotateIntervals {
         input:
-            intervals = SubsetIntervals.subset_intervals,
+            intervals = intervals,
             prefix = prefix,
             ref_fa = ref_fa,
             ref_fai = ref_fai,
@@ -253,7 +240,7 @@ workflow LRCNVs {
 
     call FilterIntervals {
         input:
-            intervals = SubsetIntervals.subset_intervals,
+            intervals = intervals,
             prefix = prefix,
             annotated_intervals = AnnotateIntervals.annotated_intervals,
             blacklist_intervals = blacklist_intervals,
@@ -402,61 +389,6 @@ workflow LRCNVs {
         File model_qc_status_file = CollectModelQualityMetrics.qc_status_file
         String model_qc_string = CollectModelQualityMetrics.qc_status_string
         Array[File] denoised_copy_ratios = PostprocessGermlineCNVCalls.denoised_copy_ratios
-    }
-}
-
-task SubsetIntervals {
-    input {
-        File intervals
-        Array[String] contigs
-        String prefix
-        String docker
-        RuntimeAttr? runtime_attr_override
-    }
-
-    # Write into a directory so the input file name, whose extension GATK uses to infer the interval format, is kept
-    String subset_intervals_dir = "~{prefix}.subset_intervals"
-    String intervals_filename = basename(intervals)
-
-    command <<<
-        set -euo pipefail
-
-        mkdir '~{subset_intervals_dir}'
-
-        # Keep SAM-style header lines, then retain records whose contig is requested, in either interval-list form
-        awk -F'\t' 'BEGIN { while ((getline contig < "~{write_lines(contigs)}") > 0) keep[contig] = 1 }
-            /^@/ { print; next }
-            { split($1, fields, ":"); if (fields[1] in keep) print }' \
-            '~{intervals}' > '~{subset_intervals_dir}/~{intervals_filename}'
-
-        if ! grep -qv '^@' '~{subset_intervals_dir}/~{intervals_filename}'; then
-            printf 'No intervals remain after subsetting to the requested contigs\n' >&2
-            exit 1
-        fi
-    >>>
-
-    output {
-        File subset_intervals = "~{subset_intervals_dir}/~{intervals_filename}"
-    }
-
-    RuntimeAttr default_attr = object {
-        cpu_cores: 1,
-        mem_gb: 2,
-        disk_gb: ceil(size(intervals, "GB") * 2) + 20,
-        boot_disk_gb: 10,
-        preemptible_tries: 1,
-        max_retries: 0
-    }
-    RuntimeAttr runtime_attr = select_first([runtime_attr_override, default_attr])
-    runtime {
-        cpu: select_first([runtime_attr.cpu_cores, default_attr.cpu_cores])
-        memory: select_first([runtime_attr.mem_gb, default_attr.mem_gb]) + " GiB"
-        disks: "local-disk " + select_first([runtime_attr.disk_gb, default_attr.disk_gb]) + " HDD"
-        bootDiskSizeGb: select_first([runtime_attr.boot_disk_gb, default_attr.boot_disk_gb])
-        docker: docker
-        preemptible: select_first([runtime_attr.preemptible_tries, default_attr.preemptible_tries])
-        maxRetries: select_first([runtime_attr.max_retries, default_attr.max_retries])
-        noAddress: true
     }
 }
 
