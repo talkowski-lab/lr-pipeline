@@ -111,49 +111,6 @@ Inputs:
 Outputs:
 - `File matched_variants_tsv`: TSV pairing each evaluation variant with its matched truth variant.
 
-### [AnnotateSvCallerSupport](../wdl/annotation_utils/AnnotateSvCallerSupport.wdl)
-This utility annotates each SV in a cohort VCF with the set of raw callers that independently support it. For every sample it matches the cohort calls against that sample's per-caller VCFs (Kanpig, cuteSV, Sniffles, Delly, pbsv, Sawfish, dipcall and hapdiff) using reciprocal-overlap, size- and sequence-similarity and a breakpoint window, then merges the support back into the cohort VCF. It outputs the annotated VCF and a TSV of per-caller match counts.
-
-Inputs:
-- `File sv_vcf`: Cohort SV VCF to annotate.
-- `File sv_vcf_idx`: Index for `sv_vcf`.
-- `Array[File] kanpig_vcfs`: Per-sample Kanpig VCFs.
-- `Array[File] kanpig_vcf_idxs`: Indexes for `kanpig_vcfs`.
-- `Array[String] sample_ids`: Samples to process.
-- `Array[File?]? sample_sv_stats`: Optional per-sample BED listing the callers supporting each variant.
-- `Array[File?]? cutesv_vcfs`: Per-sample cuteSV VCFs.
-- `Array[File?]? cutesv_vcf_idxs`: Indexes for `cutesv_vcfs`.
-- `Array[File?]? sniffles_vcfs`: Per-sample Sniffles VCFs.
-- `Array[File?]? sniffles_vcf_idxs`: Indexes for `sniffles_vcfs`.
-- `Array[File?]? delly_vcfs`: Per-sample Delly VCFs.
-- `Array[File?]? delly_vcf_idxs`: Indexes for `delly_vcfs`.
-- `Array[File?]? pbsv_vcfs`: Per-sample pbsv VCFs.
-- `Array[File?]? pbsv_vcf_idxs`: Indexes for `pbsv_vcfs`.
-- `Array[File?]? sawfish_vcfs`: Per-sample Sawfish VCFs.
-- `Array[File?]? sawfish_vcf_idxs`: Indexes for `sawfish_vcfs`.
-- `Array[File?]? dipcall_vcfs`: Per-sample dipcall VCFs.
-- `Array[File?]? dipcall_vcf_idxs`: Indexes for `dipcall_vcfs`.
-- `Array[File?]? hapdiff_vcfs`: Per-sample hapdiff VCFs.
-- `Array[File?]? hapdiff_vcf_idxs`: Indexes for `hapdiff_vcfs`.
-- `Int truvari_breakpoint_window`: Breakpoint window, in bp, for matching a raw call. (default `500`)
-- `Float truvari_reciprocal_overlap`: Minimum reciprocal overlap for matching a raw call. (default `0.0`)
-- `Float truvari_sequence_similarity`: Minimum sequence similarity for matching a raw call. (default `0.7`)
-- `Float truvari_size_similarity`: Minimum size similarity for matching a raw call. (default `0.7`)
-- `Boolean fuzzy_match_vcf_to_stats`: Whether to match cohort records to `sample_sv_stats` by proximity rather than by exact variant ID. (default `true`)
-- `Int fuzzy_match_breakpoint_window`: Breakpoint window, in bp, for fuzzy-matching a raw call to per-caller stats. (default `500`)
-- `Boolean match_gt_kanpig`: Whether a Kanpig record must have a matching genotype to count as support. (default `true`)
-- `Boolean match_gt_non_kanpig`: Whether a non-Kanpig caller record must have a matching genotype to count as support. (default `true`)
-- `File? swap_samples`: Sample-ID swap map applied to the cohort VCF.
-- `File? null_file`: Placeholder file used where an optional per-caller input is absent.
-- `String prefix`: Prefix for output file names.
-- `String utils_docker`: Container image.
-- `RuntimeAttr? runtime_attr_*`: Optional per-task runtime overrides (6).
-
-Outputs:
-- `File sv_added_vcf`: Cohort VCF annotated with raw-caller support.
-- `File sv_added_vcf_idx`: Index for the annotated VCF.
-- `File sv_match_counts_tsv`: TSV of per-caller match counts.
-
 ### [BenchmarkSTRs](../wdl/annotation_utils/BenchmarkSTRs.wdl)
 This utility benchmarks per-sample TRGT tandem-repeat genotypes against a Vamos callset. Each sample's TRGT VCF is compared with the shared Vamos VCF, per-sample match statistics are collected, and the results are aggregated into genotype-concordance matrices and plots of sequence similarity, edit distance and length difference.
 
@@ -680,15 +637,15 @@ Outputs:
 - `File renamed_vcf_idx`: Index for the renamed VCF.
 
 ### [ReplaceKanpigGT](../wdl/annotation_utils/ReplaceKanpigGT.wdl)
-This utility replaces the genotypes in a cohort VCF with the corresponding per-sample Kanpig calls for one contig, restricted to variants at or above a minimum length, and reports how many calls were matched.
+This utility replaces the genotypes in a cohort VCF with the corresponding per-sample Kanpig calls for one contig, restricted to variants above a minimum length, and reports how many calls matched.
 
 Inputs:
-- `File vcf`: Cohort VCF whose genotypes are replaced.
-- `File vcf_idx`: Index for `vcf`.
-- `Array[String] sample_ids`: Sample IDs to replace, aligned to `sample_vcfs`.
-- `Array[File] sample_vcfs`: Per-sample VCFs providing the replacement calls.
-- `Array[File] sample_vcf_idxs`: Indexes for `sample_vcfs`.
-- `String contig`: Contig being processed.
+- `File vcf`: Cohort VCF for a single contig.
+- `File vcf_idx`: Index for the cohort VCF.
+- `Array[String] sample_ids`: Samples whose genotypes are replaced, aligned by index to 'sample_vcfs'.
+- `Array[File] sample_vcfs`: Per-sample Kanpig VCFs supplying the replacement genotypes.
+- `Array[File] sample_vcf_idxs`: Indices for the per-sample Kanpig VCFs.
+- `String contig`: Contig the per-sample VCFs are subset to before replacement.
 - `Int min_sv_length`: Minimum variant length for a genotype to be replaced.
 - `String prefix`: Prefix for output file names.
 - `String utils_docker`: Container image.
