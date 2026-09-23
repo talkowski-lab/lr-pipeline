@@ -9,7 +9,9 @@ version 1.0
 ##
 ## ASSUMPTIONS (adjust workflow inputs if these don't hold for your data):
 ##   1. All contig VCFs are bgzipped (.vcf.gz) and contain the identical set
-##      of samples (in any order).
+##      of samples (in any order). Each VCF's tabix/CSI index must be
+##      supplied explicitly via `contig_vcf_indices`, in the same order as
+##      `contig_vcfs` (this workflow does not (re)generate indices itself).
 ##   2. Variants are VEP-annotated, with the annotation stored in a single
 ##      INFO field (default "CSQ"; set `vep_info_field = "ANN"` if needed),
 ##      and a gene-symbol subfield (default "SYMBOL"; set `vep_gene_field`
@@ -35,12 +37,16 @@ workflow NonRefVariantPLoFSummary {
     # One VCF per contig; same sample set assumed across all of them.
     Array[File] contig_vcfs
 
+    # Required: index file (.tbi or .csi) for each VCF in `contig_vcfs`,
+    # in the same order.
+    Array[File] contig_vcf_indices
+
     # Optional: sample IDs to process. If omitted, the sample list is
     # extracted from the first VCF in `contig_vcfs`.
     Array[String]? samples
 
     # VEP annotation settings
-    String vep_info_field = "vep"
+    String vep_info_field = "CSQ"
     String vep_gene_field = "SYMBOL"
     Boolean canonical_only = true
     Array[String] lof_consequences = [
@@ -62,24 +68,13 @@ workflow NonRefVariantPLoFSummary {
   }
 
   # ---------------------------------------------------------------------
-  # 0. Make sure every contig VCF is tabix-indexed.
-  # ---------------------------------------------------------------------
-  scatter (contig_vcf in contig_vcfs) {
-    call IndexVcf {
-      input:
-        vcf    = contig_vcf,
-        docker = bcftools_docker
-    }
-  }
-
-  # ---------------------------------------------------------------------
   # 1. Extract sample list from the first VCF, unless provided.
   # ---------------------------------------------------------------------
   if (!defined(samples)) {
     call GetSampleList {
       input:
-        vcf       = IndexVcf.indexed_vcf[0],
-        vcf_index = IndexVcf.indexed_vcf_index[0],
+        vcf       = contig_vcfs[0],
+        vcf_index = contig_vcf_indices[0],
         docker    = bcftools_docker
     }
   }
@@ -94,8 +89,8 @@ workflow NonRefVariantPLoFSummary {
     call ExtractSampleNonRef {
       input:
         sample_id   = sample_id,
-        vcfs        = IndexVcf.indexed_vcf,
-        vcf_indices = IndexVcf.indexed_vcf_index,
+        vcfs        = contig_vcfs,
+        vcf_indices = contig_vcf_indices,
         docker      = bcftools_docker
     }
 
@@ -172,33 +167,6 @@ workflow NonRefVariantPLoFSummary {
 # ===========================================================================
 # TASKS
 # ===========================================================================
-
-task IndexVcf {
-  input {
-    File vcf
-    String docker
-  }
-  String base = basename(vcf)
-  Int disk_gb = ceil(size(vcf, "GB") * 2) + 10
-
-  command <<<
-    set -euo pipefail
-    ln -s ~{vcf} ~{base}
-    tabix -p vcf ~{base}
-  >>>
-
-  output {
-    File indexed_vcf       = base
-    File indexed_vcf_index = "~{base}.tbi"
-  }
-
-  runtime {
-    docker: docker
-    cpu: 1
-    memory: "4 GB"
-    disks: "local-disk " + disk_gb + " HDD"
-  }
-}
 
 task GetSampleList {
   input {
