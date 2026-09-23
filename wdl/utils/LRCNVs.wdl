@@ -37,7 +37,7 @@ workflow LRCNVs {
     meta {
         description: [
             "This component calls copy-number variants across a cohort using GATK germline CNV (gCNV) cohort mode. From per-sample depth profiles over a shared interval list it annotates and filters intervals, determines contig ploidy, fits gCNV across scattered interval shards, post-processes per-sample calls into genotyped interval and segment VCFs, and collects sample- and model-level QC.",
-            "Setting `num_training_samples` below the cohort size switches the component to a hybrid case-cohort mode: that many samples are drawn at random and used to fit the contig-ploidy and gCNV models in cohort mode, and every remaining sample is then called against those models in case mode. Interval annotation, interval filtering and the fitted models therefore derive from the training samples alone, while the per-sample genotyped VCFs, denoised copy ratios, sample QC and contig-ploidy calls still cover the whole cohort in `sample_ids` order."
+            "Setting `num_training_samples` to a positive value below the cohort size switches the component to a hybrid case-cohort mode: that many samples are drawn at random and used to fit the contig-ploidy and gCNV models in cohort mode, and every remaining sample is then called against those models in case mode. Interval annotation, interval filtering and the fitted models therefore derive from the training samples alone, while the per-sample genotyped VCFs, denoised copy ratios, sample QC and contig-ploidy calls still cover the whole cohort in `sample_ids` order."
         ]
     }
 
@@ -51,7 +51,7 @@ workflow LRCNVs {
         ref_fai: "From references."
         ref_dict: "From references."
         num_intervals_per_scatter: "Number of intervals processed per gCNV scatter shard. GermlineCNVCaller memory grows with samples times intervals per shard, so raising this above the default needs more memory in `runtime_attr_germline_cnv_caller`."
-        num_training_samples: "Number of samples drawn at random to fit the contig-ploidy and gCNV models in cohort mode, with every remaining sample called against those models in case mode. Left unset, or set to at least the cohort size, every sample is called in cohort mode. Interval filtering percentages then apply over the training samples only, so a training set of fewer than a few dozen samples degrades the fitted models."
+        num_training_samples: "Number of samples drawn at random to fit the contig-ploidy and gCNV models in cohort mode, with every remaining sample called against those models in case mode. Set to -1, or to at least the cohort size, every sample is called in cohort mode instead. Interval filtering percentages apply over the training samples alone, so a training set of fewer than a few dozen samples degrades the fitted models."
         subsample_seed: "Random seed used to draw the training samples."
         gatk4_jar_override: "Override GATK4 jar."
         mappability_track_bed: "Mappability track used to annotate intervals."
@@ -142,7 +142,7 @@ workflow LRCNVs {
         String sv_pipeline_docker
 
         Int num_intervals_per_scatter
-        Int? num_training_samples
+        Int num_training_samples = -1
         Int subsample_seed = 42
 
         File? gatk4_jar_override
@@ -232,14 +232,13 @@ workflow LRCNVs {
         RuntimeAttr? runtime_attr_merge_contig_ploidy_calls
     }
 
-    Int num_training_samples_ = select_first([num_training_samples, length(sample_ids)])
-    Boolean run_case_mode = num_training_samples_ < length(sample_ids)
+    Boolean run_case_mode = num_training_samples > 0 && num_training_samples < length(sample_ids)
 
     if (run_case_mode) {
         call Helpers.SubsampleIndices {
             input:
                 num_items = length(sample_ids),
-                num_subsampled = num_training_samples_,
+                num_subsampled = num_training_samples,
                 seed = subsample_seed,
                 prefix = prefix,
                 docker = sv_pipeline_docker,

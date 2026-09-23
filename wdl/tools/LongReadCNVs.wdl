@@ -11,7 +11,7 @@ workflow LongReadCNVs {
     meta {
         description: [
             "This workflow calls cohort CNVs from long-read depth profiles with GATK gCNV, then converts, clusters and genotypes the depth calls. It outputs merged CNV calls, ploidy, and genotyped depth VCFs.",
-            "By default every sample is called in gCNV cohort mode. Setting `num_training_samples` below the cohort size instead runs a hybrid case-cohort mode, fitting the contig-ploidy and gCNV models on that many randomly drawn samples and calling every remaining sample against those models in case mode. All downstream steps and outputs still cover the whole cohort either way."
+            "With `num_training_samples` left at -1 every sample is called in gCNV cohort mode. Setting it below the cohort size instead runs a hybrid case-cohort mode, fitting the contig-ploidy and gCNV models on that many randomly drawn samples and calling every remaining sample against those models in case mode. All downstream steps and outputs still cover the whole cohort either way."
         ]
     }
 
@@ -33,9 +33,9 @@ workflow LongReadCNVs {
         median_coverage: "Per-sample median coverage table used by depth genotyping."
         contig_subset_list: "Optional subset of `primary_contigs_list` to restrict depth clustering and genotyping to."
         variant_prefix: "Prefix used for generated variant IDs."
+        num_training_samples: "Number of samples drawn at random to fit the contig-ploidy and gCNV models in cohort mode, with every remaining sample called against those models in case mode. Set to -1, or to at least the cohort size, every sample is called in cohort mode instead. Interval filtering percentages apply over the training samples alone, so a training set of fewer than a few dozen samples degrades the fitted models."
         gcnv_qs_cutoff: "Minimum gCNV quality score for a segment to be kept."
         num_intervals_per_scatter: "Number of intervals processed per gCNV scatter shard. GermlineCNVCaller memory grows with samples times intervals per shard, so raising this above the default needs more memory in `runtime_attr_germline_cnv_caller`."
-        num_training_samples: "Number of samples drawn at random to fit the contig-ploidy and gCNV models in cohort mode, with every remaining sample called against those models in case mode. Left unset, or set to at least the cohort size, every sample is called in cohort mode. Interval filtering percentages then apply over the training samples only, so a training set of fewer than a few dozen samples degrades the fitted models."
         subsample_seed: "Random seed used to draw the training samples."
         chr_x: "Name of the X contig in the reference."
         chr_y: "Name of the Y contig in the reference."
@@ -142,9 +142,9 @@ workflow LongReadCNVs {
         String prefix
         String variant_prefix
 
+        Int num_training_samples = -1
         Int gcnv_qs_cutoff = 30
         Int num_intervals_per_scatter = 1500
-        Int? num_training_samples
         Int subsample_seed = 42
         String chr_x = "chrX"
         String chr_y = "chrY"
