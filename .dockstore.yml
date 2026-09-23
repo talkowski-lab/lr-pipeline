@@ -147,14 +147,6 @@ workflows:
       tags:
         - /.*/
 
-  - subclass: WDL
-    name: AnnotateTruvariRemap
-    primaryDescriptorPath: /wdl/annotation/AnnotateTruvariRemap.wdl
-    filters:
-      branches:
-        - main
-      tags:
-        - /.*/
 
   - subclass: WDL
     name: AnnotateVEPHail
@@ -177,14 +169,6 @@ workflows:
   # --------------------
   # Annotation Utilities
   # --------------------
-  - subclass: WDL
-    name: AnnotateSvCallerSupport
-    primaryDescriptorPath: /wdl/annotation_utils/AnnotateSvCallerSupport.wdl
-    filters:
-      branches:
-        - main
-      tags:
-        - /.*/
 
   - subclass: WDL
     name: AnnotateTREndTags
@@ -213,14 +197,6 @@ workflows:
       tags:
         - /.*/
 
-  - subclass: WDL
-    name: AnnotateVcfCleared
-    primaryDescriptorPath: /wdl/annotation_utils/AnnotateVcfCleared.wdl
-    filters:
-      branches:
-        - main
-      tags:
-        - /.*/
 
   - subclass: WDL
     name: CombineTRs
@@ -294,14 +270,6 @@ workflows:
       tags:
         - /.*/
 
-  - subclass: WDL
-    name: CreateCohortDepthFiles
-    primaryDescriptorPath: /wdl/annotation_utils/CreateCohortDepthFiles.wdl
-    filters:
-      branches:
-        - main
-      tags:
-        - /.*/
 
   - subclass: WDL
     name: CreateCohortMetadata
@@ -357,14 +325,6 @@ workflows:
       tags:
         - /.*/
 
-  - subclass: WDL
-    name: DropGenotypes
-    primaryDescriptorPath: /wdl/annotation_utils/DropGenotypes.wdl
-    filters:
-      branches:
-        - main
-      tags:
-        - /.*/
 
   - subclass: WDL
     name: ExtractSampleVcfs
@@ -402,23 +362,7 @@ workflows:
       tags:
         - /.*/
 
-  - subclass: WDL
-    name: FilterDuplicateZeroDepthReferenceBlocks
-    primaryDescriptorPath: /wdl/annotation_utils/FilterDuplicateZeroDepthReferenceBlocks.wdl
-    filters:
-      branches:
-        - main
-      tags:
-        - /.*/
 
-  - subclass: WDL
-    name: FillFormatFields
-    primaryDescriptorPath: /wdl/annotation_utils/FillFormatFields.wdl
-    filters:
-      branches:
-        - main
-      tags:
-        - /.*/
 
   - subclass: WDL
     name: FillPhasedGenotypes
@@ -429,14 +373,6 @@ workflows:
       tags:
         - /.*/
 
-  - subclass: WDL
-    name: FindUntrimmedAlleles
-    primaryDescriptorPath: /wdl/annotation_utils/FindUntrimmedAlleles.wdl
-    filters:
-      branches:
-        - main
-      tags:
-        - /.*/
 
   - subclass: WDL
     name: CreateTRGTHistograms
@@ -456,23 +392,7 @@ workflows:
       tags:
         - /.*/
 
-  - subclass: WDL
-    name: PostProcessTRLociHPRCHGSVC
-    primaryDescriptorPath: /wdl/annotation_utils/PostProcessTRLociHPRCHGSVC.wdl
-    filters:
-      branches:
-        - main
-      tags:
-        - /.*/
 
-  - subclass: WDL
-    name: PostProcessTRLociAoU
-    primaryDescriptorPath: /wdl/annotation_utils/PostProcessTRLociAoU.wdl
-    filters:
-      branches:
-        - main
-      tags:
-        - /.*/
 
   - subclass: WDL
     name: PreprocessVcfs
@@ -537,23 +457,7 @@ workflows:
       tags:
         - /.*/
 
-  - subclass: WDL
-    name: NormalizeAlleleTypes
-    primaryDescriptorPath: /wdl/annotation_utils/NormalizeAlleleTypes.wdl
-    filters:
-      branches:
-        - main
-      tags:
-        - /.*/
 
-  - subclass: WDL
-    name: NormalizeDuplicationOrigins
-    primaryDescriptorPath: /wdl/annotation_utils/NormalizeDuplicationOrigins.wdl
-    filters:
-      branches:
-        - main
-      tags:
-        - /.*/
 
   - subclass: WDL
     name: ConvertVcfToBed
@@ -729,14 +633,6 @@ workflows:
       tags:
         - /.*/
 
-  - subclass: WDL
-    name: MergeWithTruvari
-    primaryDescriptorPath: /wdl/tools/MergeWithTruvari.wdl
-    filters:
-      branches:
-        - main
-      tags:
-        - /.*/
 
   - subclass: WDL
     name: PAV

@@ -201,8 +201,7 @@ if SINGLETON:
     min_ac = max_ac = 1
 
 def allele_passes(idx, ac_field, af_field):
-    # AC/AF may be Number=A vectors, so index by the sample's own ALT index; the bcftools prefilter
-    # only matched any element, which would report a common-allele carrier as a singleton carrier
+    # Index Number=A AC/AF by the sample's own ALT, because matching any element counts a common-allele carrier
     ac = ac_field[idx - 1] if isinstance(ac_field, tuple) else ac_field
     af = af_field[idx - 1] if isinstance(af_field, tuple) else af_field
     if min_ac is not None and (ac is None or ac < min_ac):

@@ -1549,9 +1549,7 @@ for record in vcf_in:
     svlen = abs(allele_length)
     record.info['SVLEN'] = svlen
 
-    # Set END, repositioning DUPs onto their source coordinate only when asked; left in place a DUP spans its own
-    # coordinates from POS over its length, so a callset without ORIGIN still gets an interval to compare by overlap.
-    # ORIGIN is assumed to sit on the record's own contig
+    # Set END, repositioning a DUP onto its ORIGIN only when asked so a callset without ORIGIN still spans an interval
     if move_dup and allele_type == 'DUP':
         origin_chrom, origin_pos, origin_end = extract_origin_info(record.info.get('ORIGIN', None))
         if origin_chrom is None or origin_pos is None or origin_end is None:
@@ -1767,8 +1765,7 @@ with open("record_spans.sorted.txt") as f:
         start, end = line.split()
         spans.append((int(start), int(end)))
 
-# Record every gap wider than min_gap, which are the only positions a boundary may fall on; truvari groups records
-# into a new chunk only once the next start clears the running maximum end by more than its chunksize
+# Record every gap wider than min_gap, the only positions a boundary may fall on because truvari chunks on such gaps
 cut_points = []
 max_end = spans[0][1] if spans else 0
 for index in range(1, len(spans)):
@@ -1888,8 +1885,7 @@ task ExactMatch {
     command <<<
         set -euo pipefail
 
-        # Intersect once without -n or -C; 0000 is private to the callset, 0002 and 0003 are the shared records from
-        # each input, so a single pass yields both the matched and unmatched sets the two earlier passes produced
+        # Intersect once without -n or -C, so a single pass writes the private set 0000 and the shared sets 0002/0003
         bcftools isec \
             -c none \
             -p isec \
@@ -1920,8 +1916,7 @@ task ExactMatch {
                 print $1, out
             }' > truth_matched.tsv
 
-        # Fail loudly rather than silently shifting every row, because the paste below pairs the two shared record
-        # sets positionally and one callset record matching several truth records would desynchronise them
+        # Fail loudly rather than shift every row, because the paste below pairs the two shared record sets positionally
         eval_count=$(wc -l < eval_matched.tsv)
         truth_count=$(wc -l < truth_matched.tsv)
         if [[ "${eval_count}" -ne "${truth_count}" ]]; then
@@ -4265,8 +4260,7 @@ task SubsetVcfToRegionStreaming {
 
         export GCS_OAUTH_TOKEN=$(gcloud auth application-default print-access-token)
 
-        # Pair -r with -t so records are selected by POS alone while still seeking via the index; -r on its own also
-        # returns records whose REF span reaches into the region, which would duplicate them across adjacent shards
+        # Pair -r with -t so records are selected by POS alone, because -r alone also returns REF spans reaching in
         bcftools view \
             -r ~{region} \
             -t ~{region} \

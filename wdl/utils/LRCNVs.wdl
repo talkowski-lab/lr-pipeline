@@ -1,5 +1,3 @@
-version 1.0
-
 # BSD 3-Clause License
 #
 # Copyright (c) 2019, Broad Institute
@@ -29,6 +27,8 @@ version 1.0
 # CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
 # OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+version 1.0
 
 import "Structs.wdl"
 
@@ -423,8 +423,7 @@ task SubsetIntervals {
 
         mkdir '~{subset_intervals_dir}'
 
-        # Keep SAM-style header lines, then retain records whose contig is requested, reading either a
-        # tab-delimited interval list or the one-per-line contig:start-end form
+        # Keep SAM-style header lines, then retain records whose contig is requested, in either interval-list form
         awk -F'\t' 'BEGIN { while ((getline contig < "~{write_lines(contigs)}") > 0) keep[contig] = 1 }
             /^@/ { print; next }
             { split($1, fields, ":"); if (fields[1] in keep) print }' \

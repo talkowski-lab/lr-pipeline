@@ -382,29 +382,6 @@ Outputs:
 - `File annotations_tsv_svannotate`: TSV of SVAnnotate functional-effect annotations.
 - `File annotations_header_svannotate`: Header lines describing the SVAnnotate annotation fields.
 
-### [AnnotateTruvariRemap](../wdl/annotation/AnnotateTruvariRemap.wdl)
-This tool remaps insertion sequences with minimap2 (via Truvari) in order to flag insertions whose inserted sequence aligns elsewhere in the reference. Each insertion above a minimum length is realigned per contig and assessed against alignment-score and coverage thresholds, emitting a TSV of the remap results.
-
-Inputs:
-- `File vcf`: VCF whose insertions are remapped.
-- `File vcf_idx`: Index for VCF.
-- `File ref_fa`: From references.
-- `Array[File] ref_bwa_idx`: BWA indices for `ref_fa`, from references.
-- `Array[String] contigs`: Contigs to process.
-- `Int? records_per_shard`: Number of variants to keep within a single shard during annotation.
-- `String type_field`: INFO field giving each variant's allele type, used to select insertions to remap. (default `allele_type`)
-- `String type_ins`: Value of `type_field` identifying an insertion. (default `ins`)
-- `Int min_length`: Minimum insertion length to remap.
-- `Int max_length`: Maximum insertion length to remap.
-- `Int mm2_threshold`: Minimum minimap2 alignment score to flag an insertion.
-- `Float cov_threshold`: Minimum alignment coverage to flag an insertion.
-- `String prefix`: Prefix for output file names.
-- `String remap_docker`, `String utils_docker`: Container images.
-- `RuntimeAttr? runtime_attr_*`: Optional per-task runtime overrides (5).
-
-Outputs:
-- `File annotations_tsv_remap`: TSV of insertion remap results.
-
 ### [AnnotateVEPHail](../wdl/annotation/AnnotateVEPHail.wdl)
 This workflow leverages the Ensembl Variant Effect Predictor (VEP) (https://useast.ensembl.org/info/docs/tools/vep/index.html) in order to annotate predicted functional effects based on site-level information. It strips genotypes, scatters the VCF into shards, optionally normalizes and splits multiallelics around the VEP call, and uses Hail in order to run this annotation process in a more efficient and scalable manner before concatenating the per-shard annotations into a single TSV.
 
@@ -454,49 +431,6 @@ Outputs:
 
 ## Annotation Utilities
 
-
-### [AnnotateSvCallerSupport](../wdl/annotation_utils/AnnotateSvCallerSupport.wdl)
-This utility annotates each SV in a cohort VCF with the set of raw callers that independently support it. For every sample it matches the cohort calls against that sample's per-caller VCFs (Kanpig, cuteSV, Sniffles, Delly, pbsv, Sawfish, dipcall and hapdiff) using reciprocal-overlap, size- and sequence-similarity and a breakpoint window, then merges the support back into the cohort VCF. It outputs the annotated VCF and a TSV of per-caller match counts.
-
-Inputs:
-- `File sv_vcf`: Cohort SV VCF to annotate.
-- `File sv_vcf_idx`: Index for `sv_vcf`.
-- `Array[File] kanpig_vcfs`: Per-sample Kanpig VCFs.
-- `Array[File] kanpig_vcf_idxs`: Indexes for `kanpig_vcfs`.
-- `Array[String] sample_ids`: Samples to process.
-- `Array[File?]? sample_sv_stats`: Optional per-sample BED listing the callers supporting each variant.
-- `Array[File?]? cutesv_vcfs`: Per-sample cuteSV VCFs.
-- `Array[File?]? cutesv_vcf_idxs`: Indexes for `cutesv_vcfs`.
-- `Array[File?]? sniffles_vcfs`: Per-sample Sniffles VCFs.
-- `Array[File?]? sniffles_vcf_idxs`: Indexes for `sniffles_vcfs`.
-- `Array[File?]? delly_vcfs`: Per-sample Delly VCFs.
-- `Array[File?]? delly_vcf_idxs`: Indexes for `delly_vcfs`.
-- `Array[File?]? pbsv_vcfs`: Per-sample pbsv VCFs.
-- `Array[File?]? pbsv_vcf_idxs`: Indexes for `pbsv_vcfs`.
-- `Array[File?]? sawfish_vcfs`: Per-sample Sawfish VCFs.
-- `Array[File?]? sawfish_vcf_idxs`: Indexes for `sawfish_vcfs`.
-- `Array[File?]? dipcall_vcfs`: Per-sample dipcall VCFs.
-- `Array[File?]? dipcall_vcf_idxs`: Indexes for `dipcall_vcfs`.
-- `Array[File?]? hapdiff_vcfs`: Per-sample hapdiff VCFs.
-- `Array[File?]? hapdiff_vcf_idxs`: Indexes for `hapdiff_vcfs`.
-- `Int truvari_breakpoint_window`: Breakpoint window, in bp, for matching a raw call. (default `500`)
-- `Float truvari_reciprocal_overlap`: Minimum reciprocal overlap for matching a raw call. (default `0.0`)
-- `Float truvari_sequence_similarity`: Minimum sequence similarity for matching a raw call. (default `0.7`)
-- `Float truvari_size_similarity`: Minimum size similarity for matching a raw call. (default `0.7`)
-- `Boolean fuzzy_match_vcf_to_stats`: Whether to match cohort records to `sample_sv_stats` by proximity rather than by exact variant ID. (default `true`)
-- `Int fuzzy_match_breakpoint_window`: Breakpoint window, in bp, for fuzzy-matching a raw call to per-caller stats. (default `500`)
-- `Boolean match_gt_kanpig`: Whether a Kanpig record must have a matching genotype to count as support. (default `true`)
-- `Boolean match_gt_non_kanpig`: Whether a non-Kanpig caller record must have a matching genotype to count as support. (default `true`)
-- `File? swap_samples`: Sample-ID swap map applied to the cohort VCF.
-- `File? null_file`: Placeholder file used where an optional per-caller input is absent.
-- `String prefix`: Prefix for output file names.
-- `String utils_docker`: Container image.
-- `RuntimeAttr? runtime_attr_*`: Optional per-task runtime overrides (6).
-
-Outputs:
-- `File sv_added_vcf`: Cohort VCF annotated with raw-caller support.
-- `File sv_added_vcf_idx`: Index for the annotated VCF.
-- `File sv_match_counts_tsv`: TSV of per-caller match counts.
 
 ### [AnnotateTREndTags](../wdl/annotation_utils/AnnotateTREndTags.wdl)
 This utility adds an `END` INFO tag to the tandem-repeat records of a VCF, computed per contig, so that downstream tools correctly interpret the span of each TR call. It outputs the updated VCF.
@@ -562,31 +496,6 @@ Inputs:
 - `String prefix`: Prefix for output file names.
 - `String utils_docker`: Container image.
 - `RuntimeAttr? runtime_attr_*`: Optional per-task runtime overrides (7).
-
-Outputs:
-- `File annotated_vcf`: Annotated VCF.
-- `File annotated_vcf_idx`: Index for the annotated VCF.
-
-### [AnnotateVcfCleared](../wdl/annotation_utils/AnnotateVcfCleared.wdl)
-This utility is a variant of `AnnotateVcf` that, before applying the annotation TSVs, clears existing annotations and optionally swaps in records from an untrimmed VCF in order to restore full REF/ALT alleles. It then adds the specified INFO fields and outputs the annotated VCF.
-
-Inputs:
-- `File vcf`: VCF to annotate.
-- `File vcf_idx`: Index for VCF to annotate.
-- `File? subset_untrimmed_vcf`: Untrimmed VCF whose records are swapped in to restore full REF/ALT alleles.
-- `File? subset_untrimmed_vcf_idx`: Index for `subset_untrimmed_vcf`.
-- `Array[File] annotations_tsvs`: Annotation TSVs to apply, each as a set of INFO fields.
-- `Array[String] contigs`: Contigs to annotate within the input VCF.
-- `Array[Boolean]? sort_tsvs`: Per-TSV flag indicating whether to sort the TSV before annotation.
-- `Array[String]? subset_vcf_strings`: Per-TSV `bcftools view` arguments used to pre-subset the VCF.
-- `Array[String]? awk_tsv_conditions`: Per-TSV `awk` condition used to filter the TSV rows applied.
-- `Array[Array[String]] info_names`: INFO field names added by each annotation TSV.
-- `Array[Array[String]] info_descriptions`: INFO field header descriptions for each annotation TSV.
-- `Array[Array[String]] info_types`: INFO field types for each annotation TSV.
-- `Array[Array[String]] info_numbers`: INFO field `Number` values for each annotation TSV.
-- `String prefix`: Prefix for output file names.
-- `String utils_docker`: Container image.
-- `RuntimeAttr? runtime_attr_*`: Optional per-task runtime overrides (5).
 
 Outputs:
 - `File annotated_vcf`: Annotated VCF.
@@ -747,29 +656,6 @@ Inputs:
 Outputs:
 - `File intervals`: Fixed-width interval file.
 
-### [CreateCohortDepthFiles](../wdl/annotation_utils/CreateCohortDepthFiles.wdl)
-This utility ports GATK-SV's `MakeBincovMatrix` and `PloidyEstimation` workflows to build a cohort binned-coverage matrix and per-sample ploidy estimate from per-sample `MosDepth` per-base coverage BEDs. Since mosdepth's per-base output is run-length-encoded at irregular interval widths rather than GATK-SV's fixed-width `CollectReadCounts` bins, each sample's per-base BED is first binned at `bin_size` by taking the median depth per bin (dropping any trailing partial bin), matching the binning convention used by `CreateSampleReadCounts`; because every sample is binned identically, the format-detection/shift logic in upstream `MakeBincovMatrix` (which has to distinguish raw bincov BEDs from GATK `CollectReadCounts` output) is dropped as dead code. The binned files are then run through GATK-SV's `SetBins`/`MakeBincovMatrixColumns`/`ZPaste` logic to build the bincov matrix, and through `BuildPloidyMatrix` (re-binning the bincov matrix to `ploidy_bin_size`, summing depths) and GATK-SV's `estimatePloidy.R` to estimate ploidy. GATK-SV's `estimatePloidy.R` and `estimated_CN_denoising.py` are vendored under `scripts/helper/` and built into the `utils` image, so workflow has no dependency on GATK-SV docker images. Matrix outputs remain separate; `ploidy_plots` tarball contains only PNG figures from `estimatePloidy.R` and `cn_denoising_plots.pdf`. Unlike upstream `MakeBincovMatrix`, this does not support merging into a pre-existing batch's bincov matrix, since only a single one-shot cohort matrix was needed.
-
-`estimatePloidy.R` hardcodes a 24-contig human karyotype (`chr1`..`chr22`, `chrX`, `chrY`, in that exact order) for sex assignment and per-contig ploidy expectations via positional indexing, and its 'X'/'Y' exclusion checks compare against bare `X`/`Y` rather than `chr`-prefixed names (a no-op against GRCh38-style contig names, with limited practical effect here since sample-batching/PCA (`-k`) is never invoked). `mosdepth_bed_files` must therefore be restricted to exactly those 24 contigs, in that order, or ploidy estimates will be silently wrong.
-
-Inputs:
-- `Array[String] sample_ids`: Cohort sample IDs, parallel to `mosdepth_bed_files`.
-- `Array[File] mosdepth_bed_files`: Per-sample combined mosdepth per-base coverage BEDs, restricted to `chr1`-`chr22`, `chrX`, `chrY` in that order (see caveat above).
-- `Int bin_size`: Size, in bp, of each coverage bin in the bincov matrix (GATK-SV convention default: 1000). (default `100`)
-- `Int ploidy_bin_size`: Size, in bp, of each bin in the ploidy matrix (GATK-SV convention default: 1000000). (default `1000000`)
-- `Int random_seed`: Seed for the draw, so the selection is reproducible. (default `42`)
-- `String prefix`: Prefix for output file names.
-- `String utils_docker`: Container image.
-- `RuntimeAttr? runtime_attr_*`: Optional per-task runtime overrides (7).
-
-Outputs:
-- `File binned_coverage`: Cohort binned-coverage matrix, bgzipped and tabix-indexed.
-- `File binned_coverage_idx`: Index for `binned_coverage`.
-- `File median_coverage`: Per-sample median coverage matrix.
-- `File binned_estimated_ecn`: Per-sample, per-`ploidy_bin_size`-bin estimated copy number.
-- `File estimated_cn`: Per-sample, per-chromosome estimated copy number.
-- `File ploidy_plots`: Tarball containing only ploidy PNG and PDF figures.
-
 ### [CreateCohortMetadata](../wdl/annotation_utils/CreateCohortMetadata.wdl)
 This utility builds a cohort metadata file by combining a pedigree file with an ancestry-assignment file. It outputs the merged metadata file.
 
@@ -868,21 +754,6 @@ Outputs:
 - `File dropped_vcf`: Sites-only VCF.
 - `File dropped_vcf_idx`: Index for the sites-only VCF.
 
-### [DropGenotypes](../wdl/annotation_utils/DropGenotypes.wdl)
-This utility strips all genotype (sample) columns from a VCF, optionally sharding by record count for speed. It outputs the resulting sites-only VCF.
-
-Inputs:
-- `File vcf`: VCF whose genotypes are dropped.
-- `File vcf_idx`: Index for VCF.
-- `Int? records_per_shard`: Number of variants to keep within a single shard during processing.
-- `String prefix`: Prefix for output file names.
-- `String utils_docker`: Container image.
-- `RuntimeAttr? runtime_attr_*`: Optional per-task runtime overrides (3).
-
-Outputs:
-- `File dropped_vcf`: Sites-only VCF.
-- `File dropped_vcf_idx`: Index for the sites-only VCF.
-
 ### [ExtractSampleVcfs](../wdl/annotation_utils/ExtractSampleVcfs.wdl)
 This utility extracts per-sample VCFs from a cohort VCF, splitting each sample's variants into a SNV/indel VCF and an SV VCF based on a minimum SV length. It outputs the per-sample SNV/indel and SV VCFs.
 
@@ -964,54 +835,6 @@ Outputs:
 - `File filtered_vcf_idx`: Index for `filtered_vcf`.
 - `File filtered_genotypes_tsv`: TSV with one row per affected variant: `CHROM`, `POS`, `REF`, `ALT`, `ID`, pre- and post-filter allele counts, number of filtered samples, and comma-separated filtered sample IDs.
 
-### [FilterDuplicateZeroDepthReferenceBlocks](../wdl/annotation_utils/FilterDuplicateZeroDepthReferenceBlocks.wdl)
-This utility cleans a single-sample gVCF by removing exact duplicate zero-depth, non-alt records, except that it retains one representative when removal would leave its start uncovered. It preserves gVCF coverage: a retained duplicate block is shortened by updating its `END` to one base before the next non-duplicate record when that record begins inside the block. This prevents cleanup from overlapping a distinct record or creating a coverage gap that GLNexus would genotype as `./.`. Singleton records, distinct records at the same coordinate, alternate genotypes, and records with non-zero or missing `MIN_DP` are retained unchanged.
-
-Inputs:
-- `File gvcf`: Single-sample gVCF to clean.
-- `File gvcf_idx`: Index for `gvcf`.
-- `String prefix`: Prefix for output file names.
-- `String utils_docker`: Container image.
-- `RuntimeAttr? runtime_attr_*`: Optional per-task runtime overrides.
-
-Outputs:
-- `File cleaned_vcf`: Cleaned gVCF.
-- `File cleaned_vcf_idx`: Index for `cleaned_vcf`.
-
-### [FillFormatFields](../wdl/annotation_utils/FillFormatFields.wdl)
-This utility fills missing FORMAT fields in one VCF using the values from a second, more complete VCF covering the same sites. It supports selectively copying named format fields plus toggles for filling alternate and reference genotypes, unphasing genotypes and adding PL. Sites are matched on CHROM/POS/REF/ALT, optionally also requiring a matching ID, and filling can be restricted to variants whose INFO field matches a given value. Either input can first be run through `bcftools norm`, sharded by record count so normalization never runs over a whole-contig VCF at once; normalized shards are re-concatenated with sorting (since normalization can shift a variant's position, e.g. when splitting a multiallelic) before being re-binned for matching. It outputs the refilled VCF.
-
-Inputs:
-- `File unfilled_vcf`: VCF whose FORMAT fields are filled.
-- `File unfilled_vcf_idx`: Index for `unfilled_vcf`.
-- `File filled_vcf`: VCF providing the FORMAT field values.
-- `File filled_vcf_idx`: Index for `filled_vcf`.
-- `String contig`: Contig to process.
-- `File? ref_fa`: Reference FASTA used for normalization. Required if either normalize input is `true`.
-- `File? ref_fai`: Index for `ref_fa`. Required if either normalize input is `true`.
-- `Int? records_per_shard_normalize`: Number of variants per shard when normalizing. When set, normalization runs in parallel shards that are re-concatenated and sorted afterward.
-- `Int? shard_bin_size_fill`: Region-bin size, in bp, used when sharding the contig for matching/filling.
-- `Array[String] transfer_format_fields`: FORMAT fields to fill from `filled_vcf`.
-- `Array[String] drop_format_fields`: FORMAT fields to drop entirely from the output (e.g. fields known to be unreliable). Cannot include `GT`.
-- `Boolean fill_alt_gts`: Whether to overwrite a sample's GT in `unfilled_vcf` with `filled_vcf`'s GT when `filled_vcf`'s GT is alt-containing, regardless of the current GT in `unfilled_vcf`.
-- `Boolean fill_ref_gts`: Whether to overwrite a sample's GT in `unfilled_vcf` with `filled_vcf`'s GT when `filled_vcf`'s GT is non-alt (hom-ref or no-call), regardless of the current GT in `unfilled_vcf`.
-- `Boolean match_by_id`: Whether matching also requires equal variant IDs, in addition to CHROM/POS/REF/ALT.
-- `Boolean unphase_gts`: Whether to unphase genotypes while filling.
-- `Boolean add_missing_pl_via_ad`: Whether to add a `PL` FORMAT field derived from `AD` for genotypes that lack one.
-- `Boolean expand_ad_across_alleles`: Whether to expand a fully-missing `AD` into one missing value per allele, which GLNexus writes as a bare '.' rather than '.,.'.
-- `Boolean split_rnc_across_alleles`: Whether to split a merged `RNC` code into one character per allele copy, which GLNexus writes as 'MI' rather than 'M,I'.
-- `Boolean normalize_unfilled_vcf`: Whether to normalize `unfilled_vcf` with `bcftools norm` before matching.
-- `Boolean normalize_filled_vcf`: Whether to normalize `filled_vcf` with `bcftools norm` before matching.
-- `String? subset_unfilled_vcf_field`: INFO field on `unfilled_vcf` used to limit which variants are filled. Requires `subset_unfilled_vcf_value`.
-- `String? subset_unfilled_vcf_value`: Value that `subset_unfilled_vcf_field` must equal for a variant to be filled. Variants that don't match are left unfilled.
-- `String prefix`: Prefix for output file names.
-- `String utils_docker`: Container image.
-- `RuntimeAttr? runtime_attr_*`: Optional per-task runtime overrides (11).
-
-Outputs:
-- `File refilled_vcf`: VCF with FORMAT fields filled.
-- `File refilled_vcf_idx`: Index for the refilled VCF.
-
 ### [FillPhasedGenotypes](../wdl/annotation_utils/FillPhasedGenotypes.wdl)
 This utility transfers phasing information from a phased VCF onto the genotypes of an unphased VCF over matching sites, optionally sharding each contig by region. It outputs the phased VCF.
 
@@ -1029,22 +852,6 @@ Inputs:
 Outputs:
 - `File hiphase_phased_vcf`: Phased VCF.
 - `File hiphase_phased_vcf_idx`: Index for the phased VCF.
-
-### [FindUntrimmedAlleles](../wdl/annotation_utils/FindUntrimmedAlleles.wdl)
-This utility identifies variants in a VCF whose REF and ALT alleles retain untrimmed shared bases, producing a subset VCF of those records for use in restoring full allele representations downstream. It outputs the subset VCF.
-
-Inputs:
-- `File vcf`: VCF to scan.
-- `File vcf_idx`: Index for `vcf`.
-- `Array[String] contigs`: Contigs to scan within the input VCF.
-- `Int? records_per_shard`: Number of variants to keep within a single shard during scanning.
-- `String prefix`: Prefix for output file names.
-- `String utils_docker`: Container image.
-- `RuntimeAttr? runtime_attr_*`: Optional per-task runtime overrides (5).
-
-Outputs:
-- `File untrimmed_vcf`: VCF holding the variants whose alleles are not left-trimmed.
-- `File untrimmed_vcf_idx`: Index for `untrimmed_vcf`.
 
 ### [CreateTRGTHistograms](../wdl/annotation_utils/CreateTRGTHistograms.wdl)
 This utility generates per-locus tandem repeat allele-frequency histograms, stratified by population and sex, from a multisample LPS (longest polymer sequence) table for use in the TR browser. It outputs a single combined histograms TSV.
@@ -1081,90 +888,6 @@ Inputs:
 Outputs:
 - `File tr_annotated_vcf`: Base VCF annotated with integrated TR calls.
 - `File tr_annotated_vcf_idx`: Index for the annotated VCF.
-
-### [PostProcessTRLociHPRCHGSVC](../wdl/annotation_utils/PostProcessTRLociHPRCHGSVC.wdl)
-This utility reconciles disease-associated `TRExplorerV1` catalog loci with one integrated contig VCF. Only catalog records whose `Diseases` value is a non-empty array are eligible; records with a missing, non-array, or empty value are ignored. It uses only literal `TRExplorerV1` substring matches against `INFO/TRID`, searches unmatched catalog loci in per-sample TRGT VCFs, merges recovered loci with TRGT, drops merged calls with `AC=0`, and replaces overlapping integrated TRVs. It recomputes allele-specific `INFO/AC` after replacement ploidy normalization and again before output; a zero-AC replacement never removes its overlapping input TRV. Replacement calls receive VRS, region, and in-silico annotations; these annotations run directly on only recovered calls and are not sharded.
-
-For each replaced, non-reference heterozygous TRGT genotype, it finds sample's matching truth/base VCF, reconstructs reference-relative sequence for both phased base haplotypes across replacement locus, and compares those sequences with both possible TRGT genotype orientations. `aligned` compares base haplotype 1 to replacement haplotype 1 and base haplotype 2 to replacement haplotype 2; `unaligned` uses crossed haplotypes. It phases only a unique lower-distance orientation when that orientation's summed edit distance is at most `max_phase_edit_distance` and its length-weighted combined edit-distance percentage is at most `max_phase_edit_distance_pct`; equality passes. It writes phased GT, sets `PS` to locus `POS`, and flags locus with `POSTHOC_BACKBONE_PHASED`. Reference, homozygous-alt, missing, and unresolved heterozygous calls remain unphased. It clears and reapplies `gnomAD_STR`, refreshes TR envelope tags, assigns replacement IDs exactly as `IntegrateTRs.SetTrVariantIds` (`contig-POS-TRV-(len(REF)-1)`, with `_1`, `_2`, ... on duplicates), and emits catalog-match and per-genotype TRV-phasing audit TSVs.
-
-Inputs:
-- `File vcf`: VCF to post-process.
-- `File vcf_idx`: Index for `vcf`.
-- `String contig`: Contig represented by `vcf`.
-- `Array[File] trgt_vcfs`: Per-sample TRGT VCFs whose loci are matched against the callset.
-- `Array[File] trgt_vcf_idxs`: Indexes for `trgt_vcfs`.
-- `Array[String] sample_ids`: Cohort sample IDs in exact main-VCF and TRGT merge order; each parallel TRGT VCF must contain only its corresponding sample.
-- `Array[File] base_vcfs`: Per-sample phased base VCFs used to evaluate tandem-repeat phasing.
-- `Array[File] base_vcf_idxs`: Indexes for `base_vcfs`.
-- `Boolean run_flag_homopolymer_trvs`: Flag recovered TRVs whose shortest `MOTIFS` element has length one.
-- `Boolean run_normalize_ploidy`: Whether to normalize ploidy by sex - clearing chrY female calls, making chrX/chrY male calls hemizygous, enforcing diploidy and right-aligning unphased calls (requires `ped`).
-- `Boolean replace_gnomad_str`: Assemble `INFO/gnomAD_STR` from the catalog-match report.
-- `File? ped`: Cohort pedigree, used when normalizing ploidy.
-- `File? swap_samples_base`: Optional whitespace-delimited raw-to-canonical sample-ID map applied when assigning cohort samples to `base_vcfs`.
-- `Int max_phase_edit_distance`: Maximum allowed summed edit distance across both haplotype pairs in a unique winning orientation. (default `10`)
-- `Float max_phase_edit_distance_pct`: Maximum allowed length-weighted combined edit-distance percentage across both haplotype pairs in a unique winning orientation: `100 * (distance_1 + distance_2) / (max(len(replacement_haplotype_1), len(base_haplotype_1), 1) + max(len(replacement_haplotype_2), len(base_haplotype_2), 1))`. (default `10.0`)
-- `File gnomad_tr_json`: TRExplorer catalog JSON.
-- `File ref_fa`: From references.
-- `File ref_fai`: From references.
-- `File seqrepo_tar`: From references.
-- `File simple_repeats_bed`: From references.
-- `File seg_dup_bed`: From references.
-- `File repeat_masked_bed`: From references.
-- `String cadd_ht`: From references.
-- `String pangolin_ht`: From references.
-- `String phylop_ht`: From references.
-- `String revel_ht`: From references.
-- `String spliceai_ht`: From references.
-- `String annotate_in_silico_predictors_script`: Path to the Hail script that performs the lookups (defaults to this repository's copy on `main`). (default `https://raw.githubusercontent.com/talkowski-lab/lr-pipeline/main/scripts/annotation/annotate_insilico_predictors.py`)
-- `String genome_build`: Reference genome build passed to the in-silico predictor annotation script. (default `GRCh38`)
-- `String prefix`: Prefix for output file names.
-- `String utils_docker`, `String trgt_docker`, `String vrs_docker`, `String hail_docker`: Container images.
-- `RuntimeAttr? runtime_attr_*`: Optional per-task runtime overrides (17).
-
-Outputs:
-- `File trv_postprocessed_vcf`: Post-processed tandem-repeat VCF.
-- `File trv_postprocessed_vcf_idx`: Index for `trv_postprocessed_vcf`.
-- `File trv_subsetted_vcf`: Tandem-repeat VCF subset to the recovered loci.
-- `File trv_subsetted_vcf_idx`: Index for `trv_subsetted_vcf`.
-- `File trv_catalog_match_tsv`: Catalog-to-input/TRGT match audit, including numeric matched TRGT allele count (`0` indicates `AC=0`); rows with an input substring match leave all TRGT columns blank.
-- `File trv_phasing_summary_tsv`: One row per replacement record and sample. Columns are `base_trid`, `replace_trid`, `sample_id`, input `base_gt`/`replace_gt`, base and replacement haplotype sequences, `edit_dist_aligned`, `edit_dist_unaligned`, winning-orientation `edit_dist_pct`, configured maxima, final VCF `final_gt`, and concise `status`. Distances are `sum (base_hap1 pair, base_hap2 pair)`.
-
-### [PostProcessTRLociAoU](../wdl/annotation_utils/PostProcessTRLociAoU.wdl)
-The AoU counterpart of `PostProcessTRLociHPRCHGSVC` for cohorts that have a single joint-genotyped TRGT VCF and no haplotype-resolved base VCFs, so no sequence-agreement phasing is performed. For each disease-associated `TRExplorerV1` (JSON `Diseases` a non-empty array), it locates the matching entry in `trgt_catalog_bed_gz` (`TRExplorerV1` as a substring of the BED `ID=`), then uses that entry's coordinates to check the input VCF: a TRV whose `POS`/`POS+len(REF)-1` equal the BED start+1/end is treated as already present and left untouched. Otherwise it recovers the matching `trgt_vcf` record (subset and reordered to the main-VCF sample set), keeps it only when its recomputed `INFO/AC>0`, and either replaces the best-overlapping `INFO/allele_type=trv` record or, when nothing overlaps, inserts it as a new locus. Recovered records receive canonical `IntegrateTRs` IDs, `SOURCE=TRExplorer`, optional `HOMOPOLYMER_TRV`, VRS/region/in-silico/metric annotations, and flow through the shared `ApplyTRLocusUpdates` (extended to accept insert map rows) for envelope and `gnomAD_STR` assembly. Genotypes are emitted unphased and `POSTHOC_BACKBONE_PHASED` is never set.
-
-This workflow emits no phasing audit: with no base VCFs there is nothing to phase against, so the shared `ApplyTRLocusUpdates` phasing summary (a header-only stub here) is deliberately not surfaced.
-
-Inputs:
-- `File vcf`: VCF to post-process.
-- `File vcf_idx`: Index for `vcf`.
-- `String contig`: Contig represented by `vcf`.
-- `File trgt_vcf`: TRGT VCF whose loci are matched against the callset.
-- `File trgt_vcf_idx`: Index for `trgt_vcf`.
-- `File gnomad_tr_json`: TRExplorer catalog JSON; only entries with a non-empty `Diseases` array are eligible.
-- `File trgt_catalog_bed_gz`: TRGT catalog BED (gzipped) whose column-4 `ID=` values bridge each `TRExplorerV1` to canonical coordinates.
-- `Boolean run_flag_homopolymer_trvs`: Flag recovered TRVs whose shortest `MOTIFS` element has length one.
-- `Boolean replace_gnomad_str`: Assemble `INFO/gnomAD_STR` from the catalog-match report.
-- `File seqrepo_tar`: From references.
-- `File simple_repeats_bed`: From references.
-- `File seg_dup_bed`: From references.
-- `File repeat_masked_bed`: From references.
-- `String cadd_ht`: From references.
-- `String pangolin_ht`: From references.
-- `String phylop_ht`: From references.
-- `String revel_ht`: From references.
-- `String spliceai_ht`: From references.
-- `String annotate_in_silico_predictors_script`: Path to the Hail script that performs the lookups (defaults to this repository's copy on `main`). (default `https://raw.githubusercontent.com/talkowski-lab/lr-pipeline/main/scripts/annotation/annotate_insilico_predictors.py`)
-- `String genome_build`: Reference genome build passed to the in-silico predictor annotation script. (default `GRCh38`)
-- `String prefix`: Prefix for output file names.
-- `String utils_docker`, `String vrs_docker`, `String hail_docker`: Container images.
-- `RuntimeAttr? runtime_attr_*`: Optional per-task runtime overrides (10).
-
-Outputs:
-- `File trv_postprocessed_vcf`: Post-processed tandem-repeat VCF.
-- `File trv_postprocessed_vcf_idx`: Index for `trv_postprocessed_vcf`.
-- `File trv_subsetted_vcf`: Tandem-repeat VCF subset to the recovered loci.
-- `File trv_subsetted_vcf_idx`: Index for `trv_subsetted_vcf`.
-- `File trv_catalog_match_tsv`: One row per contig-relevant catalog entry, sharing the HPRC/HGSVC columns plus a trailing `status` (`already_in_input_vcf`, `replaced_from_trgt`, `added_from_trgt`, `trgt_ac0_skipped`, `no_trgt_match`, `no_catalog_bed_match`, `not_eligible`).
 
 ### [PreprocessVcfs](../wdl/annotation_utils/PreprocessVcfs.wdl)
 This utility preprocesses and integrates one or more cohort VCFs into a single VCF. It first optionally converts symbolic alleles to sequence alleles, then applies any per-VCF sample-ID swaps, optionally subsets every VCF to the requested samples, and validates that the resulting sample sets are identical. Each VCF is then optionally normalized, annotated with core variant attributes and an optional source label, and length-filtered. Per-VCF controls are required arrays: an empty array disables that control for every VCF; a non-empty array must align with `vcfs`.
@@ -1310,40 +1033,6 @@ Inputs:
 
 Outputs:
 - `File subset_tsv`: Column-subset TSV.
-
-### [NormalizeAlleleTypes](../wdl/annotation_utils/NormalizeAlleleTypes.wdl)
-This utility reclassifies `allele_type` values and records the original type in a new `allele_subtype` field. Variants with `allele_type=dup` are tested for tandemness against their duplication source (from `INFO/ORIGIN`) using two criteria: size similarity between the insertion length and the ORIGIN region length must meet the `dup_size_similarity` threshold, and the insertion POS must fall within the ORIGIN region or within `dup_breakpoint_window` bases of its breakpoints. All get `allele_subtype=tandem_dup`; those passing keep `allele_type=dup`, while those failing are set to `allele_type=ins`. Variants with `allele_type` of `complex_dup`, `dup_interspersed`, `inv_dup`, `alu_ins`, `line_ins`, `sva_ins` or `numt` are set to `allele_type=ins`, and those with `alu_del`, `line_del` or `sva_del` are set to `allele_type=del`, each recording the original value in `allele_subtype`. REF/ALT/POS are never modified. Records with other `allele_type` values are passed through unchanged. Supports optional record-count sharding.
-
-Inputs:
-- `File vcf`: VCF to transform.
-- `File vcf_idx`: Index for `vcf`.
-- `Int? records_per_shard`: Number of records per shard for parallel processing.
-- `Int dup_breakpoint_window`: Maximum distance (bp) between insertion POS and ORIGIN breakpoints to pass the breakpoint check. (default `10`)
-- `Float dup_size_similarity`: Minimum size similarity ratio (relative to the larger of the two lengths) between insertion and ORIGIN lengths. (default `0.9`)
-- `Int min_dup_size`: Minimum insertion size (bp) to consider for the tandem check. (default `50`)
-- `String prefix`: Prefix for output file names.
-- `String utils_docker`: Container image.
-- `RuntimeAttr? runtime_attr_*`: Optional per-task runtime overrides (3).
-
-Outputs:
-- `File transformed_vcf`: VCF with revised `allele_type`/`allele_subtype`.
-- `File transformed_vcf_idx`: Index for `transformed_vcf`.
-
-### [NormalizeDuplicationOrigins](../wdl/annotation_utils/NormalizeDuplicationOrigins.wdl)
-This utility resolves the relative `ORIGIN` coordinates of duplications and NUMTs into absolute genomic coordinates and annotates them back onto the VCF. `ORIGIN` values prefixed with `flank_` encode coordinates relative to a flanking window and are converted to genome-absolute positions; values already in absolute form are kept as-is. When multiple comma-separated `ORIGIN` values are present - whether flank-relative, absolute, or mixed - each is processed individually and the resulting absolute values are written back in their original order. It outputs the VCF with absolute-origin annotations.
-
-Inputs:
-- `File vcf`: VCF to process.
-- `File vcf_idx`: Index for `vcf`.
-- `Int? records_per_shard`: Number of variants to keep within a single shard during processing.
-- `Boolean modify_origin_header_number`: Whether to rewrite the `ORIGIN` header Number so multi-valued entries validate. (default `false`)
-- `String prefix`: Prefix for output file names.
-- `String utils_docker`: Container image.
-- `RuntimeAttr? runtime_attr_*`: Optional per-task runtime overrides (5).
-
-Outputs:
-- `File absolute_origin_vcf`: VCF with absolute `ORIGIN` coordinates.
-- `File absolute_origin_vcf_idx`: Index for `absolute_origin_vcf`.
 
 ### [ConvertVcfToBed](../wdl/annotation_utils/ConvertVcfToBed.wdl)
 This utility converts per-contig VCFs to one BED-like table with `svtk vcf2bed`. It can filter by variant length, rewrite selected INFO fields, convert records to insertion/deletion classes, shard large inputs, and control INFO, sample, filter, BND, CPX, compression, and output-extension behavior.
@@ -1898,25 +1587,6 @@ Inputs:
 Outputs:
 - `File palmer_merged_vcf`: Merged PALMER VCF.
 - `File palmer_merged_vcf_idx`: Index for the merged VCF.
-
-### [MergeWithTruvari](../wdl/tools/MergeWithTruvari.wdl)
-This tool merges VCFs by combining them with `bcftools merge` and then collapsing redundant records with Truvari (https://github.com/ACEnglish/truvari). An optional preprocessing script can reshape the merged VCF before collapsing.
-
-Inputs:
-- `Array[File] vcfs`: VCFs to merge.
-- `Array[File] vcf_idxs`: Index for `vcfs`.
-- `String? truvari_params`: Arguments passed to `truvari collapse`.
-- `String? bcftools_merge_params`: Arguments passed to `bcftools merge`.
-- `File? preprocess_script`: Script run on the merged VCF before collapsing.
-- `File ref_fa`: From references.
-- `File ref_fai`: From references.
-- `String prefix`: Prefix for output file names.
-- `String merge_docker`, `String truvari_docker`: Container images.
-- `RuntimeAttr? runtime_attr_*`: Optional per-task runtime overrides.
-
-Outputs:
-- `File truvari_collapsed_vcf`: Merged and collapsed callset.
-- `File truvari_collapsed_vcf_idx`: Index for `truvari_collapsed_vcf`.
 
 ### [PAV](../wdl/tools/PAV.wdl)
 This tool runs PAV (https://github.com/EichlerLab/pav) in batch mode across multiple samples' phased haplotype assemblies to call variants against the reference. It outputs per-sample VCFs, along with tarballs of the full PAV results and log directories.

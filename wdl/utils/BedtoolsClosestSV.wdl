@@ -86,8 +86,7 @@ workflow BedtoolsClosestSV {
             runtime_attr_override = runtime_attr_split_vcf
     }
 
-    # Convert and split the callset again with canonical DUPs repositioned onto their ORIGIN coordinates. Only the DUP
-    # records move, so every other comparison reads the unmoved split and this round is skipped when ORIGIN is absent
+    # Convert and split the callset again with canonical DUPs repositioned onto their ORIGIN coordinates
     if (move_dup_to_origin) {
         call Helpers.ConvertToSymbolic as ConvertEvalMoved {
             input:

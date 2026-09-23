@@ -100,11 +100,28 @@ class Checker:
             if name != stem:
                 self.error(1, "W013", "workflow '{}' must match the file name '{}.wdl'".format(name, stem))
 
+        self.check_comment_runs()
         self.check_unused_runtime_attrs()
         if workflows:
             self.check_workflow_meta()
         else:
             self.check_alphabetical_tasks()
+
+    def check_comment_runs(self):
+        """A comment must fit on one line; only a header starting at line 1 may span several."""
+        start = None
+        for index, line in enumerate(self.lines + [""]):
+            if line.lstrip().startswith("#"):
+                if start is None:
+                    start = index
+                continue
+            if start is not None and index - start > 1 and start > 0:
+                self.error(
+                    start + 1,
+                    "W027",
+                    "comment spans {} lines; a comment must be a single line".format(index - start),
+                )
+            start = None
 
     def check_alphabetical_tasks(self):
         """In a task library - a file with no workflow - tasks must be declared alphabetically."""

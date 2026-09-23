@@ -137,8 +137,7 @@ workflow AnnotateCallsetOverlap {
     Boolean single_contig = length(contigs) == 1
 
     scatter (contig in contigs) {
-        # Read each contig straight out of the bucket and drop genotypes up front, because only the site columns and
-        # INFO are ever used downstream and the genotypes otherwise dominate localization for a cohort callset
+        # Read each contig straight out of the bucket without genotypes, which dominate localization but go unused here
         call Helpers.SubsetVcfToRegionStreaming as SubsetEval {
             input:
                 vcf = vcf,
@@ -191,8 +190,7 @@ workflow AnnotateCallsetOverlap {
         File truth_sv_vcf_renamed = select_first([RenameSVTruthIds.renamed_vcf, SubsetSVTruth.subset_vcf])
         File truth_sv_vcf_renamed_idx = select_first([RenameSVTruthIds.renamed_vcf_idx, SubsetSVTruth.subset_vcf_idx])
 
-        # Give a sequence-allele SV truth VCF the symbolic ALTs, SVTYPE, SVLEN and END that the bedtools closest round
-        # reads off the truth callset, using the same conversion the callset itself goes through
+        # Give a sequence-allele SV truth VCF the symbolic ALTs, SVTYPE, SVLEN and END the bedtools closest round reads
         if (convert_symbolic_truth_sv_vcf) {
             call Helpers.ConvertToSymbolic as ConvertSVTruth {
                 input:

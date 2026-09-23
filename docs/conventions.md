@@ -5,7 +5,7 @@ This document defines the comment, WDL and Python style conventions to follow wh
 ## Comments
 These rules apply to WDL, Python, R and Bash alike, including code embedded in a WDL `command` block.
 - Comments should mark key sections of code and explain at a high level what that section does. They should never restate what a line of code already says, nor annotate individual lines.
-- A comment should be a single line. Use a second line only for a genuine gotcha that cannot be compressed without losing the reason it exists - for example an upstream tool quirk or a correctness constraint that is not visible in the code.
+- A comment should always be a single line, including a genuine gotcha such as an upstream tool quirk or a correctness constraint that is not visible in the code; keep the reason and cut the detail rather than wrapping onto a second line. The only comment that may span lines is a license or provenance header at the very top of a file.
 - Comments should be imperative and verb-first - e.g. `# Concatenate the TSVs, keeping a single header when requested`, not `# Concatenation` or `# This concatenates the TSVs`.
 - Comments should start with a capital letter and should not end with a period. Multi-sentence comments should be rewritten as a single statement.
 - Avoid vague verbs such as `Handle`, `Process` and `Run script to`, matching the workflow naming rules below. Name the actual operation.
