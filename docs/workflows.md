@@ -1415,7 +1415,6 @@ Inputs:
 - `File intervals`: Interval list over which CNVs are called.
 - `Array[String]+ sample_ids`: Sample IDs in the cohort.
 - `Array[File]+ depth_profiles`: Per-sample read-depth profiles, aligned to `sample_ids`.
-- `Array[String] contigs`: Contigs to process, given in reference dictionary order. `intervals` is subset to these before gCNV runs, and depth preprocessing, clustering and genotyping are likewise restricted, so genome-wide `intervals`, `merged_bincov`, `training_intervals` and `contig_ploidy_priors` are accepted.
 - `Boolean sort_depth_profiles`: Whether to sort each depth profile by contig and position first, for profiles that are not already coordinate sorted.
 - `String batch_id`: Identifier for the cohort batch.
 - `File contig_ploidy_priors`: Contig ploidy priors used to determine per-sample contig ploidy.
@@ -1425,11 +1424,13 @@ Inputs:
 - `File ref_fai`: From references.
 - `File ref_dict`: From references.
 - `File pedigree`: Cohort pedigree used by depth genotyping.
+- `File primary_contigs_list`: Primary contigs, one per line in reference dictionary order, used for the ploidy table, VCF headers, clustering and genotyping.
 - `File training_intervals`: Intervals used to train the depth genotyping model.
 - `File median_coverage`: Per-sample median coverage table used by depth genotyping.
+- `File? contig_subset_list`: Optional subset of `primary_contigs_list` to restrict depth clustering and genotyping to.
 - `String variant_prefix`: Prefix used for generated variant IDs.
 - `Int gcnv_qs_cutoff`: Minimum gCNV quality score for a segment to be kept. (default `30`)
-- `Int num_intervals_per_scatter`: Number of intervals processed per scatter shard. (default `1500`)
+- `Int num_intervals_per_scatter`: Number of intervals processed per gCNV scatter shard. GermlineCNVCaller memory grows with samples times intervals per shard, so raising this above the default needs more memory in `runtime_attr_germline_cnv_caller`. (default `1500`)
 - `String chr_x`: Name of the X contig in the reference. (default `chrX`)
 - `String chr_y`: Name of the Y contig in the reference. (default `chrY`)
 - `File? gatk4_jar_override`: Override GATK4 jar.
@@ -1507,7 +1508,7 @@ Inputs:
 - `Boolean svtk_set_pass`: Set FILTER to PASS during conversion. (default `false`)
 - `String prefix`: Prefix for output file names.
 - `String gatk_docker`, `String sv_base_mini_docker`, `String sv_pipeline_docker`: Container images.
-- `RuntimeAttr? runtime_attr_*`: Optional per-task runtime overrides (23).
+- `RuntimeAttr? runtime_attr_*`: Optional per-task runtime overrides (22).
 
 Outputs:
 - `File merged_cnvs_vcf`: Cohort CNV VCF after depth preprocessing.
@@ -1866,13 +1867,12 @@ Inputs:
 - `File intervals`: Interval list over which CNVs are called.
 - `Array[String]+ sample_ids`: Sample IDs in the cohort.
 - `Array[File]+ depth_profiles`: Per-sample read-depth profiles, aligned to `sample_ids`.
-- `Array[String] contigs`: Contigs to call CNVs on. `intervals` is subset to these before annotation and filtering, so a genome-wide interval list may be supplied. GATK copy-number tools reject a non-UNION `--interval-set-rule`, so the subset is taken as a separate step rather than by interval intersection.
 - `String cohort_id`: Identifier for the cohort.
-- `File contig_ploidy_priors`: Contig ploidy priors used to determine per-sample contig ploidy. May cover more contigs than `contigs`.
+- `File contig_ploidy_priors`: Contig ploidy priors used to determine per-sample contig ploidy.
 - `File ref_fa`: From references.
 - `File ref_fai`: From references.
 - `File ref_dict`: From references.
-- `Int num_intervals_per_scatter`: Number of intervals processed per scatter shard.
+- `Int num_intervals_per_scatter`: Number of intervals processed per gCNV scatter shard. GermlineCNVCaller memory grows with samples times intervals per shard, so raising this above the default needs more memory in `runtime_attr_germline_cnv_caller`.
 - `File? gatk4_jar_override`: Override GATK4 jar.
 - `File? mappability_track_bed`: Mappability track used to annotate intervals.
 - `File? mappability_track_bed_idx`: Index for `mappability_track_bed`.
@@ -1930,8 +1930,8 @@ Inputs:
 - `Array[String]? allosomal_contigs`: Contigs treated as allosomal.
 - `Int maximum_number_events_per_sample`: Maximum number of events permitted per sample. (default `1000`)
 - `String prefix`: Prefix for output file names.
-- `String gatk_docker`, `String sv_base_mini_docker`: Container images.
-- `RuntimeAttr? runtime_attr_*`: Optional per-task runtime overrides (9).
+- `String gatk_docker`: Container image.
+- `RuntimeAttr? runtime_attr_*`: Optional per-task runtime overrides (8).
 
 Outputs:
 - `File annotated_intervals`: Intervals annotated with GC content and tracks.
@@ -1959,7 +1959,7 @@ Inputs:
 - `Array[File]+ genotyped_segments_vcfs`: Per-sample gCNV genotyped-segment VCFs.
 - `Array[File]+ genotyped_segments_vcf_idxs`: Indexes for `genotyped_segments_vcfs`.
 - `File contig_ploidy_calls_tar`: Tarred gCNV contig-ploidy calls.
-- `Array[String] contigs`: Contigs to process, given in reference dictionary order.
+- `File primary_contigs_list`: Primary contigs, one per line in reference dictionary order, used for the ploidy table and VCF headers.
 - `File ref_fai`: Reference FASTA index, used for contig ordering.
 - `File pedigree`: Pedigree supplying per-sample sex.
 - `String batch_id`: Identifier for the batch.
@@ -1988,7 +1988,8 @@ Inputs:
 - `File depth_vcf_idx`: Index for depth_vcf.
 - `File ploidy_table`: Ploidy table from `DepthPreprocessing`.
 - `String variant_prefix`: Prefix applied to generated variant IDs.
-- `Array[String] contigs`: Contigs to cluster over, given in reference dictionary order. These also become the `##contig` lines of the svtk-formatted output.
+- `File contig_list`: Primary contigs, one per line in reference dictionary order. These also become the `##contig` lines of the svtk-formatted output.
+- `File? contig_subset_list`: Optional subset of `contig_list` to cluster over.
 - `File ref_fa`: Reference FASTA, index and sequence dictionary.
 - `File ref_fai`: Reference FASTA, index and sequence dictionary.
 - `File ref_dict`: Reference FASTA, index and sequence dictionary.
@@ -2028,7 +2029,8 @@ Inputs:
 - `File rd_file_idx`: Index for rd_file.
 - `File ref_dict`: Reference sequence dictionary.
 - `File ploidy_table`: Ploidy table from `DepthPreprocessing`.
-- `Array[String] contigs`: Contigs to genotype over, given in reference dictionary order. Model training is also restricted to these, so `training_intervals` and `rd_file` may be genome-wide.
+- `File contig_list`: Primary contigs, one per line in reference dictionary order, to genotype over.
+- `File? contig_subset_list`: Optional subset of `contig_list` to genotype over.
 - `String chr_x`: Allosome contig names (defaults `chrX` and `chrY`). (default `chrX`)
 - `String chr_y`: Allosome contig names (defaults `chrX` and `chrY`). (default `chrY`)
 - `String prefix`: Prefix for output file names.
