@@ -166,6 +166,15 @@ workflows:
       tags:
         - /.*/
 
+  - subclass: WDL
+    name: AnnotateTruvariRemap
+    primaryDescriptorPath: /wdl/annotation/AnnotateTruvariRemap.wdl
+    filters:
+      branches:
+        - main
+      tags:
+        - /.*/
+
   # --------------------
   # Annotation Utilities
   # --------------------
@@ -272,6 +281,15 @@ workflows:
 
 
   - subclass: WDL
+    name: CreateCohortDepthFiles
+    primaryDescriptorPath: /wdl/annotation_utils/CreateCohortDepthFiles.wdl
+    filters:
+      branches:
+        - main
+      tags:
+        - /.*/
+
+  - subclass: WDL
     name: CreateCohortMetadata
     primaryDescriptorPath: /wdl/annotation_utils/CreateCohortMetadata.wdl
     filters:
@@ -327,6 +345,15 @@ workflows:
 
 
   - subclass: WDL
+    name: DropGenotypes
+    primaryDescriptorPath: /wdl/annotation_utils/DropGenotypes.wdl
+    filters:
+      branches:
+        - main
+      tags:
+        - /.*/
+
+  - subclass: WDL
     name: ExtractSampleVcfs
     primaryDescriptorPath: /wdl/annotation_utils/ExtractSampleVcfs.wdl
     filters:
@@ -363,6 +390,15 @@ workflows:
         - /.*/
 
 
+
+  - subclass: WDL
+    name: FillFormatFields
+    primaryDescriptorPath: /wdl/annotation_utils/FillFormatFields.wdl
+    filters:
+      branches:
+        - main
+      tags:
+        - /.*/
 
   - subclass: WDL
     name: FillPhasedGenotypes
@@ -705,4 +741,5 @@ workflows:
         - main
       tags:
         - /.*/
+
 

@@ -428,6 +428,29 @@ Inputs:
 Outputs:
 - `File annotations_tsv_vrs`: TSV of per-variant VRS attributes (`VRS_Allele_IDs`, `VRS_Error`, `VRS_Starts`, `VRS_Ends`, `VRS_States`, `VRS_Lengths`, `VRS_RepeatSubunitLengths`).
 
+### [AnnotateTruvariRemap](../wdl/annotation/AnnotateTruvariRemap.wdl)
+This tool remaps insertion sequences with minimap2 (via Truvari) in order to flag insertions whose inserted sequence aligns elsewhere in the reference. Each insertion above a minimum length is realigned per contig and assessed against alignment-score and coverage thresholds, emitting a TSV of the remap results.
+
+Inputs:
+- `File vcf`: VCF whose insertions are remapped.
+- `File vcf_idx`: Index for VCF.
+- `File ref_fa`: From references.
+- `Array[File] ref_bwa_idx`: BWA indices for `ref_fa`, from references.
+- `Array[String] contigs`: Contigs to process.
+- `Int? records_per_shard`: Number of variants to keep within a single shard during annotation.
+- `String type_field`: INFO field giving each variant's allele type, used to select insertions to remap. (default `allele_type`)
+- `String type_ins`: Value of `type_field` identifying an insertion. (default `ins`)
+- `Int min_length`: Minimum insertion length to remap.
+- `Int max_length`: Maximum insertion length to remap.
+- `Int mm2_threshold`: Minimum minimap2 alignment score to flag an insertion.
+- `Float cov_threshold`: Minimum alignment coverage to flag an insertion.
+- `String prefix`: Prefix for output file names.
+- `String remap_docker`, `String utils_docker`: Container images.
+- `RuntimeAttr? runtime_attr_*`: Optional per-task runtime overrides (5).
+
+Outputs:
+- `File annotations_tsv_remap`: TSV of insertion remap results.
+
 
 ## Annotation Utilities
 
@@ -656,6 +679,29 @@ Inputs:
 Outputs:
 - `File intervals`: Fixed-width interval file.
 
+### [CreateCohortDepthFiles](../wdl/annotation_utils/CreateCohortDepthFiles.wdl)
+This utility ports GATK-SV's `MakeBincovMatrix` and `PloidyEstimation` workflows to build a cohort binned-coverage matrix and per-sample ploidy estimate from per-sample `MosDepth` per-base coverage BEDs. Since mosdepth's per-base output is run-length-encoded at irregular interval widths rather than GATK-SV's fixed-width `CollectReadCounts` bins, each sample's per-base BED is first binned at `bin_size` by taking the median depth per bin (dropping any trailing partial bin), matching the binning convention used by `CreateSampleReadCounts`; because every sample is binned identically, the format-detection/shift logic in upstream `MakeBincovMatrix` (which has to distinguish raw bincov BEDs from GATK `CollectReadCounts` output) is dropped as dead code. The binned files are then run through GATK-SV's `SetBins`/`MakeBincovMatrixColumns`/`ZPaste` logic to build the bincov matrix, and through `BuildPloidyMatrix` (re-binning the bincov matrix to `ploidy_bin_size`, summing depths) and GATK-SV's `estimatePloidy.R` to estimate ploidy. GATK-SV's `estimatePloidy.R` and `estimated_CN_denoising.py` are vendored under `scripts/helper/` and built into the `utils` image, so workflow has no dependency on GATK-SV docker images. Matrix outputs remain separate; `ploidy_plots` tarball contains only PNG figures from `estimatePloidy.R` and `cn_denoising_plots.pdf`. Unlike upstream `MakeBincovMatrix`, this does not support merging into a pre-existing batch's bincov matrix, since only a single one-shot cohort matrix was needed.
+
+`estimatePloidy.R` hardcodes a 24-contig human karyotype (`chr1`..`chr22`, `chrX`, `chrY`, in that exact order) for sex assignment and per-contig ploidy expectations via positional indexing, and its 'X'/'Y' exclusion checks compare against bare `X`/`Y` rather than `chr`-prefixed names (a no-op against GRCh38-style contig names, with limited practical effect here since sample-batching/PCA (`-k`) is never invoked). `mosdepth_bed_files` must therefore be restricted to exactly those 24 contigs, in that order, or ploidy estimates will be silently wrong.
+
+Inputs:
+- `Array[String] sample_ids`: Cohort sample IDs, parallel to `mosdepth_bed_files`.
+- `Array[File] mosdepth_bed_files`: Per-sample combined mosdepth per-base coverage BEDs, restricted to `chr1`-`chr22`, `chrX`, `chrY` in that order (see caveat above).
+- `Int bin_size`: Size, in bp, of each coverage bin in the bincov matrix (GATK-SV convention default: 1000). (default `100`)
+- `Int ploidy_bin_size`: Size, in bp, of each bin in the ploidy matrix (GATK-SV convention default: 1000000). (default `1000000`)
+- `Int random_seed`: Seed for the draw, so the selection is reproducible. (default `42`)
+- `String prefix`: Prefix for output file names.
+- `String utils_docker`: Container image.
+- `RuntimeAttr? runtime_attr_*`: Optional per-task runtime overrides (7).
+
+Outputs:
+- `File binned_coverage`: Cohort binned-coverage matrix, bgzipped and tabix-indexed.
+- `File binned_coverage_idx`: Index for `binned_coverage`.
+- `File median_coverage`: Per-sample median coverage matrix.
+- `File binned_estimated_ecn`: Per-sample, per-`ploidy_bin_size`-bin estimated copy number.
+- `File estimated_cn`: Per-sample, per-chromosome estimated copy number.
+- `File ploidy_plots`: Tarball containing only ploidy PNG and PDF figures.
+
 ### [CreateCohortMetadata](../wdl/annotation_utils/CreateCohortMetadata.wdl)
 This utility builds a cohort metadata file by combining a pedigree file with an ancestry-assignment file. It outputs the merged metadata file.
 
@@ -754,6 +800,21 @@ Outputs:
 - `File dropped_vcf`: Sites-only VCF.
 - `File dropped_vcf_idx`: Index for the sites-only VCF.
 
+### [DropGenotypes](../wdl/annotation_utils/DropGenotypes.wdl)
+This utility strips all genotype (sample) columns from a VCF, optionally sharding by record count for speed. It outputs the resulting sites-only VCF.
+
+Inputs:
+- `File vcf`: VCF whose genotypes are dropped.
+- `File vcf_idx`: Index for VCF.
+- `Int? records_per_shard`: Number of variants to keep within a single shard during processing.
+- `String prefix`: Prefix for output file names.
+- `String utils_docker`: Container image.
+- `RuntimeAttr? runtime_attr_*`: Optional per-task runtime overrides (3).
+
+Outputs:
+- `File dropped_vcf`: Sites-only VCF.
+- `File dropped_vcf_idx`: Index for the sites-only VCF.
+
 ### [ExtractSampleVcfs](../wdl/annotation_utils/ExtractSampleVcfs.wdl)
 This utility extracts per-sample VCFs from a cohort VCF, splitting each sample's variants into a SNV/indel VCF and an SV VCF based on a minimum SV length. It outputs the per-sample SNV/indel and SV VCFs.
 
@@ -834,6 +895,40 @@ Outputs:
 - `File filtered_vcf`: VCF with low-coverage genotypes set to missing.
 - `File filtered_vcf_idx`: Index for `filtered_vcf`.
 - `File filtered_genotypes_tsv`: TSV with one row per affected variant: `CHROM`, `POS`, `REF`, `ALT`, `ID`, pre- and post-filter allele counts, number of filtered samples, and comma-separated filtered sample IDs.
+
+### [FillFormatFields](../wdl/annotation_utils/FillFormatFields.wdl)
+This utility fills missing FORMAT fields in one VCF using the values from a second, more complete VCF covering the same sites. It supports selectively copying named format fields plus toggles for filling alternate and reference genotypes, unphasing genotypes and adding PL. Sites are matched on CHROM/POS/REF/ALT, optionally also requiring a matching ID, and filling can be restricted to variants whose INFO field matches a given value. Either input can first be run through `bcftools norm`, sharded by record count so normalization never runs over a whole-contig VCF at once; normalized shards are re-concatenated with sorting (since normalization can shift a variant's position, e.g. when splitting a multiallelic) before being re-binned for matching. It outputs the refilled VCF.
+
+Inputs:
+- `File unfilled_vcf`: VCF whose FORMAT fields are filled.
+- `File unfilled_vcf_idx`: Index for `unfilled_vcf`.
+- `File filled_vcf`: VCF providing the FORMAT field values.
+- `File filled_vcf_idx`: Index for `filled_vcf`.
+- `String contig`: Contig to process.
+- `File? ref_fa`: Reference FASTA used for normalization. Required if either normalize input is `true`.
+- `File? ref_fai`: Index for `ref_fa`. Required if either normalize input is `true`.
+- `Int? records_per_shard_normalize`: Number of variants per shard when normalizing. When set, normalization runs in parallel shards that are re-concatenated and sorted afterward.
+- `Int? shard_bin_size_fill`: Region-bin size, in bp, used when sharding the contig for matching/filling.
+- `Array[String] transfer_format_fields`: FORMAT fields to fill from `filled_vcf`.
+- `Array[String] drop_format_fields`: FORMAT fields to drop entirely from the output (e.g. fields known to be unreliable). Cannot include `GT`.
+- `Boolean fill_alt_gts`: Whether to overwrite a sample's GT in `unfilled_vcf` with `filled_vcf`'s GT when `filled_vcf`'s GT is alt-containing, regardless of the current GT in `unfilled_vcf`.
+- `Boolean fill_ref_gts`: Whether to overwrite a sample's GT in `unfilled_vcf` with `filled_vcf`'s GT when `filled_vcf`'s GT is non-alt (hom-ref or no-call), regardless of the current GT in `unfilled_vcf`.
+- `Boolean match_by_id`: Whether matching also requires equal variant IDs, in addition to CHROM/POS/REF/ALT.
+- `Boolean unphase_gts`: Whether to unphase genotypes while filling.
+- `Boolean add_missing_pl_via_ad`: Whether to add a `PL` FORMAT field derived from `AD` for genotypes that lack one.
+- `Boolean expand_ad_across_alleles`: Whether to expand a fully-missing `AD` into one missing value per allele, which GLNexus writes as a bare '.' rather than '.,.'.
+- `Boolean split_rnc_across_alleles`: Whether to split a merged `RNC` code into one character per allele copy, which GLNexus writes as 'MI' rather than 'M,I'.
+- `Boolean normalize_unfilled_vcf`: Whether to normalize `unfilled_vcf` with `bcftools norm` before matching.
+- `Boolean normalize_filled_vcf`: Whether to normalize `filled_vcf` with `bcftools norm` before matching.
+- `String? subset_unfilled_vcf_field`: INFO field on `unfilled_vcf` used to limit which variants are filled. Requires `subset_unfilled_vcf_value`.
+- `String? subset_unfilled_vcf_value`: Value that `subset_unfilled_vcf_field` must equal for a variant to be filled. Variants that don't match are left unfilled.
+- `String prefix`: Prefix for output file names.
+- `String utils_docker`: Container image.
+- `RuntimeAttr? runtime_attr_*`: Optional per-task runtime overrides (11).
+
+Outputs:
+- `File refilled_vcf`: VCF with FORMAT fields filled.
+- `File refilled_vcf_idx`: Index for the refilled VCF.
 
 ### [FillPhasedGenotypes](../wdl/annotation_utils/FillPhasedGenotypes.wdl)
 This utility transfers phasing information from a phased VCF onto the genotypes of an unphased VCF over matching sites, optionally sharding each contig by region. It outputs the phased VCF.
