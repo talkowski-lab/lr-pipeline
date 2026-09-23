@@ -3814,6 +3814,72 @@ task StripInfoFields {
     }
 }
 
+task SubsampleIndices {
+    input {
+        Int num_items
+        Int num_subsampled
+        Int seed
+        String prefix
+        String docker
+        RuntimeAttr? runtime_attr_override
+    }
+
+    command <<<
+        set -euo pipefail
+
+        # Draw the subsampled indices, then record where each original index lands once subsampled and remaining are concatenated
+        python3 <<'PYCODE'
+import random
+
+random.seed(~{seed})
+subsampled = sorted(random.sample(range(~{num_items}), ~{num_subsampled}))
+subsampled_set = set(subsampled)
+remaining = [index for index in range(~{num_items}) if index not in subsampled_set]
+
+positions = [0] * ~{num_items}
+for position, index in enumerate(subsampled + remaining):
+    positions[index] = position
+
+with open("~{prefix}.subsampled_indices.txt", "w") as out:
+    for index in subsampled:
+        out.write(f"{index}\n")
+
+with open("~{prefix}.remaining_indices.txt", "w") as out:
+    for index in remaining:
+        out.write(f"{index}\n")
+
+with open("~{prefix}.concatenated_positions.txt", "w") as out:
+    for position in positions:
+        out.write(f"{position}\n")
+PYCODE
+    >>>
+
+    output {
+        Array[Int] subsampled_indices = read_lines("~{prefix}.subsampled_indices.txt")
+        Array[Int] remaining_indices = read_lines("~{prefix}.remaining_indices.txt")
+        Array[Int] concatenated_positions = read_lines("~{prefix}.concatenated_positions.txt")
+    }
+
+    RuntimeAttr default_attr = object {
+        cpu_cores: 1,
+        mem_gb: 1,
+        disk_gb: 10,
+        boot_disk_gb: 10,
+        preemptible_tries: 1,
+        max_retries: 0
+    }
+    RuntimeAttr runtime_attr = select_first([runtime_attr_override, default_attr])
+    runtime {
+        cpu: select_first([runtime_attr.cpu_cores, default_attr.cpu_cores])
+        memory: select_first([runtime_attr.mem_gb, default_attr.mem_gb]) + " GiB"
+        disks: "local-disk " + select_first([runtime_attr.disk_gb, default_attr.disk_gb]) + " HDD"
+        bootDiskSizeGb: select_first([runtime_attr.boot_disk_gb, default_attr.boot_disk_gb])
+        docker: docker
+        preemptible: select_first([runtime_attr.preemptible_tries, default_attr.preemptible_tries])
+        maxRetries: select_first([runtime_attr.max_retries, default_attr.max_retries])
+    }
+}
+
 task SubsetBamToContig {
     input {
         File bam
