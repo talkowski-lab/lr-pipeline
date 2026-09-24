@@ -40,7 +40,7 @@ workflow HaplotypeMeQTL_tensorQTL {
         String bcftools_docker = "quay.io/biocontainers/bcftools:1.19--h8b25389_1"
         String python_docker = "wzhou88/saige:1.3.6"
         String tensorqtl_docker = "gcr.io/broad-cga-francois-gtex/tensorqtl:latest"
-        Int tensorqtl_num_gpus = 1
+        Int tensorqtl_num_gpus = 0
         String tensorqtl_gpu_type = "nvidia-tesla-p100"
         Array[String] tensorqtl_gpu_zones = ["us-central1-c"]
 
@@ -105,7 +105,7 @@ workflow HaplotypeMeQTL_tensorQTL {
 
         call MeQTLTensorQTLTasks.BuildCovariates {
             input:
-                psam = ConvertVcfToPgen.psam,
+                phenotype_bed_plain = BuildPhenotypeBed.phenotype_bed_plain,
                 covariates_file = covariates_file,
                 prefix = contig_prefix,
                 docker = python_docker,

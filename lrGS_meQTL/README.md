@@ -183,16 +183,40 @@ convention at the user's request): `quay.io/biocontainers/plink2:2.00a5.10--h4ac
 `quay.io/biocontainers/bcftools:1.19--h8b25389_1`, `wzhou88/saige:1.3.6` for
 `python_docker` (already has Python 3.8; any other dependency-free Python 3
 image also works), and `gcr.io/broad-cga-francois-gtex/tensorqtl:latest`
-(the upstream repo's own image - GPU-enabled, requires `nvidia-tesla-p100`
-by default via `tensorqtl_gpu_type`/`tensorqtl_num_gpus`/`tensorqtl_gpu_zones`).
+(the upstream repo's own image).
+
+`tensorqtl_num_gpus` **defaults to 0 (CPU-only)**, not the upstream repo's
+GPU default - see design decisions below.
 
 Same `RuntimeAttr? runtime_attr_<task>` pattern as the SAIGE workflows.
 
 ### Design decisions worth knowing about
 
-- **No per-site chunking.** tensorQTL is vectorized/GPU-based and reads the
-  whole phenotype matrix for a contig in one call, unlike SAIGE's one
+- **No per-site chunking.** tensorQTL is vectorized and reads the whole
+  phenotype matrix for a contig in one call, unlike SAIGE's one
   null-model-per-site loop - so there's no `sites_per_shard` equivalent here.
+- **CPU by default, not GPU.** The upstream repo's task defaults to
+  `nvidia-tesla-p100` in `us-central1-c`; a real run using that default
+  failed to even start (zero log output after being queued for 2+ hours),
+  consistent with a GPU quota/availability problem specific to that Google
+  Cloud project - not something this WDL can verify for an arbitrary Terra
+  workspace. tensorQTL's own code falls back to CPU automatically
+  (`torch.device("cuda" if torch.cuda.is_available() else "cpu")`), so
+  `tensorqtl_num_gpus` now defaults to 0. Set it > 0 if your project has
+  confirmed GPU quota and you want the speed. `TensorQTLCisPermutations`'s
+  `mem_gb` default (64GB) is likewise generously sized, not precisely
+  profiled: a real CPU-mode run (chr22, 231 samples, 170,526 variants,
+  54,616 phenotypes with a cis-variant) was OOM-killed 12 phenotypes into
+  permutation testing under a 7.7GB local test ceiling.
+- **`covariates_file`'s sample columns must exactly match the phenotype
+  bed's, identity and order both** - tensorQTL asserts
+  `phenotype_df.columns.equals(covariates_df.index)`, not just that the two
+  sets overlap. `BuildCovariates` derives its sample list from the
+  phenotype bed's own header (not the plink2 `.psam`, which can be a
+  larger/differently-ordered set - e.g. all VCF samples vs. only those with
+  methylation calls); getting this wrong fails fast with an `AssertionError`
+  before any real computation happens, which is how it was originally
+  caught.
 - **Multiallelic sites are split, not dropped**: `NormalizeVcf` runs
   `bcftools norm -m -any` on every contig VCF before plink2 ever sees it.
   This also sidesteps plink2's ~254-ALT-allele import limit on the rare

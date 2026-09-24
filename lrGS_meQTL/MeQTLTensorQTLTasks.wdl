@@ -128,12 +128,12 @@ in_path, threshold, out_path, count_path = sys.argv[1], float(sys.argv[2]), sys.
 MISSING = {".", "NA", ""}
 
 n_qualifying = 0
-with gzip.open(in_path, "rt") as fin, open(out_path, "w") as fout:
+with gzip.open(in_path, "rt") as fin, open(out_path, "w", newline="") as fout:
     reader = csv.reader(fin, delimiter="\t")
     header = next(reader)
     header[0] = header[0].lstrip("#")
     sample_ids = header[3:]
-    writer = csv.writer(fout, delimiter="\t")
+    writer = csv.writer(fout, delimiter="\t", lineterminator="\n")
     writer.writerow(["#chr", "start", "end", "phenotype_id"] + sample_ids)
 
     for row in reader:
@@ -226,13 +226,17 @@ task BgzipTabixBed {
 
 # Builds tensorQTL's covariates file (first column covariate name, remaining
 # columns one per sample - transposed at load time by tensorQTL itself) from
-# our own long-format covariates_file (person_id + one column per covariate),
-# reordering/subsetting samples to match the plink2 .psam sample order. If no
-# covariates_file is supplied, emits a header-only (zero-covariate) file so
-# the pipeline still runs with an intercept-only model.
+# our own long-format covariates_file (person_id + one column per covariate).
+# Sample columns are taken from the phenotype bed's own header, in its exact
+# order - NOT the plink2 .psam sample list, which can be a larger/differently
+# ordered set (e.g. all VCF samples vs. only those with methylation calls).
+# tensorQTL asserts phenotype_df.columns.equals(covariates_df.index) exactly
+# (identity AND order, not just set membership), so any mismatch is fatal. If
+# no covariates_file is supplied, emits a header-only (zero-covariate) file
+# so the pipeline still runs with an intercept-only model.
 task BuildCovariates {
     input {
-        File psam
+        File phenotype_bed_plain
         File? covariates_file
         String prefix
         String docker
@@ -247,14 +251,14 @@ import argparse
 import csv
 
 p = argparse.ArgumentParser()
-p.add_argument("--psam", required=True)
+p.add_argument("--phenotype-bed", required=True)
 p.add_argument("--out", required=True)
 p.add_argument("--covariates", default=None)
 args = p.parse_args()
 
-with open(args.psam) as f:
-    f.readline()
-    sample_ids = [line.rstrip("\n").split("\t")[0] for line in f]
+with open(args.phenotype_bed) as f:
+    header = f.readline().rstrip("\n").split("\t")
+    sample_ids = header[4:]
 
 covar_rows = []
 if args.covariates:
@@ -273,7 +277,7 @@ with open(args.out, "w") as out:
         out.write("\t".join(row) + "\n")
 PYEOF
         python3 build_covariates.py \
-            --psam ~{psam} \
+            --phenotype-bed ~{phenotype_bed_plain} \
             --out ~{prefix}.covariates.txt \
             ~{if defined(covariates_file) then "--covariates=" + covariates_file else ""}
     >>>
@@ -285,7 +289,7 @@ PYEOF
     RuntimeAttr default_attr = object {
         cpu_cores: 1,
         mem_gb: 2,
-        disk_gb: ceil(size(psam, "GB")) + 10,
+        disk_gb: ceil(size(phenotype_bed_plain, "GB")) + 10,
         boot_disk_gb: 10,
         preemptible_tries: 2,
         max_retries: 0
@@ -305,7 +309,21 @@ PYEOF
 # Modernized (WDL 1.0, this repo's RuntimeAttr/prefix conventions) port of
 # AoU-Multiomics-Analysis/tensorQTL_cis_permutations's tensorqtl_cis_permutations
 # task. Unlike SAIGE, tensorQTL processes every qualifying phenotype on the
-# contig in a single vectorized/GPU call - no per-site chunking needed.
+# contig in a single vectorized call - no per-site chunking needed.
+#
+# num_gpus defaults to 0 (CPU-only): tensorQTL's own code falls back to CPU
+# automatically (`torch.device("cuda" if torch.cuda.is_available() else
+# "cpu")`), and a Terra run requesting a GPU (the upstream repo's own
+# nvidia-tesla-p100/us-central1-c default) failed to even start - zero log
+# output after 2+ hours queued, consistent with a GPU quota/availability
+# problem in that specific Google Cloud project, which this WDL has no way
+# to verify for an arbitrary Terra workspace. Set tensorqtl_num_gpus > 0 if
+# your project has GPU quota and you want the speed.
+#
+# mem_gb is generously sized (64GB), not precisely profiled: a real CPU-mode
+# run (chr22, 231 samples, 170,526 variants, 54,616 phenotypes with a
+# cis-variant after tensorQTL's own filtering) was OOM-killed 12 phenotypes
+# into permutation testing under a 7.7GB local Docker memory ceiling.
 task TensorQTLCisPermutations {
     input {
         File plink_pgen
@@ -358,7 +376,7 @@ task TensorQTLCisPermutations {
 
     RuntimeAttr default_attr = object {
         cpu_cores: 4,
-        mem_gb: 32,
+        mem_gb: 64,
         disk_gb: 3 * ceil(size(plink_pgen, "GB") + size(phenotype_bed, "GB")) + 20,
         boot_disk_gb: 25,
         preemptible_tries: 2,
