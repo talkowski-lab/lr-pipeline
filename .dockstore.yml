@@ -452,6 +452,7 @@ workflows:
     filters:
       branches:
         - main
+        - kj-aou-phase2-helpers
       tags:
         - /.*/
 
