@@ -320,17 +320,20 @@ PYEOF
     }
 }
 
-# Core per-chunk worker: loops over a [row_start, row_end) slice of the
-# filtered methylation sites, and for each site that still has enough
-# non-missing samples, runs SAIGE step1_fitNULLGLMM.R (sparse-GRM null
-# model for that site's phenotype) followed by step2_SPAtests.R restricted
-# to a +/- cis_window region around the site via --rangestoIncludeFile.
-# Results from all sites in the chunk are concatenated into one TSV.
-task RunCisMeQTLChunk {
+# Runs every qualifying methylation site on the contig: for each, SAIGE
+# step1_fitNULLGLMM.R (sparse-GRM null model for that site's phenotype)
+# followed by step2_SPAtests.R restricted to a +/- cis_window region around
+# the site via --rangestoIncludeFile. Sites are parallelized across CPU
+# cores within this one task via Python multiprocessing, rather than as
+# separate Cromwell-scheduled shards - a nested WDL scatter (one level for
+# contigs, one for site chunks) hit a Cromwell input-resolution bug on
+# optional inputs (covariates_file, runtime_attr_override) referenced two
+# scatter levels deep ("Failed to lookup input value for required input"
+# even though both are declared optional), so parallelism across sites is
+# kept inside this task instead of a second WDL scatter level.
+task RunCisMeQTLContig {
     input {
         File filtered_sites
-        Int row_start
-        Int row_end
         String contig
         File vcf
         File vcf_csi
@@ -347,6 +350,7 @@ task RunCisMeQTLChunk {
         Int min_samples_per_site
         String vcf_field
         Boolean inv_normalize
+        Int n_parallel_workers
         String prefix
         String docker
         RuntimeAttr? runtime_attr_override
@@ -362,20 +366,18 @@ task RunCisMeQTLChunk {
         ln -s ~{pruned_fam} variance_ratio_markers.fam
         ln -s ~{sparse_grm} sparseGRM.mtx
         ln -s ~{sparse_grm_samples} sparseGRM.sampleIDs.txt
-        touch ~{prefix}.skipped_sites.log
         mkdir -p sites results
 
-        cat <<'PYEOF' > run_chunk.py
+        cat <<'PYEOF' > run_contig.py
 import argparse
 import csv
 import gzip
+import multiprocessing
 import os
 import subprocess
 
 p = argparse.ArgumentParser()
 p.add_argument("--sites", required=True)
-p.add_argument("--row-start", type=int, required=True)
-p.add_argument("--row-end", type=int, required=True)
 p.add_argument("--contig", required=True)
 p.add_argument("--cis-window", type=int, required=True)
 p.add_argument("--relatedness-cutoff", required=True)
@@ -385,149 +387,166 @@ p.add_argument("--min-samples", type=int, required=True)
 p.add_argument("--vcf-field", default="GT")
 p.add_argument("--inv-normalize", choices=["TRUE", "FALSE"], required=True)
 p.add_argument("--covariates", default=None)
+p.add_argument("--n-workers", type=int, required=True)
 p.add_argument("--out", required=True)
 p.add_argument("--skipped-log", required=True)
-args = p.parse_args()
+ARGS = p.parse_args()
 
 MISSING = {".", "NA", ""}
+SINGLE_THREAD_ENV = dict(
+    os.environ,
+    OMP_NUM_THREADS="1",
+    OPENBLAS_NUM_THREADS="1",
+    MKL_NUM_THREADS="1",
+    VECLIB_MAXIMUM_THREADS="1",
+)
 
-covariates = {}
-covar_cols = []
-if args.covariates:
-    with open(args.covariates) as cf:
+COVARIATES = {}
+COVAR_COLS = []
+if ARGS.covariates:
+    with open(ARGS.covariates) as cf:
         reader = csv.reader(cf, delimiter="\t")
-        covar_header = next(reader)
-        covar_cols = covar_header[1:]
+        COVAR_COLS = next(reader)[1:]
         for row in reader:
-            covariates[row[0]] = row[1:]
+            COVARIATES[row[0]] = row[1:]
 
-combined_out = open(args.out, "w")
-wrote_header = False
-n_tested = 0
-n_skipped = 0
 
-with gzip.open(args.sites, "rt") as f:
-    reader = csv.reader(f, delimiter="\t")
-    header = next(reader)
-    sample_ids = header[5:]
-    for i, row in enumerate(reader):
-        if i < args.row_start:
+def process_site(row):
+    chrom, start, end, site_id, call_rate, sample_ids, values = row
+    pos = int(start)
+
+    rows_out = []
+    for sid, val in zip(sample_ids, values):
+        if val in MISSING:
             continue
-        if i >= args.row_end:
-            break
-        chrom, start, end, site_id, call_rate = row[:5]
-        values = row[5:]
-        pos = int(start)
-
-        rows_out = []
-        for sid, val in zip(sample_ids, values):
-            if val in MISSING:
-                continue
-            if args.covariates and sid not in covariates:
-                continue
-            rows_out.append((sid, val, covariates.get(sid, [])))
-
-        if len(rows_out) < args.min_samples:
-            n_skipped += 1
-            with open(args.skipped_log, "a") as lf:
-                lf.write(f"{site_id}\tinsufficient_samples\t{len(rows_out)}\n")
+        if ARGS.covariates and sid not in COVARIATES:
             continue
+        rows_out.append((sid, val, COVARIATES.get(sid, [])))
 
-        pheno_path = f"sites/{site_id}.pheno.txt"
-        with open(pheno_path, "w") as pf:
-            pf.write("\t".join(["person_id", "trait"] + covar_cols) + "\n")
-            for sid, val, cov_vals in rows_out:
-                pf.write("\t".join([sid, val] + cov_vals) + "\n")
+    if len(rows_out) < ARGS.min_samples:
+        return (site_id, "insufficient_samples", str(len(rows_out)), None)
 
-        window_start = max(0, pos - args.cis_window)
-        window_end = pos + args.cis_window
-        range_path = f"sites/{site_id}.range.bed"
-        with open(range_path, "w") as rf:
-            rf.write(f"{chrom}\t{window_start}\t{window_end}\n")
+    pheno_path = f"sites/{site_id}.pheno.txt"
+    with open(pheno_path, "w") as pf:
+        pf.write("\t".join(["person_id", "trait"] + COVAR_COLS) + "\n")
+        for sid, val, cov_vals in rows_out:
+            pf.write("\t".join([sid, val] + cov_vals) + "\n")
 
-        step1_prefix = f"results/{site_id}.step1"
-        step1_cmd = [
-            "step1_fitNULLGLMM.R",
-            "--plinkFile=variance_ratio_markers",
-            "--useSparseGRMtoFitNULL=TRUE",
-            "--sparseGRMFile=sparseGRM.mtx",
-            "--sparseGRMSampleIDFile=sparseGRM.sampleIDs.txt",
-            f"--phenoFile={pheno_path}",
-            "--phenoCol=trait",
-            f"--covarColList={args.covar_col_list}",
-            f"--qCovarColList={args.qcovar_col_list}",
-            f"--invNormalize={args.inv_normalize}",
-            "--sampleIDColinphenoFile=person_id",
-            "--traitType=quantitative",
-            "--IsOverwriteVarianceRatioFile=TRUE",
-            "--isCateVarianceRatio=FALSE",
-            f"--outputPrefix={step1_prefix}",
-            "--maxiter=5000",
-        ]
-        r1 = subprocess.run(step1_cmd, capture_output=True, text=True)
-        if r1.returncode != 0 or not os.path.exists(step1_prefix + ".rda"):
-            n_skipped += 1
-            with open(args.skipped_log, "a") as lf:
-                lf.write(f"{site_id}\tstep1_failed\t{r1.stderr[-500:].strip()}\n")
-            os.remove(pheno_path)
-            os.remove(range_path)
-            continue
+    window_start = max(0, pos - ARGS.cis_window)
+    window_end = pos + ARGS.cis_window
+    range_path = f"sites/{site_id}.range.bed"
+    with open(range_path, "w") as rf:
+        rf.write(f"{chrom}\t{window_start}\t{window_end}\n")
 
-        step2_out = f"results/{site_id}.step2.assoc.txt"
-        step2_cmd = [
-            "step2_SPAtests.R",
-            "--vcfFile=genotypes.vcf.gz",
-            "--vcfFileIndex=genotypes.vcf.gz.csi",
-            f"--vcfField={args.vcf_field}",
-            f"--chrom={args.contig}",
-            f"--rangestoIncludeFile={range_path}",
-            f"--GMMATmodelFile={step1_prefix}.rda",
-            f"--varianceRatioFile={step1_prefix}.varianceRatio.txt",
-            "--sparseGRMFile=sparseGRM.mtx",
-            "--sparseGRMSampleIDFile=sparseGRM.sampleIDs.txt",
-            f"--relatednessCutoff={args.relatedness_cutoff}",
-            "--LOCO=FALSE",
-            f"--SAIGEOutputFile={step2_out}",
-            "--is_output_moreDetails=FALSE",
-        ]
-        r2 = subprocess.run(step2_cmd, capture_output=True, text=True)
-        if r2.returncode != 0 or not os.path.exists(step2_out):
-            n_skipped += 1
-            with open(args.skipped_log, "a") as lf:
-                lf.write(f"{site_id}\tstep2_failed\t{r2.stderr[-500:].strip()}\n")
-        else:
-            with open(step2_out) as sf:
-                out_header = sf.readline().rstrip("\n")
+    step1_prefix = f"results/{site_id}.step1"
+    step1_cmd = [
+        "step1_fitNULLGLMM.R",
+        "--plinkFile=variance_ratio_markers",
+        "--useSparseGRMtoFitNULL=TRUE",
+        "--sparseGRMFile=sparseGRM.mtx",
+        "--sparseGRMSampleIDFile=sparseGRM.sampleIDs.txt",
+        f"--phenoFile={pheno_path}",
+        "--phenoCol=trait",
+        f"--covarColList={ARGS.covar_col_list}",
+        f"--qCovarColList={ARGS.qcovar_col_list}",
+        f"--invNormalize={ARGS.inv_normalize}",
+        "--sampleIDColinphenoFile=person_id",
+        "--traitType=quantitative",
+        "--IsOverwriteVarianceRatioFile=TRUE",
+        "--isCateVarianceRatio=FALSE",
+        f"--outputPrefix={step1_prefix}",
+        "--maxiter=5000",
+    ]
+    r1 = subprocess.run(step1_cmd, capture_output=True, text=True, env=SINGLE_THREAD_ENV)
+    if r1.returncode != 0 or not os.path.exists(step1_prefix + ".rda"):
+        os.remove(pheno_path)
+        os.remove(range_path)
+        return (site_id, "step1_failed", r1.stderr[-500:].strip(), None)
+
+    step2_out = f"results/{site_id}.step2.assoc.txt"
+    step2_cmd = [
+        "step2_SPAtests.R",
+        "--vcfFile=genotypes.vcf.gz",
+        "--vcfFileIndex=genotypes.vcf.gz.csi",
+        f"--vcfField={ARGS.vcf_field}",
+        f"--chrom={ARGS.contig}",
+        f"--rangestoIncludeFile={range_path}",
+        f"--GMMATmodelFile={step1_prefix}.rda",
+        f"--varianceRatioFile={step1_prefix}.varianceRatio.txt",
+        "--sparseGRMFile=sparseGRM.mtx",
+        "--sparseGRMSampleIDFile=sparseGRM.sampleIDs.txt",
+        f"--relatednessCutoff={ARGS.relatedness_cutoff}",
+        "--LOCO=FALSE",
+        f"--SAIGEOutputFile={step2_out}",
+        "--is_output_moreDetails=FALSE",
+    ]
+    r2 = subprocess.run(step2_cmd, capture_output=True, text=True, env=SINGLE_THREAD_ENV)
+
+    result = None
+    status = None
+    if r2.returncode != 0 or not os.path.exists(step2_out):
+        status = ("step2_failed", r2.stderr[-500:].strip())
+    else:
+        with open(step2_out) as sf:
+            out_header = sf.readline().rstrip("\n")
+            lines = [f"{site_id}\t{chrom}\t{pos}\t{len(rows_out)}\t" + line for line in sf]
+        result = (out_header, lines)
+
+    os.remove(pheno_path)
+    os.remove(range_path)
+    for suffix in (".rda", ".varianceRatio.txt"):
+        fp = step1_prefix + suffix
+        if os.path.exists(fp):
+            os.remove(fp)
+    if os.path.exists(step2_out):
+        os.remove(step2_out)
+
+    if result is not None:
+        return (site_id, "ok", None, result)
+    return (site_id, status[0], status[1], None)
+
+
+def main():
+    rows = []
+    with gzip.open(ARGS.sites, "rt") as f:
+        reader = csv.reader(f, delimiter="\t")
+        header = next(reader)
+        sample_ids = header[5:]
+        for row in reader:
+            chrom, start, end, site_id, call_rate = row[:5]
+            rows.append((chrom, start, end, site_id, call_rate, sample_ids, row[5:]))
+
+    n_tested = 0
+    n_skipped = 0
+    wrote_header = False
+    with open(ARGS.out, "w") as combined_out, open(ARGS.skipped_log, "w") as skipped_log:
+        with multiprocessing.Pool(ARGS.n_workers) as pool:
+            for site_id, status, detail, result in pool.imap(process_site, rows, chunksize=1):
+                if status != "ok":
+                    n_skipped += 1
+                    skipped_log.write(f"{site_id}\t{status}\t{detail}\n")
+                    continue
+                out_header, lines = result
                 if not wrote_header:
                     combined_out.write(
                         "pheno_site_id\tpheno_chrom\tpheno_pos\tn_samples\t" + out_header + "\n"
                     )
                     wrote_header = True
-                for line in sf:
-                    combined_out.write(f"{site_id}\t{chrom}\t{pos}\t{len(rows_out)}\t" + line)
-            n_tested += 1
+                combined_out.writelines(lines)
+                n_tested += 1
 
-        os.remove(pheno_path)
-        os.remove(range_path)
-        for suffix in (".rda", ".varianceRatio.txt"):
-            fp = step1_prefix + suffix
-            if os.path.exists(fp):
-                os.remove(fp)
-        if os.path.exists(step2_out):
-            os.remove(step2_out)
+        if not wrote_header:
+            combined_out.write("pheno_site_id\tpheno_chrom\tpheno_pos\tn_samples\n")
 
-combined_out.close()
-if not wrote_header:
-    with open(args.out, "w") as f:
-        f.write("pheno_site_id\tpheno_chrom\tpheno_pos\tn_samples\n")
+    print(f"tested={n_tested} skipped={n_skipped}")
 
-print(f"tested={n_tested} skipped={n_skipped}")
+
+if __name__ == "__main__":
+    main()
 PYEOF
 
-        python3 run_chunk.py \
+        python3 run_contig.py \
             --sites ~{filtered_sites} \
-            --row-start ~{row_start} \
-            --row-end ~{row_end} \
             --contig ~{contig} \
             --cis-window ~{cis_window} \
             --relatedness-cutoff ~{relatedness_cutoff} \
@@ -536,19 +555,20 @@ PYEOF
             --min-samples ~{min_samples_per_site} \
             --vcf-field ~{vcf_field} \
             --inv-normalize ~{if inv_normalize then "TRUE" else "FALSE"} \
-            --out ~{prefix}.chunk.assoc.txt \
+            --n-workers ~{n_parallel_workers} \
+            --out ~{prefix}.assoc.txt \
             --skipped-log ~{prefix}.skipped_sites.log \
             ~{if defined(covariates_file) then "--covariates=" + covariates_file else ""}
     >>>
 
     output {
-        File chunk_assoc = "~{prefix}.chunk.assoc.txt"
+        File contig_assoc = "~{prefix}.assoc.txt"
         File skipped_sites_log = "~{prefix}.skipped_sites.log"
     }
 
     RuntimeAttr default_attr = object {
-        cpu_cores: 2,
-        mem_gb: 8,
+        cpu_cores: n_parallel_workers,
+        mem_gb: 4 * n_parallel_workers,
         disk_gb: 2 * ceil(size(vcf, "GB")) + 20,
         boot_disk_gb: 10,
         preemptible_tries: 2,

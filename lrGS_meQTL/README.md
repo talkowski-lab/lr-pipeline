@@ -59,7 +59,7 @@ calls), that's fine and expected.
 |---|---|---|
 | `min_call_rate` | 0.9 | Per-site minimum fraction of non-missing samples to test |
 | `cis_window` | 2,000,000 | +/- bp window around each site's position for the association scan |
-| `sites_per_shard` | 200 | How many qualifying sites each `RunCisMeQTLChunk` shard processes serially |
+| `n_parallel_workers` | 8 | How many sites `RunCisMeQTLContig` processes concurrently (Python multiprocessing) within its one VM per contig |
 | `ld_prune_window_kb` / `ld_prune_step` / `ld_prune_r2` | 50 / 5 / 0.2 | `plink --indep-pairwise` params |
 | `vcf_half_call` | `"missing"` | How plink treats GT half-calls (e.g. `0/.`); long-read phased VCFs can have these |
 | `num_random_markers_for_grm` / `relatedness_cutoff` / `min_maf_for_grm` / `max_missing_rate_for_grm` | 2000 / 0.125 / 0.01 / 0.15 | `createSparseGRM.R` params |
@@ -95,12 +95,18 @@ editing the WDL.
   `--rangestoIncludeFile`** on the whole-contig VCF, rather than pre-slicing
   a per-site plink/VCF subset. Functionally equivalent, avoids an extra
   per-site file-prep step.
-- **Sites are processed in a bash/python loop inside `RunCisMeQTLChunk`, not
-  one WDL task per site.** A contig can have hundreds of thousands of
-  qualifying sites; one Cromwell task per site would be impractical. Chunks
-  of `sites_per_shard` sites scatter in parallel instead; tune
-  `sites_per_shard` down for more parallelism (more, smaller shards) or up
-  for less scheduling overhead.
+- **Sites are processed inside one task per contig (`RunCisMeQTLContig`),
+  parallelized across CPU cores via Python `multiprocessing`, not via a
+  second WDL scatter level.** A contig can have hundreds of thousands of
+  qualifying sites, so a per-site Cromwell task is impractical - but an
+  earlier design that nested a `scatter (chunk_idx in ...)` inside
+  the per-contig `scatter (i in ...)` hit a real Cromwell bug in practice
+  (observed on Terra): optional inputs (`covariates_file`,
+  `runtime_attr_*`) referenced two scatter levels deep failed with `Failed
+  to lookup input value for required input`, even though both are declared
+  optional and the WDL passes `womtool validate` cleanly. Tune
+  `n_parallel_workers` (and the task's CPU/memory `RuntimeAttr`) to control
+  how many sites run concurrently per contig instead.
 - **Multiallelic sites are silently skipped by SAIGE step2** (its VCF reader
   only handles biallelic records) - this showed up as `Warning: skipping
   multiallelic variant` in interactive testing. The tensorQTL workflows
@@ -108,9 +114,9 @@ editing the WDL.
   dropping them; the SAIGE workflows don't do this today.
 - **Failed or under-powered sites are skipped, not fatal.** Both
   insufficient-sample-count sites and SAIGE step1/step2 failures are logged
-  to `skipped_sites.log` (per chunk, surfaced as
-  `per_chunk_skipped_logs` in the workflow outputs) and excluded from
-  `chunk.assoc.txt`, so one bad site doesn't fail the whole contig.
+  to `skipped_sites.log` (per contig, surfaced as `per_contig_skipped_logs`
+  in the workflow outputs) and excluded from that contig's assoc file, so
+  one bad site doesn't fail the whole contig.
 - **Haplotype encoding**: `SplitPhasedVcfToHaplotypes` rewrites each phased
   record's `sample` genotype (`a|b`) into two homozygous pseudo-diploid
   genotypes (`a/a` for `sample_hap1`, `b/b` for `sample_hap2`), so plink and
@@ -135,8 +141,8 @@ editing the WDL.
 - `per_contig_assoc`: same, split per contig.
 - `per_contig_pruned_bed` / `per_contig_sparse_grm`: intermediate plink/GRM
   files, in case you want to reuse them outside this workflow.
-- `per_chunk_skipped_logs`: per-chunk skip reasons (nested array: contig x
-  chunk).
+- `per_contig_skipped_logs`: per-contig skip reasons (insufficient samples,
+  step1/step2 failures).
 
 ---
 
