@@ -6,6 +6,7 @@ task ConvertSymbolicAllelesToSequence {
     input {
         File vcf
         File vcf_idx
+        Boolean drop_inversions
         File ref_fa
         File ref_fai
         String prefix
@@ -25,7 +26,9 @@ task ConvertSymbolicAllelesToSequence {
 import pysam
 
 
-SUPPORTED_SYMBOLIC_ALTS = {"<DEL>", "<DUP>", "<INS>", "<INV>"}
+SUPPORTED_SYMBOLIC_ALTS = {"<DEL>", "<DUP>", "<INV>"}
+
+drop_inversions = ~{true="True" false="False" drop_inversions}
 
 
 def is_symbolic(alt):
@@ -43,17 +46,17 @@ def get_end(record):
 
     svlen = record.info.get("SVLEN")
     if svlen is None:
-        fail(record, "symbolic <DEL> or <DUP> requires END or SVLEN")
+        fail(record, "symbolic <DEL> requires END or SVLEN")
     if isinstance(svlen, (list, tuple)):
         if len(svlen) != 1:
-            fail(record, "symbolic <DEL> or <DUP> requires one SVLEN value")
+            fail(record, "symbolic <DEL> requires one SVLEN value")
         svlen = svlen[0]
     try:
         svlen = int(svlen)
     except (TypeError, ValueError):
         fail(record, f"invalid SVLEN value {svlen!r}")
     if svlen == 0:
-        fail(record, "symbolic <DEL> or <DUP> requires a nonzero END or SVLEN")
+        fail(record, "symbolic <DEL> requires a nonzero END or SVLEN")
     return record.start + 1 + abs(svlen)
 
 
@@ -62,7 +65,7 @@ def get_symbolic_length(record):
     if svlen is not None:
         if isinstance(svlen, (list, tuple)):
             if len(svlen) != 1:
-                fail(record, "symbolic <INS>, <INV>, or <DUP> requires one SVLEN value")
+                fail(record, "symbolic <DUP> requires one SVLEN value")
             svlen = svlen[0]
         try:
             svlen = int(svlen)
@@ -74,15 +77,11 @@ def get_symbolic_length(record):
     length = record.stop - record.pos
     if length > 0:
         return length
-    fail(record, "symbolic <INS>, <INV>, or <DUP> requires a nonzero SVLEN or END")
+    fail(record, "symbolic <DUP> requires a nonzero SVLEN or END")
 
 
 vcf_in = pysam.VariantFile("split.vcf.gz")
 header = vcf_in.header.copy()
-if "allele_length" not in header.info:
-    header.add_line('##INFO=<ID=allele_length,Number=1,Type=Integer,Description="Allele length">')
-if "allele_type" not in header.info:
-    header.add_line('##INFO=<ID=allele_type,Number=1,Type=String,Description="Allele type">')
 reference = pysam.FastaFile("~{ref_fa}", filepath_index="~{ref_fai}")
 vcf_out = pysam.VariantFile("~{prefix}.vcf.gz", "wz", header=header)
 
@@ -95,15 +94,9 @@ for record in vcf_in:
     if alt not in SUPPORTED_SYMBOLIC_ALTS:
         fail(record, f"unsupported symbolic ALT {alt}")
 
-    if alt == "<INS>":
-        record.info["allele_length"] = get_symbolic_length(record)
-        record.info["allele_type"] = "ins"
-        vcf_out.write(record)
-        continue
-    elif alt == "<INV>":
-        record.info["allele_length"] = get_symbolic_length(record)
-        record.info["allele_type"] = "inv"
-        vcf_out.write(record)
+    if alt == "<INV>":
+        if not drop_inversions:
+            vcf_out.write(record)
         continue
 
     symbolic_length = get_symbolic_length(record) if alt == "<DUP>" else None
@@ -126,9 +119,6 @@ for record in vcf_in:
     else:
         record.alleles = (anchor, anchor + sequence[1:])
     record.stop = record.start + len(record.ref)
-    if alt == "<DUP>":
-        record.info["allele_length"] = symbolic_length
-        record.info["allele_type"] = "ins"
     vcf_out.write(record)
 
 vcf_in.close()
