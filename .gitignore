@@ -13,6 +13,7 @@
 *.txt
 *.json
 !/.claude/settings.json
+!/.codex/hooks.json
 
 *.vcf
 *.vcf.gz

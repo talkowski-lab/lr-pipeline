@@ -20,12 +20,16 @@ docs/                # Extended documentation (this file included)
 .github/
   workflows/         # Active GitHub Actions CI
   scripts/           # CI check scripts, also run locally, plus new_worktree.sh and merge_branch.sh for the branch lifecycle
+  hooks/             # Agent hook scripts keeping sessions out of the main checkout and in a worktree
 archive/             # Retired workflows, scripts, Dockerfiles, notebooks and their reference docs
   docs/workflows.md  # Generated from the retired workflows, the counterpart to docs/workflows.md
   notebooks/         # Retired ad hoc Jupyter notebooks (Terra cost analysis via the API and BigQuery)
 .claude/
-  settings.json      # Hooks keeping Claude Code sessions out of the main checkout and in a worktree
-  hooks/             # The scripts those hooks run
+  settings.json      # Wires .github/hooks/ into Claude Code
+.codex/
+  hooks.json         # Wires the same scripts into Codex
+.githooks/
+  pre-commit         # Tool-agnostic backstop refusing commits in the main checkout
 .worktreelinks       # Gitignored local-only paths each worktree symlinks from the main checkout
 .dockstore.yml       # Dockstore registration for every directly-run workflow
 AGENTS.md            # Canonical agent instructions; .claude/CLAUDE.md and .github/copilot-instructions.md are symlinks to it
