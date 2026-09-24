@@ -16,7 +16,7 @@ version 1.0
 
 import "Tasks.meQTL.wdl" as Tasks
 
-workflow HaplotypeMeQTL {
+workflow HaplotypeMeQTL_SAIGE {
     input {
         Array[File] vcfs
         Array[File] methylation_files

@@ -5,8 +5,8 @@ Cis-meQTL scanning with plink (LD-pruning, sparse-GRM marker set) + SAIGE
 
 Two workflows share `Tasks.meQTL.wdl`:
 
-- **`GenotypeMeQTL.wdl`** - diploid genotype dosage vs. per-sample methylation.
-- **`HaplotypeMeQTL.wdl`** - per-haplotype pseudo-genotype vs. per-haplotype
+- **`GenotypeMeQTL_SAIGE.wdl`** - diploid genotype dosage vs. per-sample methylation.
+- **`HaplotypeMeQTL_SAIGE.wdl`** - per-haplotype pseudo-genotype vs. per-haplotype
   methylation. Requires a fully phased input VCF.
 
 ## Inputs (both workflows)
@@ -37,7 +37,7 @@ to published, pre-verified images and normally don't need to be overridden:
 
 A gzipped, tab-separated, wide-format bed: `chrom`, `start`, `end`, then one
 column per sample (or per haplotype, `sample_hap1`/`sample_hap2`, for
-`HaplotypeMeQTL.wdl`), values missing as `.`/`NA`/empty. This matches
+`HaplotypeMeQTL_SAIGE.wdl`), values missing as `.`/`NA`/empty. This matches
 `hprc_methylated.chr22.combined.bed.gz` (genotype workflow) and
 `hprc_methylated.chr22.haplotype.bed.gz` (haplotype workflow).
 
