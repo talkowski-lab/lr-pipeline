@@ -1,10 +1,10 @@
 #!/bin/bash
-# Per-sample non-ref genotype counts from one chromosome VCF, overall, by
-# variant type/size (using the existing INFO/allele_type + INFO/allele_length
-# annotations -- no need to re-derive type/size from REF/ALT), and by each
-# type/size category further split by INFO/REGION (genomic context: US, RM,
-# SD, SR -- see INFO/REGION header description; single-valued per site, so
-# the split is mutually exclusive).
+# Per-sample non-ref genotype counts from one chromosome VCF, restricted to
+# FILTER=PASS sites, overall, by variant type/size (using the existing
+# INFO/allele_type + INFO/allele_length annotations -- no need to re-derive
+# type/size from REF/ALT), and by each type/size category further split by
+# INFO/REGION (genomic context: US, RM, SD, SR -- see INFO/REGION header
+# description; single-valued per site, so the split is mutually exclusive).
 #
 # For a filtered (or unfiltered) subset of sites, per-sample non-ref count is
 # extracted from `bcftools stats -s -`'s PSC (SNV het/hom) + PSI (indel
@@ -38,13 +38,8 @@ REGIONS=(US RM SD SR)
 bcftools query -l "$VCF" | wc -l | tr -d ' ' > "${OUT_PREFIX}.n_samples.txt"
 
 extract_counts() {
-    # $1 = bcftools -i filter expression ("" = no filter)
-    local filt="$1"
-    if [ -n "$filt" ]; then
-        bcftools view -i "$filt" "$VCF"
-    else
-        bcftools view "$VCF"
-    fi | bcftools stats -s - - | awk -F'\t' '
+    # $1 = bcftools -i filter expression
+    bcftools view -i "$1" "$VCF" | bcftools stats -s - - | awk -F'\t' '
         $1=="PSC" { nonref[$3] += $5 + $6 }
         $1=="PSI" { nonref[$3] += $8 + $9 + $10 + $11 }
         END { for (s in nonref) print s"\t"nonref[s] }
@@ -59,14 +54,14 @@ trap 'rm -rf "$WORKDIR"' EXIT
 COL_NAMES=()
 COL_FILTERS=()
 
-COL_NAMES+=("n_total_nonref");  COL_FILTERS+=("")
-COL_NAMES+=("n_snv");           COL_FILTERS+=('INFO/allele_type="snv"')
-COL_NAMES+=("n_del_1_49");      COL_FILTERS+=('INFO/allele_type="del" && abs(INFO/allele_length)>=1   && abs(INFO/allele_length)<=49')
-COL_NAMES+=("n_ins_1_49");      COL_FILTERS+=('INFO/allele_type="ins" && abs(INFO/allele_length)>=1   && abs(INFO/allele_length)<=49')
-COL_NAMES+=("n_del_50_499");    COL_FILTERS+=('INFO/allele_type="del" && abs(INFO/allele_length)>=50  && abs(INFO/allele_length)<=499')
-COL_NAMES+=("n_ins_50_499");    COL_FILTERS+=('INFO/allele_type="ins" && abs(INFO/allele_length)>=50  && abs(INFO/allele_length)<=499')
-COL_NAMES+=("n_del_gt499");     COL_FILTERS+=('INFO/allele_type="del" && abs(INFO/allele_length)>499')
-COL_NAMES+=("n_ins_gt499");     COL_FILTERS+=('INFO/allele_type="ins" && abs(INFO/allele_length)>499')
+COL_NAMES+=("n_total_nonref");  COL_FILTERS+=('FILTER="PASS"')
+COL_NAMES+=("n_snv");           COL_FILTERS+=('FILTER="PASS" && INFO/allele_type="snv"')
+COL_NAMES+=("n_del_1_49");      COL_FILTERS+=('FILTER="PASS" && INFO/allele_type="del" && abs(INFO/allele_length)>=1   && abs(INFO/allele_length)<=49')
+COL_NAMES+=("n_ins_1_49");      COL_FILTERS+=('FILTER="PASS" && INFO/allele_type="ins" && abs(INFO/allele_length)>=1   && abs(INFO/allele_length)<=49')
+COL_NAMES+=("n_del_50_499");    COL_FILTERS+=('FILTER="PASS" && INFO/allele_type="del" && abs(INFO/allele_length)>=50  && abs(INFO/allele_length)<=499')
+COL_NAMES+=("n_ins_50_499");    COL_FILTERS+=('FILTER="PASS" && INFO/allele_type="ins" && abs(INFO/allele_length)>=50  && abs(INFO/allele_length)<=499')
+COL_NAMES+=("n_del_gt499");     COL_FILTERS+=('FILTER="PASS" && INFO/allele_type="del" && abs(INFO/allele_length)>499')
+COL_NAMES+=("n_ins_gt499");     COL_FILTERS+=('FILTER="PASS" && INFO/allele_type="ins" && abs(INFO/allele_length)>499')
 
 # The 7 type/size categories above, each further split by REGION.
 n_base_cats=${#COL_NAMES[@]}
