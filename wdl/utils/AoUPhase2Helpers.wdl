@@ -6,7 +6,7 @@ task ConvertSymbolicAllelesToSequence {
     input {
         File vcf
         File vcf_idx
-        Boolean drop_inversions
+        Boolean drop_unsupported_symbolic_alleles
         File ref_fa
         File ref_fai
         String prefix
@@ -26,9 +26,9 @@ task ConvertSymbolicAllelesToSequence {
 import pysam
 
 
-SUPPORTED_SYMBOLIC_ALTS = {"<DEL>", "<DUP>", "<INV>"}
+CONVERTIBLE_SYMBOLIC_ALTS = {"<DEL>", "<DUP>"}
 
-drop_inversions = ~{true="True" false="False" drop_inversions}
+drop_unsupported_symbolic_alleles = ~{true="True" false="False" drop_unsupported_symbolic_alleles}
 
 
 def is_symbolic(alt):
@@ -91,12 +91,9 @@ for record in vcf_in:
     if not is_symbolic(alt):
         vcf_out.write(record)
         continue
-    if alt not in SUPPORTED_SYMBOLIC_ALTS:
-        fail(record, f"unsupported symbolic ALT {alt}")
-
-    if alt == "<INV>":
-        if not drop_inversions:
-            vcf_out.write(record)
+    if alt not in CONVERTIBLE_SYMBOLIC_ALTS:
+        if not drop_unsupported_symbolic_alleles:
+            fail(record, f"unsupported symbolic ALT {alt}")
         continue
 
     symbolic_length = get_symbolic_length(record) if alt == "<DUP>" else None
