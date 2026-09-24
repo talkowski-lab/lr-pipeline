@@ -82,8 +82,8 @@ task SplitPhasedVcfToHaplotypes {
                 for (i = 2; i <= 8; i++) { printf "\t%s", $i }
                 printf "\tGT"
                 for (i = 10; i <= NF; i++) {
-                    split($i, sub, ":")
-                    gt = sub[gtidx]
+                    split($i, subfields, ":")
+                    gt = subfields[gtidx]
                     n = split(gt, alleles, /[|\/]/)
                     a = (n >= 1 ? alleles[1] : ".")
                     b = (n >= 2 ? alleles[2] : a)
