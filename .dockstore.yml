@@ -18,6 +18,7 @@ workflows:
     filters:
       branches:
         - main
+        - kj-truth-field-inputs
       tags:
         - /.*/
 

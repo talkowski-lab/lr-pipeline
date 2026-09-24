@@ -34,7 +34,7 @@ Note: When converting to symbolic representation, only canonical DUPs (allele_ty
 
 Note: Callset DUPs are compared twice, because the two matching rules need different coordinates. Against truth DUPs they are compared by reciprocal overlap, over their `ORIGIN` interval when `move_dup_to_origin` is true and over their own span from POS otherwise; against truth insertions they are always collapsed to a point at their VCF position and compared by breakpoint proximity and length ratio. Setting `move_dup_to_origin` to false is what lets the workflow run on a callset with no `INFO/ORIGIN`.
 
-Note: The SV truth VCF is expected to be symbolic already. Set `convert_symbolic_truth_sv_vcf` when it instead carries sequence alleles in the same format as the callset. Its canonical DUPs then follow the same `move_dup_to_origin` positioning as the callset.
+Note: The SV truth VCF is expected to be symbolic already. Set `convert_symbolic_truth_sv_vcf` when it instead carries sequence alleles, in which case its allele type and length are read from `type_field_truth_sv_vcf` and `length_field_truth_sv_vcf`, which need not match the fields used for the callset. Its canonical DUPs then follow the same `move_dup_to_origin` positioning as the callset.
 
 Both the exact-match and Truvari rounds can be sharded within a contig. Truvari shard boundaries are snapped forward to the next gap wider than the `min_shard_gap_truvari_match` input of `TruvariMatch`, which keeps results identical to an unsharded run because Truvari only groups records into a new comparison chunk once the next record clears the running end by more than its chunk size. Fixed-width bins alone would split colocated record pairs and silently lose matches.
 
@@ -52,10 +52,13 @@ Inputs:
 - `Int min_sv_length_bedtools_closest_truth_vcf`: Minimum length for a truth variant to enter the `bedtools closest` matching round.
 - `Int? shard_bin_size_exact_match`: If set, shards the exact-match round into contig regions of roughly this many base pairs, run in parallel.
 - `Int? shard_bin_size_truvari_match`: If set, shards the Truvari round into contig regions of at least this many base pairs, run in parallel. Each region is extended to the next safe gap, so a value of 1000000 or more is recommended.
-- `Boolean convert_symbolic_truth_sv_vcf`: Whether the SV truth VCF represents alleles as sequence rather than symbolically. When true it is converted to a symbolic representation first, reading the same `type_field_vcf` and `length_field_vcf` INFO fields as the callset. (default `false`)
+- `Boolean convert_symbolic_truth_sv_vcf`: Whether the SV truth VCF represents alleles as sequence rather than symbolically. When true it is converted to a symbolic representation first, reading the `type_field_truth_sv_vcf` and `length_field_truth_sv_vcf` INFO fields. (default `false`)
 - `Boolean move_dup_to_origin`: Whether canonical DUPs are repositioned onto their `INFO/ORIGIN` interval before the DUP-vs-DUP reciprocal-overlap comparison. When false each DUP instead spans its own coordinates, from POS over its allele length, and `INFO/ORIGIN` is not required. (default `true`)
 - `String type_field_vcf`: INFO field in the callset VCF giving each variant's allele type. (default `allele_type`)
+- `String type_field_truth_sv_vcf`: INFO field in the SV truth VCF giving each variant's allele type. Only read when `convert_symbolic_truth_sv_vcf` is true, since a symbolic truth VCF is typed by `SVTYPE`. (default `allele_type`)
 - `String length_field_vcf`: INFO field in the callset VCF giving each variant's allele length. (default `allele_length`)
+- `String length_field_truth_sv_vcf`: INFO field in the SV truth VCF giving each variant's allele length. Only read when `convert_symbolic_truth_sv_vcf` is true, since conversion rewrites the length into `SVLEN`. (default `allele_length`)
+- `String length_field_bedtools_closest_truth_vcf`: INFO field carrying the SV truth VCF's allele length by the time it reaches the `bedtools closest` round, used to apply `min_sv_length_bedtools_closest_truth_vcf`. Conversion always writes `SVLEN`, so this only needs changing for an already-symbolic truth VCF that names the field differently. (default `SVLEN`)
 - `String source_tag_truth_snv_indel_vcf`: Label used to tag matches against the SNV & indel truth VCF. (default `SNV_indel`)
 - `String source_tag_truth_sv_vcf`: Label used to tag matches against the SV truth VCF. (default `SV`)
 - `String? args_string_vcf`: `bcftools view` arguments used to pre-subset the callset VCF.
@@ -2107,10 +2110,11 @@ Inputs:
 - `File vcf_idx`: Index for vcf.
 - `File truth_sv_vcf`: Truth SV callset.
 - `File truth_sv_vcf_idx`: Index for truth_sv_vcf.
-- `Int min_sv_length`: Minimum SV length applied to each callset.
-- `Int min_sv_length_truth`: Minimum SV length applied to each callset.
-- `String type_field`: INFO field holding variant type.
-- `String length_field`: INFO field holding allele length.
+- `Int min_sv_length`: Minimum SV length applied to the callset.
+- `Int min_sv_length_truth`: Minimum SV length applied to the truth callset.
+- `String type_field`: INFO field in the callset VCF holding variant type.
+- `String length_field`: INFO field in the callset VCF holding allele length.
+- `String length_field_truth`: INFO field in the truth VCF holding allele length, used to apply `min_sv_length_truth`. The truth callset arrives here in symbolic form, so this is `SVLEN` unless the caller names it otherwise. (default `SVLEN`)
 - `Boolean move_dup_to_origin`: Whether canonical DUPs are repositioned onto their `INFO/ORIGIN` interval before the DUP-vs-DUP reciprocal-overlap comparison. When false each DUP instead spans its own coordinates, from POS over its allele length, and `INFO/ORIGIN` is not required. (default `true`)
 - `String source_tag`: Tag identifying the truth callset in the annotations. (default `SV`)
 - `String prefix`: Prefix for output file names.
