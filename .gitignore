@@ -12,6 +12,7 @@
 *.csv
 *.txt
 *.json
+!/.claude/settings.json
 
 *.vcf
 *.vcf.gz
