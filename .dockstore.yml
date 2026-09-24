@@ -428,7 +428,15 @@ workflows:
       tags:
         - /.*/
 
-
+  - subclass: WDL
+    name: MergeVcfs
+    primaryDescriptorPath: /wdl/annotation_utils/MergeVcfs.wdl
+    filters:
+      branches:
+        - main
+        - kj-merge-vcfs-sample-merge
+      tags:
+        - /.*/
 
   - subclass: WDL
     name: PreprocessVcfs

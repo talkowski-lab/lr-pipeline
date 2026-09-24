@@ -984,6 +984,44 @@ Outputs:
 - `File tr_annotated_vcf`: Base VCF annotated with integrated TR calls.
 - `File tr_annotated_vcf_idx`: Index for the annotated VCF.
 
+### [MergeVcfs](../wdl/annotation_utils/MergeVcfs.wdl)
+This utility merges per-contig VCFs that were called across distinct sample sets into a single callset for the contig, handling tandem-repeat and non-tandem-repeat variants separately.
+
+Tandem-repeat variants are merged on CHROM, POS and REF alone, so records that describe the same locus with different ALT alleles collapse into one multiallelic record whose ALT list is the union of the inputs and whose genotypes are remapped onto it.
+
+Non-tandem-repeat variants are first merged on an exact CHROM, POS, REF and ALT match. Records that stay unmatched and are at least `min_truvari_match` long are then collapsed with Truvari (https://github.com/ACEnglish/truvari) using a breakpoint distance, reciprocal overlap, and sequence, size and sample similarity; shorter unmatched records pass through untouched.
+
+The contig is split into bins of `shard_bin_size` and every merging step runs per shard, so Truvari never pairs records more than one bin apart. Both merged and unmerged records reach the output.
+
+Every output record carries `MERGE_COUNT`, the number of input records merged into it, `MERGE_TYPE`, one of EXACT, TRV_EXACT, TRUVARI or UNIQUE, and `MERGE_SOURCE`, which is MERGED for records drawn from more than one input VCF and otherwise the `vcf_names` entry of the single VCF that carried it.
+
+Where a merged record cannot hold both inputs' values, the ID and any INFO field other than `MERGE_COUNT` are taken from the first input VCF that carried the record, and AC, AN and AF are recomputed over the merged samples.
+
+Inputs:
+- `Array[File] contig_vcfs`: Per-callset VCFs for the contig being merged, each called across a distinct set of samples.
+- `Array[File] contig_vcf_idxs`: Indexes for `contig_vcfs`.
+- `Array[String] vcf_names`: Name of each entry of `contig_vcfs`, in the same order, used as the `MERGE_SOURCE` value for records that only one callset carried.
+- `String contig`: Contig being merged.
+- `Int min_truvari_match`: Minimum variant length for Truvari matching. (default `20`)
+- `Int truvari_breakpoint_window`: Maximum breakpoint distance, in bp, for merging non-TR variants. (default `500`)
+- `Float truvari_reciprocal_overlap`: Minimum reciprocal overlap for merging non-TR variants. (default `0.0`)
+- `Float truvari_sample_similarity`: Minimum sample similarity for merging non-TR variants. (default `0.0`)
+- `Float truvari_sequence_similarity`: Minimum sequence similarity for merging non-TR variants. (default `0.7`)
+- `Float truvari_size_similarity`: Minimum size similarity for merging non-TR variants. (default `0.7`)
+- `Int truvari_size_max`: Maximum variant length Truvari will consider when collapsing. (default `50000`)
+- `Int truvari_size_min`: Minimum variant length Truvari will consider when collapsing. (default `20`)
+- `File ref_fa`: From references.
+- `File ref_fai`: From references.
+- `Int shard_bin_size`: Region-bin size, in bp, used when sharding the contig. (default `10000000`)
+- `String prefix`: Prefix for output file names.
+- `String utils_docker`: Container image.
+- `RuntimeAttr? runtime_attr_*`: Optional per-task runtime overrides (10).
+
+Outputs:
+- `File merged_vcf`: Merged VCF.
+- `File merged_vcf_idx`: Index for the merged VCF.
+- `File merge_summary_tsv`: TSV summarizing the merge.
+
 ### [PreprocessVcfs](../wdl/annotation_utils/PreprocessVcfs.wdl)
 This utility preprocesses and integrates one or more cohort VCFs into a single VCF. It first optionally converts symbolic alleles to sequence alleles, then applies any per-VCF sample-ID swaps, optionally subsets every VCF to the requested samples, and validates that the resulting sample sets are identical. Each VCF is then optionally normalized, annotated with core variant attributes and an optional source label, and length-filtered. Per-VCF controls are required arrays: an empty array disables that control for every VCF; a non-empty array must align with `vcfs`.
 
