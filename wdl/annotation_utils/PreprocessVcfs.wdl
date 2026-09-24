@@ -1,11 +1,12 @@
 version 1.0
 
+import "../utils/AoUPhase2Helpers.wdl"
 import "../utils/Helpers.wdl"
 
 workflow PreprocessVcfs {
     meta {
         description: [
-            "This utility preprocesses and integrates one or more cohort VCFs into a single VCF. It first optionally converts symbolic alleles to sequence alleles, then applies any per-VCF sample-ID swaps, optionally subsets every VCF to the requested samples, and validates that the resulting sample sets are identical. Each VCF is then optionally normalized, annotated with core variant attributes and an optional source label, and length-filtered. Per-VCF controls are required arrays: an empty array disables that control for every VCF; a non-empty array must align with `vcfs`."
+            "This utility preprocesses and integrates one or more cohort VCFs into a single VCF. It first optionally converts the symbolic `<DEL>` and `<DUP>` alleles of an All of Us Phase 2 VCF to sequence alleles, then applies any per-VCF sample-ID swaps, optionally subsets every VCF to the requested samples, and validates that the resulting sample sets are identical. Each VCF is then optionally normalized, annotated with core variant attributes and an optional source label, and length-filtered. Per-VCF controls are required arrays: an empty array disables that control for every VCF; a non-empty array must align with `vcfs`."
         ]
     }
 
@@ -13,7 +14,7 @@ workflow PreprocessVcfs {
         vcfs: "Cohort VCFs to preprocess and merge."
         vcf_idxs: "Indexes for `vcfs`."
         normalize_vcfs: "Per-VCF normalization settings. `[]` disables normalization; otherwise aligned with `vcfs`."
-        convert_symbolic_to_sequence: "Per-VCF symbolic-allele conversion settings. `[]` disables conversion; otherwise aligned with `vcfs`. For enabled VCFs, `<DEL>` becomes a reference-anchored deletion, and `<DUP>` becomes a reference-anchored insertion using `SVLEN` or `END` as a fallback to determine the inserted-reference length. `<INS>` remains unchanged; existing `INFO/allele_length` and `INFO/allele_type` values are preserved, while missing values receive an absolute length from `SVLEN` or `END` as a fallback and `allele_type=ins`. `<INV>` remains symbolic but receives `INFO/allele_type=inv` and an absolute `INFO/allele_length` from `SVLEN` or `END` as a fallback. Any other angle-bracket symbolic ALT fails the workflow."
+        convert_aou_phase2_symbolic_alleles: "Per-VCF symbolic-allele conversion settings for All of Us Phase 2 VCFs, which carry nucleotide `INS` alleles alongside symbolic `<DEL>` and `<DUP>` alleles. `[]` disables conversion; otherwise aligned with `vcfs`. For enabled VCFs, `<DEL>` becomes a reference-anchored deletion, and `<DUP>` becomes a reference-anchored insertion using `SVLEN` or `END` as a fallback to determine the inserted-reference length. Converted records keep their `SVTYPE`, `SVLEN`, `CIPOS`, `CIEND`, `IMPRECISE` and `STRANDS` values, so a converted `<DUP>` reports `SVTYPE=DUP` alongside `allele_type=ins`; `END` is dropped once the ALT is no longer symbolic. `<INS>` remains unchanged; existing `INFO/allele_length` and `INFO/allele_type` values are preserved, while missing values receive an absolute length from `SVLEN` or `END` as a fallback and `allele_type=ins`. `<INV>` remains symbolic but receives `INFO/allele_type=inv` and an absolute `INFO/allele_length` from `SVLEN` or `END` as a fallback. Any other angle-bracket symbolic ALT fails the workflow."
         source_tags: "Per-VCF `SOURCE` values. `[]` disables source tagging; otherwise aligned with `vcfs`. Required when at least one length cutoff is enabled."
         swap_sample_lists: "Per-VCF sample-ID swap maps, applied before sample subsetting. `[]` disables swapping; otherwise aligned with `vcfs`. A zero-byte map means no swap for that VCF."
         min_length_cutoffs: "Per-VCF minimum absolute allele lengths. `[]` disables minimum-length filtering; otherwise aligned with `vcfs`. A value of `-1` disables this filter for that VCF. Calls with `abs(allele_length)` strictly below an enabled cutoff receive `SMALL_{source_tags[i]}`."
@@ -32,7 +33,7 @@ workflow PreprocessVcfs {
         String prefix
 
         Array[Boolean] normalize_vcfs
-        Array[Boolean] convert_symbolic_to_sequence
+        Array[Boolean] convert_aou_phase2_symbolic_alleles
         Array[String] source_tags
         Array[File] swap_sample_lists
         Array[Int] min_length_cutoffs
@@ -66,7 +67,7 @@ workflow PreprocessVcfs {
             vcfs = vcfs,
             vcf_idxs = vcf_idxs,
             normalize_vcfs = normalize_vcfs,
-            convert_symbolic_to_sequence = convert_symbolic_to_sequence,
+            convert_aou_phase2_symbolic_alleles = convert_aou_phase2_symbolic_alleles,
             source_tags = source_tags,
             swap_sample_lists = swap_sample_lists,
             min_length_cutoffs = min_length_cutoffs,
@@ -79,10 +80,10 @@ workflow PreprocessVcfs {
 
     if (inputs_valid) {
         scatter (vcf_index in range(length(vcfs))) {
-            Boolean convert_vcf = if length(convert_symbolic_to_sequence) > 0 then convert_symbolic_to_sequence[vcf_index] else false
+            Boolean convert_vcf = if length(convert_aou_phase2_symbolic_alleles) > 0 then convert_aou_phase2_symbolic_alleles[vcf_index] else false
 
             if (convert_vcf) {
-                call Helpers.ConvertSymbolicAllelesToSequence as ConvertSymbolicAllelesToSequence {
+                call AoUPhase2Helpers.ConvertSymbolicAllelesToSequence {
                     input:
                         vcf = vcfs[vcf_index],
                         vcf_idx = vcf_idxs[vcf_index],
@@ -391,7 +392,7 @@ task ValidatePreprocessVcfsInputs {
         Array[File] vcfs
         Array[File] vcf_idxs
         Array[Boolean] normalize_vcfs
-        Array[Boolean] convert_symbolic_to_sequence
+        Array[Boolean] convert_aou_phase2_symbolic_alleles
         Array[String] source_tags
         Array[File] swap_sample_lists
         Array[Int] min_length_cutoffs
@@ -411,7 +412,7 @@ inputs = {
     "vcfs": json.load(open("~{write_json(vcfs)}")),
     "vcf_idxs": json.load(open("~{write_json(vcf_idxs)}")),
     "normalize_vcfs": json.load(open("~{write_json(normalize_vcfs)}")),
-    "convert_symbolic_to_sequence": json.load(open("~{write_json(convert_symbolic_to_sequence)}")),
+    "convert_aou_phase2_symbolic_alleles": json.load(open("~{write_json(convert_aou_phase2_symbolic_alleles)}")),
     "source_tags": json.load(open("~{write_json(source_tags)}")),
     "swap_sample_lists": json.load(open("~{write_json(swap_sample_lists)}")),
     "min_length_cutoffs": json.load(open("~{write_json(min_length_cutoffs)}")),
@@ -430,7 +431,7 @@ if len(inputs["vcf_idxs"]) != expected_length:
 
 for name in (
     "normalize_vcfs",
-    "convert_symbolic_to_sequence",
+    "convert_aou_phase2_symbolic_alleles",
     "source_tags",
     "swap_sample_lists",
     "min_length_cutoffs",

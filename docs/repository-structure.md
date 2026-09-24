@@ -8,7 +8,7 @@ wdl/
   annotation/        # Main annotation workflows (prefix: Annotate*)
   annotation_utils/  # VCF manipulation and utility workflows
   tools/             # Individual bioinformatics tool wrappers
-  utils/             # Shared structs (Structs.wdl) and helper tasks (Helpers.wdl)
+  utils/             # Shared structs (Structs.wdl) and helper tasks (Helpers.wdl, AoUPhase2Helpers.wdl)
 scripts/
   annotation/        # Standalone annotation scripts (e.g. genomic context)
   helper/            # Shared standalone utility scripts, including Hail helpers
@@ -33,7 +33,7 @@ Workflows are split by role:
 - **`wdl/annotation/`** - top-level annotation workflows, always prefixed `Annotate*`. Each characterizes one aspect of the callset (MEIs, functional consequence, external-database overlap, etc.) and typically outputs a TSV rather than a VCF.
 - **`wdl/annotation_utils/`** - VCF manipulation utilities used to glue the annotation workflows together (splitting, merging, applying TSV annotations back onto a VCF, post-processing).
 - **`wdl/tools/`** - thin wrappers around individual bioinformatics tools (PALMER, TRGT, HiPhase, mosdepth, etc.) that aren't annotation-specific.
-- **`wdl/utils/`** - not directly run. `Structs.wdl` defines the shared `RuntimeAttr` struct; `Helpers.wdl` is a task library holding reusable tasks (subsetting, concatenation, sharding, etc.) imported by the other three directories, with its tasks declared alphabetically. It also holds importable sub-workflows, which are never Dockstore-registered: `BedtoolsClosestSV.wdl`, `ExactMatch.wdl`, `ScatterVcf.wdl` and `TruvariMatch.wdl` are callset-matching and sharding building blocks, while `LRCNVs.wdl`, `DepthPreprocessing.wdl`, `DepthClustering.wdl` and `GenotypeDepth.wdl` form the depth-based CNV pipeline driven by `tools/LongReadCNVs.wdl`. All eight are described in [Sub-workflows](workflows.md#sub-workflows).
+- **`wdl/utils/`** - not directly run. `Structs.wdl` defines the shared `RuntimeAttr` struct; `Helpers.wdl` is a task library holding reusable tasks (subsetting, concatenation, sharding, etc.) imported by the other three directories, with its tasks declared alphabetically. `AoUPhase2Helpers.wdl` is a second task library, holding tasks that are specific to the All of Us Phase 2 callset rather than reusable across cohorts. It also holds importable sub-workflows, which are never Dockstore-registered: `BedtoolsClosestSV.wdl`, `ExactMatch.wdl`, `ScatterVcf.wdl` and `TruvariMatch.wdl` are callset-matching and sharding building blocks, while `LRCNVs.wdl`, `DepthPreprocessing.wdl`, `DepthClustering.wdl` and `GenotypeDepth.wdl` form the depth-based CNV pipeline driven by `tools/LongReadCNVs.wdl`. All eight are described in [Sub-workflows](workflows.md#sub-workflows).
 
 Every workflow directly run in the pipeline (i.e. everything in `annotation/`, `annotation_utils/` and `tools/`) must have a matching entry in [`.dockstore.yml`](../.dockstore.yml), under its corresponding `# Annotation Workflows` / `# Annotation Utilities` / `# Tools` section. This is enforced by CI (see [CI/CD](ci-cd.md)), and that file's ordering is also the section order of [Workflows](workflows.md). For the full WDL/task/input style convention, see [Conventions](conventions.md).
 
