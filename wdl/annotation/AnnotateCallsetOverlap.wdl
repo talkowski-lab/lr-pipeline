@@ -13,7 +13,7 @@ workflow AnnotateCallsetOverlap {
             "The workflow undergoes multiple rounds of variant matching in order to determine matched pairs: (1) Exact match across CHROM, POS, REF and ALT. (2) Truvari match with overlap percentages of 90%, 70% and 50%. (3) Matching based on `bedtools closest`, finetuned for SVs. Here the callset and truth variants are split by type and converted to a symbolic representation, after which separate `bedtools closest` passes are run - one tuned for deletions and duplications via reciprocal positional overlap, and one tuned for insertions via breakpoint proximity - so that each callset variant is paired with the nearest same-type truth variant above the per-callset minimum SV-length thresholds.",
             "Note: When converting to symbolic representation, only canonical DUPs (allele_type = `DUP` exactly) are treated as DUP; other DUP subtypes (e.g., `dup_interspersed`, `inv_dup`) are treated as insertions.",
             "Note: Callset DUPs are compared twice, because the two matching rules need different coordinates. Against truth DUPs they are compared by reciprocal overlap, over their `ORIGIN` interval when `move_dup_to_origin` is true and over their own span from POS otherwise; against truth insertions they are always collapsed to a point at their VCF position and compared by breakpoint proximity and length ratio. Setting `move_dup_to_origin` to false is what lets the workflow run on a callset with no `INFO/ORIGIN`.",
-            "Note: The SV truth VCF is expected to be symbolic already. Set `convert_symbolic_truth_sv_vcf` when it instead carries sequence alleles in the same format as the callset. Its canonical DUPs then follow the same `move_dup_to_origin` positioning as the callset.",
+            "Note: The SV truth VCF is expected to be symbolic already. Set `convert_symbolic_truth_sv_vcf` when it instead carries sequence alleles, in which case its allele type and length are read from `type_field_truth_sv_vcf` and `length_field_truth_sv_vcf`, which need not match the fields used for the callset. Its canonical DUPs then follow the same `move_dup_to_origin` positioning as the callset.",
             "Both the exact-match and Truvari rounds can be sharded within a contig. Truvari shard boundaries are snapped forward to the next gap wider than the `min_shard_gap_truvari_match` input of `TruvariMatch`, which keeps results identical to an unsharded run because Truvari only groups records into a new comparison chunk once the next record clears the running end by more than its chunk size. Fixed-width bins alone would split colocated record pairs and silently lose matches."
         ]
     }
@@ -32,10 +32,13 @@ workflow AnnotateCallsetOverlap {
         min_sv_length_bedtools_closest_truth_vcf: "Minimum length for a truth variant to enter the `bedtools closest` matching round."
         shard_bin_size_exact_match: "If set, shards the exact-match round into contig regions of roughly this many base pairs, run in parallel."
         shard_bin_size_truvari_match: "If set, shards the Truvari round into contig regions of at least this many base pairs, run in parallel. Each region is extended to the next safe gap, so a value of 1000000 or more is recommended."
-        convert_symbolic_truth_sv_vcf: "Whether the SV truth VCF represents alleles as sequence rather than symbolically. When true it is converted to a symbolic representation first, reading the same `type_field_vcf` and `length_field_vcf` INFO fields as the callset."
+        convert_symbolic_truth_sv_vcf: "Whether the SV truth VCF represents alleles as sequence rather than symbolically. When true it is converted to a symbolic representation first, reading the `type_field_truth_sv_vcf` and `length_field_truth_sv_vcf` INFO fields."
         move_dup_to_origin: "Whether canonical DUPs are repositioned onto their `INFO/ORIGIN` interval before the DUP-vs-DUP reciprocal-overlap comparison. When false each DUP instead spans its own coordinates, from POS over its allele length, and `INFO/ORIGIN` is not required."
         type_field_vcf: "INFO field in the callset VCF giving each variant's allele type."
+        type_field_truth_sv_vcf: "INFO field in the SV truth VCF giving each variant's allele type. Only read when `convert_symbolic_truth_sv_vcf` is true, since a symbolic truth VCF is typed by `SVTYPE`."
         length_field_vcf: "INFO field in the callset VCF giving each variant's allele length."
+        length_field_truth_sv_vcf: "INFO field in the SV truth VCF giving each variant's allele length. Only read when `convert_symbolic_truth_sv_vcf` is true, since conversion rewrites the length into `SVLEN`."
+        length_field_bedtools_closest_truth_vcf: "INFO field carrying the SV truth VCF's allele length by the time it reaches the `bedtools closest` round, used to apply `min_sv_length_bedtools_closest_truth_vcf`. Conversion always writes `SVLEN`, so this only needs changing for an already-symbolic truth VCF that names the field differently."
         source_tag_truth_snv_indel_vcf: "Label used to tag matches against the SNV & indel truth VCF."
         source_tag_truth_sv_vcf: "Label used to tag matches against the SV truth VCF."
         args_string_vcf: "`bcftools view` arguments used to pre-subset the callset VCF."
@@ -75,7 +78,10 @@ workflow AnnotateCallsetOverlap {
         Boolean move_dup_to_origin = true
 
         String type_field_vcf = "allele_type"
+        String type_field_truth_sv_vcf = "allele_type"
         String length_field_vcf = "allele_length"
+        String length_field_truth_sv_vcf = "allele_length"
+        String length_field_bedtools_closest_truth_vcf = "SVLEN"
         String source_tag_truth_snv_indel_vcf = "SNV_indel"
         String source_tag_truth_sv_vcf = "SV"
 
@@ -197,8 +203,8 @@ workflow AnnotateCallsetOverlap {
                     vcf = truth_sv_vcf_renamed,
                     vcf_idx = truth_sv_vcf_renamed_idx,
                     move_dup_to_origin = move_dup_to_origin,
-                    type_field = type_field_vcf,
-                    length_field = length_field_vcf,
+                    type_field = type_field_truth_sv_vcf,
+                    length_field = length_field_truth_sv_vcf,
                     prefix = "~{prefix}.~{contig}.sv_truth.symbolic",
                     docker = utils_docker,
                     runtime_attr_override = runtime_attr_convert_sv_truth
@@ -285,6 +291,7 @@ workflow AnnotateCallsetOverlap {
                 min_sv_length_truth = min_sv_length_bedtools_closest_truth_vcf,
                 type_field = type_field_vcf,
                 length_field = length_field_vcf,
+                length_field_truth = length_field_bedtools_closest_truth_vcf,
                 move_dup_to_origin = move_dup_to_origin,
                 source_tag = source_tag_truth_sv_vcf,
                 gatk_sv_lr_docker = gatk_sv_lr_docker,

@@ -15,10 +15,11 @@ workflow BedtoolsClosestSV {
         vcf_idx: "Index for vcf."
         truth_sv_vcf: "Truth SV callset."
         truth_sv_vcf_idx: "Index for truth_sv_vcf."
-        min_sv_length: "Minimum SV length applied to each callset."
-        min_sv_length_truth: "Minimum SV length applied to each callset."
-        type_field: "INFO field holding variant type."
-        length_field: "INFO field holding allele length."
+        min_sv_length: "Minimum SV length applied to the callset."
+        min_sv_length_truth: "Minimum SV length applied to the truth callset."
+        type_field: "INFO field in the callset VCF holding variant type."
+        length_field: "INFO field in the callset VCF holding allele length."
+        length_field_truth: "INFO field in the truth VCF holding allele length, used to apply `min_sv_length_truth`. The truth callset arrives here in symbolic form, so this is `SVLEN` unless the caller names it otherwise."
         move_dup_to_origin: "Whether canonical DUPs are repositioned onto their `INFO/ORIGIN` interval before the DUP-vs-DUP reciprocal-overlap comparison. When false each DUP instead spans its own coordinates, from POS over its allele length, and `INFO/ORIGIN` is not required."
         source_tag: "Tag identifying the truth callset in the annotations."
         annotation_tsv: "Nearest-neighbour annotations for the remaining records."
@@ -35,6 +36,7 @@ workflow BedtoolsClosestSV {
         Int min_sv_length_truth
         String type_field
         String length_field
+        String length_field_truth = "SVLEN"
         Boolean move_dup_to_origin = true
         String source_tag = "SV"
 
@@ -118,7 +120,7 @@ workflow BedtoolsClosestSV {
         input:
             vcf = truth_sv_vcf,
             vcf_idx = truth_sv_vcf_idx,
-            length_field = "SVLEN",
+            length_field = length_field_truth,
             min_length = min_sv_length_truth,
             prefix = "~{prefix}.subset_truth",
             docker = utils_docker,
