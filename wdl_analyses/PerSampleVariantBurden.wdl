@@ -6,9 +6,11 @@ version 1.0
 ## chr1.chr1.annotated.vcf.gz .. chr22.chr22.annotated.vcf.gz), for each VCF:
 ##   1. count samples in the VCF header
 ##   2. count non-ref genotypes per sample, overall and split into
-##      {snv, del_1_49, ins_1_49, del_50_499, ins_50_499, del_gt499, ins_gt499}
-##      using the VCF's own INFO/allele_type + INFO/allele_length annotations
-##      (see per_sample_type_counts.sh for the exact bcftools-stats formula)
+##      {snv, del_1_49, ins_1_49, del_50_499, ins_50_499, del_gt499, ins_gt499},
+##      each of those 7 further split by INFO/REGION (US/RM/SD/SR genomic
+##      context), using the VCF's own INFO/allele_type + INFO/allele_length +
+##      INFO/REGION annotations (see per_sample_type_counts.sh for the exact
+##      bcftools-stats formula)
 ##
 ## Then, across all chromosome shards:
 ##   3. sum each sample's counts genome-wide, restrict to samples present in
@@ -17,6 +19,9 @@ version 1.0
 ##      row i = sample i, count of samples so far, and cumulative totals
 ##      (overall + per type/size bucket) for that sample and all samples
 ##      ranked below it.
+##   4. separately, also sum each sample's counts genome-wide into a flat
+##      (non-cumulative, non-ranked, unfiltered by population) per-sample
+##      variant count table covering all type/size x REGION categories.
 ##
 ## Per-VCF sample counts (n_samples_per_vcf, output below) are expected to
 ## match across shards from the same cohort -- not enforced here, just
@@ -33,6 +38,7 @@ workflow PerSampleVariantBurden {
         String       output_basename
         File         per_sample_type_counts_script  # per_sample_type_counts.sh
         File         combine_and_rank_script         # combine_and_rank_samples.py
+        File         build_sample_variant_count_table_script  # build_sample_variant_count_table.py
         String       bcftools_docker = "quay.io/biocontainers/bcftools:1.20--h8b25389_0"
         String       python_docker   = "python:3.11-slim"
         Int          mem_gb      = 8
@@ -64,15 +70,27 @@ workflow PerSampleVariantBurden {
             preemptible             = preemptible
     }
 
+    call BuildSampleVariantCountTable {
+        input:
+            per_sample_tsvs = PerSampleTypeCounts.per_sample_counts,
+            output_basename = output_basename,
+            script           = build_sample_variant_count_table_script,
+            docker           = python_docker,
+            mem_gb           = mem_gb,
+            disk_gb          = disk_gb,
+            preemptible      = preemptible
+    }
+
     output {
         Array[Int]  n_samples_per_vcf        = PerSampleTypeCounts.n_samples
         Array[File] per_sample_counts_per_vcf = PerSampleTypeCounts.per_sample_counts
         File        ranked_sample_burden_table = CombineAndRankSamples.ranked_table
+        File        sample_variant_count_table = BuildSampleVariantCountTable.count_table
     }
 
     meta {
         author: "gnomAD LR analysis"
-        description: "Per-sample non-ref variant burden (by type/size) across chromosome-shard VCFs, ranked and cumulated ascending by total burden, restricted to a given sample/population list."
+        description: "Per-sample non-ref variant burden (by type/size/REGION) across chromosome-shard VCFs: a ranked, cumulated-ascending, population-list-restricted burden table, and a flat unranked genome-wide per-sample count table."
     }
 }
 
@@ -128,6 +146,37 @@ task CombineAndRankSamples {
 
     output {
         File ranked_table = out_name
+    }
+
+    runtime {
+        docker:      docker
+        memory:      mem_gb + " GB"
+        cpu:         2
+        disks:       "local-disk " + disk_gb + " HDD"
+        preemptible: preemptible
+    }
+}
+
+task BuildSampleVariantCountTable {
+    input {
+        Array[File] per_sample_tsvs
+        String      output_basename
+        File        script
+        String      docker
+        Int         mem_gb
+        Int         disk_gb
+        Int         preemptible
+    }
+
+    String out_name = output_basename + ".sample_variant_count_table.tsv"
+
+    command <<<
+        set -euo pipefail
+        python3 ~{script} --shards ~{sep=" " per_sample_tsvs} --out ~{out_name}
+    >>>
+
+    output {
+        File count_table = out_name
     }
 
     runtime {
