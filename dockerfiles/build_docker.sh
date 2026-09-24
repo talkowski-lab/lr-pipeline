@@ -2,9 +2,13 @@
 set -euo pipefail
 
 # Builds, tags and pushes a gnomad-lr Docker image to Artifact Registry.
-# Auto-increments the image's kj_V<N> tag for the versioned history, and
-# also (re)tags/pushes it as :latest, so any Dockerfile that inherits from
+# On main, auto-increments the image's kj_V<N> tag for the versioned history,
+# and also (re)tags/pushes it as :latest, so any Dockerfile that inherits from
 # it via "FROM .../<image>:latest" always picks up this build without edits.
+#
+# On a feature branch, the image is pushed as :<branch> only, so that branches
+# built in parallel worktrees never overwrite each other's images or :latest.
+# A branch build also inherits from the branch's own base image when one exists.
 #
 # Tool/library versions are centralized in dockerfiles/versions.env, keyed
 # as <image-name>__<ARG_NAME>. Every ARG declared in the target Dockerfile
@@ -31,19 +35,37 @@ for arg_name in $(grep -oE '^ARG [A-Z_]+' "${dockerfile}" | awk '{print $2}'); d
     build_args+=(--build-arg "${arg_name}=${!version_key}")
 done
 
-current_version=$(gcloud artifacts docker tags list "${REGISTRY}/${image_name}" --format='value(tag)' 2>/dev/null \
-    | grep -oE '^kj_V[0-9]+$' \
-    | sed -E 's/kj_V//' \
-    | sort -n \
-    | tail -1) || true
-new_tag="kj_V$(( ${current_version:-0} + 1 ))"
+branch="$(git -C "${REPO_ROOT}" symbolic-ref --short HEAD)"
+
+from_args=()
+if [[ "${branch}" == "main" ]]; then
+    current_version=$(gcloud artifacts docker tags list "${REGISTRY}/${image_name}" --format='value(tag)' 2>/dev/null \
+        | grep -oE '^kj_V[0-9]+$' \
+        | sed -E 's/kj_V//' \
+        | sort -n \
+        | tail -1) || true
+    new_tag="kj_V$(( ${current_version:-0} + 1 ))"
+    push_tags=("${new_tag}" latest)
+else
+    new_tag="${branch}"
+    push_tags=("${new_tag}")
+
+    # Inherit the branch's own base image, so a branch that changes what the base bakes in is testable
+    base_image=$(grep -m1 '^FROM ' "${dockerfile}" | sed -E "s#^FROM ${REGISTRY}/([^:]+):latest\$#\1#") || true
+    if [[ -n "${base_image}" && "${base_image}" != FROM* ]] \
+        && gcloud artifacts docker tags list "${REGISTRY}/${base_image}" --format='value(tag)' 2>/dev/null \
+            | grep -qxF "${branch}"; then
+        from_args=(--from "${REGISTRY}/${base_image}:${branch}")
+        echo "Inheriting ${REGISTRY}/${base_image}:${branch} instead of :latest"
+    fi
+fi
 
 echo "Building ${image_name}:${new_tag} from ${dockerfile_name}"
-podman build --platform linux/amd64 --network=host "${build_args[@]+"${build_args[@]}"}" -f "${dockerfile}" -t "${image_name}:${new_tag}" "${REPO_ROOT}"
+podman build --platform linux/amd64 --network=host "${from_args[@]+"${from_args[@]}"}" "${build_args[@]+"${build_args[@]}"}" -f "${dockerfile}" -t "${image_name}:${new_tag}" "${REPO_ROOT}"
 
-for tag in "${new_tag}" latest; do
+for tag in "${push_tags[@]}"; do
     podman tag "${image_name}:${new_tag}" "${REGISTRY}/${image_name}:${tag}"
     podman push "${REGISTRY}/${image_name}:${tag}"
 done
 
-echo "Pushed ${REGISTRY}/${image_name}:${new_tag} and :latest"
+echo "Pushed ${REGISTRY}/${image_name} with tags: ${push_tags[*]}"

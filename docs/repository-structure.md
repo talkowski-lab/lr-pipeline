@@ -19,10 +19,14 @@ data/                # Local-only analysis inputs, outputs and scratch work; git
 docs/                # Extended documentation (this file included)
 .github/
   workflows/         # Active GitHub Actions CI
-  scripts/           # CI check scripts, also run locally, plus merge_branch.sh for the branch merge sequence
+  scripts/           # CI check scripts, also run locally, plus new_worktree.sh and merge_branch.sh for the branch lifecycle
 archive/             # Retired workflows, scripts, Dockerfiles, notebooks and their reference docs
   docs/workflows.md  # Generated from the retired workflows, the counterpart to docs/workflows.md
   notebooks/         # Retired ad hoc Jupyter notebooks (Terra cost analysis via the API and BigQuery)
+.claude/
+  settings.json      # Hooks keeping Claude Code sessions out of the main checkout and in a worktree
+  hooks/             # The scripts those hooks run
+.worktreelinks       # Gitignored local-only paths each worktree symlinks from the main checkout
 .dockstore.yml       # Dockstore registration for every directly-run workflow
 AGENTS.md            # Canonical agent instructions; .claude/CLAUDE.md and .github/copilot-instructions.md are symlinks to it
 ```

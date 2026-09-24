@@ -18,14 +18,21 @@ dockerfiles/build_docker.sh <image-name>
 
 The script does the following:
 - Resolves any `ARG` declared in the Dockerfile without an inline default from [`dockerfiles/versions.env`](../dockerfiles/versions.env), keyed as `<image-name>__<ARG_NAME>`, and passes each as a `--build-arg`. That file is the single source of truth for pinned tool and library versions.
-- Queries `gcloud artifacts docker tags list` for the highest `kj_V<N>` tag already pushed for the image and increments it, so version numbering never has to be tracked by hand.
-- Builds with `podman build --platform linux/amd64` from the repository root, then pushes under both the new `kj_V<N>` tag and `:latest`.
+- Builds with `podman build --platform linux/amd64` from the repository root - meaning the worktree it is run from, so each branch builds its own tree.
+- Tags the build by the branch it was built on, since branches are developed in parallel worktrees - see [Branches](conventions.md#branches).
+
+| Branch | Tags pushed | How the tag is chosen |
+|---|---|---|
+| `main` | `kj_V<N>` and `:latest` | `gcloud artifacts docker tags list` gives the highest `kj_V<N>` already pushed, which the script increments |
+| `kj-<topic>` | `:<branch>` only | The branch name itself, so parallel branches never overwrite each other's images or `:latest` |
+
+A branch build also passes `--from <registry>/<base>:<branch>` when the Dockerfile's first `FROM` is a `:latest` image from this registry and that base has a build on the same branch, so a branch that changes what the base image bakes in is testable end to end. `merge_branch.sh` deletes the branch's image tags once the branch merges, and the merged change reaches `:latest` only when the image is rebuilt from the main checkout. Two `main` builds of the same image started at once would still race for the same `kj_V<N>`; build one at a time.
 
 Two consequences worth knowing:
 - Because the build context is the repository root, `Dockerfile.utils` bakes the live `scripts/` tree into the image via `COPY ./scripts /opt/scripts`. Any change under `scripts/` therefore requires rebuilding `utils`, and then any image that inherits from it, before the change reaches a running task. The exception is the Hail scripts, which workflows fetch by URL at run time - see [Scripts](repository-structure.md#scripts).
 - The script needs an authenticated `gcloud` for tag discovery and a `podman` logged in to the registry for the push.
 
-**Which tag to use:** WDL tasks never hardcode a docker image URI - the `String docker` task input is always supplied by the caller via Terra workspace data, per [Conventions](conventions.md). Workspace data should point at the `:latest` tag for each image, since every `build_docker.sh` run retags `:latest` to the newest build. The `kj_V<N>` tags exist purely as an immutable version history, for pinning or rolling back to a specific prior build.
+**Which tag to use:** WDL tasks never hardcode a docker image URI - the `String docker` task input is always supplied by the caller via Terra workspace data, per [Conventions](conventions.md). Workspace data should point at the `:latest` tag for each image, since every `main` build retags `:latest` to the newest build. The `kj_V<N>` tags exist purely as an immutable version history, for pinning or rolling back to a specific prior build. While testing a branch, point that branch's Terra method config at the `:<branch>` tag instead, and drop back to `:latest` after the merge and rebuild.
 
 
 ## Repository

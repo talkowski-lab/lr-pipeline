@@ -39,23 +39,24 @@ Terra imports workflows from Dockstore, which syncs on push from every branch li
 
 
 ### Feature branch test versions
-Development happens on a `kj-<kebab-topic>` branch rather than on `main` - see [Branches](conventions.md#branches). To test a changed workflow from that branch, add the branch name under `filters.branches` in that workflow's entry and push; Dockstore reads the `.dockstore.yml` on the pushed branch, so the version appears under the branch name and can be imported into Terra. Only the workflows being tested should list the branch.
+Development happens on a `kj-<kebab-topic>` branch rather than on `main`, in its own worktree created by [`new_worktree.sh`](../.github/scripts/new_worktree.sh) - see [Branches](conventions.md#branches). To test a changed workflow from that branch, add the branch name under `filters.branches` in that workflow's entry and push; Dockstore reads the `.dockstore.yml` on the pushed branch, so the version appears under the branch name and can be imported into Terra. Only the workflows being tested should list the branch.
 
-Once the changes are validated and a merge has been explicitly approved, merge locally - no pull request - with [`merge_branch.sh`](../.github/scripts/merge_branch.sh), run from a clean working tree.
+Once the changes are validated and a merge has been explicitly approved, merge locally - no pull request - with [`merge_branch.sh`](../.github/scripts/merge_branch.sh), run from the main checkout, which must be on `main`, and with the branch's worktree clean.
 ```bash
-.github/scripts/merge_branch.sh          # merges the current branch
-.github/scripts/merge_branch.sh kj-topic # merges a named branch
+.github/scripts/merge_branch.sh kj-topic # merges a named branch from its worktree
+.github/scripts/merge_branch.sh          # run inside a worktree, merges its branch
 ```
 The script performs the whole sequence, and each step is what to do by hand if it is ever run one piece at a time.
 1. Removes the branch from every `filters.branches` list it was added to and commits that, after `check_dockstore_sync.py --main-only` confirms nothing else was left behind. Doing this before the merge keeps the filter off `main` entirely.
-2. Rebases onto `origin/main`. A conflict stops the script with the rebase still in progress and nothing merged, because conflicts are resolved by a human, never automatically. Resolve them, `git rebase --continue`, and run the script again, or `git rebase --abort` to back out.
-3. Fast-forwards `main` and pushes it. The merge is `--ff-only`, so it fails rather than quietly creating a merge commit if `main` moved in between.
-4. Deletes the branch on the remote and locally. Deleting the remote branch is what removes its Dockstore version. The rebased branch is never force-pushed, since it is deleted moments later anyway.
+2. Rebases the branch, in its worktree, onto `origin/main`. A conflict stops the script with the rebase still in progress and nothing merged, because conflicts are resolved by a human, never automatically. Resolve them, `git rebase --continue`, and run the script again, or `git rebase --abort` to back out.
+3. Fast-forwards `main` in the main checkout and pushes it. The merge is `--ff-only`, so it fails rather than quietly creating a merge commit if `main` moved in between.
+4. Removes the worktree, then deletes the branch on the remote and locally. Deleting the remote branch is what removes its Dockstore version. The rebased branch is never force-pushed, since it is deleted moments later anyway.
+5. Deletes every `<image>:<branch>` tag the branch's builds pushed to Artifact Registry - see [Building and Pushing](dockers.md#building-and-pushing). This runs last, so a `gcloud` failure leaves the git state already final. Any image the branch changed should then be rebuilt from the main checkout, which is what moves `:latest` onto the merged code.
 
 The repository also has `delete_branch_on_merge` enabled, which covers the occasional pull request; a local merge is not a merged pull request as far as GitHub is concerned, so the script deletes the branch explicitly. There is deliberately no CI job that bulk-deletes merged branches, since the repository carries long-lived collaborator branches that such a job would remove.
 
 
 ## Docker Images
-Images are not built by CI. They are built and pushed locally - see [Building and pushing](dockers.md#building-and-pushing) in the Docker images document for the `build_docker.sh` flow.
+Images are not built by CI, and are tagged by the branch they are built on - `kj_V<N>` and `:latest` from `main`, `:<branch>` from a feature branch, per [Building and Pushing](dockers.md#building-and-pushing). They are built and pushed locally - see [Building and pushing](dockers.md#building-and-pushing) in the Docker images document for the `build_docker.sh` flow.
 
 A [`docker-build-push.yml`](../archive/.github/workflows/docker-build-push.yml) workflow and its [`build_changed_dockers.sh`](../archive/.github/scripts/build_changed_dockers.sh) helper were designed to build changed images on push, but are kept in `archive/` and are intentionally inactive: they require a `GCP_SA_KEY` service-account secret that has not been configured for the repository.

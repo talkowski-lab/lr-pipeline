@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Merges a validated feature branch into main and deletes it, following the sequence in docs/ci-cd.md.
-# Stops without merging if the rebase conflicts, leaving the conflict in place for a human to resolve.
+# Merges a validated feature branch into main, removes its worktree and deletes it, following the sequence in docs/ci-cd.md.
+# Stops without merging if the rebase conflicts, leaving the conflict in place in the worktree for a human to resolve.
 
 usage() {
     echo "Usage: $(basename "$0") [<branch>]" >&2
-    echo "Merges <branch>, defaulting to the current branch, into main. Run from anywhere in the repository." >&2
+    echo "Merges <branch> into main. Run from the main checkout with the branch name, or from inside the branch's worktree." >&2
     exit 2
 }
 
@@ -14,7 +14,6 @@ if [[ $# -gt 1 || ${1:-} == -* ]]; then
     usage
 fi
 
-cd "$(git rev-parse --show-toplevel)"
 BRANCH="${1:-$(git rev-parse --abbrev-ref HEAD)}"
 
 if [[ "$BRANCH" == "main" ]]; then
@@ -33,12 +32,31 @@ if ! git show-ref --verify --quiet "refs/heads/$BRANCH"; then
     exit 1
 fi
 
-if [[ -n "$(git status --porcelain)" ]]; then
-    echo "Working tree is not clean; commit or stash before merging." >&2
+MAIN_WORKTREE="$(git worktree list --porcelain | sed -n '1s/^worktree //p')"
+BRANCH_WORKTREE="$(git worktree list --porcelain |
+    awk -v ref="refs/heads/$BRANCH" '$1 == "worktree" {path = $2} $1 == "branch" && $2 == ref {print path}')"
+
+if [[ -z "$BRANCH_WORKTREE" ]]; then
+    echo "'$BRANCH' is not checked out in any worktree; run .github/scripts/new_worktree.sh $BRANCH first." >&2
     exit 1
 fi
 
-git switch "$BRANCH"
+if [[ "$BRANCH_WORKTREE" == "$MAIN_WORKTREE" ]]; then
+    echo "'$BRANCH' is checked out in the main checkout, which must stay on main." >&2
+    exit 1
+fi
+
+if [[ "$(git -C "$MAIN_WORKTREE" symbolic-ref --short HEAD)" != "main" ]]; then
+    echo "Main checkout $MAIN_WORKTREE must stay on main; run 'git switch main' there first." >&2
+    exit 1
+fi
+
+cd "$BRANCH_WORKTREE"
+
+if [[ -n "$(git status --porcelain)" ]]; then
+    echo "Worktree $BRANCH_WORKTREE is not clean; commit or stash before merging." >&2
+    exit 1
+fi
 
 # Drop the branch from every .dockstore.yml filter so main never carries a feature-branch version
 if grep -qE "^[[:space:]]*-[[:space:]]*${BRANCH}[[:space:]]*$" .dockstore.yml; then
@@ -60,15 +78,25 @@ if ! git rebase origin/main; then
     exit 1
 fi
 
-git switch main
-git pull --ff-only origin main
-git merge --ff-only "$BRANCH"
-git push origin main
+git -C "$MAIN_WORKTREE" pull --ff-only origin main
+git -C "$MAIN_WORKTREE" merge --ff-only "$BRANCH"
+git -C "$MAIN_WORKTREE" push origin main
 
-# Delete the branch on both sides, since deleting the remote branch is what removes its Dockstore version
+# Leave the worktree before removing it, then delete the branch on both sides,
+# since deleting the remote branch is what removes its Dockstore version
+cd "$MAIN_WORKTREE"
 if [[ -n "$(git ls-remote --heads origin "$BRANCH")" ]]; then
     git push origin --delete "$BRANCH"
 fi
+git worktree remove "$BRANCH_WORKTREE"
 git branch -d "$BRANCH"
 
-echo "Merged $BRANCH into main and deleted it."
+# Drop the branch-tagged images build_docker.sh pushed, last so that a gcloud failure leaves git state final
+REGISTRY="us-central1-docker.pkg.dev/talkowski-sv-gnomad/kj-dockers"
+for image in $(gcloud artifacts docker images list "$REGISTRY" --include-tags --format='value(package)' \
+    --filter="tags:$BRANCH" 2>/dev/null | sort -u); do
+    echo "Deleting $image:$BRANCH"
+    gcloud artifacts docker tags delete "$image:$BRANCH" --quiet
+done
+
+echo "Merged $BRANCH into main, removed its worktree and deleted it."
