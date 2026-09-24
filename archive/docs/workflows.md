@@ -587,33 +587,6 @@ Outputs:
 - `File merged_vcf`: VCF carrying both annotation sets.
 - `File merged_vcf_idx`: Index for `merged_vcf`.
 
-### [MergeVcfs](../wdl/annotation_utils/MergeVcfs.wdl)
-This utility merges multiple per-contig VCFs covering the same contig into one, handling tandem-repeat and non-tandem-repeat variants separately. Non-TR variants are merged with Truvari using reciprocal-overlap, sequence-, size- and sample-similarity, a breakpoint distance and size bounds, while TR variants are merged on their identifiers, with optional region sharding. It outputs the merged VCF and a merge-summary TSV.
-
-Inputs:
-- `Array[File] contig_vcfs`: Per-callset VCFs for the contig being merged.
-- `Array[File] contig_vcf_idxs`: Indexes for `contig_vcfs`.
-- `String contig`: Contig being merged.
-- `Int min_truvari_match`: Minimum variant length for Truvari matching. (default `20`)
-- `Int truvari_breakpoint_window`: Maximum breakpoint distance, in bp, for merging non-TR variants. (default `500`)
-- `Float truvari_reciprocal_overlap`: Minimum reciprocal overlap for merging non-TR variants. (default `0.0`)
-- `Float truvari_sample_similarity`: Minimum sample similarity for merging non-TR variants. (default `0.0`)
-- `Float truvari_sequence_similarity`: Minimum sequence similarity for merging non-TR variants. (default `0.7`)
-- `Float truvari_size_similarity`: Minimum size similarity for merging non-TR variants. (default `0.7`)
-- `Int truvari_size_max`: Maximum variant length Truvari will consider when collapsing. (default `50000`)
-- `Int truvari_size_min`: Minimum variant length Truvari will consider when collapsing. (default `20`)
-- `File ref_fa`: From references.
-- `File ref_fai`: From references.
-- `Int? shard_bin_size`: Region-bin size, in bp, used when sharding the contig.
-- `String prefix`: Prefix for output file names.
-- `String utils_docker`: Container image.
-- `RuntimeAttr? runtime_attr_*`: Optional per-task runtime overrides (10).
-
-Outputs:
-- `File merged_vcf`: Merged VCF.
-- `File merged_vcf_idx`: Index for the merged VCF.
-- `File merge_summary_tsv`: TSV summarizing the merge.
-
 ### [NormalizeAlleleTypes](../wdl/annotation_utils/NormalizeAlleleTypes.wdl)
 This utility reclassifies `allele_type` values and records the original type in a new `allele_subtype` field. Variants with `allele_type=dup` are tested for tandemness against their duplication source (from `INFO/ORIGIN`) using two criteria: size similarity between the insertion length and the ORIGIN region length must meet the `dup_size_similarity` threshold, and the insertion POS must fall within the ORIGIN region or within `dup_breakpoint_window` bases of its breakpoints. All get `allele_subtype=tandem_dup`; those passing keep `allele_type=dup`, while those failing are set to `allele_type=ins`. Variants with `allele_type` of `complex_dup`, `dup_interspersed`, `inv_dup`, `alu_ins`, `line_ins`, `sva_ins` or `numt` are set to `allele_type=ins`, and those with `alu_del`, `line_del` or `sva_del` are set to `allele_type=del`, each recording the original value in `allele_subtype`. REF/ALT/POS are never modified. Records with other `allele_type` values are passed through unchanged. Supports optional record-count sharding.
 
