@@ -6,7 +6,7 @@ import "../utils/Structs.wdl"
 workflow ExactMatch {
     meta {
         description: [
-            "This sub-workflow performs the first callset-comparison round, matching records to a truth callset on exact position and allele. Both callsets are optionally renamed to a common ID scheme, sharded, matched, and the annotations concatenated. Records left unmatched are emitted in the form `TruvariMatch` expects."
+            "This sub-workflow performs the first callset-comparison round, matching records to a truth callset on exact position and allele. Both callsets are optionally renamed to a common ID scheme, sharded, matched, and the annotations concatenated. Records left unmatched are emitted alongside the renamed truth callset, both unfiltered by length, for the caller to subset before `TruvariMatch`."
         ]
     }
 
@@ -17,19 +17,16 @@ workflow ExactMatch {
         truth_snv_indel_vcf_idx: "Index for truth_snv_indel_vcf."
         contig: "Contig being processed."
         shard_bin_size_exact_match: "Shard size for the matching step."
-        min_sv_length_truvari_vcf: "Minimum lengths applied when emitting the Truvari inputs."
-        min_sv_length_truvari_truth_vcf: "Minimum lengths applied when emitting the Truvari inputs."
-        length_field_vcf: "INFO field holding allele length."
         source_tag_truth_snv_indel_vcf: "Tag identifying the truth callset in the annotations."
         rename_id_string_vcf: "ID rename templates."
         rename_id_string_truth_snv_indel_vcf: "ID rename templates."
         rename_id_strip_chr_vcf: "Strip the `chr` prefix while renaming."
         rename_id_strip_chr_truth_snv_indel_vcf: "Strip the `chr` prefix while renaming."
         annotated_tsv: "Exact-match annotations."
-        truvari_eval_vcf: "Unmatched callset records, passed to `TruvariMatch`."
-        truvari_eval_vcf_idx: "Index for truvari_eval_vcf."
-        truvari_truth_vcf: "Unmatched truth records, passed to `TruvariMatch`."
-        truvari_truth_vcf_idx: "Index for truvari_truth_vcf."
+        unmatched_vcf: "Callset records left unmatched, not yet filtered by length."
+        unmatched_vcf_idx: "Index for unmatched_vcf."
+        truth_vcf: "Truth callset after optional ID renaming, not yet filtered by length."
+        truth_vcf_idx: "Index for truth_vcf."
     }
 
     input {
@@ -42,9 +39,6 @@ workflow ExactMatch {
 
         Int? shard_bin_size_exact_match
 
-        Int min_sv_length_truvari_vcf
-        Int min_sv_length_truvari_truth_vcf
-        String length_field_vcf
         String source_tag_truth_snv_indel_vcf
 
         String? rename_id_string_vcf
@@ -63,8 +57,6 @@ workflow ExactMatch {
         RuntimeAttr? runtime_attr_append_exact_annotations
         RuntimeAttr? runtime_attr_concat_exact_annotations
         RuntimeAttr? runtime_attr_concat_exact_unmatched
-        RuntimeAttr? runtime_attr_truvari_subset_vcf
-        RuntimeAttr? runtime_attr_truvari_subset_truth
     }
 
     if (defined(rename_id_string_vcf)) {
@@ -206,32 +198,11 @@ workflow ExactMatch {
     File unmatched_vcf_final = select_first([ConcatExactUnmatched.concat_vcf, ExactMatchFull.unmatched_vcf])
     File unmatched_vcf_final_idx = select_first([ConcatExactUnmatched.concat_vcf_idx, ExactMatchFull.unmatched_vcf_idx])
 
-    call Helpers.SubsetVcfByLength as SubsetTruvariEval {
-        input:
-            vcf = unmatched_vcf_final,
-            vcf_idx = unmatched_vcf_final_idx,
-            length_field = length_field_vcf,
-            min_length = min_sv_length_truvari_vcf,
-            prefix = "~{prefix}.truvari_eval",
-            docker = utils_docker,
-            runtime_attr_override = runtime_attr_truvari_subset_vcf
-    }
-
-    call Helpers.SubsetVcfByArgs as SubsetTruvariTruth {
-        input:
-            vcf = truth_vcf_final,
-            vcf_idx = truth_vcf_final_idx,
-            include_args = "abs(ILEN) >= ~{min_sv_length_truvari_truth_vcf}",
-            prefix = "~{prefix}.truvari_truth",
-            docker = utils_docker,
-            runtime_attr_override = runtime_attr_truvari_subset_truth
-    }
-
     output {
         File annotated_tsv = annotated_tsv_final
-        File truvari_eval_vcf = SubsetTruvariEval.subset_vcf
-        File truvari_eval_vcf_idx = SubsetTruvariEval.subset_vcf_idx
-        File truvari_truth_vcf = SubsetTruvariTruth.subset_vcf
-        File truvari_truth_vcf_idx = SubsetTruvariTruth.subset_vcf_idx
+        File unmatched_vcf = unmatched_vcf_final
+        File unmatched_vcf_idx = unmatched_vcf_final_idx
+        File truth_vcf = truth_vcf_final
+        File truth_vcf_idx = truth_vcf_final_idx
     }
 }

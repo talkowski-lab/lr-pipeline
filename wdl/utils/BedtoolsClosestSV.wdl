@@ -6,20 +6,17 @@ import "Structs.wdl"
 workflow BedtoolsClosestSV {
     meta {
         description: [
-            "This sub-workflow performs the final comparison round, pairing each still-unmatched record with its nearest truth-callset neighbour using `bedtools closest`. Insertions and CNVs are compared separately, since proximity means different things for each, and the two comparisons are merged into a single annotation table."
+            "This sub-workflow performs the final comparison round, pairing each still-unmatched record with its nearest truth-callset neighbour using `bedtools closest`. Insertions and CNVs are compared separately, since proximity means different things for each, and the two comparisons are merged into a single annotation table. Both inputs arrive already subset to the caller's minimum SV lengths, so no length filtering happens here."
         ]
     }
 
     parameter_meta {
-        vcf: "Records left unmatched by `TruvariMatch`."
+        vcf: "Records left unmatched by `TruvariMatch`, already subset to the caller's minimum SV length."
         vcf_idx: "Index for vcf."
-        truth_sv_vcf: "Truth SV callset."
+        truth_sv_vcf: "Truth SV callset in symbolic form, already subset to the caller's minimum SV length."
         truth_sv_vcf_idx: "Index for truth_sv_vcf."
-        min_sv_length: "Minimum SV length applied to the callset."
-        min_sv_length_truth: "Minimum SV length applied to the truth callset."
-        type_field: "INFO field in the callset VCF holding variant type."
-        length_field: "INFO field in the callset VCF holding allele length."
-        length_field_truth: "INFO field in the truth VCF holding allele length, used to apply `min_sv_length_truth`. The truth callset arrives here in symbolic form, so this is `SVLEN` unless the caller names it otherwise."
+        type_field: "INFO field in the callset VCF holding variant type, read by the symbolic conversion."
+        length_field: "INFO field in the callset VCF holding allele length, read by the symbolic conversion."
         move_dup_to_origin: "Whether canonical DUPs are repositioned onto their `INFO/ORIGIN` interval before the DUP-vs-DUP reciprocal-overlap comparison. When false each DUP instead spans its own coordinates, from POS over its allele length, and `INFO/ORIGIN` is not required."
         source_tag: "Tag identifying the truth callset in the annotations."
         annotation_tsv: "Nearest-neighbour annotations for the remaining records."
@@ -32,19 +29,14 @@ workflow BedtoolsClosestSV {
         File truth_sv_vcf_idx
         String prefix
 
-        Int min_sv_length
-        Int min_sv_length_truth
         String type_field
         String length_field
-        String length_field_truth = "SVLEN"
         Boolean move_dup_to_origin = true
         String source_tag = "SV"
 
         String gatk_sv_lr_docker
         String utils_docker
 
-        RuntimeAttr? runtime_attr_subset_vcf
-        RuntimeAttr? runtime_attr_subset_truth
         RuntimeAttr? runtime_attr_convert_to_symbolic
         RuntimeAttr? runtime_attr_split_vcf
         RuntimeAttr? runtime_attr_split_truth
@@ -53,23 +45,11 @@ workflow BedtoolsClosestSV {
         RuntimeAttr? runtime_attr_merge_comparisons
     }
 
-    # Subset the callset to variants at or above the minimum SV length
-    call Helpers.SubsetVcfByLength as SubsetEval {
-        input:
-            vcf = vcf,
-            vcf_idx = vcf_idx,
-            length_field = length_field,
-            min_length = min_sv_length,
-            prefix = "~{prefix}.subset_eval",
-            docker = utils_docker,
-            runtime_attr_override = runtime_attr_subset_vcf
-    }
-
     # Convert the callset to symbolic alleles and split it by type, leaving each DUP on its own coordinates
     call Helpers.ConvertToSymbolic as ConvertEvalUnmoved {
         input:
-            vcf = SubsetEval.subset_vcf,
-            vcf_idx = SubsetEval.subset_vcf_idx,
+            vcf = vcf,
+            vcf_idx = vcf_idx,
             move_dup_to_origin = false,
             type_field = type_field,
             length_field = length_field,
@@ -92,8 +72,8 @@ workflow BedtoolsClosestSV {
     if (move_dup_to_origin) {
         call Helpers.ConvertToSymbolic as ConvertEvalMoved {
             input:
-                vcf = SubsetEval.subset_vcf,
-                vcf_idx = SubsetEval.subset_vcf_idx,
+                vcf = vcf,
+                vcf_idx = vcf_idx,
                 move_dup_to_origin = true,
                 type_field = type_field,
                 length_field = length_field,
@@ -115,23 +95,11 @@ workflow BedtoolsClosestSV {
 
     File eval_dup_bed = select_first([SplitEvalMoved.dup_bed, SplitEvalUnmoved.dup_bed])
 
-    # Subset the truth callset to variants at or above its own minimum SV length
-    call Helpers.SubsetVcfByLength as SubsetTruth {
-        input:
-            vcf = truth_sv_vcf,
-            vcf_idx = truth_sv_vcf_idx,
-            length_field = length_field_truth,
-            min_length = min_sv_length_truth,
-            prefix = "~{prefix}.subset_truth",
-            docker = utils_docker,
-            runtime_attr_override = runtime_attr_subset_truth
-    }
-
     # Split the truth callset by type, breaking complex records into their constituent intervals
     call SplitVcf as SplitTruth {
         input:
-            vcf = SubsetTruth.subset_vcf,
-            vcf_idx = SubsetTruth.subset_vcf_idx,
+            vcf = truth_sv_vcf,
+            vcf_idx = truth_sv_vcf_idx,
             split_cpx = true,
             prefix = "~{prefix}.truth",
             docker = gatk_sv_lr_docker,
@@ -257,10 +225,10 @@ workflow BedtoolsClosestSV {
     # Join the retained matches back to the callset and truth records to emit the annotation TSV
     call CreateBedtoolsAnnotationTsv {
         input:
-            truvari_unmatched_vcf = SubsetEval.subset_vcf,
-            truvari_unmatched_vcf_idx = SubsetEval.subset_vcf_idx,
-            truth_sv_vcf = SubsetTruth.subset_vcf,
-            truth_sv_vcf_idx = SubsetTruth.subset_vcf_idx,
+            truvari_unmatched_vcf = vcf,
+            truvari_unmatched_vcf_idx = vcf_idx,
+            truth_sv_vcf = truth_sv_vcf,
+            truth_sv_vcf_idx = truth_sv_vcf_idx,
             closest_bed = PrioritizedConcatComparisons.merged_tsv,
             source_tag = source_tag,
             prefix = "~{prefix}.bedtools_closest_annotations",

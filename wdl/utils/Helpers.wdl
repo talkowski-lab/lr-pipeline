@@ -4094,7 +4094,9 @@ task SubsetVcfByLength {
         RuntimeAttr? runtime_attr_override
     }
 
-    String size_filter = if defined(min_length) && defined(max_length) then 'abs(INFO/~{length_field})>=~{min_length} && abs(INFO/~{length_field})<=~{max_length}' else if defined(min_length) then 'abs(INFO/~{length_field})>=~{min_length}' else if defined(max_length) then 'abs(INFO/~{length_field})<=~{max_length}' else '1==1'
+    # ILEN is a bcftools built-in computed from REF and ALT rather than an INFO field, so it takes no INFO/ prefix
+    String length_expr = if length_field == "ILEN" then "ILEN" else "INFO/~{length_field}"
+    String size_filter = if defined(min_length) && defined(max_length) then 'abs(~{length_expr})>=~{min_length} && abs(~{length_expr})<=~{max_length}' else if defined(min_length) then 'abs(~{length_expr})>=~{min_length}' else if defined(max_length) then 'abs(~{length_expr})<=~{max_length}' else '1==1'
 
     command <<<
         set -euo pipefail
