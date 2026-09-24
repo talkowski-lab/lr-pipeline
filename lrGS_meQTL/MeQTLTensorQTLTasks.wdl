@@ -311,14 +311,21 @@ PYEOF
 # task. Unlike SAIGE, tensorQTL processes every qualifying phenotype on the
 # contig in a single vectorized call - no per-site chunking needed.
 #
-# num_gpus defaults to 0 (CPU-only): tensorQTL's own code falls back to CPU
-# automatically (`torch.device("cuda" if torch.cuda.is_available() else
-# "cpu")`), and a Terra run requesting a GPU (the upstream repo's own
-# nvidia-tesla-p100/us-central1-c default) failed to even start - zero log
+# CPU-only, deliberately: tensorQTL's own code falls back to CPU automatically
+# (`torch.device("cuda" if torch.cuda.is_available() else "cpu")`), and GPU
+# runtime attributes caused two separate real Cromwell/GCP Batch failures in
+# this same workspace - first, a run requesting the upstream repo's own
+# nvidia-tesla-p100/us-central1-c default failed to even start (zero log
 # output after 2+ hours queued, consistent with a GPU quota/availability
-# problem in that specific Google Cloud project, which this WDL has no way
-# to verify for an arbitrary Terra workspace. Set tensorqtl_num_gpus > 0 if
-# your project has GPU quota and you want the speed.
+# problem specific to that Google Cloud project); then, after switching the
+# default to gpuCount=0 to mean "no GPU," Cromwell rejected the runtime
+# attributes outright with "Expecting gpuCount runtime attribute value
+# greater than 0" - gpuCount can only be present with a value >= 1, or
+# absent entirely, not 0. Since CPU is the only path verified to actually
+# work end-to-end, GPU runtime attributes are removed here rather than
+# fought further for a feature nobody has a working configuration for; if
+# you have confirmed GPU quota and want the speed, add gpuType/gpuCount/
+# zones back to the runtime block below (only when requesting > 0 GPUs).
 #
 # mem_gb is generously sized (64GB), not precisely profiled: a real CPU-mode
 # run (chr22, 231 samples, 170,526 variants, 54,616 phenotypes with a
@@ -339,9 +346,6 @@ task TensorQTLCisPermutations {
         Float? pval_threshold
         Int? seed
         String? flags
-        Int num_gpus
-        String gpu_type
-        Array[String] gpu_zones
         String prefix
         String docker
         RuntimeAttr? runtime_attr_override
@@ -391,9 +395,6 @@ task TensorQTLCisPermutations {
         docker: docker
         preemptible: select_first([runtime_attr.preemptible_tries, default_attr.preemptible_tries])
         maxRetries: select_first([runtime_attr.max_retries, default_attr.max_retries])
-        gpuType: gpu_type
-        gpuCount: num_gpus
-        zones: gpu_zones
     }
 }
 

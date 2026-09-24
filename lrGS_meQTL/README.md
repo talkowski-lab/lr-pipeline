@@ -9,9 +9,9 @@ that share the same VCF + wide-format methylation table inputs:
   wraps the core task from
   [AoU-Multiomics-Analysis/tensorQTL_cis_permutations](https://github.com/AoU-Multiomics-Analysis/tensorQTL_cis_permutations),
   which normally expects pre-made plink2 files + phenotype bed + covariates;
-  here it builds those from a VCF + methylation table instead. Vectorized/GPU,
-  no sparse-GRM relatedness correction, tests every qualifying site on a
-  contig in one call.
+  here it builds those from a VCF + methylation table instead. Vectorized,
+  CPU-only (see design decisions below), no sparse-GRM relatedness
+  correction, tests every qualifying site on a contig in one call.
 
 Each backend has a genotype (diploid) and a haplotype workflow:
 
@@ -185,8 +185,8 @@ convention at the user's request): `quay.io/biocontainers/plink2:2.00a5.10--h4ac
 image also works), and `gcr.io/broad-cga-francois-gtex/tensorqtl:latest`
 (the upstream repo's own image).
 
-`tensorqtl_num_gpus` **defaults to 0 (CPU-only)**, not the upstream repo's
-GPU default - see design decisions below.
+`TensorQTLCisPermutations` is CPU-only - no GPU inputs to set. See design
+decisions below for why.
 
 Same `RuntimeAttr? runtime_attr_<task>` pattern as the SAIGE workflows.
 
@@ -195,16 +195,24 @@ Same `RuntimeAttr? runtime_attr_<task>` pattern as the SAIGE workflows.
 - **No per-site chunking.** tensorQTL is vectorized and reads the whole
   phenotype matrix for a contig in one call, unlike SAIGE's one
   null-model-per-site loop - so there's no `sites_per_shard` equivalent here.
-- **CPU by default, not GPU.** The upstream repo's task defaults to
-  `nvidia-tesla-p100` in `us-central1-c`; a real run using that default
-  failed to even start (zero log output after being queued for 2+ hours),
+- **CPU-only, not GPU - removed after two separate real failures.**
+  tensorQTL's own code falls back to CPU automatically
+  (`torch.device("cuda" if torch.cuda.is_available() else "cpu")`).
+  `TensorQTLCisPermutations` originally requested a GPU (the upstream
+  repo's own `nvidia-tesla-p100`/`us-central1-c` default); that run failed
+  to even start (zero log output after being queued for 2+ hours),
   consistent with a GPU quota/availability problem specific to that Google
-  Cloud project - not something this WDL can verify for an arbitrary Terra
-  workspace. tensorQTL's own code falls back to CPU automatically
-  (`torch.device("cuda" if torch.cuda.is_available() else "cpu")`), so
-  `tensorqtl_num_gpus` now defaults to 0. Set it > 0 if your project has
-  confirmed GPU quota and you want the speed. `TensorQTLCisPermutations`'s
-  `mem_gb` default (64GB) is likewise generously sized, not precisely
+  Cloud project. Switching the default to `gpuCount=0` ("no GPU") then
+  failed differently: Cromwell/GCP Batch rejects the runtime attributes
+  outright with `Expecting gpuCount runtime attribute value greater than
+  0` - gpuCount can only be present with a value >= 1, or absent entirely,
+  never 0. Since CPU is the only path verified to actually work end-to-end,
+  GPU runtime attributes were removed from the task rather than fought
+  further for a feature nobody has a working configuration for. If you
+  have confirmed GPU quota and want the speed, `gpuType`/`gpuCount`/`zones`
+  need to be added back to `TensorQTLCisPermutations`'s runtime block
+  directly (only when requesting > 0 GPUs - the value can't be 0).
+  `mem_gb`'s default (64GB) is likewise generously sized, not precisely
   profiled: a real CPU-mode run (chr22, 231 samples, 170,526 variants,
   54,616 phenotypes with a cis-variant) was OOM-killed 12 phenotypes into
   permutation testing under a 7.7GB local test ceiling.

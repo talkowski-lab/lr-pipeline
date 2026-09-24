@@ -42,9 +42,6 @@ workflow GenotypeMeQTL_tensorQTL {
         String bcftools_docker = "quay.io/biocontainers/bcftools:1.19--h8b25389_1"
         String python_docker = "wzhou88/saige:1.3.6"
         String tensorqtl_docker = "gcr.io/broad-cga-francois-gtex/tensorqtl:latest"
-        Int tensorqtl_num_gpus = 0
-        String tensorqtl_gpu_type = "nvidia-tesla-p100"
-        Array[String] tensorqtl_gpu_zones = ["us-central1-c"]
 
         RuntimeAttr? runtime_attr_normalize_vcf
         RuntimeAttr? runtime_attr_convert_pgen
@@ -120,9 +117,6 @@ workflow GenotypeMeQTL_tensorQTL {
                 pval_threshold = pval_threshold,
                 seed = seed,
                 flags = flags,
-                num_gpus = tensorqtl_num_gpus,
-                gpu_type = tensorqtl_gpu_type,
-                gpu_zones = tensorqtl_gpu_zones,
                 prefix = contig_prefix,
                 docker = tensorqtl_docker,
                 runtime_attr_override = runtime_attr_run_tensorqtl
