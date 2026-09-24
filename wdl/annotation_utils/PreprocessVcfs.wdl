@@ -6,7 +6,7 @@ import "../utils/Helpers.wdl"
 workflow PreprocessVcfs {
     meta {
         description: [
-            "This utility preprocesses and integrates one or more cohort VCFs into a single VCF. It first optionally converts the symbolic `<DEL>` and `<DUP>` alleles of an All of Us Phase 2 VCF to sequence alleles, then applies any per-VCF sample-ID swaps, optionally subsets every VCF to the requested samples, and validates that the resulting sample sets are identical. Each VCF is then optionally normalized, annotated with core variant attributes and an optional source label, and length-filtered. Per-VCF controls are required arrays: an empty array disables that control for every VCF; a non-empty array must align with `vcfs`."
+            "This utility preprocesses and integrates one or more cohort VCFs into a single VCF. It first optionally converts the symbolic `<DEL>` and `<DUP>` alleles of an All of Us Phase 2 VCF to sequence alleles and drops its `<INV>` records, then applies any per-VCF sample-ID swaps, optionally subsets every VCF to the requested samples, and validates that the resulting sample sets are identical. Each VCF is then optionally normalized, annotated with core variant attributes and an optional source label, and length-filtered. Per-VCF controls are required arrays: an empty array disables that control for every VCF; a non-empty array must align with `vcfs`."
         ]
     }
 
@@ -14,7 +14,7 @@ workflow PreprocessVcfs {
         vcfs: "Cohort VCFs to preprocess and merge."
         vcf_idxs: "Indexes for `vcfs`."
         normalize_vcfs: "Per-VCF normalization settings. `[]` disables normalization; otherwise aligned with `vcfs`."
-        convert_aou_phase2_symbolic_alleles: "Per-VCF symbolic-allele conversion settings for All of Us Phase 2 VCFs, which carry nucleotide `INS` alleles alongside symbolic `<DEL>` and `<DUP>` alleles. `[]` disables conversion; otherwise aligned with `vcfs`. For enabled VCFs, `<DEL>` becomes a reference-anchored deletion, and `<DUP>` becomes a reference-anchored insertion using `SVLEN` or `END` as a fallback to determine the inserted-reference length. Converted records keep their `SVTYPE`, `SVLEN`, `CIPOS`, `CIEND`, `IMPRECISE` and `STRANDS` values, so a converted `<DUP>` reports `SVTYPE=DUP` alongside `allele_type=ins`; `END` is dropped once the ALT is no longer symbolic. `<INS>` remains unchanged; existing `INFO/allele_length` and `INFO/allele_type` values are preserved, while missing values receive an absolute length from `SVLEN` or `END` as a fallback and `allele_type=ins`. `<INV>` remains symbolic but receives `INFO/allele_type=inv` and an absolute `INFO/allele_length` from `SVLEN` or `END` as a fallback. Any other angle-bracket symbolic ALT fails the workflow."
+        convert_aou_phase2_symbolic_alleles: "Per-VCF symbolic-allele conversion settings for All of Us Phase 2 VCFs, which carry nucleotide `INS` alleles alongside symbolic `<DEL>`, `<DUP>` and `<INV>` alleles. `[]` disables conversion; otherwise aligned with `vcfs`. Non-symbolic records pass through untouched. For enabled VCFs, `<DEL>` becomes a reference-anchored deletion whose `REF` is the deleted reference sequence and whose `ALT` is the anchor base, and `<DUP>` becomes a reference-anchored insertion whose `REF` is the anchor base and whose `ALT` is the anchor plus the duplicated reference sequence, using `SVLEN` or `END` as a fallback to determine the duplicated length. Converted records keep their `SVTYPE`, `SVLEN`, `CIPOS`, `CIEND`, `IMPRECISE` and `STRANDS` values, so a converted `<DUP>` reports `SVTYPE=DUP` even though its alleles are now an insertion; `END` is dropped once the ALT is no longer symbolic, and `INFO/allele_length` and `INFO/allele_type` are left to `AnnotateVariantAttributes`. `<INV>` records are dropped. Any other angle-bracket symbolic ALT fails the workflow."
         source_tags: "Per-VCF `SOURCE` values. `[]` disables source tagging; otherwise aligned with `vcfs`. Required when at least one length cutoff is enabled."
         swap_sample_lists: "Per-VCF sample-ID swap maps, applied before sample subsetting. `[]` disables swapping; otherwise aligned with `vcfs`. A zero-byte map means no swap for that VCF."
         min_length_cutoffs: "Per-VCF minimum absolute allele lengths. `[]` disables minimum-length filtering; otherwise aligned with `vcfs`. A value of `-1` disables this filter for that VCF. Calls with `abs(allele_length)` strictly below an enabled cutoff receive `SMALL_{source_tags[i]}`."
@@ -87,6 +87,7 @@ workflow PreprocessVcfs {
                     input:
                         vcf = vcfs[vcf_index],
                         vcf_idx = vcf_idxs[vcf_index],
+                        drop_inversions = true,
                         ref_fa = ref_fa,
                         ref_fai = ref_fai,
                         prefix = "~{prefix}.vcf_~{vcf_index}.symbolic_converted",
