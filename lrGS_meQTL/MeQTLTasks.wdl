@@ -351,6 +351,8 @@ task RunCisMeQTLContig {
         String vcf_field
         Boolean inv_normalize
         Int n_parallel_workers
+        Int max_sites_without_override
+        Boolean allow_large_scan
         String prefix
         String docker
         RuntimeAttr? runtime_attr_override
@@ -388,6 +390,8 @@ p.add_argument("--vcf-field", default="GT")
 p.add_argument("--inv-normalize", choices=["TRUE", "FALSE"], required=True)
 p.add_argument("--covariates", default=None)
 p.add_argument("--n-workers", type=int, required=True)
+p.add_argument("--max-sites-without-override", type=int, required=True)
+p.add_argument("--allow-large-scan", choices=["TRUE", "FALSE"], required=True)
 p.add_argument("--out", required=True)
 p.add_argument("--skipped-log", required=True)
 ARGS = p.parse_args()
@@ -516,6 +520,28 @@ def main():
             chrom, start, end, site_id, call_rate = row[:5]
             rows.append((chrom, start, end, site_id, call_rate, sample_ids, row[5:]))
 
+    if len(rows) > ARGS.max_sites_without_override and ARGS.allow_large_scan == "FALSE":
+        # Measured empirically (one real site, 2Mb cis-window): step1 ~5s +
+        # step2 ~10s =~ 15s/site. SAIGE's step1_fitNULLGLMM.R fits a fresh
+        # null model per site, so this cost is fundamentally per-site, not
+        # a fixable inefficiency - it doesn't amortize the way a vectorized
+        # tool like tensorQTL does. This guard exists because that math ran
+        # for 10+ hours on a real chr22 scan (572,893 qualifying sites)
+        # before being killed, having completed only ~3.7% of sites.
+        est_hours = len(rows) * 15 / ARGS.n_workers / 3600
+        raise SystemExit(
+            f"{ARGS.contig}: {len(rows)} qualifying sites exceeds "
+            f"max_sites_without_override ({ARGS.max_sites_without_override}). "
+            f"At roughly 15s/site (measured) / {ARGS.n_workers} workers, this would "
+            f"take approximately {est_hours:.1f} hours. SAIGE fits a fresh null model per site, so "
+            f"this cost does not amortize with more sites - for genome-wide or "
+            f"other large-scale scans, use the tensorQTL workflows instead "
+            f"(GenotypeMeQTL_tensorQTL.wdl / HaplotypeMeQTL_tensorQTL.wdl), which "
+            f"test every qualifying site on a contig in one vectorized call. "
+            f"If you really want to run this many sites through SAIGE anyway, "
+            f"set allow_large_scan=true."
+        )
+
     n_tested = 0
     n_skipped = 0
     wrote_header = False
@@ -556,6 +582,8 @@ PYEOF
             --vcf-field ~{vcf_field} \
             --inv-normalize ~{if inv_normalize then "TRUE" else "FALSE"} \
             --n-workers ~{n_parallel_workers} \
+            --max-sites-without-override ~{max_sites_without_override} \
+            --allow-large-scan ~{if allow_large_scan then "TRUE" else "FALSE"} \
             --out ~{prefix}.assoc.txt \
             --skipped-log ~{prefix}.skipped_sites.log \
             ~{if defined(covariates_file) then "--covariates=" + covariates_file else ""}

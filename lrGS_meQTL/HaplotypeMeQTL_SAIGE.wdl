@@ -46,6 +46,8 @@ workflow HaplotypeMeQTL_SAIGE {
         Int min_samples_per_site = 20
         Boolean inv_normalize = true
         Int n_parallel_workers = 8
+        Int max_sites_without_override = 5000
+        Boolean allow_large_scan = false
 
         String plink_docker = "quay.io/biocontainers/plink:1.90b6.21--h031d066_5"
         String bcftools_docker = "quay.io/biocontainers/bcftools:1.19--h8b25389_1"
@@ -130,6 +132,8 @@ workflow HaplotypeMeQTL_SAIGE {
                 vcf_field = "GT",
                 inv_normalize = inv_normalize,
                 n_parallel_workers = n_parallel_workers,
+                max_sites_without_override = max_sites_without_override,
+                allow_large_scan = allow_large_scan,
                 prefix = "~{contig_prefix}.cis_meQTL.haplotype",
                 docker = saige_docker,
                 runtime_attr_override = runtime_attr_run_contig
