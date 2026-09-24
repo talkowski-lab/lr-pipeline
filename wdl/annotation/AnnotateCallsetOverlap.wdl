@@ -14,6 +14,7 @@ workflow AnnotateCallsetOverlap {
             "Note: When converting to symbolic representation, only canonical DUPs (allele_type = `DUP` exactly) are treated as DUP; other DUP subtypes (e.g., `dup_interspersed`, `inv_dup`) are treated as insertions.",
             "Note: Callset DUPs are compared twice, because the two matching rules need different coordinates. Against truth DUPs they are compared by reciprocal overlap, over their `ORIGIN` interval when `move_dup_to_origin` is true and over their own span from POS otherwise; against truth insertions they are always collapsed to a point at their VCF position and compared by breakpoint proximity and length ratio. Setting `move_dup_to_origin` to false is what lets the workflow run on a callset with no `INFO/ORIGIN`.",
             "Note: The SV truth VCF is expected to be symbolic already. Set `convert_symbolic_truth_sv_vcf` when it instead carries sequence alleles, in which case its allele type and length are read from `type_field_truth_sv_vcf` and `length_field_truth_sv_vcf`, which need not match the fields used for the callset. Its canonical DUPs then follow the same `move_dup_to_origin` positioning as the callset.",
+            "Every minimum-length filter is applied in this workflow, measuring each VCF by its own `length_field_*` input, and the SV truth VCF is filtered before renaming and conversion. With `convert_symbolic_truth_sv_vcf` a canonical DUP is therefore measured by `length_field_truth_sv_vcf` rather than by the `ORIGIN` span that conversion writes into `SVLEN`.",
             "Both the exact-match and Truvari rounds can be sharded within a contig. Truvari shard boundaries are snapped forward to the next gap wider than the `min_shard_gap_truvari_match` input of `TruvariMatch`, which keeps results identical to an unsharded run because Truvari only groups records into a new comparison chunk once the next record clears the running end by more than its chunk size. Fixed-width bins alone would split colocated record pairs and silently lose matches."
         ]
     }
@@ -26,19 +27,19 @@ workflow AnnotateCallsetOverlap {
         truth_sv_vcf: "Truth VCF containing SVs to match against."
         truth_sv_vcf_idx: "Index for `truth_sv_vcf`."
         contigs: "Contigs to evaluate."
-        min_sv_length_truvari_vcf: "Minimum length for a callset variant to enter the Truvari matching round."
-        min_sv_length_truvari_truth_vcf: "Minimum length for a truth variant to enter the Truvari matching round."
-        min_sv_length_bedtools_closest_vcf: "Minimum length for a callset variant to enter the `bedtools closest` matching round."
-        min_sv_length_bedtools_closest_truth_vcf: "Minimum length for a truth variant to enter the `bedtools closest` matching round."
+        min_sv_length_truvari_vcf: "Minimum length for a callset variant to enter the Truvari matching round, measured by `length_field_vcf`."
+        min_sv_length_truvari_truth_snv_indel_vcf: "Minimum length for a SNV & indel truth variant to enter the Truvari matching round, measured by `length_field_truth_snv_indel_vcf`."
+        min_sv_length_bedtools_closest_vcf: "Minimum length for a callset variant to enter the `bedtools closest` matching round, measured by `length_field_vcf`."
+        min_sv_length_bedtools_closest_truth_vcf: "Minimum length for an SV truth variant to enter the `bedtools closest` matching round, measured by `length_field_truth_sv_vcf` before any renaming or conversion."
         shard_bin_size_exact_match: "If set, shards the exact-match round into contig regions of roughly this many base pairs, run in parallel."
         shard_bin_size_truvari_match: "If set, shards the Truvari round into contig regions of at least this many base pairs, run in parallel. Each region is extended to the next safe gap, so a value of 1000000 or more is recommended."
         convert_symbolic_truth_sv_vcf: "Whether the SV truth VCF represents alleles as sequence rather than symbolically. When true it is converted to a symbolic representation first, reading the `type_field_truth_sv_vcf` and `length_field_truth_sv_vcf` INFO fields."
         move_dup_to_origin: "Whether canonical DUPs are repositioned onto their `INFO/ORIGIN` interval before the DUP-vs-DUP reciprocal-overlap comparison. When false each DUP instead spans its own coordinates, from POS over its allele length, and `INFO/ORIGIN` is not required."
         type_field_vcf: "INFO field in the callset VCF giving each variant's allele type."
         type_field_truth_sv_vcf: "INFO field in the SV truth VCF giving each variant's allele type. Only read when `convert_symbolic_truth_sv_vcf` is true, since a symbolic truth VCF is typed by `SVTYPE`."
-        length_field_vcf: "INFO field in the callset VCF giving each variant's allele length."
-        length_field_truth_sv_vcf: "INFO field in the SV truth VCF giving each variant's allele length. Only read when `convert_symbolic_truth_sv_vcf` is true, since conversion rewrites the length into `SVLEN`."
-        length_field_bedtools_closest_truth_vcf: "INFO field carrying the SV truth VCF's allele length by the time it reaches the `bedtools closest` round, used to apply `min_sv_length_bedtools_closest_truth_vcf`. Conversion always writes `SVLEN`, so this only needs changing for an already-symbolic truth VCF that names the field differently."
+        length_field_vcf: "INFO field in the callset VCF giving each variant's allele length, read by both callset length filters and by the symbolic conversion."
+        length_field_truth_snv_indel_vcf: "Length used to filter the SNV & indel truth VCF, either an INFO field or `ILEN`, the bcftools built-in indel length computed from REF and ALT for a truth VCF such as gnomAD that carries no length field."
+        length_field_truth_sv_vcf: "INFO field in the SV truth VCF giving each variant's allele length, used to apply `min_sv_length_bedtools_closest_truth_vcf` and, when `convert_symbolic_truth_sv_vcf` is true, read by the conversion. A symbolic truth VCF carries `SVLEN`; a sequence-allele one needs its own field named here, e.g. `allele_length`."
         source_tag_truth_snv_indel_vcf: "Label used to tag matches against the SNV & indel truth VCF."
         source_tag_truth_sv_vcf: "Label used to tag matches against the SV truth VCF."
         args_string_vcf: "`bcftools view` arguments used to pre-subset the callset VCF."
@@ -67,7 +68,7 @@ workflow AnnotateCallsetOverlap {
         String prefix
 
         Int min_sv_length_truvari_vcf
-        Int min_sv_length_truvari_truth_vcf
+        Int min_sv_length_truvari_truth_snv_indel_vcf
         Int min_sv_length_bedtools_closest_vcf
         Int min_sv_length_bedtools_closest_truth_vcf
 
@@ -80,8 +81,8 @@ workflow AnnotateCallsetOverlap {
         String type_field_vcf = "allele_type"
         String type_field_truth_sv_vcf = "allele_type"
         String length_field_vcf = "allele_length"
-        String length_field_truth_sv_vcf = "allele_length"
-        String length_field_bedtools_closest_truth_vcf = "SVLEN"
+        String length_field_truth_snv_indel_vcf = "ILEN"
+        String length_field_truth_sv_vcf = "SVLEN"
         String source_tag_truth_snv_indel_vcf = "SNV_indel"
         String source_tag_truth_sv_vcf = "SV"
 
@@ -180,11 +181,23 @@ workflow AnnotateCallsetOverlap {
                 runtime_attr_override = runtime_attr_subset_sv_truth
         }
 
+        # Apply the SV truth length filter before renaming and conversion, so every later step sees only records long enough
+        call Helpers.SubsetVcfByLength as SubsetBedtoolsTruth {
+            input:
+                vcf = SubsetSVTruth.subset_vcf,
+                vcf_idx = SubsetSVTruth.subset_vcf_idx,
+                length_field = length_field_truth_sv_vcf,
+                min_length = min_sv_length_bedtools_closest_truth_vcf,
+                prefix = "~{prefix}.~{contig}.sv_truth.subset",
+                docker = utils_docker,
+                runtime_attr_override = runtime_attr_bedtools_subset_truth
+        }
+
         if (defined(rename_id_string_truth_sv_vcf)) {
             call Helpers.RenameVariantIds as RenameSVTruthIds {
                 input:
-                    vcf = SubsetSVTruth.subset_vcf,
-                    vcf_idx = SubsetSVTruth.subset_vcf_idx,
+                    vcf = SubsetBedtoolsTruth.subset_vcf,
+                    vcf_idx = SubsetBedtoolsTruth.subset_vcf_idx,
                     prefix = "~{prefix}.~{contig}.sv_truth.renamed",
                     id_format = select_first([rename_id_string_truth_sv_vcf]),
                     strip_chr = select_first([rename_id_strip_chr_truth_sv_vcf, false]),
@@ -193,8 +206,8 @@ workflow AnnotateCallsetOverlap {
             }
         }
 
-        File truth_sv_vcf_renamed = select_first([RenameSVTruthIds.renamed_vcf, SubsetSVTruth.subset_vcf])
-        File truth_sv_vcf_renamed_idx = select_first([RenameSVTruthIds.renamed_vcf_idx, SubsetSVTruth.subset_vcf_idx])
+        File truth_sv_vcf_renamed = select_first([RenameSVTruthIds.renamed_vcf, SubsetBedtoolsTruth.subset_vcf])
+        File truth_sv_vcf_renamed_idx = select_first([RenameSVTruthIds.renamed_vcf_idx, SubsetBedtoolsTruth.subset_vcf_idx])
 
         # Give a sequence-allele SV truth VCF the symbolic ALTs, SVTYPE, SVLEN and END the bedtools closest round reads
         if (convert_symbolic_truth_sv_vcf) {
@@ -223,9 +236,6 @@ workflow AnnotateCallsetOverlap {
                 contig = contig,
                 prefix = "~{prefix}.~{contig}",
                 shard_bin_size_exact_match = shard_bin_size_exact_match,
-                min_sv_length_truvari_vcf = min_sv_length_truvari_vcf,
-                min_sv_length_truvari_truth_vcf = min_sv_length_truvari_truth_vcf,
-                length_field_vcf = length_field_vcf,
                 source_tag_truth_snv_indel_vcf = source_tag_truth_snv_indel_vcf,
                 rename_id_string_vcf = rename_id_string_vcf,
                 rename_id_string_truth_snv_indel_vcf = rename_id_string_truth_snv_indel_vcf,
@@ -240,17 +250,38 @@ workflow AnnotateCallsetOverlap {
                 runtime_attr_exact_match = runtime_attr_exact_match,
                 runtime_attr_append_exact_annotations = runtime_attr_append_exact_annotations,
                 runtime_attr_concat_exact_annotations = runtime_attr_concat_exact_annotations,
-                runtime_attr_concat_exact_unmatched = runtime_attr_concat_exact_unmatched,
-                runtime_attr_truvari_subset_vcf = runtime_attr_truvari_subset_vcf,
-                runtime_attr_truvari_subset_truth = runtime_attr_truvari_subset_truth
+                runtime_attr_concat_exact_unmatched = runtime_attr_concat_exact_unmatched
+        }
+
+        # Admit only records long enough for Truvari, measuring each VCF by its own length field
+        call Helpers.SubsetVcfByLength as SubsetTruvariEval {
+            input:
+                vcf = ExactMatch.unmatched_vcf,
+                vcf_idx = ExactMatch.unmatched_vcf_idx,
+                length_field = length_field_vcf,
+                min_length = min_sv_length_truvari_vcf,
+                prefix = "~{prefix}.~{contig}.truvari_eval",
+                docker = utils_docker,
+                runtime_attr_override = runtime_attr_truvari_subset_vcf
+        }
+
+        call Helpers.SubsetVcfByLength as SubsetTruvariTruth {
+            input:
+                vcf = ExactMatch.truth_vcf,
+                vcf_idx = ExactMatch.truth_vcf_idx,
+                length_field = length_field_truth_snv_indel_vcf,
+                min_length = min_sv_length_truvari_truth_snv_indel_vcf,
+                prefix = "~{prefix}.~{contig}.truvari_truth",
+                docker = utils_docker,
+                runtime_attr_override = runtime_attr_truvari_subset_truth
         }
 
         call TruvariMatch.TruvariMatch {
             input:
-                vcf = ExactMatch.truvari_eval_vcf,
-                vcf_idx = ExactMatch.truvari_eval_vcf_idx,
-                truth_snv_indel_vcf = ExactMatch.truvari_truth_vcf,
-                truth_snv_indel_vcf_idx = ExactMatch.truvari_truth_vcf_idx,
+                vcf = SubsetTruvariEval.subset_vcf,
+                vcf_idx = SubsetTruvariEval.subset_vcf_idx,
+                truth_snv_indel_vcf = SubsetTruvariTruth.subset_vcf,
+                truth_snv_indel_vcf_idx = SubsetTruvariTruth.subset_vcf_idx,
                 contig = contig,
                 prefix = "~{prefix}.~{contig}.truvari",
                 source_tag = source_tag_truth_snv_indel_vcf,
@@ -280,24 +311,31 @@ workflow AnnotateCallsetOverlap {
                 runtime_attr_override = runtime_attr_append_truvari_annotations
         }
 
-        call BedtoolsClosestSV.BedtoolsClosestSV {
+        # Admit only records long enough for the bedtools closest round; the SV truth was filtered above
+        call Helpers.SubsetVcfByLength as SubsetBedtoolsEval {
             input:
                 vcf = TruvariMatch.unmatched_vcf,
                 vcf_idx = TruvariMatch.unmatched_vcf_idx,
+                length_field = length_field_vcf,
+                min_length = min_sv_length_bedtools_closest_vcf,
+                prefix = "~{prefix}.~{contig}.bedtools_eval",
+                docker = utils_docker,
+                runtime_attr_override = runtime_attr_bedtools_subset_vcf
+        }
+
+        call BedtoolsClosestSV.BedtoolsClosestSV {
+            input:
+                vcf = SubsetBedtoolsEval.subset_vcf,
+                vcf_idx = SubsetBedtoolsEval.subset_vcf_idx,
                 truth_sv_vcf = truth_sv_vcf_final,
                 truth_sv_vcf_idx = truth_sv_vcf_final_idx,
                 prefix = "~{prefix}.~{contig}.bedtools_closest",
-                min_sv_length = min_sv_length_bedtools_closest_vcf,
-                min_sv_length_truth = min_sv_length_bedtools_closest_truth_vcf,
                 type_field = type_field_vcf,
                 length_field = length_field_vcf,
-                length_field_truth = length_field_bedtools_closest_truth_vcf,
                 move_dup_to_origin = move_dup_to_origin,
                 source_tag = source_tag_truth_sv_vcf,
                 gatk_sv_lr_docker = gatk_sv_lr_docker,
                 utils_docker = utils_docker,
-                runtime_attr_subset_vcf = runtime_attr_bedtools_subset_vcf,
-                runtime_attr_subset_truth = runtime_attr_bedtools_subset_truth,
                 runtime_attr_convert_to_symbolic = runtime_attr_bedtools_convert_to_symbolic,
                 runtime_attr_split_vcf = runtime_attr_bedtools_split_vcf,
                 runtime_attr_split_truth = runtime_attr_bedtools_split_truth,
