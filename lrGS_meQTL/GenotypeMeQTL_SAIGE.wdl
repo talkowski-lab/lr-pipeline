@@ -41,9 +41,9 @@ workflow GenotypeMeQTL_SAIGE {
         Int min_samples_per_site = 20
         Boolean inv_normalize = true
 
-        String plink_docker
-        String bcftools_docker
-        String saige_docker
+        String plink_docker = "quay.io/biocontainers/plink:1.90b6.21--h031d066_5"
+        String bcftools_docker = "quay.io/biocontainers/bcftools:1.19--h8b25389_1"
+        String saige_docker = "wzhou88/saige:1.3.6"
 
         RuntimeAttr? runtime_attr_index_vcf
         RuntimeAttr? runtime_attr_ld_prune

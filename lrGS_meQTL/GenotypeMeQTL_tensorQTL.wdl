@@ -38,10 +38,10 @@ workflow GenotypeMeQTL_tensorQTL {
         Int? seed
         String? flags
 
-        String plink2_docker
-        String bcftools_docker
-        String python_docker
-        String tensorqtl_docker
+        String plink2_docker = "quay.io/biocontainers/plink2:2.00a5.10--h4ac6f70_0"
+        String bcftools_docker = "quay.io/biocontainers/bcftools:1.19--h8b25389_1"
+        String python_docker = "wzhou88/saige:1.3.6"
+        String tensorqtl_docker = "gcr.io/broad-cga-francois-gtex/tensorqtl:latest"
         Int tensorqtl_num_gpus = 1
         String tensorqtl_gpu_type = "nvidia-tesla-p100"
         Array[String] tensorqtl_gpu_zones = ["us-central1-c"]
