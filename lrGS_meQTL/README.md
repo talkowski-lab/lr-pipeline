@@ -185,6 +185,12 @@ Same `RuntimeAttr? runtime_attr_<task>` pattern as the SAIGE workflows.
   conversion via plink2's `--output-chr chrM`, since it defaults to
   stripping the `chr` prefix, which would otherwise silently break tensorQTL's
   cis-window matching against the methylation bed's `#chr` column.
+  `NormalizeVcf` also needs considerably more memory than its VCF size would
+  suggest - observed OOM-killed on Terra (`rc=137`) and locally reproduced
+  failing even at 7GB on a ~2GB chr22 VCF, almost certainly from splitting
+  this dataset's one extreme multiallelic site (576 ALT alleles). Its
+  `mem_gb` default (64GB) is a generously-sized value backed by that
+  empirical lower bound, not a precisely profiled number.
 - **Missing phenotype values are mean-imputed, not sample-subsetted.**
   tensorQTL needs one rectangular, complete phenotype x sample matrix for
   the whole contig (unlike SAIGE, which fits a fresh null model per site

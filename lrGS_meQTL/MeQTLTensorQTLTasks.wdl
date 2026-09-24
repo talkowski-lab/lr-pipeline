@@ -7,6 +7,15 @@ import "../wdl/utils/Structs.wdl"
 # variants; this also sidesteps plink2's ~254-ALT-allele import limit on
 # the rare complex multiallelic site, without silently dropping it the way
 # SAIGE's VCF reader does (see MeQTLTasks.wdl).
+#
+# Needs considerably more memory than its VCF size would suggest: observed
+# OOM-killed (rc=137) on Terra, and locally reproduced failing even at 7GB,
+# on a ~2GB chr22 VCF - almost certainly driven by splitting the one
+# extreme multiallelic site (576 ALT alleles) this dataset has, combined
+# with its very large per-record annotation payload. mem_gb below is a
+# generously-sized default backed by that empirical lower bound, not a
+# precisely profiled number - override via runtime_attr_override if it
+# still OOMs on a larger/differently-annotated contig.
 task NormalizeVcf {
     input {
         File vcf
@@ -27,7 +36,7 @@ task NormalizeVcf {
 
     RuntimeAttr default_attr = object {
         cpu_cores: 2,
-        mem_gb: 4,
+        mem_gb: 64,
         disk_gb: 3 * ceil(size(vcf, "GB")) + 20,
         boot_disk_gb: 10,
         preemptible_tries: 2,
