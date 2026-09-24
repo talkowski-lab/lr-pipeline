@@ -230,8 +230,10 @@ PYEOF
 }
 
 # Build the trio VCF UPDhmm needs: prefilter each single-sample VCF to autosomal biallelic
-# PASS SNPs with GT only (optionally masking low-GQ genotypes), rename each sample column to
-# its PED id, merge the three, and keep only biallelic SNP sites genotyped in all three.
+# PASS SNPs, keeping GT plus DP/AD if present (optionally masking low-GQ genotypes), rename
+# each sample column to its PED id, merge the three, and keep only biallelic SNP sites
+# genotyped in all three. DP/AD are retained (not just GT) so UPDhmm's add_ratios step can
+# compute real per-block depth ratios instead of leaving them NA.
 task MakeTrioVcf {
     input {
         String family_id
@@ -275,10 +277,10 @@ task MakeTrioVcf {
             if [ "$MINGQ" -gt 0 ]; then
                 bcftools +setGT "raw.$id.bcf" -Ou -- -t q -i "FMT/GQ<$MINGQ" -n . \
                     | bcftools annotate -x INFO -Ou \
-                    | bcftools annotate -x '^FORMAT/GT' -Oz -o "filt.$id.vcf.gz"
+                    | bcftools annotate -x '^FORMAT/GT,FORMAT/DP,FORMAT/AD' -Oz -o "filt.$id.vcf.gz"
             else
                 bcftools annotate -x INFO "raw.$id.bcf" -Ou \
-                    | bcftools annotate -x '^FORMAT/GT' -Oz -o "filt.$id.vcf.gz"
+                    | bcftools annotate -x '^FORMAT/GT,FORMAT/DP,FORMAT/AD' -Oz -o "filt.$id.vcf.gz"
             fi
             printf '%s\n' "$id" > "sn.$id.txt"
             bcftools reheader -s "sn.$id.txt" "filt.$id.vcf.gz" -o "renamed.$id.vcf.gz"
