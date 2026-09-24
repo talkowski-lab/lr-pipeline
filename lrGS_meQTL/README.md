@@ -3,7 +3,7 @@
 Cis-meQTL scanning with plink (LD-pruning, sparse-GRM marker set) + SAIGE
 (sparse-GRM null model + SPA test), scattered per contig.
 
-Two workflows share `Tasks.meQTL.wdl`:
+Two workflows share `MeQTLTasks.wdl`:
 
 - **`GenotypeMeQTL_SAIGE.wdl`** - diploid genotype dosage vs. per-sample methylation.
 - **`HaplotypeMeQTL_SAIGE.wdl`** - per-haplotype pseudo-genotype vs. per-haplotype
@@ -17,6 +17,7 @@ all three must describe the same contig (e.g. `vcfs[2]` and
 
 | Input | Default | Notes |
 |---|---|---|
+| `prefix` | (required) | Run name, prefixed onto every output file: `~{prefix}.~{contig}...` |
 | `min_call_rate` | 0.9 | Per-site minimum fraction of non-missing samples to test |
 | `cis_window` | 2,000,000 | +/- bp window around each site's position for the association scan |
 | `sites_per_shard` | 200 | How many qualifying sites each `RunCisMeQTLChunk` shard processes serially |
@@ -28,10 +29,15 @@ all three must describe the same contig (e.g. `vcfs[2]` and
 | `min_samples_per_site` | 20 | Sites with fewer non-missing, covariate-complete samples than this are skipped (logged, not fatal) |
 | `inv_normalize` | true | Inverse-normalize the phenotype in step1 (`--invNormalize`) |
 
-The docker images (`plink_docker`, `bcftools_docker`, `saige_docker`) default
-to published, pre-verified images and normally don't need to be overridden:
+`plink_docker`, `bcftools_docker`, and `saige_docker` are required inputs (no
+in-WDL default, per repo convention). Pre-verified images to pass in:
 `quay.io/biocontainers/plink:1.90b6.21--h031d066_5`,
 `quay.io/biocontainers/bcftools:1.19--h8b25389_1`, `wzhou88/saige:1.3.6`.
+
+Every task also takes a `RuntimeAttr? runtime_attr_override`, exposed at the
+workflow level as one `runtime_attr_<task>` input per task (e.g.
+`runtime_attr_create_grm`), so resources can be tuned per task without
+editing the WDL.
 
 ## Methylation file format
 

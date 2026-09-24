@@ -1,29 +1,24 @@
 version 1.0
 
-# Shared tasks for cis-meQTL scanning with plink + SAIGE (sparse-GRM mode).
-#
-# Both GenotypeMeQTL.wdl (diploid genotype dosage) and HaplotypeMeQTL.wdl
-# (per-haplotype pseudo-samples) import this file and scatter these tasks
-# per contig, then chunk methylation sites within each contig to keep any
-# single task to a bounded number of SAIGE step1/step2 invocations.
-
 import "../wdl/utils/Structs.wdl"
 
 task IndexVcf {
     input {
         File vcf
-        String docker = "quay.io/biocontainers/bcftools:1.19--h8b25389_1"
+        String prefix
+        String docker
         RuntimeAttr? runtime_attr_override
     }
 
     command <<<
         set -euo pipefail
-        ln -s ~{vcf} local.vcf.gz
-        bcftools index -c local.vcf.gz
+
+        ln -s ~{vcf} ~{prefix}.vcf.gz
+        bcftools index -c ~{prefix}.vcf.gz
     >>>
 
     output {
-        File vcf_csi = "local.vcf.gz.csi"
+        File vcf_csi = "~{prefix}.vcf.gz.csi"
     }
 
     RuntimeAttr default_attr = object {
@@ -31,8 +26,8 @@ task IndexVcf {
         mem_gb: 4,
         disk_gb: ceil(size(vcf, "GB")) + 20,
         boot_disk_gb: 10,
-        preemptible_tries: 3,
-        max_retries: 1
+        preemptible_tries: 2,
+        max_retries: 0
     }
     RuntimeAttr runtime_attr = select_first([runtime_attr_override, default_attr])
     runtime {
@@ -50,7 +45,7 @@ task IndexVcf {
 # samples: each original sample "S" becomes "S_hap1" and "S_hap2", each
 # genotype encoded as a homozygous pseudo-diploid call (e.g. allele "1" on a
 # haplotype becomes "1/1"; a missing allele becomes "./."). This lets plink
-# and SAIGE - both diploid-oriented tools - operate on haplotypes unchanged.
+# and SAIGE - both diploid-oriented - operate on haplotypes unchanged.
 # Column names match the *_hap1 / *_hap2 convention used in the per-haplotype
 # methylation bed files (e.g. hprc_methylated.chr22.haplotype.bed.gz), so
 # downstream matching is by sample-name string, not column order.
@@ -61,8 +56,8 @@ task IndexVcf {
 task SplitPhasedVcfToHaplotypes {
     input {
         File vcf
-        String contig
-        String docker = "quay.io/biocontainers/bcftools:1.19--h8b25389_1"
+        String prefix
+        String docker
         RuntimeAttr? runtime_attr_override
     }
 
@@ -98,14 +93,14 @@ task SplitPhasedVcfToHaplotypes {
                 }
                 printf "\n"
             }
-        ' | bgzip -c > ~{contig}.haplotypes.vcf.gz
+        ' | bgzip -c > ~{prefix}.haplotypes.vcf.gz
 
-        bcftools index -c ~{contig}.haplotypes.vcf.gz
+        bcftools index -c ~{prefix}.haplotypes.vcf.gz
     >>>
 
     output {
-        File haplotype_vcf = "~{contig}.haplotypes.vcf.gz"
-        File haplotype_vcf_csi = "~{contig}.haplotypes.vcf.gz.csi"
+        File haplotype_vcf = "~{prefix}.haplotypes.vcf.gz"
+        File haplotype_vcf_csi = "~{prefix}.haplotypes.vcf.gz.csi"
     }
 
     RuntimeAttr default_attr = object {
@@ -113,8 +108,8 @@ task SplitPhasedVcfToHaplotypes {
         mem_gb: 4,
         disk_gb: 4 * ceil(size(vcf, "GB")) + 20,
         boot_disk_gb: 10,
-        preemptible_tries: 3,
-        max_retries: 1
+        preemptible_tries: 2,
+        max_retries: 0
     }
     RuntimeAttr runtime_attr = select_first([runtime_attr_override, default_attr])
     runtime {
@@ -135,12 +130,12 @@ task SplitPhasedVcfToHaplotypes {
 task LdPruneAndExtract {
     input {
         File vcf
-        String contig
-        Int window_size_kb = 50
-        Int step_size = 5
-        Float r2_threshold = 0.2
-        String vcf_half_call = "missing"
-        String docker = "quay.io/biocontainers/plink:1.90b6.21--h031d066_5"
+        String prefix
+        Int window_size_kb
+        Int step_size
+        Float r2_threshold
+        String vcf_half_call
+        String docker
         RuntimeAttr? runtime_attr_override
     }
 
@@ -149,21 +144,21 @@ task LdPruneAndExtract {
 
         plink --vcf ~{vcf} --vcf-half-call ~{vcf_half_call} \
             --indep-pairwise ~{window_size_kb} ~{step_size} ~{r2_threshold} \
-            --out pruned
+            --out ~{prefix}.prune
 
         plink --vcf ~{vcf} --vcf-half-call ~{vcf_half_call} \
-            --extract pruned.prune.in --keep-allele-order --make-bed \
-            --out ~{contig}.pruned
+            --extract ~{prefix}.prune.prune.in --keep-allele-order --make-bed \
+            --out ~{prefix}.pruned
     >>>
 
     output {
-        File bed = "~{contig}.pruned.bed"
-        File bim = "~{contig}.pruned.bim"
-        File fam = "~{contig}.pruned.fam"
-        File prune_in = "pruned.prune.in"
-        File prune_out = "pruned.prune.out"
-        File prune_log = "pruned.log"
-        File extract_log = "~{contig}.pruned.log"
+        File bed = "~{prefix}.pruned.bed"
+        File bim = "~{prefix}.pruned.bim"
+        File fam = "~{prefix}.pruned.fam"
+        File prune_in = "~{prefix}.prune.prune.in"
+        File prune_out = "~{prefix}.prune.prune.out"
+        File prune_log = "~{prefix}.prune.log"
+        File extract_log = "~{prefix}.pruned.log"
     }
 
     RuntimeAttr default_attr = object {
@@ -171,8 +166,8 @@ task LdPruneAndExtract {
         mem_gb: 8,
         disk_gb: 3 * ceil(size(vcf, "GB")) + 25,
         boot_disk_gb: 10,
-        preemptible_tries: 3,
-        max_retries: 1
+        preemptible_tries: 2,
+        max_retries: 0
     }
     RuntimeAttr runtime_attr = select_first([runtime_attr_override, default_attr])
     runtime {
@@ -191,24 +186,26 @@ task CreateSparseGRM {
         File bed
         File bim
         File fam
-        Int num_random_markers = 2000
-        Float relatedness_cutoff = 0.125
-        Float min_maf_for_grm = 0.01
-        Float max_missing_rate_for_grm = 0.15
-        Int n_threads = 4
-        String docker = "wzhou88/saige:1.3.6"
+        String prefix
+        Int num_random_markers
+        Float relatedness_cutoff
+        Float min_maf_for_grm
+        Float max_missing_rate_for_grm
+        Int n_threads
+        String docker
         RuntimeAttr? runtime_attr_override
     }
 
     command <<<
         set -euo pipefail
-        ln -s ~{bed} plink_input.bed
-        ln -s ~{bim} plink_input.bim
-        ln -s ~{fam} plink_input.fam
+
+        ln -s ~{bed} ~{prefix}.bed
+        ln -s ~{bim} ~{prefix}.bim
+        ln -s ~{fam} ~{prefix}.fam
 
         createSparseGRM.R \
-            --plinkFile=plink_input \
-            --outputPrefix=sparseGRM \
+            --plinkFile=~{prefix} \
+            --outputPrefix=~{prefix}.sparseGRM \
             --numRandomMarkerforSparseKin=~{num_random_markers} \
             --relatednessCutoff=~{relatedness_cutoff} \
             --minMAFforGRM=~{min_maf_for_grm} \
@@ -217,8 +214,8 @@ task CreateSparseGRM {
     >>>
 
     output {
-        File sparse_grm = glob("sparseGRM*.sparseGRM.mtx")[0]
-        File sparse_grm_samples = glob("sparseGRM*.sparseGRM.mtx.sampleIDs.txt")[0]
+        File sparse_grm = glob("~{prefix}.sparseGRM*.sparseGRM.mtx")[0]
+        File sparse_grm_samples = glob("~{prefix}.sparseGRM*.sparseGRM.mtx.sampleIDs.txt")[0]
     }
 
     RuntimeAttr default_attr = object {
@@ -226,8 +223,8 @@ task CreateSparseGRM {
         mem_gb: 16,
         disk_gb: 5 * ceil(size(bed, "GB")) + 20,
         boot_disk_gb: 10,
-        preemptible_tries: 3,
-        max_retries: 1
+        preemptible_tries: 2,
+        max_retries: 0
     }
     RuntimeAttr runtime_attr = select_first([runtime_attr_override, default_attr])
     runtime {
@@ -249,13 +246,15 @@ task CreateSparseGRM {
 task FilterMethylationSites {
     input {
         File methylation_bed
-        Float call_rate_threshold = 0.9
-        String docker = "wzhou88/saige:1.3.6"
+        Float call_rate_threshold
+        String prefix
+        String docker
         RuntimeAttr? runtime_attr_override
     }
 
     command <<<
         set -euo pipefail
+
         cat <<'PYEOF' > filter_sites.py
 import csv
 import gzip
@@ -263,8 +262,8 @@ import sys
 
 in_path = sys.argv[1]
 threshold = float(sys.argv[2])
-out_path = "filtered_sites.tsv.gz"
-count_path = "n_sites.txt"
+out_path = sys.argv[3]
+count_path = sys.argv[4]
 
 MISSING = {".", "NA", ""}
 
@@ -293,12 +292,12 @@ with gzip.open(in_path, "rt") as fin, gzip.open(out_path, "wt") as fout:
 with open(count_path, "w") as f:
     f.write(str(n_qualifying) + "\n")
 PYEOF
-        python3 filter_sites.py ~{methylation_bed} ~{call_rate_threshold}
+        python3 filter_sites.py ~{methylation_bed} ~{call_rate_threshold} ~{prefix}.filtered_sites.tsv.gz ~{prefix}.n_sites.txt
     >>>
 
     output {
-        File filtered_sites = "filtered_sites.tsv.gz"
-        Int n_sites = read_int("n_sites.txt")
+        File filtered_sites = "~{prefix}.filtered_sites.tsv.gz"
+        Int n_sites = read_int("~{prefix}.n_sites.txt")
     }
 
     RuntimeAttr default_attr = object {
@@ -306,8 +305,8 @@ PYEOF
         mem_gb: 4,
         disk_gb: 5 * ceil(size(methylation_bed, "GB")) + 10,
         boot_disk_gb: 10,
-        preemptible_tries: 3,
-        max_retries: 1
+        preemptible_tries: 2,
+        max_retries: 0
     }
     RuntimeAttr runtime_attr = select_first([runtime_attr_override, default_attr])
     runtime {
@@ -341,19 +340,21 @@ task RunCisMeQTLChunk {
         File sparse_grm
         File sparse_grm_samples
         Float relatedness_cutoff
-        Int cis_window = 2000000
+        Int cis_window
         File? covariates_file
-        String covar_col_list = ""
-        String qcovar_col_list = ""
-        Int min_samples_per_site = 20
-        String vcf_field = "GT"
-        Boolean inv_normalize = true
-        String docker = "wzhou88/saige:1.3.6"
+        String covar_col_list
+        String qcovar_col_list
+        Int min_samples_per_site
+        String vcf_field
+        Boolean inv_normalize
+        String prefix
+        String docker
         RuntimeAttr? runtime_attr_override
     }
 
     command <<<
         set -euo pipefail
+
         ln -s ~{vcf} genotypes.vcf.gz
         ln -s ~{vcf_csi} genotypes.vcf.gz.csi
         ln -s ~{pruned_bed} variance_ratio_markers.bed
@@ -361,7 +362,7 @@ task RunCisMeQTLChunk {
         ln -s ~{pruned_fam} variance_ratio_markers.fam
         ln -s ~{sparse_grm} sparseGRM.mtx
         ln -s ~{sparse_grm_samples} sparseGRM.sampleIDs.txt
-        touch skipped_sites.log
+        touch ~{prefix}.skipped_sites.log
         mkdir -p sites results
 
         cat <<'PYEOF' > run_chunk.py
@@ -384,6 +385,8 @@ p.add_argument("--min-samples", type=int, required=True)
 p.add_argument("--vcf-field", default="GT")
 p.add_argument("--inv-normalize", choices=["TRUE", "FALSE"], required=True)
 p.add_argument("--covariates", default=None)
+p.add_argument("--out", required=True)
+p.add_argument("--skipped-log", required=True)
 args = p.parse_args()
 
 MISSING = {".", "NA", ""}
@@ -398,7 +401,7 @@ if args.covariates:
         for row in reader:
             covariates[row[0]] = row[1:]
 
-combined_out = open("chunk.assoc.txt", "w")
+combined_out = open(args.out, "w")
 wrote_header = False
 n_tested = 0
 n_skipped = 0
@@ -426,7 +429,7 @@ with gzip.open(args.sites, "rt") as f:
 
         if len(rows_out) < args.min_samples:
             n_skipped += 1
-            with open("skipped_sites.log", "a") as lf:
+            with open(args.skipped_log, "a") as lf:
                 lf.write(f"{site_id}\tinsufficient_samples\t{len(rows_out)}\n")
             continue
 
@@ -464,7 +467,7 @@ with gzip.open(args.sites, "rt") as f:
         r1 = subprocess.run(step1_cmd, capture_output=True, text=True)
         if r1.returncode != 0 or not os.path.exists(step1_prefix + ".rda"):
             n_skipped += 1
-            with open("skipped_sites.log", "a") as lf:
+            with open(args.skipped_log, "a") as lf:
                 lf.write(f"{site_id}\tstep1_failed\t{r1.stderr[-500:].strip()}\n")
             os.remove(pheno_path)
             os.remove(range_path)
@@ -490,7 +493,7 @@ with gzip.open(args.sites, "rt") as f:
         r2 = subprocess.run(step2_cmd, capture_output=True, text=True)
         if r2.returncode != 0 or not os.path.exists(step2_out):
             n_skipped += 1
-            with open("skipped_sites.log", "a") as lf:
+            with open(args.skipped_log, "a") as lf:
                 lf.write(f"{site_id}\tstep2_failed\t{r2.stderr[-500:].strip()}\n")
         else:
             with open(step2_out) as sf:
@@ -515,7 +518,7 @@ with gzip.open(args.sites, "rt") as f:
 
 combined_out.close()
 if not wrote_header:
-    with open("chunk.assoc.txt", "w") as f:
+    with open(args.out, "w") as f:
         f.write("pheno_site_id\tpheno_chrom\tpheno_pos\tn_samples\n")
 
 print(f"tested={n_tested} skipped={n_skipped}")
@@ -533,12 +536,14 @@ PYEOF
             --min-samples ~{min_samples_per_site} \
             --vcf-field ~{vcf_field} \
             --inv-normalize ~{if inv_normalize then "TRUE" else "FALSE"} \
+            --out ~{prefix}.chunk.assoc.txt \
+            --skipped-log ~{prefix}.skipped_sites.log \
             ~{if defined(covariates_file) then "--covariates=" + covariates_file else ""}
     >>>
 
     output {
-        File chunk_assoc = "chunk.assoc.txt"
-        File skipped_sites_log = "skipped_sites.log"
+        File chunk_assoc = "~{prefix}.chunk.assoc.txt"
+        File skipped_sites_log = "~{prefix}.skipped_sites.log"
     }
 
     RuntimeAttr default_attr = object {
@@ -546,8 +551,8 @@ PYEOF
         mem_gb: 8,
         disk_gb: 2 * ceil(size(vcf, "GB")) + 20,
         boot_disk_gb: 10,
-        preemptible_tries: 3,
-        max_retries: 1
+        preemptible_tries: 2,
+        max_retries: 0
     }
     RuntimeAttr runtime_attr = select_first([runtime_attr_override, default_attr])
     runtime {
@@ -567,22 +572,23 @@ PYEOF
 task ConcatenateTsvs {
     input {
         Array[File] tsvs
-        String out_prefix
-        String docker = "quay.io/biocontainers/bcftools:1.19--h8b25389_1"
+        String prefix
+        String docker
         RuntimeAttr? runtime_attr_override
     }
 
     command <<<
         set -euo pipefail
+
         if [ ~{length(tsvs)} -eq 0 ]; then
-            touch ~{out_prefix}.tsv
+            touch ~{prefix}.tsv
         else
-            awk 'FNR==1 && NR!=1 { next } { print }' ~{sep=" " tsvs} > ~{out_prefix}.tsv
+            awk 'FNR==1 && NR!=1 { next } { print }' ~{sep=" " tsvs} > ~{prefix}.tsv
         fi
     >>>
 
     output {
-        File merged = "~{out_prefix}.tsv"
+        File merged = "~{prefix}.tsv"
     }
 
     RuntimeAttr default_attr = object {
@@ -590,8 +596,8 @@ task ConcatenateTsvs {
         mem_gb: 2,
         disk_gb: 5 * ceil(size(tsvs, "GB")) + 10,
         boot_disk_gb: 10,
-        preemptible_tries: 3,
-        max_retries: 1
+        preemptible_tries: 2,
+        max_retries: 0
     }
     RuntimeAttr runtime_attr = select_first([runtime_attr_override, default_attr])
     runtime {

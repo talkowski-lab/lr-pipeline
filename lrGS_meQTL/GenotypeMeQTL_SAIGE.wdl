@@ -1,6 +1,8 @@
 version 1.0
 
-# Cis-meQTL scan: diploid genotype dosage vs. per-sample methylation level.
+# Cis-meQTL scan: diploid genotype dosage vs. per-sample methylation level,
+# via plink (LD-pruning, sparse-GRM marker set) + SAIGE (sparse-GRM null
+# model + SPA test).
 #
 # Per contig (scattered): LD-prune + extract a plink bfile from the contig
 # VCF, build a sparse GRM from that bfile, filter the contig's methylation
@@ -13,37 +15,43 @@ version 1.0
 # `vcfs`, `methylation_files`, and `contigs` are parallel arrays: index i
 # in all three must refer to the same contig.
 
-import "Tasks.meQTL.wdl" as Tasks
+import "MeQTLTasks.wdl"
 
 workflow GenotypeMeQTL_SAIGE {
     input {
         Array[File] vcfs
         Array[File] methylation_files
         Array[String] contigs
+        String prefix
 
         Float min_call_rate = 0.9
         Int cis_window = 2000000
         Int sites_per_shard = 200
-
         Int ld_prune_window_kb = 50
         Int ld_prune_step = 5
         Float ld_prune_r2 = 0.2
         String vcf_half_call = "missing"
-
         Int num_random_markers_for_grm = 2000
         Float relatedness_cutoff = 0.125
         Float min_maf_for_grm = 0.01
         Float max_missing_rate_for_grm = 0.15
-
         File? covariates_file
         String covar_col_list = ""
         String qcovar_col_list = ""
         Int min_samples_per_site = 20
         Boolean inv_normalize = true
 
-        String plink_docker = "quay.io/biocontainers/plink:1.90b6.21--h031d066_5"
-        String bcftools_docker = "quay.io/biocontainers/bcftools:1.19--h8b25389_1"
-        String saige_docker = "wzhou88/saige:1.3.6"
+        String plink_docker
+        String bcftools_docker
+        String saige_docker
+
+        RuntimeAttr? runtime_attr_index_vcf
+        RuntimeAttr? runtime_attr_ld_prune
+        RuntimeAttr? runtime_attr_create_grm
+        RuntimeAttr? runtime_attr_filter_sites
+        RuntimeAttr? runtime_attr_run_chunk
+        RuntimeAttr? runtime_attr_concat_chunks
+        RuntimeAttr? runtime_attr_concat_contigs
     }
 
     Int n_contigs = length(contigs)
@@ -52,41 +60,50 @@ workflow GenotypeMeQTL_SAIGE {
         File vcf = vcfs[i]
         File methylation_file = methylation_files[i]
         String contig = contigs[i]
+        String contig_prefix = "~{prefix}.~{contig}"
 
-        call Tasks.IndexVcf {
+        call MeQTLTasks.IndexVcf {
             input:
                 vcf = vcf,
-                docker = bcftools_docker
+                prefix = contig_prefix,
+                docker = bcftools_docker,
+                runtime_attr_override = runtime_attr_index_vcf
         }
 
-        call Tasks.LdPruneAndExtract {
+        call MeQTLTasks.LdPruneAndExtract {
             input:
                 vcf = vcf,
-                contig = contig,
+                prefix = contig_prefix,
                 window_size_kb = ld_prune_window_kb,
                 step_size = ld_prune_step,
                 r2_threshold = ld_prune_r2,
                 vcf_half_call = vcf_half_call,
-                docker = plink_docker
+                docker = plink_docker,
+                runtime_attr_override = runtime_attr_ld_prune
         }
 
-        call Tasks.CreateSparseGRM {
+        call MeQTLTasks.CreateSparseGRM {
             input:
                 bed = LdPruneAndExtract.bed,
                 bim = LdPruneAndExtract.bim,
                 fam = LdPruneAndExtract.fam,
+                prefix = contig_prefix,
                 num_random_markers = num_random_markers_for_grm,
                 relatedness_cutoff = relatedness_cutoff,
                 min_maf_for_grm = min_maf_for_grm,
                 max_missing_rate_for_grm = max_missing_rate_for_grm,
-                docker = saige_docker
+                n_threads = 4,
+                docker = saige_docker,
+                runtime_attr_override = runtime_attr_create_grm
         }
 
-        call Tasks.FilterMethylationSites {
+        call MeQTLTasks.FilterMethylationSites {
             input:
                 methylation_bed = methylation_file,
                 call_rate_threshold = min_call_rate,
-                docker = saige_docker
+                prefix = contig_prefix,
+                docker = saige_docker,
+                runtime_attr_override = runtime_attr_filter_sites
         }
 
         Int n_chunks = (FilterMethylationSites.n_sites + sites_per_shard - 1) / sites_per_shard
@@ -97,7 +114,7 @@ workflow GenotypeMeQTL_SAIGE {
                           then row_start + sites_per_shard
                           else FilterMethylationSites.n_sites
 
-            call Tasks.RunCisMeQTLChunk {
+            call MeQTLTasks.RunCisMeQTLChunk {
                 input:
                     filtered_sites = FilterMethylationSites.filtered_sites,
                     row_start = row_start,
@@ -118,23 +135,27 @@ workflow GenotypeMeQTL_SAIGE {
                     min_samples_per_site = min_samples_per_site,
                     vcf_field = "GT",
                     inv_normalize = inv_normalize,
-                    docker = saige_docker
+                    prefix = "~{contig_prefix}.chunk~{chunk_idx}",
+                    docker = saige_docker,
+                    runtime_attr_override = runtime_attr_run_chunk
             }
         }
 
-        call Tasks.ConcatenateTsvs as ConcatenateContigChunks {
+        call MeQTLTasks.ConcatenateTsvs as ConcatenateContigChunks {
             input:
                 tsvs = RunCisMeQTLChunk.chunk_assoc,
-                out_prefix = contig + ".cis_meQTL",
-                docker = bcftools_docker
+                prefix = "~{contig_prefix}.cis_meQTL",
+                docker = bcftools_docker,
+                runtime_attr_override = runtime_attr_concat_chunks
         }
     }
 
-    call Tasks.ConcatenateTsvs as ConcatenateAllContigs {
+    call MeQTLTasks.ConcatenateTsvs as ConcatenateAllContigs {
         input:
             tsvs = ConcatenateContigChunks.merged,
-            out_prefix = "cis_meQTL.genotype.all_contigs",
-            docker = bcftools_docker
+            prefix = "~{prefix}.cis_meQTL.genotype.all_contigs",
+            docker = bcftools_docker,
+            runtime_attr_override = runtime_attr_concat_contigs
     }
 
     output {
