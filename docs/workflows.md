@@ -54,7 +54,7 @@ Inputs:
 - `Int min_sv_length_truvari_truth_snv_indel_vcf`: Minimum length for a SNV & indel truth variant to enter the Truvari matching round, measured by `length_field_truth_snv_indel_vcf`.
 - `Int min_sv_length_bedtools_closest_vcf`: Minimum length for a callset variant to enter the `bedtools closest` matching round, measured by `length_field_vcf`.
 - `Int min_sv_length_bedtools_closest_truth_vcf`: Minimum length for an SV truth variant to enter the `bedtools closest` matching round, measured by `length_field_truth_sv_vcf` before any renaming or conversion.
-- `Int? shard_bin_size_exact_match`: If set, shards the exact-match round into contig regions of roughly this many base pairs, run in parallel.
+- `Int shard_bin_size_exact_match`: Width in base pairs of the contig regions the exact-match round is sharded into, run in parallel. (default `5000000`)
 - `Int? shard_bin_size_truvari_match`: If set, shards the Truvari round into contig regions of at least this many base pairs, run in parallel. Each region is extended to the next safe gap, so a value of 1000000 or more is recommended.
 - `Boolean subset_contig_vcf`: Whether to stream `vcf` down to `contig` first. When false it must already contain only that contig. (default `true`)
 - `Boolean subset_contig_truth_snv_indel_vcf`: Whether to stream `truth_snv_indel_vcf` down to `contig` first. When false it must already contain only that contig. (default `true`)
@@ -2064,7 +2064,7 @@ Inputs:
 - `File truth_snv_indel_vcf`: Truth callset.
 - `File truth_snv_indel_vcf_idx`: Index for truth_snv_indel_vcf.
 - `String contig`: Contig being processed.
-- `Int? shard_bin_size_exact_match`: Shard size for the matching step.
+- `Int shard_bin_size_exact_match`: Width in base pairs of the contig regions the matching step is sharded into. (default `5000000`)
 - `String source_tag_truth_snv_indel_vcf`: Tag identifying the truth callset in the annotations.
 - `String? rename_id_string_vcf`: ID rename templates.
 - `String? rename_id_string_truth_snv_indel_vcf`: ID rename templates.
