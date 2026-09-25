@@ -1665,20 +1665,15 @@ task CreateContigShards {
         RuntimeAttr? runtime_attr_override
     }
 
-    parameter_meta {
-        vcfs: { localization_optional: true }
-        vcf_idxs: { localization_optional: true }
-    }
-
     command <<<
         set -euo pipefail
-
-        export GCS_OAUTH_TOKEN=$(gcloud auth application-default print-access-token)
 
         paste "~{write_lines(vcfs)}" "~{write_lines(vcf_idxs)}" > vcf_pairs.tsv
         max_pos=0
         while IFS=$'\t' read -r vcf vcf_idx; do
-            src="${vcf}##idx##${vcf_idx}"
+            if [[ "$vcf_idx" != "$vcf.tbi" ]]; then
+                ln -sf "$vcf_idx" "$vcf.tbi"
+            fi
             # Walk back from the header contig length in doubling windows, so the last record is reached through the index rather than a whole-contig scan
             contig_len=$(bcftools view -h "$vcf" | { grep -m1 "^##contig=<ID=~{contig}," || true; } | sed -n 's/.*length=\([0-9]*\).*/\1/p') || true
             pos=""
@@ -1690,12 +1685,12 @@ task CreateContigShards {
                     if (( start < 1 )); then
                         start=1
                     fi
-                    pos=$(bcftools view -H -G -r ~{contig}:${start}-${end} -t ~{contig}:${start}-${end} "$src" | tail -n1 | cut -f2 || true)
+                    pos=$(bcftools view -H -G -r ~{contig}:${start}-${end} -t ~{contig}:${start}-${end} "$vcf" | tail -n1 | cut -f2 || true)
                     end=$(( start - 1 ))
                     probe_width=$(( probe_width * 2 ))
                 done
             else
-                pos=$(bcftools view -H -G -r ~{contig} "$src" | tail -n1 | cut -f2 || true)
+                pos=$(bcftools view -H -G -r ~{contig} "$vcf" | tail -n1 | cut -f2 || true)
             fi
             if [[ -n "$pos" ]] && (( pos > max_pos )); then
                 max_pos=$pos

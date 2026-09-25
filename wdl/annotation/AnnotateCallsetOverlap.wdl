@@ -15,7 +15,7 @@ workflow AnnotateCallsetOverlap {
             "Note: Callset DUPs are compared twice, because the two matching rules need different coordinates. Against truth DUPs they are compared by reciprocal overlap, over their `ORIGIN` interval when `move_dup_to_origin` is true and over their own span from POS otherwise; against truth insertions they are always collapsed to a point at their VCF position and compared by breakpoint proximity and length ratio. Setting `move_dup_to_origin` to false is what lets the workflow run on a callset with no `INFO/ORIGIN`.",
             "Note: The SV truth VCF is expected to be symbolic already. Set `convert_symbolic_truth_sv_vcf` when it instead carries sequence alleles, in which case its allele type and length are read from `type_field_truth_sv_vcf` and `length_field_truth_sv_vcf`, which need not match the fields used for the callset. Its canonical DUPs then follow the same `move_dup_to_origin` positioning as the callset.",
             "Every minimum-length filter measures its VCF by the `length_field_*` input named here. The two Truvari filters run region by region inside `ExactMatch`; the two `bedtools closest` filters run here, and the SV truth VCF is filtered before renaming and conversion. With `convert_symbolic_truth_sv_vcf` a canonical DUP is therefore measured by `length_field_truth_sv_vcf` rather than by the `ORIGIN` span that conversion writes into `SVLEN`.",
-            "The workflow runs on one contig. The callset and SNV & indel truth VCFs are never passed over whole: `ExactMatch` reads them region by region straight from the bucket, dropping genotypes and applying their `args_string_*` expression on the way, so they may hold any set of contigs. The SV truth VCF, which the `bedtools closest` round consumes unsharded, is streamed down to the contig in one pass unless `subset_contig_truth_sv_vcf` is false, after which its `args_string_truth_sv_vcf` expression is applied in a separate pass that also drops genotypes.",
+            "The workflow runs on one contig. The callset and SNV & indel truth VCFs are never passed over whole: `ExactMatch` reads them region by region straight from the bucket, dropping genotypes and applying their `args_string_*` expression on the way, so they may hold any set of contigs. The SV truth VCF, which the `bedtools closest` round consumes unsharded, is prepared in a single pass that applies its `args_string_truth_sv_vcf` expression and `min_sv_length_bedtools_closest_truth_vcf`, drops genotypes and, when `subset_contig_truth_sv_vcf` is true, reads only the contig from the bucket.",
             "Both the exact-match and Truvari rounds can be sharded within a contig. Truvari shard boundaries are snapped forward to the next gap wider than the `min_shard_gap_truvari_match` input of `TruvariMatch`, which keeps results identical to an unsharded run because Truvari only groups records into a new comparison chunk once the next record clears the running end by more than its chunk size. Fixed-width bins alone would split colocated record pairs and silently lose matches."
         ]
     }
@@ -43,10 +43,10 @@ workflow AnnotateCallsetOverlap {
         length_field_truth_sv_vcf: "INFO field in the SV truth VCF giving each variant's allele length, used to apply `min_sv_length_bedtools_closest_truth_vcf` and, when `convert_symbolic_truth_sv_vcf` is true, read by the conversion. A symbolic truth VCF carries `SVLEN`; a sequence-allele one needs its own field named here, e.g. `allele_length`."
         source_tag_truth_snv_indel_vcf: "Label used to tag matches against the SNV & indel truth VCF."
         source_tag_truth_sv_vcf: "Label used to tag matches against the SV truth VCF."
-        subset_contig_truth_sv_vcf: "Whether to stream `truth_sv_vcf` down to `contig` first. When false it is taken as already holding only that contig."
+        subset_contig_truth_sv_vcf: "Whether to read only `contig` from `truth_sv_vcf`. When false the whole file is read and taken as already holding only that contig."
         args_string_vcf: "`bcftools view` include expression applied to the callset VCF as each exact-match region is read."
         args_string_truth_snv_indel_vcf: "`bcftools view` include expression applied to the SNV & indel truth VCF as each exact-match region is read."
-        args_string_truth_sv_vcf: "`bcftools view` include expression applied to the SV truth VCF in its own pass."
+        args_string_truth_sv_vcf: "`bcftools view` include expression applied to the SV truth VCF alongside its length filter."
         rename_id_string_vcf: "Expression used to rename variant IDs in the callset VCF prior to matching."
         rename_id_string_truth_snv_indel_vcf: "Expression used to rename variant IDs in the SNV & indel truth VCF prior to matching."
         rename_id_string_truth_sv_vcf: "Expression used to rename variant IDs in the SV truth VCF prior to matching."
@@ -105,8 +105,7 @@ workflow AnnotateCallsetOverlap {
         String gatk_sv_lr_docker
         String utils_docker
 
-        RuntimeAttr? runtime_attr_subset_contig_sv_truth
-        RuntimeAttr? runtime_attr_subset_args_sv_truth
+        RuntimeAttr? runtime_attr_subset_sv_truth
         RuntimeAttr? runtime_attr_rename_sv_truth
         RuntimeAttr? runtime_attr_convert_sv_truth
         RuntimeAttr? runtime_attr_rename_vcf
@@ -132,7 +131,6 @@ workflow AnnotateCallsetOverlap {
         RuntimeAttr? runtime_attr_truvari_concat_unmatched
         RuntimeAttr? runtime_attr_append_truvari_annotations
         RuntimeAttr? runtime_attr_bedtools_subset_vcf
-        RuntimeAttr? runtime_attr_bedtools_subset_truth
         RuntimeAttr? runtime_attr_bedtools_convert_to_symbolic
         RuntimeAttr? runtime_attr_bedtools_split_vcf
         RuntimeAttr? runtime_attr_bedtools_split_truth
@@ -143,49 +141,26 @@ workflow AnnotateCallsetOverlap {
         RuntimeAttr? runtime_attr_build_annotation_tsv
     }
 
-    # Stream the SV truth down to the contig straight out of the bucket, unless it already holds only that contig
-    if (subset_contig_truth_sv_vcf) {
-        call Helpers.SubsetVcfToRegionStreaming {
-            input:
-                vcf = truth_sv_vcf,
-                vcf_idx = truth_sv_vcf_idx,
-                region = contig,
-                drop_genotypes = true,
-                prefix = "~{prefix}.~{contig}.sv_truth.contig",
-                docker = utils_docker,
-                runtime_attr_override = runtime_attr_subset_contig_sv_truth
-        }
-    }
-
-    # Apply the optional include expression in its own pass, dropping genotypes so a VCF that skipped the contig subset arrives sites-only
-    call Helpers.SubsetVcfByArgs  {
+    # Prepare the SV truth in one pass: contig subset when asked, include expression, length filter and genotype drop
+    call SubsetTruthSvVcf {
         input:
-            vcf = select_first([SubsetVcfToRegionStreaming.subset_vcf, truth_sv_vcf]),
-            vcf_idx = select_first([SubsetVcfToRegionStreaming.subset_vcf_idx, truth_sv_vcf_idx]),
+            vcf = truth_sv_vcf,
+            vcf_idx = truth_sv_vcf_idx,
+            contig = contig,
+            subset_contig = subset_contig_truth_sv_vcf,
             include_args = args_string_truth_sv_vcf,
-            extra_args = "-G",
-            prefix = "~{prefix}.~{contig}.sv_truth",
-            docker = utils_docker,
-            runtime_attr_override = runtime_attr_subset_args_sv_truth
-    }
-
-    # Apply the SV truth length filter before renaming and conversion, so every later step sees only records long enough
-    call Helpers.SubsetVcfByLength as SubsetByLengthTruthSV {
-        input:
-            vcf = SubsetVcfByArgs.subset_vcf,
-            vcf_idx = SubsetVcfByArgs.subset_vcf_idx,
             length_field = length_field_truth_sv_vcf,
             min_length = min_sv_length_bedtools_closest_truth_vcf,
-            prefix = "~{prefix}.~{contig}.sv_truth.subset",
+            prefix = "~{prefix}.~{contig}.sv_truth",
             docker = utils_docker,
-            runtime_attr_override = runtime_attr_bedtools_subset_truth
+            runtime_attr_override = runtime_attr_subset_sv_truth
     }
 
     if (defined(rename_id_string_truth_sv_vcf)) {
         call Helpers.RenameVariantIds as RenameSVTruthIds {
             input:
-                vcf = SubsetByLengthTruthSV.subset_vcf,
-                vcf_idx = SubsetByLengthTruthSV.subset_vcf_idx,
+                vcf = SubsetTruthSvVcf.subset_vcf,
+                vcf_idx = SubsetTruthSvVcf.subset_vcf_idx,
                 prefix = "~{prefix}.~{contig}.sv_truth.renamed",
                 id_format = select_first([rename_id_string_truth_sv_vcf]),
                 strip_chr = select_first([rename_id_strip_chr_truth_sv_vcf, false]),
@@ -194,8 +169,8 @@ workflow AnnotateCallsetOverlap {
         }
     }
 
-    File truth_sv_vcf_renamed = select_first([RenameSVTruthIds.renamed_vcf, SubsetByLengthTruthSV.subset_vcf])
-    File truth_sv_vcf_renamed_idx = select_first([RenameSVTruthIds.renamed_vcf_idx, SubsetByLengthTruthSV.subset_vcf_idx])
+    File truth_sv_vcf_renamed = select_first([RenameSVTruthIds.renamed_vcf, SubsetTruthSvVcf.subset_vcf])
+    File truth_sv_vcf_renamed_idx = select_first([RenameSVTruthIds.renamed_vcf_idx, SubsetTruthSvVcf.subset_vcf_idx])
 
     # Give a sequence-allele SV truth VCF the symbolic ALTs, SVTYPE, SVLEN and END the bedtools closest round reads
     if (convert_symbolic_truth_sv_vcf) {
@@ -347,6 +322,72 @@ workflow AnnotateCallsetOverlap {
     output {
         File annotations_tsv_benchmark = BuildBenchmarkAnnotationTsv.merged_tsv
         File annotations_header_benchmark = BuildBenchmarkAnnotationTsv.merged_header
+    }
+}
+
+task SubsetTruthSvVcf {
+    input {
+        File vcf
+        File vcf_idx
+        String contig
+        Boolean subset_contig
+        String? include_args
+        String length_field
+        Int min_length
+        String prefix
+        String docker
+        RuntimeAttr? runtime_attr_override
+    }
+
+    parameter_meta {
+        vcf: { localization_optional: true }
+        vcf_idx: { localization_optional: true }
+    }
+
+    # ILEN is a bcftools built-in computed from REF and ALT rather than an INFO field, so it takes no INFO/ prefix
+    String length_expr = if length_field == "ILEN" then "ILEN" else "INFO/~{length_field}"
+    String size_filter = "abs(~{length_expr})>=~{min_length}"
+    String include_filter = if defined(include_args) then "(" + select_first([include_args]) + ") && " + size_filter else size_filter
+
+    command <<<
+        set -euo pipefail
+
+        export GCS_OAUTH_TOKEN=$(gcloud auth application-default print-access-token)
+
+        # Pair -r with -t so records are selected by POS alone, because -r alone also returns REF spans reaching in
+        bcftools view \
+            ~{if subset_contig then "-r " + contig + " -t " + contig else ""} \
+            -i '~{include_filter}' \
+            -G \
+            --threads $(nproc) \
+            ~{vcf} \
+            -Oz -o ~{prefix}.vcf.gz
+
+        tabix -p vcf -f ~{prefix}.vcf.gz
+    >>>
+
+    output {
+        File subset_vcf = "~{prefix}.vcf.gz"
+        File subset_vcf_idx = "~{prefix}.vcf.gz.tbi"
+    }
+
+    RuntimeAttr default_attr = object {
+        cpu_cores: 2,
+        mem_gb: 4,
+        disk_gb: ceil(size(vcf, "GB")) + 20,
+        boot_disk_gb: 10,
+        preemptible_tries: 1,
+        max_retries: 0
+    }
+    RuntimeAttr runtime_attr = select_first([runtime_attr_override, default_attr])
+    runtime {
+        cpu: select_first([runtime_attr.cpu_cores, default_attr.cpu_cores])
+        memory: select_first([runtime_attr.mem_gb, default_attr.mem_gb]) + " GiB"
+        disks: "local-disk " + select_first([runtime_attr.disk_gb, default_attr.disk_gb]) + " HDD"
+        bootDiskSizeGb: select_first([runtime_attr.boot_disk_gb, default_attr.boot_disk_gb])
+        docker: docker
+        preemptible: select_first([runtime_attr.preemptible_tries, default_attr.preemptible_tries])
+        maxRetries: select_first([runtime_attr.max_retries, default_attr.max_retries])
     }
 }
 

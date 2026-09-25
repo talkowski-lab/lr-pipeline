@@ -38,7 +38,7 @@ Note: The SV truth VCF is expected to be symbolic already. Set `convert_symbolic
 
 Every minimum-length filter measures its VCF by the `length_field_*` input named here. The two Truvari filters run region by region inside `ExactMatch`; the two `bedtools closest` filters run here, and the SV truth VCF is filtered before renaming and conversion. With `convert_symbolic_truth_sv_vcf` a canonical DUP is therefore measured by `length_field_truth_sv_vcf` rather than by the `ORIGIN` span that conversion writes into `SVLEN`.
 
-The workflow runs on one contig. The callset and SNV & indel truth VCFs are never passed over whole: `ExactMatch` reads them region by region straight from the bucket, dropping genotypes and applying their `args_string_*` expression on the way, so they may hold any set of contigs. The SV truth VCF, which the `bedtools closest` round consumes unsharded, is streamed down to the contig in one pass unless `subset_contig_truth_sv_vcf` is false, after which its `args_string_truth_sv_vcf` expression is applied in a separate pass that also drops genotypes.
+The workflow runs on one contig. The callset and SNV & indel truth VCFs are never passed over whole: `ExactMatch` reads them region by region straight from the bucket, dropping genotypes and applying their `args_string_*` expression on the way, so they may hold any set of contigs. The SV truth VCF, which the `bedtools closest` round consumes unsharded, is prepared in a single pass that applies its `args_string_truth_sv_vcf` expression and `min_sv_length_bedtools_closest_truth_vcf`, drops genotypes and, when `subset_contig_truth_sv_vcf` is true, reads only the contig from the bucket.
 
 Both the exact-match and Truvari rounds can be sharded within a contig. Truvari shard boundaries are snapped forward to the next gap wider than the `min_shard_gap_truvari_match` input of `TruvariMatch`, which keeps results identical to an unsharded run because Truvari only groups records into a new comparison chunk once the next record clears the running end by more than its chunk size. Fixed-width bins alone would split colocated record pairs and silently lose matches.
 
@@ -65,10 +65,10 @@ Inputs:
 - `String length_field_truth_sv_vcf`: INFO field in the SV truth VCF giving each variant's allele length, used to apply `min_sv_length_bedtools_closest_truth_vcf` and, when `convert_symbolic_truth_sv_vcf` is true, read by the conversion. A symbolic truth VCF carries `SVLEN`; a sequence-allele one needs its own field named here, e.g. `allele_length`. (default `SVLEN`)
 - `String source_tag_truth_snv_indel_vcf`: Label used to tag matches against the SNV & indel truth VCF. (default `SNV_indel`)
 - `String source_tag_truth_sv_vcf`: Label used to tag matches against the SV truth VCF. (default `SV`)
-- `Boolean subset_contig_truth_sv_vcf`: Whether to stream `truth_sv_vcf` down to `contig` first. When false it is taken as already holding only that contig. (default `false`)
+- `Boolean subset_contig_truth_sv_vcf`: Whether to read only `contig` from `truth_sv_vcf`. When false the whole file is read and taken as already holding only that contig. (default `false`)
 - `String? args_string_vcf`: `bcftools view` include expression applied to the callset VCF as each exact-match region is read.
 - `String? args_string_truth_snv_indel_vcf`: `bcftools view` include expression applied to the SNV & indel truth VCF as each exact-match region is read.
-- `String? args_string_truth_sv_vcf`: `bcftools view` include expression applied to the SV truth VCF in its own pass.
+- `String? args_string_truth_sv_vcf`: `bcftools view` include expression applied to the SV truth VCF alongside its length filter.
 - `String? rename_id_string_vcf`: Expression used to rename variant IDs in the callset VCF prior to matching.
 - `String? rename_id_string_truth_snv_indel_vcf`: Expression used to rename variant IDs in the SNV & indel truth VCF prior to matching.
 - `String? rename_id_string_truth_sv_vcf`: Expression used to rename variant IDs in the SV truth VCF prior to matching.
@@ -79,7 +79,7 @@ Inputs:
 - `File? ref_fai`: From references.
 - `String prefix`: Prefix for output file names.
 - `String gatk_sv_lr_docker`, `String utils_docker`: Container images.
-- `RuntimeAttr? runtime_attr_*`: Optional per-task runtime overrides (36).
+- `RuntimeAttr? runtime_attr_*`: Optional per-task runtime overrides (34).
 
 Outputs:
 - `File annotations_tsv_benchmark`: TSV mapping callset variants to their matched truth variants, match type, and the truth callset's AC/AF/AN and genotype-count fields.
