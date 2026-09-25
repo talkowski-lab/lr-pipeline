@@ -700,6 +700,8 @@ task FinalizeNonTrvMerge {
 
         tabix -f -p vcf type_filled.vcf.gz
 
+        rm -f sorted.vcf.gz sorted.vcf.gz.tbi missing_mt.tsv.gz*
+
         # Take back the ID that the callset prefix overwrote, now that Truvari no longer needs it
         bcftools view type_filled.vcf.gz \
             | awk -F'\t' -v OFS='\t' '
@@ -718,10 +720,11 @@ task FinalizeNonTrvMerge {
 
         tabix -f -p vcf id_restored.vcf.gz
 
+        rm -f type_filled.vcf.gz*
+
         bcftools +fill-tags id_restored.vcf.gz -Oz -o ~{prefix}.vcf.gz -- -t AC,AN,AF
 
-        rm -f sorted.vcf.gz sorted.vcf.gz.tbi missing_mt.tsv.gz* \
-            type_filled.vcf.gz* id_restored.vcf.gz*
+        rm -f id_restored.vcf.gz*
 
         tabix -f -p vcf ~{prefix}.vcf.gz
     >>>
