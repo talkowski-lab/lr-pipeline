@@ -993,14 +993,16 @@ Non-tandem-repeat variants are first merged on an exact CHROM, POS, REF and ALT 
 
 The contig is split into bins of `shard_bin_size` and every merging step runs per shard, so Truvari never pairs records more than one bin apart. Both merged and unmerged records reach the output.
 
-Every output record carries `MERGE_COUNT`, the number of input records merged into it, `MERGE_TYPE`, one of EXACT, TRV_EXACT, TRUVARI or UNIQUE, and `MERGE_SOURCE`, which is MERGED for records drawn from more than one input VCF and otherwise the `vcf_names` entry of the single VCF that carried it.
+Every output record carries `MERGE_COUNT`, the number of input records merged into it, and `MERGE_TYPE`, one of EXACT, TRV_EXACT, TRUVARI or UNIQUE.
 
-Where a merged record cannot hold both inputs' values, the ID and any INFO field other than `MERGE_COUNT` are taken from the first input VCF that carried the record, and AC, AN and AF are recomputed over the merged samples.
+Provenance is recorded in four parallel lists with one entry per merged input record: `SOURCE_NAMES`, the `vcf_names` entry of the callset that carried it, `SOURCE_IDS`, its ID there, and `SOURCE_REFS` and `SOURCE_ALTS`, its REF and ALT as that callset wrote them. The ALT alleles of a single record are separated by a pipe, so that a multiallelic record stays one entry. A name repeats when Truvari collapses records that came from the same callset.
+
+Where a merged record cannot hold both inputs' values, the ID and any INFO field other than `MERGE_COUNT` and the `SOURCE_` lists are taken from the first input VCF that carried the record, and AC, AN and AF are recomputed over the merged samples.
 
 Inputs:
-- `Array[File] contig_vcfs`: Per-callset VCFs for the contig being merged, each called across a distinct set of samples.
-- `Array[File] contig_vcf_idxs`: Indexes for `contig_vcfs`.
-- `Array[String] vcf_names`: Name of each entry of `contig_vcfs`, in the same order, used as the `MERGE_SOURCE` value for records that only one callset carried.
+- `Array[File] vcfs`: Per-callset VCFs for the contig being merged, each called across a distinct set of samples.
+- `Array[File] vcf_idxs`: Indexes for `vcfs`.
+- `Array[String] vcf_names`: Name of each entry of `vcfs`, in the same order, recorded in `SOURCE_NAMES`. A name must not contain a comma, semicolon, pipe or whitespace.
 - `String contig`: Contig being merged.
 - `Int min_truvari_match`: Minimum variant length for Truvari matching. (default `20`)
 - `Int truvari_breakpoint_window`: Maximum breakpoint distance, in bp, for merging non-TR variants. (default `500`)
@@ -1012,15 +1014,15 @@ Inputs:
 - `Int truvari_size_min`: Minimum variant length Truvari will consider when collapsing. (default `20`)
 - `File ref_fa`: From references.
 - `File ref_fai`: From references.
-- `Int shard_bin_size`: Region-bin size, in bp, used when sharding the contig. (default `10000000`)
+- `Int shard_bin_size`: Region-bin size, in bp, used when sharding the contig.
 - `String prefix`: Prefix for output file names.
 - `String utils_docker`: Container image.
-- `RuntimeAttr? runtime_attr_*`: Optional per-task runtime overrides (10).
+- `RuntimeAttr? runtime_attr_*`: Optional per-task runtime overrides (9).
 
 Outputs:
 - `File merged_vcf`: Merged VCF.
 - `File merged_vcf_idx`: Index for the merged VCF.
-- `File merge_summary_tsv`: TSV summarizing the merge.
+- `File merge_summary_tsv`: TSV with one row per allele type and size bin, tandem repeats sharing a single row without a bin, and three columns per entry of `vcf_names` holding how many of that callset's records went in, how many came out merged with another record, and how many came out on their own. The merged and unmerged counts sum to the input count.
 
 ### [PreprocessVcfs](../wdl/annotation_utils/PreprocessVcfs.wdl)
 This utility preprocesses and integrates one or more cohort VCFs into a single VCF. It first optionally converts symbolic alleles to sequence alleles, then applies any per-VCF sample-ID swaps, optionally subsets every VCF to the requested samples, and validates that the resulting sample sets are identical. Each VCF is then optionally normalized, annotated with core variant attributes and an optional source label, and length-filtered. Per-VCF controls are required arrays: an empty array disables that control for every VCF; a non-empty array must align with `vcfs`.

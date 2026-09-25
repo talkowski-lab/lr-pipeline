@@ -939,6 +939,7 @@ task ConsolidateCollapsedSites {
         String keep_strategy
         Boolean set_merge_annotations
         Boolean strip_format_to_gt
+        Array[String] join_info_fields = []
         String prefix
         String docker
         RuntimeAttr? runtime_attr_override
@@ -1004,6 +1005,7 @@ def sample_overlap(set_a, set_b):
 
 sample_sim_threshold = ~{sample_similarity}
 set_merge_annot = ~{true="True" false="False" set_merge_annotations}
+join_fields = [f for f in "~{sep=',' join_info_fields}".split(",") if f]
 
 original_records = {}
 orig_vcf = pysam.VariantFile("~{vcf}")
@@ -1056,9 +1058,16 @@ for kept_record in kept_vcf:
                     out_vcf.write(orig_removed)
                     continue
 
+            # Append list-valued provenance here so it stays parallel to the cluster_size increment below
+            for join_key in join_fields:
+                if join_key not in orig_removed.info:
+                    continue
+                kept_values = tuple(orig_kept.info.get(join_key, ()))
+                orig_kept.info[join_key] = kept_values + tuple(orig_removed.info[join_key])
+
             # Pull INFO fields that exist on the removed record but not the kept record
             for info_key in orig_removed.info.keys():
-                if info_key in orig_kept.info:
+                if info_key in orig_kept.info or info_key in join_fields:
                     continue
                 if info_key not in orig_kept.header.info:
                     continue
