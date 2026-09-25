@@ -144,7 +144,12 @@ editing the WDL.
   single-allele GT (e.g. hemizygous chrX/chrY in males) is duplicated onto
   both haplotypes rather than left truly haploid - a simplification worth
   revisiting if sex chromosomes matter for your analysis. tensorQTL's
-  haplotype workflow reuses this same task.
+  haplotype workflow reuses this same task. Its `mem_gb` default is 64GB for
+  the same reason `NormalizeVcf`'s is (see below): one extreme multiallelic
+  site makes a single record far larger than the file's average, and both
+  `bcftools view` and `awk` hold a whole record at a time. The tensorQTL
+  haplotype path feeds it the post-`norm` VCF, which on chr22 is 11GB from a
+  2GB input, so the old 4GB default OOM-killed it 32 minutes in.
 - **Output coordinate convention**: a site's "position" for both the cis
   window and the `pheno_pos` output column is its bed `start` (0-based),
   matching the ad hoc convention used in the interactive session this

@@ -103,9 +103,15 @@ task SplitPhasedVcfToHaplotypes {
         File haplotype_vcf_csi = "~{prefix}.haplotypes.vcf.gz.csi"
     }
 
+    # mem_gb matches NormalizeVcf's 64GB for the same reason: this dataset's
+    # one extreme multiallelic site (576 ALT alleles) makes a single VCF
+    # record far larger than the file's average, and both bcftools and awk
+    # hold a whole record in memory. Observed OOM-killed on Terra at the old
+    # 4GB default (submission 67ff34ab, chr22), on the post-`bcftools norm`
+    # VCF that split expands to 11GB from a 2GB input.
     RuntimeAttr default_attr = object {
         cpu_cores: 2,
-        mem_gb: 4,
+        mem_gb: 64,
         disk_gb: 4 * ceil(size(vcf, "GB")) + 20,
         boot_disk_gb: 10,
         preemptible_tries: 2,
