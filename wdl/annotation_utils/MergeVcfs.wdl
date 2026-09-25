@@ -226,7 +226,15 @@ task MergeTrvVcfs {
                 ln -sf "$vcf_idx" "${vcf}.tbi"
             fi
 
-            bcftools view -i 'INFO/allele_type=="trv"' -Oz -o "typed_${i}.vcf.gz" "$vcf"
+            # Callsets type AL differently, and bcftools merge then writes raw bytes into the sample columns
+            bcftools view -h "$vcf" \
+                | sed 's|^##FORMAT=<ID=AL,.*$|##FORMAT=<ID=AL,Number=.,Type=Integer,Description="Length of each allele">|' \
+                > "al_header_${i}.txt"
+
+            bcftools reheader -h "al_header_${i}.txt" -o "retyped_${i}.vcf.gz" "$vcf"
+            tabix -f -p vcf "retyped_${i}.vcf.gz"
+
+            bcftools view -i 'INFO/allele_type=="trv"' -Oz -o "typed_${i}.vcf.gz" "retyped_${i}.vcf.gz"
             tabix -f -p vcf "typed_${i}.vcf.gz"
 
             # Drop annotations left by an earlier Truvari run, so this output's header matches the non-TR one
@@ -275,6 +283,8 @@ task MergeTrvVcfs {
             tabix -f -p vcf "tagged_${i}.vcf.gz"
 
             rm -f \
+                "al_header_${i}.txt" \
+                "retyped_${i}.vcf.gz" "retyped_${i}.vcf.gz.tbi" \
                 "typed_${i}.vcf.gz" "typed_${i}.vcf.gz.tbi" \
                 "stripped_${i}.vcf.gz" "stripped_${i}.vcf.gz.tbi" \
                 "cleaned_${i}.vcf.gz" "cleaned_${i}.vcf.gz.tbi" \
@@ -426,7 +436,15 @@ task MergeNonTrvVcfs {
                 ln -sf "$vcf_idx" "${vcf}.tbi"
             fi
 
-            bcftools view -e 'INFO/allele_type=="trv"' -Oz -o "typed_${i}.vcf.gz" "$vcf"
+            # Callsets type AL differently, and bcftools merge then writes raw bytes into the sample columns
+            bcftools view -h "$vcf" \
+                | sed 's|^##FORMAT=<ID=AL,.*$|##FORMAT=<ID=AL,Number=.,Type=Integer,Description="Length of each allele">|' \
+                > "al_header_${i}.txt"
+
+            bcftools reheader -h "al_header_${i}.txt" -o "retyped_${i}.vcf.gz" "$vcf"
+            tabix -f -p vcf "retyped_${i}.vcf.gz"
+
+            bcftools view -e 'INFO/allele_type=="trv"' -Oz -o "typed_${i}.vcf.gz" "retyped_${i}.vcf.gz"
             tabix -f -p vcf "typed_${i}.vcf.gz"
 
             # Drop annotations left by an earlier Truvari run, whose ids would collide with this one
@@ -475,6 +493,8 @@ task MergeNonTrvVcfs {
             tabix -f -p vcf "tagged_${i}.vcf.gz"
 
             rm -f \
+                "al_header_${i}.txt" \
+                "retyped_${i}.vcf.gz" "retyped_${i}.vcf.gz.tbi" \
                 "typed_${i}.vcf.gz" "typed_${i}.vcf.gz.tbi" \
                 "stripped_${i}.vcf.gz" "stripped_${i}.vcf.gz.tbi" \
                 "cleaned_${i}.vcf.gz" "cleaned_${i}.vcf.gz.tbi" \
