@@ -16,7 +16,7 @@ workflow ExactMatch {
         truth_snv_indel_vcf: "Truth callset."
         truth_snv_indel_vcf_idx: "Index for truth_snv_indel_vcf."
         contig: "Contig being processed."
-        shard_bin_size_exact_match: "Shard size for the matching step."
+        shard_bin_size_exact_match: "Width in base pairs of the contig regions the matching step is sharded into."
         source_tag_truth_snv_indel_vcf: "Tag identifying the truth callset in the annotations."
         rename_id_string_vcf: "ID rename templates."
         rename_id_string_truth_snv_indel_vcf: "ID rename templates."
@@ -37,7 +37,7 @@ workflow ExactMatch {
         String contig
         String prefix
 
-        Int? shard_bin_size_exact_match
+        Int shard_bin_size_exact_match = 5000000
 
         String source_tag_truth_snv_indel_vcf
 
@@ -90,118 +90,87 @@ workflow ExactMatch {
     File truth_vcf_final = select_first([RenameTruthIds.renamed_vcf, truth_snv_indel_vcf])
     File truth_vcf_final_idx = select_first([RenameTruthIds.renamed_vcf_idx, truth_snv_indel_vcf_idx])
 
-    if (defined(shard_bin_size_exact_match)) {
-        call Helpers.CreateContigShards as CreateExactShards {
-            input:
-                vcfs = [eval_vcf_final, truth_vcf_final],
-                vcf_idxs = [eval_vcf_final_idx, truth_vcf_final_idx],
-                contig = contig,
-                shard_bin_size = select_first([shard_bin_size_exact_match]),
-                prefix = "~{prefix}.exact_shards",
-                docker = utils_docker,
-                runtime_attr_override = runtime_attr_create_exact_shards
-        }
-
-        scatter (k in range(length(CreateExactShards.shard_regions))) {
-            call Helpers.SubsetVcfToRegionStreaming as SubsetExactEval {
-                input:
-                    vcf = eval_vcf_final,
-                    vcf_idx = eval_vcf_final_idx,
-                    region = CreateExactShards.shard_regions[k],
-                    prefix = "~{prefix}.exact_eval_~{k}",
-                    docker = utils_docker,
-                    runtime_attr_override = runtime_attr_subset_exact_vcf
-            }
-
-            call Helpers.SubsetVcfToRegionStreaming as SubsetExactTruth {
-                input:
-                    vcf = truth_vcf_final,
-                    vcf_idx = truth_vcf_final_idx,
-                    region = CreateExactShards.shard_regions[k],
-                    prefix = "~{prefix}.exact_truth_~{k}",
-                    docker = utils_docker,
-                    runtime_attr_override = runtime_attr_subset_exact_truth
-            }
-
-            call Helpers.ExactMatch as ExactMatchShard {
-                input:
-                    vcf = SubsetExactEval.subset_vcf,
-                    vcf_idx = SubsetExactEval.subset_vcf_idx,
-                    truth_snv_indel_vcf = SubsetExactTruth.subset_vcf,
-                    truth_snv_indel_vcf_idx = SubsetExactTruth.subset_vcf_idx,
-                    source_tag = source_tag_truth_snv_indel_vcf,
-                    prefix = "~{prefix}.exact_~{k}",
-                    docker = utils_docker,
-                    runtime_attr_override = runtime_attr_exact_match
-            }
-
-            call Helpers.AppendAnnotationsFromVcf as AppendExactAnnotationsShard {
-                input:
-                    annotation_tsv = ExactMatchShard.annotation_tsv,
-                    truth_vcf = ExactMatchShard.matched_truth_vcf,
-                    truth_vcf_idx = ExactMatchShard.matched_truth_vcf_idx,
-                    is_sv_truth = false,
-                    prefix = "~{prefix}.exact_annotated_~{k}",
-                    docker = utils_docker,
-                    runtime_attr_override = runtime_attr_append_exact_annotations
-            }
-        }
-
-        call Helpers.ConcatTsvs as ConcatExactAnnotations {
-            input:
-                tsvs = AppendExactAnnotationsShard.annotated_tsv,
-                sort_output = true,
-                preserve_header = true,
-                prefix = "~{prefix}.exact_annotations",
-                docker = utils_docker,
-                runtime_attr_override = runtime_attr_concat_exact_annotations
-        }
-
-        call Helpers.ConcatVcfs as ConcatExactUnmatched {
-            input:
-                vcfs = ExactMatchShard.unmatched_vcf,
-                vcf_idxs = ExactMatchShard.unmatched_vcf_idx,
-                allow_overlaps = false,
-                naive = false,
-                prefix = "~{prefix}.exact_unmatched",
-                docker = utils_docker,
-                runtime_attr_override = runtime_attr_concat_exact_unmatched
-        }
+    call Helpers.CreateContigShards as CreateExactShards {
+        input:
+            vcfs = [eval_vcf_final, truth_vcf_final],
+            vcf_idxs = [eval_vcf_final_idx, truth_vcf_final_idx],
+            contig = contig,
+            shard_bin_size = shard_bin_size_exact_match,
+            prefix = "~{prefix}.exact_shards",
+            docker = utils_docker,
+            runtime_attr_override = runtime_attr_create_exact_shards
     }
 
-    if (!defined(shard_bin_size_exact_match)) {
-        call Helpers.ExactMatch as ExactMatchFull {
+    scatter (k in range(length(CreateExactShards.shard_regions))) {
+        call Helpers.SubsetVcfToRegionStreaming as SubsetExactEval {
             input:
                 vcf = eval_vcf_final,
                 vcf_idx = eval_vcf_final_idx,
-                truth_snv_indel_vcf = truth_vcf_final,
-                truth_snv_indel_vcf_idx = truth_vcf_final_idx,
+                region = CreateExactShards.shard_regions[k],
+                prefix = "~{prefix}.exact_eval_~{k}",
+                docker = utils_docker,
+                runtime_attr_override = runtime_attr_subset_exact_vcf
+        }
+
+        call Helpers.SubsetVcfToRegionStreaming as SubsetExactTruth {
+            input:
+                vcf = truth_vcf_final,
+                vcf_idx = truth_vcf_final_idx,
+                region = CreateExactShards.shard_regions[k],
+                prefix = "~{prefix}.exact_truth_~{k}",
+                docker = utils_docker,
+                runtime_attr_override = runtime_attr_subset_exact_truth
+        }
+
+        call Helpers.ExactMatch as ExactMatchShard {
+            input:
+                vcf = SubsetExactEval.subset_vcf,
+                vcf_idx = SubsetExactEval.subset_vcf_idx,
+                truth_snv_indel_vcf = SubsetExactTruth.subset_vcf,
+                truth_snv_indel_vcf_idx = SubsetExactTruth.subset_vcf_idx,
                 source_tag = source_tag_truth_snv_indel_vcf,
-                prefix = "~{prefix}.exact",
+                prefix = "~{prefix}.exact_~{k}",
                 docker = utils_docker,
                 runtime_attr_override = runtime_attr_exact_match
         }
 
-        call Helpers.AppendAnnotationsFromVcf as AppendExactAnnotationsFull {
+        call Helpers.AppendAnnotationsFromVcf as AppendExactAnnotationsShard {
             input:
-                annotation_tsv = ExactMatchFull.annotation_tsv,
-                truth_vcf = ExactMatchFull.matched_truth_vcf,
-                truth_vcf_idx = ExactMatchFull.matched_truth_vcf_idx,
+                annotation_tsv = ExactMatchShard.annotation_tsv,
+                truth_vcf = ExactMatchShard.matched_truth_vcf,
+                truth_vcf_idx = ExactMatchShard.matched_truth_vcf_idx,
                 is_sv_truth = false,
-                prefix = "~{prefix}.exact_annotated",
+                prefix = "~{prefix}.exact_annotated_~{k}",
                 docker = utils_docker,
                 runtime_attr_override = runtime_attr_append_exact_annotations
         }
     }
 
-    File annotated_tsv_final = select_first([ConcatExactAnnotations.concatenated_tsv, AppendExactAnnotationsFull.annotated_tsv])
-    File unmatched_vcf_final = select_first([ConcatExactUnmatched.concat_vcf, ExactMatchFull.unmatched_vcf])
-    File unmatched_vcf_final_idx = select_first([ConcatExactUnmatched.concat_vcf_idx, ExactMatchFull.unmatched_vcf_idx])
+    call Helpers.ConcatTsvs as ConcatExactAnnotations {
+        input:
+            tsvs = AppendExactAnnotationsShard.annotated_tsv,
+            sort_output = true,
+            preserve_header = true,
+            prefix = "~{prefix}.exact_annotations",
+            docker = utils_docker,
+            runtime_attr_override = runtime_attr_concat_exact_annotations
+    }
+
+    call Helpers.ConcatVcfs as ConcatExactUnmatched {
+        input:
+            vcfs = ExactMatchShard.unmatched_vcf,
+            vcf_idxs = ExactMatchShard.unmatched_vcf_idx,
+            allow_overlaps = false,
+            naive = false,
+            prefix = "~{prefix}.exact_unmatched",
+            docker = utils_docker,
+            runtime_attr_override = runtime_attr_concat_exact_unmatched
+    }
 
     output {
-        File annotated_tsv = annotated_tsv_final
-        File unmatched_vcf = unmatched_vcf_final
-        File unmatched_vcf_idx = unmatched_vcf_final_idx
+        File annotated_tsv = ConcatExactAnnotations.concatenated_tsv
+        File unmatched_vcf = ConcatExactUnmatched.concat_vcf
+        File unmatched_vcf_idx = ConcatExactUnmatched.concat_vcf_idx
         File truth_vcf = truth_vcf_final
         File truth_vcf_idx = truth_vcf_final_idx
     }
