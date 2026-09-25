@@ -126,6 +126,7 @@ This document describes the INFO and FORMAT fields and FILTER values present in 
 
 ## FILTER Values
 - `ASSEMBLY_ONLY_SINGLETON`: Variant with `AC = 1` whose sole carrier has support exclusively from assembly-based callers (`dipcall` and/or `hapdiff`).
+- `HIGH_NCR`: Variant whose `INFO/NCR` is at or above the no-call rate cutoff applied to the callset.
 - `LARGE_SNV_INDEL`: Variant with `SOURCE = "DeepVariant"` that has `INFO/allele_length ≥ 50`.
 - `LOW_COVERAGE_REGION`: Variant region determined to have low coverage relative to entire genome.
 - `MONOALLELIC`: Variant in a region with multiple variants that could not be unified into non-overlapping multi-allelic sites.

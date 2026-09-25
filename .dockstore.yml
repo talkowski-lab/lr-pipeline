@@ -389,6 +389,16 @@ workflows:
       tags:
         - /.*/
 
+  - subclass: WDL
+    name: FilterLowCallSites
+    primaryDescriptorPath: /wdl/annotation_utils/FilterLowCallSites.wdl
+    filters:
+      branches:
+        - main
+        - kj-filter-low-call-sites
+      tags:
+        - /.*/
+
 
 
   - subclass: WDL

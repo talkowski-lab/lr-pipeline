@@ -69,7 +69,7 @@ Each characterization workflow writes an `annotations_tsv_*` column that [Annota
 
 
 ## 4. Release
-This is where the two callsets diverge most, and where their version numbering stops lining up - HPRC/HGSVC ran ten release steps, All of Us five. The table gives, for each step, the release column that step wrote for each cohort. `–` means the step was not run for that cohort at all. `run, no column` means the step produced supporting files rather than a release VCF.
+This is where the two callsets diverge most, and where their version numbering stops lining up - HPRC/HGSVC ran eleven release steps, All of Us six. The table gives, for each step, the release column that step wrote for each cohort. `–` means the step was not run for that cohort at all. `run, no column` means the step produced supporting files rather than a release VCF.
 
 | # | Step | HPRC/HGSVC | All of Us |
 | --- | --- | --- | --- |
@@ -87,9 +87,10 @@ This is where the two callsets diverge most, and where their version numbering s
 | 12 | **[AnnotateAF](https://github.com/broadinstitute/gatk-sv/blob/kj_project_gnomad_lr/wdl/AnnotateAF.wdl)** - recomputed allele frequencies | `hprc_hgsvc_vcf_V9` | – |
 | 13 | **[TRGTLPS](../wdl/tools/TRGTLPS.wdl)** then **[CreateTRGTHistograms](../wdl/annotation_utils/CreateTRGTHistograms.wdl)** - `trgt_lps_tsv` and the `trgt_histograms_tsv` browser histograms | run, no column | not recorded |
 | 14 | **[AnnotateSVAnnotate](../wdl/annotation/AnnotateSVAnnotate.wdl)** then **[AnnotateVcf](../wdl/annotation_utils/AnnotateVcf.wdl)** - refreshed SV functional consequences. Final release for both cohorts | `hprc_hgsvc_vcf_V10` | `aou_vcf_V5` |
-| 15 | **[DropGenotypes](../wdl/annotation_utils/DropGenotypes.wdl)** _(All of Us)_ - dropped genotypes to produce the sites-only release VCF | – | `aou_sites_vcf` |
+| 15 | **[FilterLowCallSites](../wdl/annotation_utils/FilterLowCallSites.wdl)** - removed sites whose samples carry no alternate allele and flagged the high no-call rate sites `HIGH_NCR` | `hprc_hgsvc_vcf_V11` | `aou_vcf_V6` |
+| 16 | **[DropGenotypes](../wdl/annotation_utils/DropGenotypes.wdl)** _(All of Us)_ - dropped genotypes to produce the sites-only release VCF | – | `aou_sites_vcf` |
 
-Steps 2 and 8 to 12 are HPRC/HGSVC only, which is why its chain reaches `V10` while All of Us stops at `V5`. Steps 1, 5, 6, 7 and 14 advanced both.
+Steps 2 and 8 to 12 are HPRC/HGSVC only, which is why its chain reaches `V11` while All of Us stops at `V6`. Steps 1, 5, 6, 7, 14 and 15 advanced both.
 
 
 ## Cohort Divergences
@@ -107,7 +108,7 @@ Steps 2 and 8 to 12 are HPRC/HGSVC only, which is why its chain reaches `V10` wh
 | `FilterLowCoverageGenotypes` | Run | Not run |
 | Assembly-only singleton filter | Run | Not run |
 | Sites-only VCF | Not produced | `aou_sites_vcf` via [DropGenotypes](../wdl/annotation_utils/DropGenotypes.wdl) |
-| Release versions | `hprc_hgsvc_vcf_V1` to `V10` | `aou_vcf_V1` to `V5`, plus `aou_sites_vcf` |
+| Release versions | `hprc_hgsvc_vcf_V1` to `V11` | `aou_vcf_V1` to `V6`, plus `aou_sites_vcf` |
 
 
 ## Evidence and Gaps
