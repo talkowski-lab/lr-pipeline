@@ -395,7 +395,6 @@ workflows:
     filters:
       branches:
         - main
-        - kj-filter-low-call-sites
       tags:
         - /.*/
 
