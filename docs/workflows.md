@@ -896,6 +896,27 @@ Outputs:
 - `File filtered_vcf_idx`: Index for `filtered_vcf`.
 - `File filtered_genotypes_tsv`: TSV with one row per affected variant: `CHROM`, `POS`, `REF`, `ALT`, `ID`, pre- and post-filter allele counts, number of filtered samples, and comma-separated filtered sample IDs.
 
+### [FilterLowCallSites](../wdl/annotation_utils/FilterLowCallSites.wdl)
+This utility removes sites that carry no informative genotypes and flags the sites that are largely uncalled. When `remove_no_calls` is set, every variant whose samples carry no alternate allele - an allele count of zero - is removed. When `min_ncr_filter` is set to a non-negative value, every surviving variant whose no-call rate reaches that value is given the `HIGH_NCR` FILTER value, whose header line the workflow adds; those variants are flagged rather than removed.
+
+A genotype counts as a carrier when any of its alleles is alternate, so a partially called genotype such as './1' keeps the site from being an allele count of zero. Carriers are counted from the genotypes rather than read from `INFO/AC`, so an allele count left stale by an upstream step does not affect which sites are removed.
+
+The no-call rate comes from `INFO/NCR`, which is a single value at biallelic and multiallelic sites alike and is used as it stands. A variant that carries no `INFO/NCR` falls back to counting the proportion of alleles without a call, which is what that field holds, and every such variant ID is printed to the task log. It optionally shards by record count and outputs the filtered VCF.
+
+Inputs:
+- `File vcf`: Cohort VCF to filter.
+- `File vcf_idx`: Index for the cohort VCF.
+- `Boolean remove_no_calls`: Whether to remove sites whose samples carry no alternate allele.
+- `Float min_ncr_filter`: No-call rate at or above which a site is given the `HIGH_NCR` FILTER value. A negative value leaves sites unflagged. (default `-1`)
+- `Int? records_per_shard`: Number of variants per shard. When set, variants are processed in parallel shards and concatenated.
+- `String prefix`: Prefix for output file names.
+- `String utils_docker`: Container image.
+- `RuntimeAttr? runtime_attr_*`: Optional per-task runtime overrides (3).
+
+Outputs:
+- `File filtered_vcf`: VCF with the sites carrying no alternate allele removed and the high no-call rate sites flagged.
+- `File filtered_vcf_idx`: Index for `filtered_vcf`.
+
 ### [FillFormatFields](../wdl/annotation_utils/FillFormatFields.wdl)
 This utility fills missing FORMAT fields in one VCF using the values from a second, more complete VCF covering the same sites. It supports selectively copying named format fields plus toggles for filling alternate and reference genotypes, unphasing genotypes and adding PL. Sites are matched on CHROM/POS/REF/ALT, optionally also requiring a matching ID, and filling can be restricted to variants whose INFO field matches a given value. Either input can first be run through `bcftools norm`, sharded by record count so normalization never runs over a whole-contig VCF at once; normalized shards are re-concatenated with sorting (since normalization can shift a variant's position, e.g. when splitting a multiallelic) before being re-binned for matching. It outputs the refilled VCF.
 
