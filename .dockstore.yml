@@ -443,7 +443,6 @@ workflows:
     filters:
       branches:
         - main
-        - kj-merge-vcfs-sample-merge
       tags:
         - /.*/
 
