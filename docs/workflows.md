@@ -1480,6 +1480,8 @@ Outputs:
 ### [LongReadCNVs](../wdl/tools/LongReadCNVs.wdl)
 This workflow calls cohort CNVs from long-read depth profiles with GATK gCNV, then converts, clusters and genotypes the depth calls. It outputs merged CNV calls, ploidy, and genotyped depth VCFs.
 
+With `num_training_samples` left at -1 every sample is called in gCNV cohort mode. Setting it below the cohort size instead runs a hybrid case-cohort mode, fitting the contig-ploidy and gCNV models on that many randomly drawn samples and calling every remaining sample against those models in case mode. All downstream steps and outputs still cover the whole cohort either way.
+
 Inputs:
 - `File intervals`: Interval list over which CNVs are called.
 - `Array[String]+ sample_ids`: Sample IDs in the cohort.
@@ -1498,8 +1500,10 @@ Inputs:
 - `File median_coverage`: Per-sample median coverage table used by depth genotyping.
 - `File? contig_subset_list`: Optional subset of `primary_contigs_list` to restrict depth clustering and genotyping to.
 - `String variant_prefix`: Prefix used for generated variant IDs.
+- `Int num_training_samples`: Number of samples drawn at random to fit the contig-ploidy and gCNV models in cohort mode, with every remaining sample called against those models in case mode. Set to -1, or to at least the cohort size, every sample is called in cohort mode instead. Interval filtering percentages apply over the training samples alone, so a training set of fewer than a few dozen samples degrades the fitted models. (default `-1`)
 - `Int gcnv_qs_cutoff`: Minimum gCNV quality score for a segment to be kept. (default `30`)
 - `Int num_intervals_per_scatter`: Number of intervals processed per gCNV scatter shard. GermlineCNVCaller memory grows with samples times intervals per shard, so raising this above the default needs more memory in `runtime_attr_germline_cnv_caller`. (default `1500`)
+- `Int subsample_seed`: Random seed used to draw the training samples. (default `42`)
 - `String chr_x`: Name of the X contig in the reference. (default `chrX`)
 - `String chr_y`: Name of the Y contig in the reference. (default `chrY`)
 - `File? gatk4_jar_override`: Override GATK4 jar.
@@ -1577,7 +1581,7 @@ Inputs:
 - `Boolean svtk_set_pass`: Set FILTER to PASS during conversion. (default `false`)
 - `String prefix`: Prefix for output file names.
 - `String gatk_docker`, `String sv_base_mini_docker`, `String sv_pipeline_docker`: Container images.
-- `RuntimeAttr? runtime_attr_*`: Optional per-task runtime overrides (22).
+- `RuntimeAttr? runtime_attr_*`: Optional per-task runtime overrides (26).
 
 Outputs:
 - `File merged_cnvs_vcf`: Cohort CNV VCF after depth preprocessing.
@@ -1932,6 +1936,8 @@ These workflows live in `wdl/utils/` and are building blocks rather than entry p
 ### [LRCNVs](../wdl/utils/LRCNVs.wdl)
 This component calls copy-number variants across a cohort using GATK germline CNV (gCNV) cohort mode. From per-sample depth profiles over a shared interval list it annotates and filters intervals, determines contig ploidy, fits gCNV across scattered interval shards, post-processes per-sample calls into genotyped interval and segment VCFs, and collects sample- and model-level QC.
 
+Setting `num_training_samples` to a positive value below the cohort size switches the component to a hybrid case-cohort mode: that many samples are drawn at random and used to fit the contig-ploidy and gCNV models in cohort mode, and every remaining sample is then called against those models in case mode. Interval annotation, interval filtering and the fitted models therefore derive from the training samples alone, while the per-sample genotyped VCFs, denoised copy ratios, sample QC and contig-ploidy calls still cover the whole cohort in `sample_ids` order.
+
 Inputs:
 - `File intervals`: Interval list over which CNVs are called.
 - `Array[String]+ sample_ids`: Sample IDs in the cohort.
@@ -1942,6 +1948,8 @@ Inputs:
 - `File ref_fai`: From references.
 - `File ref_dict`: From references.
 - `Int num_intervals_per_scatter`: Number of intervals processed per gCNV scatter shard. GermlineCNVCaller memory grows with samples times intervals per shard, so raising this above the default needs more memory in `runtime_attr_germline_cnv_caller`.
+- `Int num_training_samples`: Number of samples drawn at random to fit the contig-ploidy and gCNV models in cohort mode, with every remaining sample called against those models in case mode. Set to -1, or to at least the cohort size, every sample is called in cohort mode instead. Interval filtering percentages apply over the training samples alone, so a training set of fewer than a few dozen samples degrades the fitted models. (default `-1`)
+- `Int subsample_seed`: Random seed used to draw the training samples. (default `42`)
 - `File? gatk4_jar_override`: Override GATK4 jar.
 - `File? mappability_track_bed`: Mappability track used to annotate intervals.
 - `File? mappability_track_bed_idx`: Index for `mappability_track_bed`.
@@ -1999,25 +2007,25 @@ Inputs:
 - `Array[String]? allosomal_contigs`: Contigs treated as allosomal.
 - `Int maximum_number_events_per_sample`: Maximum number of events permitted per sample. (default `1000`)
 - `String prefix`: Prefix for output file names.
-- `String gatk_docker`: Container image.
-- `RuntimeAttr? runtime_attr_*`: Optional per-task runtime overrides (8).
+- `String gatk_docker`, `String sv_pipeline_docker`: Container images.
+- `RuntimeAttr? runtime_attr_*`: Optional per-task runtime overrides (12).
 
 Outputs:
 - `File annotated_intervals`: Intervals annotated with GC content and tracks.
-- `File filtered_intervals`: Intervals retained after filtering.
-- `File contig_ploidy_model_tar`: Fitted contig-ploidy model.
-- `File contig_ploidy_calls_tar`: Per-sample contig-ploidy calls.
-- `Array[File] gcnv_model_tars`: Fitted gCNV models, one per scatter shard.
-- `Array[Array[File]] gcnv_calls_tars`: Per-shard per-sample gCNV calls.
-- `Array[File] gcnv_tracking_tars`: Per-shard model-fitting tracking files.
+- `File filtered_intervals`: Intervals retained after filtering the training samples.
+- `File contig_ploidy_model_tar`: Contig-ploidy model fitted on the training samples.
+- `File contig_ploidy_calls_tar`: Per-sample contig-ploidy calls for every sample, ordered as `sample_ids`.
+- `Array[File] gcnv_model_tars`: gCNV models fitted on the training samples, one per scatter shard.
+- `Array[Array[File]] gcnv_calls_tars`: Per-shard gCNV calls for the training samples.
+- `Array[File] gcnv_tracking_tars`: Per-shard model-fitting tracking files for the training samples.
 - `Array[File] genotyped_intervals_vcfs`: Per-sample genotyped interval VCFs.
 - `Array[File] genotyped_intervals_vcf_idxs`: Indexes for `genotyped_intervals_vcfs`.
 - `Array[File] genotyped_segments_vcfs`: Per-sample genotyped segment VCFs.
 - `Array[File] genotyped_segments_vcf_idxs`: Indexes for `genotyped_segments_vcfs`.
 - `Array[File] sample_qc_status_files`: Per-sample QC status files.
 - `Array[String] sample_qc_status_strings`: Per-sample QC status strings.
-- `File model_qc_status_file`: Model-level QC status file.
-- `String model_qc_string`: Model-level QC status string.
+- `File model_qc_status_file`: Model-level QC status file for the models fitted on the training samples.
+- `String model_qc_string`: Model-level QC status string for the models fitted on the training samples.
 - `Array[File] denoised_copy_ratios`: Per-sample denoised copy ratios.
 
 ### [DepthPreprocessing](../wdl/utils/DepthPreprocessing.wdl)
