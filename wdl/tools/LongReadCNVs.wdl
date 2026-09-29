@@ -144,7 +144,7 @@ workflow LongReadCNVs {
 
         Int num_training_samples = -1
         Int gcnv_qs_cutoff = 30
-        Int num_intervals_per_scatter = 1500
+        Int num_intervals_per_scatter = 10000
         Int subsample_seed = 42
         String chr_x = "chrX"
         String chr_y = "chrY"

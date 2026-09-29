@@ -1502,7 +1502,7 @@ Inputs:
 - `String variant_prefix`: Prefix used for generated variant IDs.
 - `Int num_training_samples`: Number of samples drawn at random to fit the contig-ploidy and gCNV models in cohort mode, with every remaining sample called against those models in case mode. Set to -1, or to at least the cohort size, every sample is called in cohort mode instead. Interval filtering percentages apply over the training samples alone, so a training set of fewer than a few dozen samples degrades the fitted models. (default `-1`)
 - `Int gcnv_qs_cutoff`: Minimum gCNV quality score for a segment to be kept. (default `30`)
-- `Int num_intervals_per_scatter`: Number of intervals processed per gCNV scatter shard. GermlineCNVCaller memory grows with samples times intervals per shard, so raising this above the default needs more memory in `runtime_attr_germline_cnv_caller`. (default `1500`)
+- `Int num_intervals_per_scatter`: Number of intervals processed per gCNV scatter shard. GermlineCNVCaller memory grows with samples times intervals per shard, so raising this above the default needs more memory in `runtime_attr_germline_cnv_caller`. (default `10000`)
 - `Int subsample_seed`: Random seed used to draw the training samples. (default `42`)
 - `String chr_x`: Name of the X contig in the reference. (default `chrX`)
 - `String chr_y`: Name of the Y contig in the reference. (default `chrY`)

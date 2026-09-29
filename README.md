@@ -20,6 +20,7 @@ The pipeline covers three broad stages.
 ## Documentation
 - [Annotations](docs/annotations.md) - VCF INFO fields, FORMAT fields and filter definitions.
 - [CI/CD](docs/ci-cd.md) - GitHub Actions checks, the matching local pre-flight commands, and Dockstore registration.
+- [CNV Pipeline](docs/pipeline_cnvs.md) - how to call depth-based CNVs on a new cohort, from per-sample depth to a genotyped cohort CNV VCF.
 - [Cohort](docs/cohort.md) - sample cohorts, sizes and metadata sources.
 - [Conventions](docs/conventions.md) - WDL, Python and Markdown style conventions.
 - [Docker images](docs/dockers.md) - every image the pipeline uses, and how repository images are built, tagged and pushed.
