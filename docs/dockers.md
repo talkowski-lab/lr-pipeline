@@ -78,6 +78,8 @@ Built/maintained by collaborators.
 | `hiphase_docker` | broad-dsp-lrma/hangsuunc/hiphase:v1.5.0 | Hang Su |
 | `hiphase_preprocess_docker` | hangsuunc/cleanvcf:v1 | Hang Su |
 | `remap_docker` | quay.io/ymostovoy/lr-remap | Yulia Mostovoy |
+| `sv_integration_docker` | broad-dsp-lrma/fcunial/callset_integration_phase2_workpackages | Fabio Cunial |
+| `xgb_scoring_docker` | broad-dsde-methods/broad-gatk-snapshots/gatk:sl_aou_lr_intrasample_filtering_xgb | GATK snapshot |
 | `minimap_docker` | eichlerlab/assembly_eval:0.2 | Eichler Lab |
 | `automop_docker` | broad-dsde-methods/automop:0.1 | Broad DSP |
 

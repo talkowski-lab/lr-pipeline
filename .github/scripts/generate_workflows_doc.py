@@ -69,6 +69,12 @@ SUBWORKFLOW_GROUPS = [
         "general sharding helper.",
         ["ExactMatch", "TruvariMatch", "BedtoolsClosestSV", "ScatterVcf"],
     ),
+    (
+        "Long SV cohort integration",
+        "`MergeCohortLongSVClass` merges and collapses one call class, ultralong or bnd, and is run once per class "
+        "by `MergeCohortLongSVCallsets`.",
+        ["MergeCohortLongSVClass"],
+    ),
 ]
 
 ARCHIVE_TITLE = "Long-Read Annotation"

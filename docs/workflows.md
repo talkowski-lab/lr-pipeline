@@ -1868,6 +1868,139 @@ Outputs:
 - `File sniffles_vcf_idx`: Index for the structural variant calls.
 - `File sniffles_snf`: Structural variant candidates for the sample, for later population-mode calling.
 
+### [MergeSampleSVCallsets](../wdl/tools/MergeSampleSVCallsets.wdl)
+This tool merges each sample's PAV, pbsv and Sniffles calls into one scored VCF per sample. Each caller's VCF is normalized and split into SVs between the minimum and maximum length, longer SVs and breakends, and the callers are merged within each class with Truvari (https://github.com/ACEnglish/truvari) collapse. The SVs within the length range are then genotyped against the sample's reads with Kanpig (https://github.com/ACEnglish/kanpig), keeping only calls with ALT support, and records matching the training resource are marked for XGBoost training.
+
+Each sample is then scored with an XGBoost model trained on those records, through GATK ScoreVariantAnnotations, and split into the chunks of the interval CSV for the cohort merge. Samples are processed in batches, one batch per VM.
+
+Nothing is returned as a workflow output. The per-sample merged, longer-SV and breakend calls are written under '01_intrasample' in 'remote_outdir', which MergeCohortLongSVCallsets reads, and the scored chunks with one marker file per sample are written under '02_scoring', which MergeCohortSVCallsets reads. A sample whose outputs already exist is skipped, so a resubmission only reruns the samples that failed.
+
+Inputs:
+- `Array[String] sample_ids`: Samples to process, aligned by index with every other per-sample array.
+- `Array[String] sample_sexes`: Sex of each sample. 'M' selects the male ploidy BED for Kanpig; any other value selects the female one.
+- `Array[String] aligned_bams`: GCS paths to each sample's aligned reads, streamed rather than localized.
+- `Array[String] aligned_bais`: GCS paths to the indexes for 'aligned_bams'.
+- `Array[String] pbsv_vcfs`: GCS paths to each sample's pbsv calls.
+- `Array[String] pbsv_vcf_idxs`: GCS paths to the indexes for 'pbsv_vcfs'.
+- `Array[String] sniffles_vcfs`: GCS paths to each sample's Sniffles calls.
+- `Array[String] sniffles_vcf_idxs`: GCS paths to the indexes for 'sniffles_vcfs'.
+- `Array[String] pav_vcfs`: GCS paths to each sample's PAV calls. Required only when 'has_pav' is true. (default `[]`)
+- `Array[String] pav_vcf_idxs`: GCS paths to the indexes for 'pav_vcfs'. Required only when 'has_pav' is true. (default `[]`)
+- `Array[String] pav_beds`: GCS paths to each sample's PAV callable-region BEDs. Required only when 'has_pav' is true. (default `[]`)
+- `Boolean has_pav`: Whether to merge PAV calls alongside pbsv and Sniffles. When false, only pbsv and Sniffles are merged and PAV support is recorded as zero. (default `true`)
+- `String remote_outdir`: GCS directory the per-sample outputs are written under, without a trailing slash.
+- `String region`: Region to restrict every caller's calls to, or 'all' to keep the whole genome. (default `all`)
+- `String requester_pays_project`: Project billed for reads from requester-pays buckets. Leave empty when none are read. (default empty)
+- `Int min_sv_length`: Minimum SV length kept. (default `20`)
+- `Int max_sv_length`: Maximum length of an SV genotyped with Kanpig and scored. Longer SVs are integrated separately by MergeCohortLongSVCallsets. (default `2000`)
+- `String kanpig_params_singlesample`: Kanpig arguments for genotyping a single sample. (default `--neighdist 1000 --gpenalty 0.02 --hapsim 0.9999 --sizesim 0.90 --seqsim 0.85 --maxpaths 10000`)
+- `Int ultralong_collapse_mode`: Whether Truvari collapse uses sequence similarity when merging SVs longer than 'max_sv_length': 0 for no, 1 for yes. (default `0`)
+- `String filter_string`: bcftools expression for records to keep after scoring, or 'none' to keep every record. (default `none`)
+- `Array[String] annotations`: INFO fields the XGBoost model is trained and scored on. (default `["KS_1", "KS_2", "SQ", "GQ", "DP", "AD_NON_ALT", "AD_ALL", "GT_COUNT", "SUPP_PAV", "SUPP_SNIFFLES", "SUPP_PBSV", "SVLEN"]`)
+- `File training_resource_vcf`: Truth SV calls whose matches in each sample are marked as XGBoost training records.
+- `File training_resource_vcf_idx`: Index for 'training_resource_vcf'.
+- `File training_resource_bed`: Regions in which 'training_resource_vcf' is considered complete.
+- `File ref_fa`: From references.
+- `File ref_fai`: From references.
+- `File standard_chromosomes_bed`: Chromosomes calls are restricted to.
+- `File autosomes_bed`: Autosomes, used to report each sample's heterozygous-call rate.
+- `File ref_agp`: Assembly gap layout of the reference, whose gaps are removed from the calls and the training regions.
+- `File ploidy_bed_female`: From references.
+- `File ploidy_bed_male`: From references.
+- `File split_for_bcftools_merge_csv`: Intervals the scored calls are split into for the cohort merge, one chunk per line.
+- `File training_python_script`: Python script GATK TrainVariantAnnotationsModel runs to train the XGBoost model.
+- `File scoring_python_script`: Python script GATK ScoreVariantAnnotations runs to score with the XGBoost model.
+- `File hyperparameters_json`: XGBoost hyperparameters.
+- `Int batch_size`: Number of samples processed one after another on each VM. (default `20`)
+- `String sv_integration_docker`, `String xgb_scoring_docker`: Container images.
+- `RuntimeAttr? runtime_attr_*`: Optional per-task runtime overrides (3).
+
+### [MergeCohortSVCallsets](../wdl/tools/MergeCohortSVCallsets.wdl)
+This tool merges the scored per-sample SV calls written by MergeSampleSVCallsets into one cohort SV callset. Each chunk of the interval CSV is merged across samples with bcftools merge, each chromosome is resharded into truvari-collapse shards, matching sites within each shard are collapsed with Truvari (https://github.com/ACEnglish/truvari) collapse, and the collapsed shards are concatenated per chromosome and then genome-wide.
+
+Nothing is returned as a workflow output. Each stage writes under 'remote_outdir', and the cohort callset is '06_concat/truvari_collapsed.bcf' there, which RegenotypeFamilySVCallsets reads.
+
+Inputs:
+- `String remote_indir`: The 'remote_outdir' of MergeSampleSVCallsets, whose '02_scoring' subdirectory is read.
+- `String remote_outdir`: GCS directory the merge, shard, collapse and concatenation stages are written under, without a trailing slash.
+- `File? sample_ids_file`: Samples to merge, one per line, in the column order of the merged VCF. Derived from the per-sample marker files in 'remote_indir' when omitted.
+- `Array[String] chromosomes`: Chromosomes to process, in output order. (default `["chr1", "chr2", "chr3", "chr4", "chr5", "chr6", "chr7", "chr8", "chr9", "chr10", "chr11", "chr12", "chr13", "chr14", "chr15", "chr16", "chr17", "chr18", "chr19", "chr20", "chr21", "chr22", "chrX", "chrY"]`)
+- `Int merge_mode`: How bcftools merge matches records: 1 by CHROM, POS, REF and ALT, or 2 by ID. (default `1`)
+- `Int truvari_chunk_min_records`: Minimum number of records in each truvari-collapse shard. (default `2000`)
+- `Int truvari_collapse_refdist`: Distance, in bp, that shard boundaries keep from any record, so that records Truvari could collapse together fall in one shard. (default `1000`)
+- `Int consistency_checks`: Whether to verify that sharding kept every record: 1 for yes, 0 for no. (default `1`)
+- `String truvari_matching_parameters`: Truvari collapse matching arguments. (default `--refdist 500 --pctseq 0.95 --pctsize 0.95 --pctovl 0.0`)
+- `Boolean use_bed`: Whether Truvari collapse is restricted to each shard's intervals with a BED. (default `false`)
+- `Int chunk_ids_per_file`: Number of truvari-collapse shards processed on each VM. (default `100`)
+- `Int concat_all_naive`: Whether the genome-wide concatenation uses bcftools concat --naive: 1 for yes, 0 for no. (default `1`)
+- `File split_for_bcftools_merge_csv`: The interval CSV MergeSampleSVCallsets split the scored calls into.
+- `String sv_integration_docker`: Container image.
+- `RuntimeAttr? runtime_attr_*`: Optional per-task runtime overrides (8).
+
+### [MergeCohortLongSVCallsets](../wdl/tools/MergeCohortLongSVCallsets.wdl)
+This tool merges the per-sample SVs longer than the MergeSampleSVCallsets length range, and the per-sample breakends, into one cohort callset for each class. Each class runs through the same bcftools merge, truvari-collapse sharding, Truvari (https://github.com/ACEnglish/truvari) collapse and concatenation stages as MergeCohortSVCallsets, without scoring or regenotyping.
+
+Nothing is returned as a workflow output. Each class writes under its own subdirectory of 'remote_outdir', named after the class, and that class's cohort callset is '15_concat/truvari_collapsed.bcf' there.
+
+Inputs:
+- `String remote_indir`: The 'remote_outdir' of MergeSampleSVCallsets.
+- `String remote_outdir`: GCS directory each class's stages are written under, without a trailing slash.
+- `Array[String] suffixes`: Classes to merge: 'ultralong' for the longer SVs and 'bnd' for the breakends. (default `["ultralong", "bnd"]`)
+- `String intrasample_subdir`: Subdirectory of 'remote_indir' holding the per-sample calls of each class. Leave empty to read them from 'remote_indir' itself. (default `01_intrasample`)
+- `Array[String] chromosomes`: Chromosomes to process, in output order. (default `["chr1", "chr2", "chr3", "chr4", "chr5", "chr6", "chr7", "chr8", "chr9", "chr10", "chr11", "chr12", "chr13", "chr14", "chr15", "chr16", "chr17", "chr18", "chr19", "chr20", "chr21", "chr22", "chrX", "chrY"]`)
+- `Int? n_expected_samples`: Number of samples to merge. Derived from the per-sample files of each class when omitted.
+- `Int truvari_chunk_min_records`: Minimum number of records in each truvari-collapse shard. (default `2000`)
+- `Int truvari_collapse_refdist`: Distance, in bp, that shard boundaries keep from any record, so that records Truvari could collapse together fall in one shard. (default `1000`)
+- `Int consistency_checks`: Whether to verify that sharding kept every record: 1 for yes, 0 for no. (default `1`)
+- `String truvari_matching_parameters`: Truvari collapse matching arguments. (default `--refdist 500 --pctseq 0.95 --pctsize 0.95 --pctovl 0.0`)
+- `Int max_resolve`: Maximum length of a symbolic SV whose sequence Truvari resolves from the reference before collapsing. (default `100000`)
+- `Boolean use_bed`: Whether Truvari collapse is restricted to each shard's intervals with a BED. (default `false`)
+- `Int chunk_ids_per_file`: Number of truvari-collapse shards processed on each VM. (default `100`)
+- `Int concat_all_naive`: Whether the genome-wide concatenation uses bcftools concat --naive: 1 for yes, 0 for no. (default `1`)
+- `File ref_fa`: From references.
+- `File ref_fai`: From references.
+- `String sv_integration_docker`: Container image.
+- `RuntimeAttr? runtime_attr_*`: Optional per-task runtime overrides (7).
+
+### [RegenotypeFamilySVCallsets](../wdl/tools/RegenotypeFamilySVCallsets.wdl)
+This tool regenotypes the cohort SV callset from MergeCohortSVCallsets jointly within one family with Kanpig (https://github.com/ACEnglish/kanpig). The family's members are first checked against the PED, then a family-specific candidate VCF is built from the cohort callset and each member is regenotyped against its reads, and each member's regenotyped calls are split into the chunks of the interval CSV.
+
+It is run once per family, as one Terra sample set per family, and every family's run writes into the same 'remote_outdir'. Nothing is returned as a workflow output; MergeRegenotypedSVCallsets merges what the family runs wrote into the regenotyped cohort callset.
+
+Inputs:
+- `String family_id`: Family to regenotype, which must match a family ID in column 1 of the PED.
+- `Array[String] sample_ids`: Members of the family, aligned by index with every other per-sample array. Must match the family's members in the PED exactly.
+- `Array[String] sample_sexes`: Sex of each member. 'M' selects the male ploidy BED for Kanpig; any other value selects the female one.
+- `Array[String] aligned_bams`: GCS paths to each member's aligned reads.
+- `Array[String] aligned_bais`: GCS paths to the indexes for 'aligned_bams'.
+- `File ped`: Six-column pedigree defining each family's members.
+- `String remote_indir`: The 'remote_outdir' of MergeCohortSVCallsets, whose '06_concat' subdirectory holds the cohort callset.
+- `String remote_outdir`: GCS directory shared by every family's run, which the per-sample regenotyped chunks are written under, without a trailing slash.
+- `String requester_pays_project`: Project billed for reads from requester-pays buckets. Leave empty when none are read. (default empty)
+- `String kanpig_params_cohort`: Kanpig arguments for regenotyping against the cohort callset. (default `--neighdist 500 --gpenalty 0.04 --hapsim 0.97`)
+- `File split_for_bcftools_merge_csv`: The interval CSV the rest of the SV integration used.
+- `File ref_fa`: From references.
+- `File ref_fai`: From references.
+- `File ploidy_bed_female`: From references.
+- `File ploidy_bed_male`: From references.
+- `File autosomes_bed`: Autosomes, used to report each member's heterozygous-call rate.
+- `String sv_integration_docker`: Container image.
+- `RuntimeAttr? runtime_attr_*`: Optional per-task runtime overrides (2).
+
+### [MergeRegenotypedSVCallsets](../wdl/tools/MergeRegenotypedSVCallsets.wdl)
+This tool merges the per-family regenotyped SV calls written by RegenotypeFamilySVCallsets into one regenotyped cohort SV callset. Each chunk of the interval CSV is merged across every sample of every family with bcftools merge, matching records by ID and dropping records that are REF in every sample, and the merged chunks are concatenated in genome order.
+
+Nothing is returned as a workflow output. The merged chunks are written under 'merge' in 'remote_outdir', and the regenotyped cohort callset is 'concat/merged.bcf' there.
+
+Inputs:
+- `String remote_indir`: The 'remote_outdir' shared by every RegenotypeFamilySVCallsets run.
+- `String remote_outdir`: GCS directory the merged chunks and the concatenated callset are written under, without a trailing slash.
+- `File? sample_ids_file`: Samples to merge, one per line, in the column order of the merged VCF. Derived from the per-sample marker files in 'remote_indir' when omitted.
+- `Int merge_mode`: How bcftools merge matches records: 1 by CHROM, POS, REF and ALT, or 2 by ID. Regenotyped calls share the cohort IDs, so 2 is correct here. (default `2`)
+- `File split_for_bcftools_merge_csv`: The interval CSV RegenotypeFamilySVCallsets split the regenotyped calls into.
+- `String sv_integration_docker`: Container image.
+- `RuntimeAttr? runtime_attr_*`: Optional per-task runtime overrides (4).
+
 ### [TRGT](../wdl/tools/TRGT.wdl)
 This workflow leverages TRGT (https://github.com/PacificBiosciences/trgt) in order to genotype short-tandem repeats.
 
@@ -2218,3 +2351,32 @@ Inputs:
 
 Outputs:
 - `Array[File] vcf_shards`: The resulting shards, or the original file when no splitting was requested.
+
+### Long SV cohort integration
+`MergeCohortLongSVClass` merges and collapses one call class, ultralong or bnd, and is run once per class by `MergeCohortLongSVCallsets`.
+
+### [MergeCohortLongSVClass](../wdl/utils/MergeCohortLongSVClass.wdl)
+This sub-workflow merges one class of per-sample calls, either the SVs longer than the MergeSampleSVCallsets length range or the breakends, into a cohort callset. The per-sample calls are merged with bcftools merge, each chromosome is resharded into truvari-collapse shards, matching sites within each shard are collapsed with Truvari (https://github.com/ACEnglish/truvari) collapse, and the collapsed shards are concatenated per chromosome and then genome-wide.
+
+Inputs:
+- `String suffix`: Class to merge: 'ultralong' or 'bnd'.
+- `String remote_indir`: GCS directory holding the per-sample calls of the class.
+- `String remote_outdir_suffix`: GCS directory the class's merge, shard, collapse and concatenation stages are written under.
+- `Array[String] chromosomes`: Chromosomes to process, in output order.
+- `Int? n_expected_samples`: Number of samples to merge. Derived from the per-sample files of the class when omitted.
+- `Int truvari_chunk_min_records`: Minimum number of records in each truvari-collapse shard. (default `2000`)
+- `Int truvari_collapse_refdist`: Distance, in bp, that shard boundaries keep from any record, so that records Truvari could collapse together fall in one shard. (default `1000`)
+- `Int consistency_checks`: Whether to verify that sharding kept every record: 1 for yes, 0 for no. (default `1`)
+- `String truvari_matching_parameters`: Truvari collapse matching arguments. (default `--refdist 500 --pctseq 0.95 --pctsize 0.95 --pctovl 0.0`)
+- `Int max_resolve`: Maximum length of a symbolic SV whose sequence Truvari resolves from the reference before collapsing. (default `100000`)
+- `Boolean use_bed`: Whether Truvari collapse is restricted to each shard's intervals with a BED. (default `false`)
+- `Int chunk_ids_per_file`: Number of truvari-collapse shards processed on each VM. (default `100`)
+- `Int concat_all_naive`: Whether the genome-wide concatenation uses bcftools concat --naive: 1 for yes, 0 for no. (default `1`)
+- `File ref_fa`: From references.
+- `File ref_fai`: From references.
+- `String sv_integration_docker`: Container image.
+- `RuntimeAttr? runtime_attr_*`: Optional per-task runtime overrides (7).
+
+Outputs:
+- `String done`: Completion signal of the genome-wide concatenation.
+- `String cohort_dir`: GCS directory holding the class's cohort callset, 'truvari_collapsed.bcf'.

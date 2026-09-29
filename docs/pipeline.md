@@ -32,14 +32,19 @@ Alignment and assembly are independent and run concurrently; only the assembly b
 2. **[GLNexus](../wdl/tools/GLNexus.wdl)** - joint-genotype the per-sample gVCFs into a cohort SNV/indel VCF.
 
 ### SV Callset
-Several callers are run per sample, merged within each sample, merged across the cohort, and then regenotyped to filter.
+Several callers are run per sample and merged within each sample, the per-sample calls are merged across the cohort, and the cohort sites are then regenotyped per family with Kanpig. Calls are split by size during the per-sample merge: SVs of 20bp to 2kb go through scoring and regenotyping, while longer SVs and breakends are integrated separately.
 1. Callers run in parallel:
    - **[PBSV](../wdl/tools/PBSV.wdl)** - read-based calls from the aligned reads.
    - **[Sniffles](../wdl/tools/Sniffles.wdl)** - read-based calls from the aligned reads.
    - **[PAV](../wdl/tools/PAV.wdl)** - assembly-based calls, taking the hifiasm haplotype FASTAs directly rather than the `MinimapAlignment` BAMs.
-2. **MergeSampleSVCallsets** ([todo](#todo-workflows)) - intra-sample integration of the per-caller VCFs with Truvari.
-3. **MergeCohortSVCallsets** ([todo](#todo-workflows)) - inter-sample integration with Truvari into a cohort SV VCF.
-4. **[Kanpig](../wdl/tools/Kanpig.wdl)** - regenotype every site against each sample's reads, requiring non-ref support to retain a call.
+2. **[MergeSampleSVCallsets](../wdl/tools/MergeSampleSVCallsets.wdl)** - per sample, normalize each caller's VCF and split it into SVs of 20bp to 2kb, longer SVs and breakends, then merge the callers within each class with `truvari collapse --intra`. The 20bp to 2kb SVs are then genotyped with Kanpig against the sample's reads, keeping only calls with ALT support, and scored with an XGBoost model trained on matches to a truth resource.
+3. Cohort integration, in parallel:
+   - **[MergeCohortSVCallsets](../wdl/tools/MergeCohortSVCallsets.wdl)** - merge the scored 20bp to 2kb SVs across the cohort with `bcftools merge`, then collapse matching sites with `truvari collapse`, into a cohort SV VCF.
+   - **[MergeCohortLongSVCallsets](../wdl/tools/MergeCohortLongSVCallsets.wdl)** - merge and collapse the longer SVs and breakends across the cohort the same way, without scoring or regenotyping.
+4. **[RegenotypeFamilySVCallsets](../wdl/tools/RegenotypeFamilySVCallsets.wdl)** - regenotype the cohort SV VCF jointly within each family with Kanpig, against each member's reads. Runs once per family, as one Terra sample set per family.
+5. **[MergeRegenotypedSVCallsets](../wdl/tools/MergeRegenotypedSVCallsets.wdl)** - merge every family's regenotyped calls by variant ID and concatenate them into the regenotyped cohort SV VCF.
+
+The SV callset is the regenotyped cohort SV VCF from step 5 together with the longer SV and breakend VCF from step 3.
 
 ### TRGT Callset
 1. **[TRGT](../wdl/tools/TRGT.wdl)** - genotype tandem repeat loci per sample from the aligned reads, run once per catalog: TRExplorer v1.0.1 and Vamos v2.1.
@@ -136,9 +141,3 @@ Each step takes the previous step's VCF, starting from the allele-type-annotated
 7. **[StripGenotypes](../wdl/annotation_utils/StripGenotypes.wdl)** _(optional)_ - drop genotypes to produce a sites-only VCF alongside the full release.
 
 Step 3 ends with the annotated, filtered, allele-frequency-annotated cohort VCF for release.
-
-
-## TODO Workflows
-These steps are part of the end-to-end path but have no workflow in this repository yet. Each needs to be implemented and registered in [`.dockstore.yml`](../.dockstore.yml) before a new cohort can be run from raw reads.
-- **MergeSampleSVCallsets** - Truvari intra-sample integration. Per-caller VCFs to one raw VCF per sample.
-- **MergeCohortSVCallsets** - Truvari inter-sample integration. Per-sample SV VCFs to a cohort SV VCF.
