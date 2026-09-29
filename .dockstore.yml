@@ -737,7 +737,6 @@ workflows:
     filters:
       branches:
         - main
-        - kj-sv-integration-port
       tags:
         - /.*/
 
@@ -747,7 +746,6 @@ workflows:
     filters:
       branches:
         - main
-        - kj-sv-integration-port
       tags:
         - /.*/
 
@@ -757,7 +755,6 @@ workflows:
     filters:
       branches:
         - main
-        - kj-sv-integration-port
       tags:
         - /.*/
 
@@ -767,7 +764,6 @@ workflows:
     filters:
       branches:
         - main
-        - kj-sv-integration-port
       tags:
         - /.*/
 
@@ -777,7 +773,6 @@ workflows:
     filters:
       branches:
         - main
-        - kj-sv-integration-port
       tags:
         - /.*/
 
