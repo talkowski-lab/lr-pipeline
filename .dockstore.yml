@@ -619,7 +619,6 @@ workflows:
     filters:
       branches:
         - main
-        - kj-hybrid-gcnv
       tags:
         - /.*/
 
