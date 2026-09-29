@@ -6,7 +6,8 @@ import "../utils/Structs.wdl"
 workflow ExactMatch {
     meta {
         description: [
-            "This sub-workflow performs the first callset-comparison round, matching records to a truth callset on exact position and allele. The contig is cut into fixed-width regions and each is processed independently: both VCFs are streamed down to the region straight from the bucket, with genotypes dropped and any include expression applied on the way, then optionally renamed to a common ID scheme and matched. Each region's unmatched callset records and its truth records are then subset to the caller's minimum Truvari lengths, so no step ever passes over a whole contig. The per-region annotations and VCFs are concatenated into the form `TruvariMatch` expects."
+            "This sub-workflow performs the first callset-comparison round, matching records to a truth callset on exact position and allele. The contig is cut into fixed-width regions and each is processed independently: both VCFs are streamed down to the region straight from the bucket, with genotypes dropped and any include expression applied on the way, then optionally renamed to a common ID scheme and matched. Each region's unmatched callset records and its truth records are then subset to the caller's minimum Truvari lengths, so no step ever passes over a whole contig. The per-region annotations and VCFs are concatenated into the form `TruvariMatch` expects.",
+            "The matching itself runs only when `run_exact_matching` is true; otherwise every callset record in the region is passed on as unmatched. The truth records are subset for Truvari only when `run_truvari_matching` is true, and the truth callset is never read when both are false, leaving only the callset preparation."
         ]
     }
 
@@ -16,8 +17,10 @@ workflow ExactMatch {
         truth_snv_indel_vcf: "Truth callset. Read region by region, so it may hold any set of contigs."
         truth_snv_indel_vcf_idx: "Index for truth_snv_indel_vcf."
         contig: "Contig being processed."
+        run_exact_matching: "Whether to match the callset against the truth callset. When false no annotations are produced and every callset record counts as unmatched."
+        run_truvari_matching: "Whether the caller runs the Truvari round, and so whether the truth records are subset for it."
         shard_bin_size_exact_match: "Width in base pairs of the contig regions the matching step is sharded into."
-        min_sv_length_truvari_vcf: "Minimum length for an unmatched callset record to be emitted for Truvari, measured by `length_field_vcf`."
+        min_sv_length_truvari_vcf: "Minimum length for an unmatched callset record to be emitted for the next matching round, measured by `length_field_vcf`."
         min_sv_length_truvari_truth_snv_indel_vcf: "Minimum length for a truth record to be emitted for Truvari, measured by `length_field_truth_snv_indel_vcf`."
         length_field_vcf: "INFO field in the callset holding allele length."
         length_field_truth_snv_indel_vcf: "Length used to filter the truth callset, either an INFO field or `ILEN`, the bcftools built-in indel length computed from REF and ALT."
@@ -28,10 +31,10 @@ workflow ExactMatch {
         rename_id_string_truth_snv_indel_vcf: "ID rename templates."
         rename_id_strip_chr_vcf: "Strip the `chr` prefix while renaming."
         rename_id_strip_chr_truth_snv_indel_vcf: "Strip the `chr` prefix while renaming."
-        annotated_tsv: "Exact-match annotations."
-        truvari_eval_vcf: "Unmatched callset records at or above `min_sv_length_truvari_vcf`, passed to `TruvariMatch`."
+        annotated_tsv: "Exact-match annotations, absent when `run_exact_matching` is false."
+        truvari_eval_vcf: "Unmatched callset records at or above `min_sv_length_truvari_vcf`, passed to the next matching round."
         truvari_eval_vcf_idx: "Index for truvari_eval_vcf."
-        truvari_truth_vcf: "Renamed truth records at or above `min_sv_length_truvari_truth_snv_indel_vcf`, passed to `TruvariMatch`."
+        truvari_truth_vcf: "Renamed truth records at or above `min_sv_length_truvari_truth_snv_indel_vcf`, passed to `TruvariMatch`. Absent when `run_truvari_matching` is false."
         truvari_truth_vcf_idx: "Index for truvari_truth_vcf."
     }
 
@@ -42,6 +45,9 @@ workflow ExactMatch {
         File truth_snv_indel_vcf_idx
         String contig
         String prefix
+
+        Boolean run_exact_matching
+        Boolean run_truvari_matching
 
         Int shard_bin_size_exact_match = 5000000
 
@@ -74,6 +80,8 @@ workflow ExactMatch {
         RuntimeAttr? runtime_attr_concat_exact_truth
     }
 
+    Boolean stream_truth = run_exact_matching || run_truvari_matching
+
     call Helpers.CreateContigShards as CreateExactShards {
         input:
             vcfs = [vcf, truth_snv_indel_vcf],
@@ -99,18 +107,6 @@ workflow ExactMatch {
                 runtime_attr_override = runtime_attr_subset_exact_vcf
         }
 
-        call Helpers.SubsetVcfToRegionStreaming as SubsetExactTruth {
-            input:
-                vcf = truth_snv_indel_vcf,
-                vcf_idx = truth_snv_indel_vcf_idx,
-                region = CreateExactShards.shard_regions[k],
-                include_args = args_string_truth_snv_indel_vcf,
-                drop_genotypes = true,
-                prefix = "~{prefix}.exact_truth_~{k}",
-                docker = utils_docker,
-                runtime_attr_override = runtime_attr_subset_exact_truth
-        }
-
         if (defined(rename_id_string_vcf)) {
             call Helpers.RenameVariantIds as RenameEvalIds {
                 input:
@@ -124,52 +120,73 @@ workflow ExactMatch {
             }
         }
 
-        if (defined(rename_id_string_truth_snv_indel_vcf)) {
-            call Helpers.RenameVariantIds as RenameTruthIds {
+        File shard_eval_vcf = select_first([RenameEvalIds.renamed_vcf, SubsetExactEval.subset_vcf])
+        File shard_eval_vcf_idx = select_first([RenameEvalIds.renamed_vcf_idx, SubsetExactEval.subset_vcf_idx])
+
+        if (stream_truth) {
+            call Helpers.SubsetVcfToRegionStreaming as SubsetExactTruth {
                 input:
-                    vcf = SubsetExactTruth.subset_vcf,
-                    vcf_idx = SubsetExactTruth.subset_vcf_idx,
-                    prefix = "~{prefix}.exact_truth_~{k}.renamed",
-                    id_format = select_first([rename_id_string_truth_snv_indel_vcf]),
-                    strip_chr = select_first([rename_id_strip_chr_truth_snv_indel_vcf, false]),
+                    vcf = truth_snv_indel_vcf,
+                    vcf_idx = truth_snv_indel_vcf_idx,
+                    region = CreateExactShards.shard_regions[k],
+                    include_args = args_string_truth_snv_indel_vcf,
+                    drop_genotypes = true,
+                    prefix = "~{prefix}.exact_truth_~{k}",
                     docker = utils_docker,
-                    runtime_attr_override = runtime_attr_rename_truth
+                    runtime_attr_override = runtime_attr_subset_exact_truth
+            }
+
+            if (defined(rename_id_string_truth_snv_indel_vcf)) {
+                call Helpers.RenameVariantIds as RenameTruthIds {
+                    input:
+                        vcf = SubsetExactTruth.subset_vcf,
+                        vcf_idx = SubsetExactTruth.subset_vcf_idx,
+                        prefix = "~{prefix}.exact_truth_~{k}.renamed",
+                        id_format = select_first([rename_id_string_truth_snv_indel_vcf]),
+                        strip_chr = select_first([rename_id_strip_chr_truth_snv_indel_vcf, false]),
+                        docker = utils_docker,
+                        runtime_attr_override = runtime_attr_rename_truth
+                }
+            }
+
+            File shard_truth_vcf = select_first([RenameTruthIds.renamed_vcf, SubsetExactTruth.subset_vcf])
+            File shard_truth_vcf_idx = select_first([RenameTruthIds.renamed_vcf_idx, SubsetExactTruth.subset_vcf_idx])
+        }
+
+        if (run_exact_matching) {
+            call Helpers.ExactMatch as ExactMatchShard {
+                input:
+                    vcf = shard_eval_vcf,
+                    vcf_idx = shard_eval_vcf_idx,
+                    truth_snv_indel_vcf = select_first([shard_truth_vcf]),
+                    truth_snv_indel_vcf_idx = select_first([shard_truth_vcf_idx]),
+                    source_tag = source_tag_truth_snv_indel_vcf,
+                    prefix = "~{prefix}.exact_~{k}",
+                    docker = utils_docker,
+                    runtime_attr_override = runtime_attr_exact_match
+            }
+
+            call Helpers.AppendAnnotationsFromVcf as AppendExactAnnotationsShard {
+                input:
+                    annotation_tsv = ExactMatchShard.annotation_tsv,
+                    truth_vcf = ExactMatchShard.matched_truth_vcf,
+                    truth_vcf_idx = ExactMatchShard.matched_truth_vcf_idx,
+                    is_sv_truth = false,
+                    prefix = "~{prefix}.exact_annotated_~{k}",
+                    docker = utils_docker,
+                    runtime_attr_override = runtime_attr_append_exact_annotations
             }
         }
 
-        File shard_eval_vcf = select_first([RenameEvalIds.renamed_vcf, SubsetExactEval.subset_vcf])
-        File shard_eval_vcf_idx = select_first([RenameEvalIds.renamed_vcf_idx, SubsetExactEval.subset_vcf_idx])
-        File shard_truth_vcf = select_first([RenameTruthIds.renamed_vcf, SubsetExactTruth.subset_vcf])
-        File shard_truth_vcf_idx = select_first([RenameTruthIds.renamed_vcf_idx, SubsetExactTruth.subset_vcf_idx])
+        # Without the exact round every callset record in the region is still unmatched
+        File shard_unmatched_vcf = select_first([ExactMatchShard.unmatched_vcf, shard_eval_vcf])
+        File shard_unmatched_vcf_idx = select_first([ExactMatchShard.unmatched_vcf_idx, shard_eval_vcf_idx])
 
-        call Helpers.ExactMatch as ExactMatchShard {
-            input:
-                vcf = shard_eval_vcf,
-                vcf_idx = shard_eval_vcf_idx,
-                truth_snv_indel_vcf = shard_truth_vcf,
-                truth_snv_indel_vcf_idx = shard_truth_vcf_idx,
-                source_tag = source_tag_truth_snv_indel_vcf,
-                prefix = "~{prefix}.exact_~{k}",
-                docker = utils_docker,
-                runtime_attr_override = runtime_attr_exact_match
-        }
-
-        call Helpers.AppendAnnotationsFromVcf as AppendExactAnnotationsShard {
-            input:
-                annotation_tsv = ExactMatchShard.annotation_tsv,
-                truth_vcf = ExactMatchShard.matched_truth_vcf,
-                truth_vcf_idx = ExactMatchShard.matched_truth_vcf_idx,
-                is_sv_truth = false,
-                prefix = "~{prefix}.exact_annotated_~{k}",
-                docker = utils_docker,
-                runtime_attr_override = runtime_attr_append_exact_annotations
-        }
-
-        # Admit only records long enough for Truvari, measuring each VCF by its own length field
+        # Admit only records long enough for the next round, measuring each VCF by its own length field
         call Helpers.SubsetVcfByLength as SubsetTruvariEval {
             input:
-                vcf = ExactMatchShard.unmatched_vcf,
-                vcf_idx = ExactMatchShard.unmatched_vcf_idx,
+                vcf = shard_unmatched_vcf,
+                vcf_idx = shard_unmatched_vcf_idx,
                 length_field = length_field_vcf,
                 min_length = min_sv_length_truvari_vcf,
                 prefix = "~{prefix}.truvari_eval_~{k}",
@@ -177,26 +194,30 @@ workflow ExactMatch {
                 runtime_attr_override = runtime_attr_truvari_subset_vcf
         }
 
-        call Helpers.SubsetVcfByLength as SubsetTruvariTruth {
-            input:
-                vcf = shard_truth_vcf,
-                vcf_idx = shard_truth_vcf_idx,
-                length_field = length_field_truth_snv_indel_vcf,
-                min_length = min_sv_length_truvari_truth_snv_indel_vcf,
-                prefix = "~{prefix}.truvari_truth_~{k}",
-                docker = utils_docker,
-                runtime_attr_override = runtime_attr_truvari_subset_truth
+        if (run_truvari_matching) {
+            call Helpers.SubsetVcfByLength as SubsetTruvariTruth {
+                input:
+                    vcf = select_first([shard_truth_vcf]),
+                    vcf_idx = select_first([shard_truth_vcf_idx]),
+                    length_field = length_field_truth_snv_indel_vcf,
+                    min_length = min_sv_length_truvari_truth_snv_indel_vcf,
+                    prefix = "~{prefix}.truvari_truth_~{k}",
+                    docker = utils_docker,
+                    runtime_attr_override = runtime_attr_truvari_subset_truth
+            }
         }
     }
 
-    call Helpers.ConcatTsvs as ConcatExactAnnotations {
-        input:
-            tsvs = AppendExactAnnotationsShard.annotated_tsv,
-            sort_output = true,
-            preserve_header = true,
-            prefix = "~{prefix}.exact_annotations",
-            docker = utils_docker,
-            runtime_attr_override = runtime_attr_concat_exact_annotations
+    if (run_exact_matching) {
+        call Helpers.ConcatTsvs as ConcatExactAnnotations {
+            input:
+                tsvs = select_all(AppendExactAnnotationsShard.annotated_tsv),
+                sort_output = true,
+                preserve_header = true,
+                prefix = "~{prefix}.exact_annotations",
+                docker = utils_docker,
+                runtime_attr_override = runtime_attr_concat_exact_annotations
+        }
     }
 
     call Helpers.ConcatVcfs as ConcatExactUnmatched {
@@ -210,22 +231,24 @@ workflow ExactMatch {
             runtime_attr_override = runtime_attr_concat_exact_unmatched
     }
 
-    call Helpers.ConcatVcfs as ConcatExactTruth {
-        input:
-            vcfs = SubsetTruvariTruth.subset_vcf,
-            vcf_idxs = SubsetTruvariTruth.subset_vcf_idx,
-            allow_overlaps = false,
-            naive = false,
-            prefix = "~{prefix}.truvari_truth",
-            docker = utils_docker,
-            runtime_attr_override = runtime_attr_concat_exact_truth
+    if (run_truvari_matching) {
+        call Helpers.ConcatVcfs as ConcatExactTruth {
+            input:
+                vcfs = select_all(SubsetTruvariTruth.subset_vcf),
+                vcf_idxs = select_all(SubsetTruvariTruth.subset_vcf_idx),
+                allow_overlaps = false,
+                naive = false,
+                prefix = "~{prefix}.truvari_truth",
+                docker = utils_docker,
+                runtime_attr_override = runtime_attr_concat_exact_truth
+        }
     }
 
     output {
-        File annotated_tsv = ConcatExactAnnotations.concatenated_tsv
+        File? annotated_tsv = ConcatExactAnnotations.concatenated_tsv
         File truvari_eval_vcf = ConcatExactUnmatched.concat_vcf
         File truvari_eval_vcf_idx = ConcatExactUnmatched.concat_vcf_idx
-        File truvari_truth_vcf = ConcatExactTruth.concat_vcf
-        File truvari_truth_vcf_idx = ConcatExactTruth.concat_vcf_idx
+        File? truvari_truth_vcf = ConcatExactTruth.concat_vcf
+        File? truvari_truth_vcf_idx = ConcatExactTruth.concat_vcf_idx
     }
 }

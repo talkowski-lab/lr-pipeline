@@ -11,10 +11,11 @@ workflow AnnotateCallsetOverlap {
         description: [
             "This workflow ingests a callset VCF and two truth VCFs - one of SNVs & indels and one of SVs - and finds matching variants across them, annotating each matched callset variant with the truth callset's AC/AF/AN and genotype-count fields. This enables benchmarking annotations against an existing cohort (e.g. gnomAD) and surfacing variants that are outliers relative to it.",
             "The workflow undergoes multiple rounds of variant matching in order to determine matched pairs: (1) Exact match across CHROM, POS, REF and ALT. (2) Truvari match with overlap percentages of 90%, 70% and 50%. (3) Matching based on `bedtools closest`, finetuned for SVs. Here the callset and truth variants are split by type and converted to a symbolic representation, after which separate `bedtools closest` passes are run - one tuned for deletions and duplications via reciprocal positional overlap, and one tuned for insertions via breakpoint proximity - so that each callset variant is paired with the nearest same-type truth variant above the per-callset minimum SV-length thresholds.",
+            "Each round is switched on by its own Boolean - `run_exact_matching`, `run_truvari_matching` and `run_bedtools_closest_matching` - and a round that is switched off passes its input on unchanged to the next round that runs. The SV truth VCF is only prepared when the `bedtools closest` round runs. At least one round must run.",
             "Note: When converting to symbolic representation, only canonical DUPs (allele_type = `DUP` exactly) are treated as DUP; other DUP subtypes (e.g., `dup_interspersed`, `inv_dup`) are treated as insertions.",
             "Note: Callset DUPs are compared twice, because the two matching rules need different coordinates. Against truth DUPs they are compared by reciprocal overlap, over their `ORIGIN` interval when `move_dup_to_origin` is true and over their own span from POS otherwise; against truth insertions they are always collapsed to a point at their VCF position and compared by breakpoint proximity and length ratio. Setting `move_dup_to_origin` to false is what lets the workflow run on a callset with no `INFO/ORIGIN`.",
             "Note: The SV truth VCF is expected to be symbolic already. Set `convert_symbolic_truth_sv_vcf` when it instead carries sequence alleles, in which case its allele type and length are read from `type_field_truth_sv_vcf` and `length_field_truth_sv_vcf`, which need not match the fields used for the callset. Its canonical DUPs then follow the same `move_dup_to_origin` positioning as the callset.",
-            "Every minimum-length filter measures its VCF by the `length_field_*` input named here. The two Truvari filters run region by region inside `ExactMatch`; the two `bedtools closest` filters run here, and the SV truth VCF is filtered before renaming and conversion. With `convert_symbolic_truth_sv_vcf` a canonical DUP is therefore measured by `length_field_truth_sv_vcf` rather than by the `ORIGIN` span that conversion writes into `SVLEN`.",
+            "Every minimum-length filter measures its VCF by the `length_field_*` input named here. The two Truvari filters run region by region inside `ExactMatch`, where the callset is filtered by `min_sv_length_bedtools_closest_vcf` instead when the Truvari round is off; the two `bedtools closest` filters run here, and the SV truth VCF is filtered before renaming and conversion. With `convert_symbolic_truth_sv_vcf` a canonical DUP is therefore measured by `length_field_truth_sv_vcf` rather than by the `ORIGIN` span that conversion writes into `SVLEN`.",
             "The workflow runs on one contig. The callset and SNV & indel truth VCFs are never passed over whole: `ExactMatch` reads them region by region straight from the bucket, dropping genotypes and applying their `args_string_*` expression on the way, so they may hold any set of contigs. The SV truth VCF, which the `bedtools closest` round consumes unsharded, is prepared in a single pass that applies its `args_string_truth_sv_vcf` expression and `min_sv_length_bedtools_closest_truth_vcf`, drops genotypes and, when `subset_contig_truth_sv_vcf` is true, reads only the contig from the bucket.",
             "Both the exact-match and Truvari rounds can be sharded within a contig. Truvari shard boundaries are snapped forward to the next gap wider than the `min_shard_gap_truvari_match` input of `TruvariMatch`, which keeps results identical to an unsharded run because Truvari only groups records into a new comparison chunk once the next record clears the running end by more than its chunk size. Fixed-width bins alone would split colocated record pairs and silently lose matches."
         ]
@@ -28,6 +29,9 @@ workflow AnnotateCallsetOverlap {
         truth_sv_vcf: "Truth VCF containing SVs to match against."
         truth_sv_vcf_idx: "Index for `truth_sv_vcf`."
         contig: "Contig to evaluate."
+        run_exact_matching: "Whether to run the exact-match round."
+        run_truvari_matching: "Whether to run the Truvari round. When false the records left by the exact-match round pass straight to the `bedtools closest` round."
+        run_bedtools_closest_matching: "Whether to run the `bedtools closest` round. When false the SV truth VCF is never read."
         min_sv_length_truvari_vcf: "Minimum length for a callset variant to enter the Truvari matching round, measured by `length_field_vcf`."
         min_sv_length_truvari_truth_snv_indel_vcf: "Minimum length for a SNV & indel truth variant to enter the Truvari matching round, measured by `length_field_truth_snv_indel_vcf`."
         min_sv_length_bedtools_closest_vcf: "Minimum length for a callset variant to enter the `bedtools closest` matching round, measured by `length_field_vcf`."
@@ -68,6 +72,10 @@ workflow AnnotateCallsetOverlap {
         File truth_sv_vcf_idx
         String contig
         String prefix
+
+        Boolean run_exact_matching
+        Boolean run_truvari_matching
+        Boolean run_bedtools_closest_matching
 
         Int min_sv_length_truvari_vcf
         Int min_sv_length_truvari_truth_snv_indel_vcf
@@ -141,54 +149,8 @@ workflow AnnotateCallsetOverlap {
         RuntimeAttr? runtime_attr_build_annotation_tsv
     }
 
-    # Prepare the SV truth in one pass: contig subset when asked, include expression, length filter and genotype drop
-    call SubsetTruthSvVcf {
-        input:
-            vcf = truth_sv_vcf,
-            vcf_idx = truth_sv_vcf_idx,
-            contig = contig,
-            subset_contig = subset_contig_truth_sv_vcf,
-            include_args = args_string_truth_sv_vcf,
-            length_field = length_field_truth_sv_vcf,
-            min_length = min_sv_length_bedtools_closest_truth_vcf,
-            prefix = "~{prefix}.~{contig}.sv_truth",
-            docker = utils_docker,
-            runtime_attr_override = runtime_attr_subset_sv_truth
-    }
-
-    if (defined(rename_id_string_truth_sv_vcf)) {
-        call Helpers.RenameVariantIds as RenameSVTruthIds {
-            input:
-                vcf = SubsetTruthSvVcf.subset_vcf,
-                vcf_idx = SubsetTruthSvVcf.subset_vcf_idx,
-                prefix = "~{prefix}.~{contig}.sv_truth.renamed",
-                id_format = select_first([rename_id_string_truth_sv_vcf]),
-                strip_chr = select_first([rename_id_strip_chr_truth_sv_vcf, false]),
-                docker = utils_docker,
-                runtime_attr_override = runtime_attr_rename_sv_truth
-        }
-    }
-
-    File truth_sv_vcf_renamed = select_first([RenameSVTruthIds.renamed_vcf, SubsetTruthSvVcf.subset_vcf])
-    File truth_sv_vcf_renamed_idx = select_first([RenameSVTruthIds.renamed_vcf_idx, SubsetTruthSvVcf.subset_vcf_idx])
-
-    # Give a sequence-allele SV truth VCF the symbolic ALTs, SVTYPE, SVLEN and END the bedtools closest round reads
-    if (convert_symbolic_truth_sv_vcf) {
-        call Helpers.ConvertToSymbolic as ConvertSVTruth {
-            input:
-                vcf = truth_sv_vcf_renamed,
-                vcf_idx = truth_sv_vcf_renamed_idx,
-                move_dup_to_origin = move_dup_to_origin,
-                type_field = type_field_truth_sv_vcf,
-                length_field = length_field_truth_sv_vcf,
-                prefix = "~{prefix}.~{contig}.sv_truth.symbolic",
-                docker = utils_docker,
-                runtime_attr_override = runtime_attr_convert_sv_truth
-        }
-    }
-
-    File truth_sv_vcf_final = select_first([ConvertSVTruth.processed_vcf, truth_sv_vcf_renamed])
-    File truth_sv_vcf_final_idx = select_first([ConvertSVTruth.processed_vcf_idx, truth_sv_vcf_renamed_idx])
+    # Filter the exact-match leftovers by the minimum of whichever round consumes them next
+    Int min_sv_length_unmatched_vcf = if run_truvari_matching then min_sv_length_truvari_vcf else min_sv_length_bedtools_closest_vcf
 
     # Match region by region, reading both VCFs straight from the bucket so neither is ever passed over whole
     call ExactMatch.ExactMatch {
@@ -199,8 +161,10 @@ workflow AnnotateCallsetOverlap {
             truth_snv_indel_vcf_idx = truth_snv_indel_vcf_idx,
             contig = contig,
             prefix = "~{prefix}.~{contig}",
+            run_exact_matching = run_exact_matching,
+            run_truvari_matching = run_truvari_matching,
             shard_bin_size_exact_match = shard_bin_size_exact_match,
-            min_sv_length_truvari_vcf = min_sv_length_truvari_vcf,
+            min_sv_length_truvari_vcf = min_sv_length_unmatched_vcf,
             min_sv_length_truvari_truth_snv_indel_vcf = min_sv_length_truvari_truth_snv_indel_vcf,
             length_field_vcf = length_field_vcf,
             length_field_truth_snv_indel_vcf = length_field_truth_snv_indel_vcf,
@@ -226,90 +190,143 @@ workflow AnnotateCallsetOverlap {
             runtime_attr_concat_exact_truth = runtime_attr_concat_exact_truth
     }
 
-    call TruvariMatch.TruvariMatch {
-        input:
-            vcf = ExactMatch.truvari_eval_vcf,
-            vcf_idx = ExactMatch.truvari_eval_vcf_idx,
-            truth_snv_indel_vcf = ExactMatch.truvari_truth_vcf,
-            truth_snv_indel_vcf_idx = ExactMatch.truvari_truth_vcf_idx,
-            contig = contig,
-            prefix = "~{prefix}.~{contig}.truvari",
-            source_tag = source_tag_truth_snv_indel_vcf,
-            shard_bin_size_truvari_match = shard_bin_size_truvari_match,
-            ref_fa = ref_fa,
-            ref_fai = ref_fai,
-            utils_docker = utils_docker,
-            runtime_attr_create_truvari_shards = runtime_attr_truvari_create_shards,
-            runtime_attr_subset_truvari_vcf = runtime_attr_truvari_subset_region_vcf,
-            runtime_attr_subset_truvari_truth = runtime_attr_truvari_subset_region_truth,
-            runtime_attr_run_truvari_09 = runtime_attr_truvari_run_truvari_09,
-            runtime_attr_run_truvari_07 = runtime_attr_truvari_run_truvari_07,
-            runtime_attr_run_truvari_05 = runtime_attr_truvari_run_truvari_05,
-            runtime_attr_concat_matched = runtime_attr_truvari_concat_matched,
-            runtime_attr_concat_matched_truth = runtime_attr_truvari_concat_matched_truth,
-            runtime_attr_concat_unmatched = runtime_attr_truvari_concat_unmatched
+    if (run_truvari_matching) {
+        call TruvariMatch.TruvariMatch {
+            input:
+                vcf = ExactMatch.truvari_eval_vcf,
+                vcf_idx = ExactMatch.truvari_eval_vcf_idx,
+                truth_snv_indel_vcf = select_first([ExactMatch.truvari_truth_vcf]),
+                truth_snv_indel_vcf_idx = select_first([ExactMatch.truvari_truth_vcf_idx]),
+                contig = contig,
+                prefix = "~{prefix}.~{contig}.truvari",
+                source_tag = source_tag_truth_snv_indel_vcf,
+                shard_bin_size_truvari_match = shard_bin_size_truvari_match,
+                ref_fa = ref_fa,
+                ref_fai = ref_fai,
+                utils_docker = utils_docker,
+                runtime_attr_create_truvari_shards = runtime_attr_truvari_create_shards,
+                runtime_attr_subset_truvari_vcf = runtime_attr_truvari_subset_region_vcf,
+                runtime_attr_subset_truvari_truth = runtime_attr_truvari_subset_region_truth,
+                runtime_attr_run_truvari_09 = runtime_attr_truvari_run_truvari_09,
+                runtime_attr_run_truvari_07 = runtime_attr_truvari_run_truvari_07,
+                runtime_attr_run_truvari_05 = runtime_attr_truvari_run_truvari_05,
+                runtime_attr_concat_matched = runtime_attr_truvari_concat_matched,
+                runtime_attr_concat_matched_truth = runtime_attr_truvari_concat_matched_truth,
+                runtime_attr_concat_unmatched = runtime_attr_truvari_concat_unmatched
+        }
+
+        call Helpers.AppendAnnotationsFromVcf as AppendTruvariAnnotations {
+            input:
+                annotation_tsv = TruvariMatch.annotation_tsv,
+                truth_vcf = TruvariMatch.matched_truth_vcf,
+                truth_vcf_idx = TruvariMatch.matched_truth_vcf_idx,
+                is_sv_truth = false,
+                prefix = "~{prefix}.~{contig}.truvari_annotated",
+                docker = utils_docker,
+                runtime_attr_override = runtime_attr_append_truvari_annotations
+        }
     }
 
-    call Helpers.AppendAnnotationsFromVcf as AppendTruvariAnnotations {
-        input:
-            annotation_tsv = TruvariMatch.annotation_tsv,
-            truth_vcf = TruvariMatch.matched_truth_vcf,
-            truth_vcf_idx = TruvariMatch.matched_truth_vcf_idx,
-            is_sv_truth = false,
-            prefix = "~{prefix}.~{contig}.truvari_annotated",
-            docker = utils_docker,
-            runtime_attr_override = runtime_attr_append_truvari_annotations
+    if (run_bedtools_closest_matching) {
+        # Prepare the SV truth in one pass: contig subset when asked, include expression, length filter and genotype drop
+        call SubsetTruthSvVcf {
+            input:
+                vcf = truth_sv_vcf,
+                vcf_idx = truth_sv_vcf_idx,
+                contig = contig,
+                subset_contig = subset_contig_truth_sv_vcf,
+                include_args = args_string_truth_sv_vcf,
+                length_field = length_field_truth_sv_vcf,
+                min_length = min_sv_length_bedtools_closest_truth_vcf,
+                prefix = "~{prefix}.~{contig}.sv_truth",
+                docker = utils_docker,
+                runtime_attr_override = runtime_attr_subset_sv_truth
+        }
+
+        if (defined(rename_id_string_truth_sv_vcf)) {
+            call Helpers.RenameVariantIds as RenameSVTruthIds {
+                input:
+                    vcf = SubsetTruthSvVcf.subset_vcf,
+                    vcf_idx = SubsetTruthSvVcf.subset_vcf_idx,
+                    prefix = "~{prefix}.~{contig}.sv_truth.renamed",
+                    id_format = select_first([rename_id_string_truth_sv_vcf]),
+                    strip_chr = select_first([rename_id_strip_chr_truth_sv_vcf, false]),
+                    docker = utils_docker,
+                    runtime_attr_override = runtime_attr_rename_sv_truth
+            }
+        }
+
+        File truth_sv_vcf_renamed = select_first([RenameSVTruthIds.renamed_vcf, SubsetTruthSvVcf.subset_vcf])
+        File truth_sv_vcf_renamed_idx = select_first([RenameSVTruthIds.renamed_vcf_idx, SubsetTruthSvVcf.subset_vcf_idx])
+
+        # Give a sequence-allele SV truth VCF the symbolic ALTs, SVTYPE, SVLEN and END the bedtools closest round reads
+        if (convert_symbolic_truth_sv_vcf) {
+            call Helpers.ConvertToSymbolic as ConvertSVTruth {
+                input:
+                    vcf = truth_sv_vcf_renamed,
+                    vcf_idx = truth_sv_vcf_renamed_idx,
+                    move_dup_to_origin = move_dup_to_origin,
+                    type_field = type_field_truth_sv_vcf,
+                    length_field = length_field_truth_sv_vcf,
+                    prefix = "~{prefix}.~{contig}.sv_truth.symbolic",
+                    docker = utils_docker,
+                    runtime_attr_override = runtime_attr_convert_sv_truth
+            }
+        }
+
+        File truth_sv_vcf_final = select_first([ConvertSVTruth.processed_vcf, truth_sv_vcf_renamed])
+        File truth_sv_vcf_final_idx = select_first([ConvertSVTruth.processed_vcf_idx, truth_sv_vcf_renamed_idx])
+
+        # Admit only records long enough for the bedtools closest round; the SV truth was filtered above
+        call Helpers.SubsetVcfByLength as SubsetByLength {
+            input:
+                vcf = select_first([TruvariMatch.unmatched_vcf, ExactMatch.truvari_eval_vcf]),
+                vcf_idx = select_first([TruvariMatch.unmatched_vcf_idx, ExactMatch.truvari_eval_vcf_idx]),
+                length_field = length_field_vcf,
+                min_length = min_sv_length_bedtools_closest_vcf,
+                prefix = "~{prefix}.~{contig}.bedtools_eval",
+                docker = utils_docker,
+                runtime_attr_override = runtime_attr_bedtools_subset_vcf
+        }
+
+        call BedtoolsClosestSV.BedtoolsClosestSV {
+            input:
+                vcf = SubsetByLength.subset_vcf,
+                vcf_idx = SubsetByLength.subset_vcf_idx,
+                truth_sv_vcf = truth_sv_vcf_final,
+                truth_sv_vcf_idx = truth_sv_vcf_final_idx,
+                prefix = "~{prefix}.~{contig}.bedtools_closest",
+                type_field = type_field_vcf,
+                length_field = length_field_vcf,
+                move_dup_to_origin = move_dup_to_origin,
+                source_tag = source_tag_truth_sv_vcf,
+                gatk_sv_lr_docker = gatk_sv_lr_docker,
+                utils_docker = utils_docker,
+                runtime_attr_convert_to_symbolic = runtime_attr_bedtools_convert_to_symbolic,
+                runtime_attr_split_vcf = runtime_attr_bedtools_split_vcf,
+                runtime_attr_split_truth = runtime_attr_bedtools_split_truth,
+                runtime_attr_compare = runtime_attr_bedtools_compare,
+                runtime_attr_calculate = runtime_attr_bedtools_calculate,
+                runtime_attr_merge_comparisons = runtime_attr_bedtools_merge_comparisons
+        }
+
+        call Helpers.AppendAnnotationsFromVcf as AppendBedtoolsAnnotations {
+            input:
+                annotation_tsv = BedtoolsClosestSV.annotation_tsv,
+                truth_vcf = truth_sv_vcf_final,
+                truth_vcf_idx = truth_sv_vcf_final_idx,
+                is_sv_truth = true,
+                prefix = "~{prefix}.~{contig}.bedtools_annotated",
+                docker = utils_docker,
+                runtime_attr_override = runtime_attr_append_bedtools_annotations
+        }
     }
 
-    # Admit only records long enough for the bedtools closest round; the SV truth was filtered above
-    call Helpers.SubsetVcfByLength as SubsetByLength {
-        input:
-            vcf = TruvariMatch.unmatched_vcf,
-            vcf_idx = TruvariMatch.unmatched_vcf_idx,
-            length_field = length_field_vcf,
-            min_length = min_sv_length_bedtools_closest_vcf,
-            prefix = "~{prefix}.~{contig}.bedtools_eval",
-            docker = utils_docker,
-            runtime_attr_override = runtime_attr_bedtools_subset_vcf
-    }
-
-    call BedtoolsClosestSV.BedtoolsClosestSV {
-        input:
-            vcf = SubsetByLength.subset_vcf,
-            vcf_idx = SubsetByLength.subset_vcf_idx,
-            truth_sv_vcf = truth_sv_vcf_final,
-            truth_sv_vcf_idx = truth_sv_vcf_final_idx,
-            prefix = "~{prefix}.~{contig}.bedtools_closest",
-            type_field = type_field_vcf,
-            length_field = length_field_vcf,
-            move_dup_to_origin = move_dup_to_origin,
-            source_tag = source_tag_truth_sv_vcf,
-            gatk_sv_lr_docker = gatk_sv_lr_docker,
-            utils_docker = utils_docker,
-            runtime_attr_convert_to_symbolic = runtime_attr_bedtools_convert_to_symbolic,
-            runtime_attr_split_vcf = runtime_attr_bedtools_split_vcf,
-            runtime_attr_split_truth = runtime_attr_bedtools_split_truth,
-            runtime_attr_compare = runtime_attr_bedtools_compare,
-            runtime_attr_calculate = runtime_attr_bedtools_calculate,
-            runtime_attr_merge_comparisons = runtime_attr_bedtools_merge_comparisons
-    }
-
-    call Helpers.AppendAnnotationsFromVcf as AppendBedtoolsAnnotations {
-        input:
-            annotation_tsv = BedtoolsClosestSV.annotation_tsv,
-            truth_vcf = truth_sv_vcf_final,
-            truth_vcf_idx = truth_sv_vcf_final_idx,
-            is_sv_truth = true,
-            prefix = "~{prefix}.~{contig}.bedtools_annotated",
-            docker = utils_docker,
-            runtime_attr_override = runtime_attr_append_bedtools_annotations
-    }
-
-    Array[File] extended_annotation_tsvs = [
+    Array[File] extended_annotation_tsvs = select_all([
         ExactMatch.annotated_tsv,
         AppendTruvariAnnotations.annotated_tsv,
         AppendBedtoolsAnnotations.annotated_tsv
-    ]
+    ])
 
     call BuildBenchmarkAnnotationTsv {
         input:

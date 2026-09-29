@@ -11,7 +11,7 @@ workflow BedtoolsClosestSV {
     }
 
     parameter_meta {
-        vcf: "Records left unmatched by `TruvariMatch`, already subset to the caller's minimum SV length."
+        vcf: "Records left unmatched by the preceding rounds, already subset to the caller's minimum SV length."
         vcf_idx: "Index for vcf."
         truth_sv_vcf: "Truth SV callset in symbolic form, already subset to the caller's minimum SV length."
         truth_sv_vcf_idx: "Index for truth_sv_vcf."
