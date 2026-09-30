@@ -59,7 +59,7 @@ workflow AnnotateCallsetOverlap {
         rename_id_strip_chr_truth_sv_vcf: "Whether to strip the `chr` prefix when renaming SV truth variant IDs."
         ref_fa: "From references. Only needed when either VCF represents alleles symbolically, since Truvari uses it solely to resolve those alleles to sequence."
         ref_fai: "From references."
-        annotations_tsv_benchmark: "TSV mapping callset variants to their matched truth variants, match type, and the truth callset's AC/AF/AN and genotype-count fields."
+        annotations_tsv_benchmark: "TSV mapping callset variants to their matched truth variants, match type, and the truth callset's AC/AF/AN and genotype-count fields, sorted by CHROM then POS."
         annotations_header_benchmark: "Header listing the extra annotation columns present in `annotations_tsv_benchmark`."
     }
 
@@ -447,7 +447,7 @@ dyn_cols = sorted(all_ac) + sorted(all_af) + sorted(all_an)
 all_extra = static_extra + dyn_cols + genotype_cols
 master_header = fixed_cols + all_extra
 
-with open(f"{prefix}.tsv", 'w') as fout:
+with open("unsorted.tsv", 'w') as fout:
     for f in input_files:
         with open(f) as fh:
             file_cols = fh.readline().strip().split('\t')
@@ -464,6 +464,9 @@ with open(f"{prefix}.header.txt", 'w') as hout:
         hout.write(col + '\n')
 
 EOF
+
+        # Each round's rows arrive as a block, so sort the merged rows by coordinate
+        sort -k1,1 -k2,2n unsorted.tsv > "~{prefix}.tsv"
     >>>
 
     output {
@@ -474,7 +477,7 @@ EOF
     RuntimeAttr default_attr = object {
         cpu_cores: 1,
         mem_gb: 4,
-        disk_gb: 2 * ceil(size(tsvs, "GB")) + 10,
+        disk_gb: 3 * ceil(size(tsvs, "GB")) + 10,
         boot_disk_gb: 10,
         preemptible_tries: 1,
         max_retries: 0
