@@ -27,7 +27,7 @@ The cohort files are built once, then `LongReadCNVs` calls, clusters and genotyp
 1. Cohort files, in parallel:
    - **[CreateDepthIntervals](../wdl/annotation_utils/CreateDepthIntervals.wdl)** - write the interval list matching the read-count bins, from the reference index, the contigs and the bin size.
    - **[CreateCohortDepthFiles](../wdl/annotation_utils/CreateCohortDepthFiles.wdl)** - build the cohort binned-coverage matrix, per-sample median coverage and ploidy estimates from the combined per-base BEDs.
-2. **[LongReadCNVs](../wdl/tools/LongReadCNVs.wdl)** - call CNVs with GATK gCNV over the intervals from the read-count files, then merge, cluster and genotype them against the binned-coverage matrix and median coverage. Set `sort_depth_profiles = true`, and pass the PED as `pedigree`. Run in one of two modes:
+2. **[LongReadCNVs](../wdl/tools/LongReadCNVs.wdl)** - call CNVs with GATK gCNV over the intervals from the read-count files, then merge, cluster and genotype them against the binned-coverage matrix and median coverage. Set `sort_depth_profiles = true`, pass the PED as `pedigree`, and pass the contigs as `contigs`. Clustering and genotyping run only on the contigs left in the filtered gCNV intervals, so a partial interval list, e.g. chr15 alone, runs no empty shards. Run in one of two modes:
    - **Cohort mode** - leave `num_training_samples` at `-1`, so every sample is used to fit the contig-ploidy and gCNV models.
    - **Case-cohort mode** - set `num_training_samples` below the cohort size, e.g. 100, so the models are fitted on that many randomly drawn samples and every remaining sample is called against them. Fewer than a few dozen training samples degrades the fitted models.
 

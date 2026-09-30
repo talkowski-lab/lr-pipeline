@@ -16,7 +16,7 @@ workflow DepthPreprocessing {
         genotyped_segments_vcfs: "Per-sample gCNV genotyped-segment VCFs."
         genotyped_segments_vcf_idxs: "Indexes for `genotyped_segments_vcfs`."
         contig_ploidy_calls_tar: "Tarred gCNV contig-ploidy calls."
-        primary_contigs_list: "Primary contigs, one per line in reference dictionary order, used for the ploidy table and VCF headers."
+        contigs: "Contigs in reference dictionary order, used for the ploidy table and VCF headers."
         ref_fai: "Reference FASTA index, used for contig ordering."
         pedigree: "Pedigree supplying per-sample sex."
         batch_id: "Identifier for the batch."
@@ -39,7 +39,7 @@ workflow DepthPreprocessing {
         Array[File]+ genotyped_segments_vcf_idxs
         String prefix
         File contig_ploidy_calls_tar
-        File primary_contigs_list
+        Array[String] contigs
         File ref_fai
         File pedigree
         String batch_id
@@ -121,7 +121,7 @@ workflow DepthPreprocessing {
     call MakePloidyTable {
         input:
             pedigree = pedigree,
-            contigs_list = primary_contigs_list,
+            contigs_list = write_lines(contigs),
             chr_x = chr_x,
             chr_y = chr_y,
             prefix = prefix + ".ploidy",
@@ -133,7 +133,7 @@ workflow DepthPreprocessing {
         input:
             bed = MergeSetDel.out,
             sample_list = write_lines(sample_ids),
-            contig_list = primary_contigs_list,
+            contig_list = write_lines(contigs),
             ploidy_table = MakePloidyTable.ploidy_table,
             ref_fai = ref_fai,
             vid_prefix = "~{batch_id}_DEL",
@@ -146,7 +146,7 @@ workflow DepthPreprocessing {
         input:
             bed = MergeSetDup.out,
             sample_list = write_lines(sample_ids),
-            contig_list = primary_contigs_list,
+            contig_list = write_lines(contigs),
             ploidy_table = MakePloidyTable.ploidy_table,
             ref_fai = ref_fai,
             vid_prefix = "~{batch_id}_DUP",
