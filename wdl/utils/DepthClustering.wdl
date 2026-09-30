@@ -15,8 +15,8 @@ workflow DepthClustering {
         depth_vcf_idx: "Index for depth_vcf."
         ploidy_table: "Ploidy table from `DepthPreprocessing`."
         variant_prefix: "Prefix applied to generated variant IDs."
-        contig_list: "Primary contigs, one per line in reference dictionary order. These also become the `##contig` lines of the svtk-formatted output."
-        contig_subset_list: "Optional subset of `contig_list` to cluster over."
+        contigs: "Contigs in reference dictionary order, which become the `##contig` lines of the svtk-formatted output."
+        called_contigs: "Contigs to cluster over, one shard each."
         ref_fa: "Reference FASTA, index and sequence dictionary."
         ref_fai: "Reference FASTA, index and sequence dictionary."
         ref_dict: "Reference FASTA, index and sequence dictionary."
@@ -47,8 +47,8 @@ workflow DepthClustering {
         String prefix
         String variant_prefix
 
-        File contig_list
-        File? contig_subset_list
+        Array[String] contigs
+        Array[String] called_contigs
 
         File ref_fa
         File ref_fai
@@ -86,8 +86,7 @@ workflow DepthClustering {
         RuntimeAttr? runtime_attr_concat_vcfs
     }
 
-    Array[String] contigs = read_lines(select_first([contig_subset_list, contig_list]))
-    scatter (contig in contigs) {
+    scatter (contig in called_contigs) {
         call SVCluster {
             input:
                 vcf = depth_vcf,
@@ -135,7 +134,7 @@ workflow DepthClustering {
                 vcf_idx = select_first([ExcludeIntervalsByIntervalOverlap.filtered_vcf_idx, SVCluster.clustered_vcf_idx]),
                 prefix = "~{prefix}-~{contig}-depth-svtk_formatted",
                 script = gatk_to_svtk_script,
-                contig_list = contig_list,
+                contig_list = write_lines(contigs),
                 set_pass = svtk_set_pass,
                 docker = sv_pipeline_docker,
                 runtime_attr_override = runtime_attr_gatk_to_svtk_vcf

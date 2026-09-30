@@ -28,10 +28,9 @@ workflow LongReadCNVs {
         ref_fai: "From references."
         ref_dict: "From references."
         pedigree: "Cohort pedigree used by depth genotyping."
-        primary_contigs_list: "Primary contigs, one per line in reference dictionary order, used for the ploidy table, VCF headers, clustering and genotyping."
+        contigs: "Primary contigs in reference dictionary order, used for the ploidy table and VCF headers. Clustering and genotyping run only on the contigs left in the filtered gCNV intervals."
         training_intervals: "Intervals used to train the depth genotyping model."
         median_coverage: "Per-sample median coverage table used by depth genotyping."
-        contig_subset_list: "Optional subset of `primary_contigs_list` to restrict depth clustering and genotyping to."
         variant_prefix: "Prefix used for generated variant IDs."
         num_training_samples: "Number of samples drawn at random to fit the contig-ploidy and gCNV models in cohort mode, with every remaining sample called against those models in case mode. Set to -1, or to at least the cohort size, every sample is called in cohort mode instead. Interval filtering percentages apply over the training samples alone, so a training set of fewer than a few dozen samples degrades the fitted models."
         gcnv_qs_cutoff: "Minimum gCNV quality score for a segment to be kept."
@@ -134,10 +133,9 @@ workflow LongReadCNVs {
         File ref_dict
 
         File pedigree
-        File primary_contigs_list
+        Array[String] contigs
         File training_intervals
         File median_coverage
-        File? contig_subset_list
 
         String prefix
         String variant_prefix
@@ -240,6 +238,7 @@ workflow LongReadCNVs {
         RuntimeAttr? runtime_attr_collect_sample_quality_metrics
         RuntimeAttr? runtime_attr_collect_model_quality_metrics
         RuntimeAttr? runtime_attr_merge_contig_ploidy_calls
+        RuntimeAttr? runtime_attr_get_contigs_from_interval_list
         RuntimeAttr? runtime_attr_gcnv_vcf_to_bed
         RuntimeAttr? runtime_attr_merge_sample
         RuntimeAttr? runtime_attr_merge_set
@@ -355,13 +354,21 @@ workflow LongReadCNVs {
             runtime_attr_merge_contig_ploidy_calls = runtime_attr_merge_contig_ploidy_calls
     }
 
+    call Helpers.GetContigsFromIntervalList {
+        input:
+            interval_list = LRCNVs.filtered_intervals,
+            prefix = prefix,
+            docker = sv_base_mini_docker,
+            runtime_attr_override = runtime_attr_get_contigs_from_interval_list
+    }
+
     call DepthPreprocessing.DepthPreprocessing {
         input:
             sample_ids = sample_ids,
             genotyped_segments_vcfs = LRCNVs.genotyped_segments_vcfs,
             genotyped_segments_vcf_idxs = LRCNVs.genotyped_segments_vcf_idxs,
             contig_ploidy_calls_tar = LRCNVs.contig_ploidy_calls_tar,
-            primary_contigs_list = primary_contigs_list,
+            contigs = contigs,
             ref_fai = ref_fai,
             pedigree = pedigree,
             batch_id = batch_id,
@@ -387,8 +394,8 @@ workflow LongReadCNVs {
             ploidy_table = DepthPreprocessing.ploidy_table,
             prefix = prefix,
             variant_prefix = variant_prefix,
-            contig_list = primary_contigs_list,
-            contig_subset_list = contig_subset_list,
+            contigs = contigs,
+            called_contigs = GetContigsFromIntervalList.contigs,
             ref_fa = ref_fa,
             ref_fai = ref_fai,
             ref_dict = ref_dict,
@@ -428,8 +435,7 @@ workflow LongReadCNVs {
             rd_file_idx = merged_bincov_idx,
             ref_dict = ref_dict,
             ploidy_table = DepthPreprocessing.ploidy_table,
-            contig_list = primary_contigs_list,
-            contig_subset_list = contig_subset_list,
+            called_contigs = GetContigsFromIntervalList.contigs,
             chr_x = chr_x,
             chr_y = chr_y,
             gatk_docker = gatk_docker,

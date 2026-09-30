@@ -19,8 +19,7 @@ workflow GenotypeDepth {
         rd_file_idx: "Index for rd_file."
         ref_dict: "Reference sequence dictionary."
         ploidy_table: "Ploidy table from `DepthPreprocessing`."
-        contig_list: "Primary contigs, one per line in reference dictionary order, to genotype over."
-        contig_subset_list: "Optional subset of `contig_list` to genotype over."
+        called_contigs: "Contigs to genotype over, one shard each."
         chr_x: "Allosome contig names (defaults `chrX` and `chrY`)."
         chr_y: "Allosome contig names (defaults `chrX` and `chrY`)."
         genotyped_depth_vcf: "Genotyped depth CNV VCF."
@@ -40,8 +39,7 @@ workflow GenotypeDepth {
         File ref_dict
         File ploidy_table
 
-        File contig_list
-        File? contig_subset_list
+        Array[String] called_contigs
 
         String chr_x = "chrX"
         String chr_y = "chrY"
@@ -71,8 +69,7 @@ workflow GenotypeDepth {
             runtime_attr_override = runtime_attr_train_sv_genotyping
     }
 
-    Array[String] contigs = read_lines(select_first([contig_subset_list, contig_list]))
-    scatter (contig in contigs) {
+    scatter (contig in called_contigs) {
         call GenotypeSVs {
             input:
                 vcf = vcf,
