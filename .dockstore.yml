@@ -18,7 +18,6 @@ workflows:
     filters:
       branches:
         - main
-        - kj-overlap-round-toggles
       tags:
         - /.*/
 
