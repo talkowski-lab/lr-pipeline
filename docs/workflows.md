@@ -30,13 +30,15 @@ This workflow ingests a callset VCF and two truth VCFs - one of SNVs & indels an
 
 The workflow undergoes multiple rounds of variant matching in order to determine matched pairs: (1) Exact match across CHROM, POS, REF and ALT. (2) Truvari match with overlap percentages of 90%, 70% and 50%. (3) Matching based on `bedtools closest`, finetuned for SVs. Here the callset and truth variants are split by type and converted to a symbolic representation, after which separate `bedtools closest` passes are run - one tuned for deletions and duplications via reciprocal positional overlap, and one tuned for insertions via breakpoint proximity - so that each callset variant is paired with the nearest same-type truth variant above the per-callset minimum SV-length thresholds.
 
+Each round is switched on by its own Boolean - `run_exact_matching`, `run_truvari_matching` and `run_bedtools_closest_matching` - and a round that is switched off passes its input on unchanged to the next round that runs. The SV truth VCF is only prepared when the `bedtools closest` round runs. At least one round must run.
+
 Note: When converting to symbolic representation, only canonical DUPs (allele_type = `DUP` exactly) are treated as DUP; other DUP subtypes (e.g., `dup_interspersed`, `inv_dup`) are treated as insertions.
 
 Note: Callset DUPs are compared twice, because the two matching rules need different coordinates. Against truth DUPs they are compared by reciprocal overlap, over their `ORIGIN` interval when `move_dup_to_origin` is true and over their own span from POS otherwise; against truth insertions they are always collapsed to a point at their VCF position and compared by breakpoint proximity and length ratio. Setting `move_dup_to_origin` to false is what lets the workflow run on a callset with no `INFO/ORIGIN`.
 
 Note: The SV truth VCF is expected to be symbolic already. Set `convert_symbolic_truth_sv_vcf` when it instead carries sequence alleles, in which case its allele type and length are read from `type_field_truth_sv_vcf` and `length_field_truth_sv_vcf`, which need not match the fields used for the callset. Its canonical DUPs then follow the same `move_dup_to_origin` positioning as the callset.
 
-Every minimum-length filter measures its VCF by the `length_field_*` input named here. The two Truvari filters run region by region inside `ExactMatch`; the two `bedtools closest` filters run here, and the SV truth VCF is filtered before renaming and conversion. With `convert_symbolic_truth_sv_vcf` a canonical DUP is therefore measured by `length_field_truth_sv_vcf` rather than by the `ORIGIN` span that conversion writes into `SVLEN`.
+Every minimum-length filter measures its VCF by the `length_field_*` input named here. The two Truvari filters run region by region inside `ExactMatch`, where the callset is filtered by `min_sv_length_bedtools_closest_vcf` instead when the Truvari round is off; the two `bedtools closest` filters run here, and the SV truth VCF is filtered before renaming and conversion. With `convert_symbolic_truth_sv_vcf` a canonical DUP is therefore measured by `length_field_truth_sv_vcf` rather than by the `ORIGIN` span that conversion writes into `SVLEN`.
 
 The workflow runs on one contig. The callset and SNV & indel truth VCFs are never passed over whole: `ExactMatch` reads them region by region straight from the bucket, dropping genotypes and applying their `args_string_*` expression on the way, so they may hold any set of contigs. The SV truth VCF, which the `bedtools closest` round consumes unsharded, is prepared in a single pass that applies its `args_string_truth_sv_vcf` expression and `min_sv_length_bedtools_closest_truth_vcf`, drops genotypes and, when `subset_contig_truth_sv_vcf` is true, reads only the contig from the bucket.
 
@@ -50,6 +52,9 @@ Inputs:
 - `File truth_sv_vcf`: Truth VCF containing SVs to match against.
 - `File truth_sv_vcf_idx`: Index for `truth_sv_vcf`.
 - `String contig`: Contig to evaluate.
+- `Boolean run_exact_matching`: Whether to run the exact-match round.
+- `Boolean run_truvari_matching`: Whether to run the Truvari round. When false the records left by the exact-match round pass straight to the `bedtools closest` round.
+- `Boolean run_bedtools_closest_matching`: Whether to run the `bedtools closest` round. When false the SV truth VCF is never read.
 - `Int min_sv_length_truvari_vcf`: Minimum length for a callset variant to enter the Truvari matching round, measured by `length_field_vcf`.
 - `Int min_sv_length_truvari_truth_snv_indel_vcf`: Minimum length for a SNV & indel truth variant to enter the Truvari matching round, measured by `length_field_truth_snv_indel_vcf`.
 - `Int min_sv_length_bedtools_closest_vcf`: Minimum length for a callset variant to enter the `bedtools closest` matching round, measured by `length_field_vcf`.
@@ -82,7 +87,7 @@ Inputs:
 - `RuntimeAttr? runtime_attr_*`: Optional per-task runtime overrides (34).
 
 Outputs:
-- `File annotations_tsv_benchmark`: TSV mapping callset variants to their matched truth variants, match type, and the truth callset's AC/AF/AN and genotype-count fields.
+- `File annotations_tsv_benchmark`: TSV mapping callset variants to their matched truth variants, match type, and the truth callset's AC/AF/AN and genotype-count fields, sorted by CHROM then POS.
 - `File annotations_header_benchmark`: Header listing the extra annotation columns present in `annotations_tsv_benchmark`.
 
 ### [AnnotateDbSNP](../wdl/annotation/AnnotateDbSNP.wdl)
@@ -2258,14 +2263,18 @@ Outputs:
 ### [ExactMatch](../wdl/utils/ExactMatch.wdl)
 This sub-workflow performs the first callset-comparison round, matching records to a truth callset on exact position and allele. The contig is cut into fixed-width regions and each is processed independently: both VCFs are streamed down to the region straight from the bucket, with genotypes dropped and any include expression applied on the way, then optionally renamed to a common ID scheme and matched. Each region's unmatched callset records and its truth records are then subset to the caller's minimum Truvari lengths, so no step ever passes over a whole contig. The per-region annotations and VCFs are concatenated into the form `TruvariMatch` expects.
 
+The matching itself runs only when `run_exact_matching` is true; otherwise every callset record in the region is passed on as unmatched. The truth records are subset for Truvari only when `run_truvari_matching` is true, and the truth callset is never read when both are false, leaving only the callset preparation.
+
 Inputs:
 - `File vcf`: Callset being compared. Read region by region, so it may hold any set of contigs.
 - `File vcf_idx`: Index for vcf.
 - `File truth_snv_indel_vcf`: Truth callset. Read region by region, so it may hold any set of contigs.
 - `File truth_snv_indel_vcf_idx`: Index for truth_snv_indel_vcf.
 - `String contig`: Contig being processed.
+- `Boolean run_exact_matching`: Whether to match the callset against the truth callset. When false no annotations are produced and every callset record counts as unmatched.
+- `Boolean run_truvari_matching`: Whether the caller runs the Truvari round, and so whether the truth records are subset for it.
 - `Int shard_bin_size_exact_match`: Width in base pairs of the contig regions the matching step is sharded into. (default `5000000`)
-- `Int min_sv_length_truvari_vcf`: Minimum length for an unmatched callset record to be emitted for Truvari, measured by `length_field_vcf`.
+- `Int min_sv_length_truvari_vcf`: Minimum length for an unmatched callset record to be emitted for the next matching round, measured by `length_field_vcf`.
 - `Int min_sv_length_truvari_truth_snv_indel_vcf`: Minimum length for a truth record to be emitted for Truvari, measured by `length_field_truth_snv_indel_vcf`.
 - `String length_field_vcf`: INFO field in the callset holding allele length.
 - `String length_field_truth_snv_indel_vcf`: Length used to filter the truth callset, either an INFO field or `ILEN`, the bcftools built-in indel length computed from REF and ALT.
@@ -2281,11 +2290,11 @@ Inputs:
 - `RuntimeAttr? runtime_attr_*`: Optional per-task runtime overrides (12).
 
 Outputs:
-- `File annotated_tsv`: Exact-match annotations.
-- `File truvari_eval_vcf`: Unmatched callset records at or above `min_sv_length_truvari_vcf`, passed to `TruvariMatch`.
+- `File? annotated_tsv`: Exact-match annotations, absent when `run_exact_matching` is false.
+- `File truvari_eval_vcf`: Unmatched callset records at or above `min_sv_length_truvari_vcf`, passed to the next matching round.
 - `File truvari_eval_vcf_idx`: Index for truvari_eval_vcf.
-- `File truvari_truth_vcf`: Renamed truth records at or above `min_sv_length_truvari_truth_snv_indel_vcf`, passed to `TruvariMatch`.
-- `File truvari_truth_vcf_idx`: Index for truvari_truth_vcf.
+- `File? truvari_truth_vcf`: Renamed truth records at or above `min_sv_length_truvari_truth_snv_indel_vcf`, passed to `TruvariMatch`. Absent when `run_truvari_matching` is false.
+- `File? truvari_truth_vcf_idx`: Index for truvari_truth_vcf.
 
 ### [TruvariMatch](../wdl/utils/TruvariMatch.wdl)
 This sub-workflow performs the second comparison round, matching records left unmatched by `ExactMatch` with Truvari at three decreasing sequence-similarity thresholds (0.9, 0.7, 0.5). Each threshold only sees what the previous one failed to match, so a record is annotated with the strictest threshold that matched it.
@@ -2316,7 +2325,7 @@ Outputs:
 This sub-workflow performs the final comparison round, pairing each still-unmatched record with its nearest truth-callset neighbour using `bedtools closest`. Insertions and CNVs are compared separately, since proximity means different things for each, and the two comparisons are merged into a single annotation table. Both inputs arrive already subset to the caller's minimum SV lengths, so no length filtering happens here.
 
 Inputs:
-- `File vcf`: Records left unmatched by `TruvariMatch`, already subset to the caller's minimum SV length.
+- `File vcf`: Records left unmatched by the preceding rounds, already subset to the caller's minimum SV length.
 - `File vcf_idx`: Index for vcf.
 - `File truth_sv_vcf`: Truth SV callset in symbolic form, already subset to the caller's minimum SV length.
 - `File truth_sv_vcf_idx`: Index for truth_sv_vcf.
