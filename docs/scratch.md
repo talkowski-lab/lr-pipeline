@@ -36,7 +36,7 @@ In order to rerun _HiPhase_ without TRGT homopolymers.
 - (HPRC/HGSVC Only) _PostProcessTRLoci_ --> hprc_hgsvc_vcf_V5, aou_vcf_V4.
 - (HPRC/HGSVC Only) _FillFormatFields_ --> hprc_hgsvc_vcf_V6.
 - (HPRC/HGSVC Only) _FilterLowCoverageGenotypes_ --> hprc_hgsvc_vcf_V7.
-- (HPRC/HGSVC Only) _AnnotatSQMetrics_, _AnnotatGQMetrics_.
+- (HPRC/HGSVC Only) _AnnotateSQMetrics_, _AnnotateGQMetrics_.
 - (HPRC/HGSVC Only) _AnnotateVcfGQSQ_ --> hprc_hgsvc_vcf_V8.
 - (HPRC/HGSVC Only) _AnnotateAFPostHoc_ --> hprc_hgsvc_vcf_V9.
 - _AnnotateSVAnnotate_.
