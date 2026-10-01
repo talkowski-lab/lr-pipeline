@@ -1,14 +1,4 @@
 version: 1.2
-workflows:
-  - subclass: WDL
-    name: AnnotateParaphase
-    primaryDescriptorPath: /wdl/annotation/AnnotateParaphase.wdl
-    filters:
-      branches:
-        - main
-        - aou_scaling
-      tags:
-        - /.*/
 
   # --------------------
   # Annotation Workflows
