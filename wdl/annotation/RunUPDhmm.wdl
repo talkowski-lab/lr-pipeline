@@ -39,8 +39,28 @@ workflow RunUPDhmm {
                                    "chr15", "chr16", "chr17", "chr18", "chr19", "chr20", "chr21",
                                    "chr22"]
 
-        # Optional per-genotype GQ floor; genotypes below it are set to missing before merge.
-        Int? min_gq
+        # Per-genotype GQ/DP floor; genotypes below either are set to missing before merge.
+        # Low-confidence genotypes are the main source of spurious Mendelian-error blocks,
+        # so both are on by default rather than opt-in. Set to 0 to disable.
+        Int min_gq = 20
+        Int min_dp = 10
+
+        # collapseEvents()'s own confidence thresholds: an event must have MORE Mendelian
+        # errors than this and span MORE than this many bp to be reported at all. These are
+        # UPDhmm's package defaults; tighten them if calls still look noisy after GQ/DP
+        # filtering and recurrent-region flagging.
+        Int collapse_min_mendelian_error = 2
+        Int collapse_min_size = 500000
+
+        # Cohort-level recurrent-region flagging (identifyRecurrentRegions/markRecurrentRegions):
+        # real germline UPD is essentially never recurrent across unrelated trios, so a region
+        # called in >= recurrent_min_support distinct probands is flagged Recurrent="Yes" (not
+        # dropped -- filter on this column downstream). min_support=3 is UPDhmm's own default;
+        # note it can never trigger with fewer than 3 trios in the run.
+        Int recurrent_min_support = 3
+        Int recurrent_error_threshold = 100
+        Float recurrent_max_dist = 0.3
+        Float recurrent_min_overlap = 0.7
 
         String bcftools_docker = "quay.io/ymostovoy/lr-utils-basic:latest"
         String updhmm_docker = "quay.io/ymostovoy/lr-updhmm:latest"
@@ -49,6 +69,7 @@ workflow RunUPDhmm {
         RuntimeAttr? runtime_attr_make_trio
         RuntimeAttr? runtime_attr_updhmm
         RuntimeAttr? runtime_attr_concat
+        RuntimeAttr? runtime_attr_recurrent
     }
 
     call PrepareTrios {
@@ -77,6 +98,7 @@ workflow RunUPDhmm {
                 mother_vcf_idx = trio[9],
                 autosomes = autosomes,
                 min_gq = min_gq,
+                min_dp = min_dp,
                 docker = bcftools_docker,
                 runtime_attr_override = runtime_attr_make_trio
         }
@@ -89,6 +111,8 @@ workflow RunUPDhmm {
                 proband_id = trio[1],
                 father_id = trio[2],
                 mother_id = trio[3],
+                collapse_min_mendelian_error = collapse_min_mendelian_error,
+                collapse_min_size = collapse_min_size,
                 docker = updhmm_docker,
                 runtime_attr_override = runtime_attr_updhmm
         }
@@ -104,8 +128,22 @@ workflow RunUPDhmm {
             runtime_attr_override = runtime_attr_concat
     }
 
+    call MarkRecurrentRegions {
+        input:
+            cohort_events_tsv = ConcatEvents.concatenated_tsv,
+            min_support = recurrent_min_support,
+            error_threshold = recurrent_error_threshold,
+            max_dist = recurrent_max_dist,
+            min_overlap = recurrent_min_overlap,
+            prefix = "~{prefix}.upd_events",
+            docker = updhmm_docker,
+            runtime_attr_override = runtime_attr_recurrent
+    }
+
     output {
-        File cohort_upd_events = ConcatEvents.concatenated_tsv
+        # All columns from ConcatEvents plus Recurrent ("Yes"/"No") and n_samples, flagging
+        # calls that recur across unrelated trios (likely artifacts) -- no rows are dropped.
+        File cohort_upd_events = MarkRecurrentRegions.flagged_tsv
         File trios_manifest = PrepareTrios.trios_manifest
         File skipped_manifest = PrepareTrios.skipped_manifest
     }
@@ -247,7 +285,8 @@ task MakeTrioVcf {
         File mother_vcf
         File mother_vcf_idx
         Array[String] autosomes
-        Int? min_gq
+        Int min_gq = 0
+        Int min_dp = 0
         String docker
         RuntimeAttr? runtime_attr_override
     }
@@ -266,16 +305,22 @@ task MakeTrioVcf {
         set -euo pipefail
 
         REGIONS="~{sep=',' autosomes}"
-        MINGQ=~{select_first([min_gq, 0])}
+        MINGQ=~{min_gq}
+        MINDP=~{min_dp}
 
-        # Filter one single-sample VCF to autosomal biallelic PASS SNPs, GT-only, and
-        # force its sample column name to the given id. Uses -t (targets, streaming) so no
-        # separate index co-location is required.
+        # Filter one single-sample VCF to autosomal biallelic PASS SNPs, mask low-GQ/low-DP
+        # genotypes to missing, and force its sample column name to the given id. Uses -t
+        # (targets, streaming) so no separate index co-location is required.
         filter_one () {
             local id="$1"; local invcf="$2"
             bcftools view -t "$REGIONS" -v snps -m2 -M2 -f PASS "$invcf" -Ou > "raw.$id.bcf"
-            if [ "$MINGQ" -gt 0 ]; then
-                bcftools +setGT "raw.$id.bcf" -Ou -- -t q -i "FMT/GQ<$MINGQ" -n . \
+            COND=""
+            if [ "$MINGQ" -gt 0 ]; then COND="FMT/GQ<$MINGQ"; fi
+            if [ "$MINDP" -gt 0 ]; then
+                if [ -n "$COND" ]; then COND="$COND || FMT/DP<$MINDP"; else COND="FMT/DP<$MINDP"; fi
+            fi
+            if [ -n "$COND" ]; then
+                bcftools +setGT "raw.$id.bcf" -Ou -- -t q -i "$COND" -n . \
                     | bcftools annotate -x INFO -Ou \
                     | bcftools annotate -x '^FORMAT/GT,FORMAT/DP,FORMAT/AD' -Oz -o "filt.$id.vcf.gz"
             else
@@ -327,6 +372,8 @@ task RunUPDhmmTask {
         String proband_id
         String father_id
         String mother_id
+        Int collapse_min_mendelian_error = 2
+        Int collapse_min_size = 500000
         String docker
         RuntimeAttr? runtime_attr_override
     }
@@ -351,11 +398,67 @@ task RunUPDhmmTask {
             "~{father_id}" \
             "~{family_id}" \
             "~{family_id}.~{proband_id}.upd_events.tsv" \
-            ~{select_first([runtime_attr.cpu_cores, default_attr.cpu_cores])}
+            ~{select_first([runtime_attr.cpu_cores, default_attr.cpu_cores])} \
+            ~{collapse_min_mendelian_error} \
+            ~{collapse_min_size}
     >>>
 
     output {
         File events_tsv = "~{family_id}.~{proband_id}.upd_events.tsv"
+    }
+
+    runtime {
+        cpu: select_first([runtime_attr.cpu_cores, default_attr.cpu_cores])
+        memory: select_first([runtime_attr.mem_gb, default_attr.mem_gb]) + " GiB"
+        disks: "local-disk " + select_first([runtime_attr.disk_gb, default_attr.disk_gb]) + " HDD"
+        bootDiskSizeGb: select_first([runtime_attr.boot_disk_gb, default_attr.boot_disk_gb])
+        docker: docker
+        preemptible: select_first([runtime_attr.preemptible_tries, default_attr.preemptible_tries])
+        maxRetries: select_first([runtime_attr.max_retries, default_attr.max_retries])
+    }
+}
+
+# Flag cohort-wide UPD calls that recur across unrelated trios (identifyRecurrentRegions +
+# markRecurrentRegions) -- the classic signature of a technical artifact rather than true
+# UPD. Runs once on the full concatenated events table since recurrence is only meaningful
+# across the whole cohort, not within a single trio's shard. Adds Recurrent/n_samples
+# columns; does not drop rows.
+task MarkRecurrentRegions {
+    input {
+        File cohort_events_tsv
+        Int min_support
+        Int error_threshold
+        Float max_dist
+        Float min_overlap
+        String prefix
+        String docker
+        RuntimeAttr? runtime_attr_override
+    }
+
+    RuntimeAttr default_attr = object {
+        cpu_cores: 1,
+        mem_gb: 4,
+        disk_gb: 2 * ceil(size(cohort_events_tsv, "GB")) + 10,
+        boot_disk_gb: 10,
+        preemptible_tries: 2,
+        max_retries: 0
+    }
+    RuntimeAttr runtime_attr = select_first([runtime_attr_override, default_attr])
+
+    command <<<
+        set -euo pipefail
+
+        Rscript /opt/gnomad-lr/scripts/updhmm/mark_recurrent_regions.R \
+            "~{cohort_events_tsv}" \
+            ~{min_support} \
+            ~{error_threshold} \
+            ~{max_dist} \
+            ~{min_overlap} \
+            "~{prefix}.recurrent_flagged.tsv"
+    >>>
+
+    output {
+        File flagged_tsv = "~{prefix}.recurrent_flagged.tsv"
     }
 
     runtime {

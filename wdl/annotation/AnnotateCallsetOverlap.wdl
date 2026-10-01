@@ -42,6 +42,7 @@ workflow AnnotateCallsetOverlap {
         Boolean? rename_id_strip_chr_vcf_sv_truth
 
         String benchmark_annotations_docker
+        String? sv_pipeline_docker
         String utils_docker
 
         RuntimeAttr? runtime_attr_subset_eval
@@ -58,11 +59,7 @@ workflow AnnotateCallsetOverlap {
         RuntimeAttr? runtime_attr_bedtools_subset_eval
         RuntimeAttr? runtime_attr_bedtools_subset_truth
         RuntimeAttr? runtime_attr_bedtools_convert_to_symbolic
-        RuntimeAttr? runtime_attr_bedtools_split_eval
-        RuntimeAttr? runtime_attr_bedtools_split_truth
-        RuntimeAttr? runtime_attr_bedtools_compare
-        RuntimeAttr? runtime_attr_bedtools_calculate
-        RuntimeAttr? runtime_attr_bedtools_merge_comparisons
+        RuntimeAttr? runtime_attr_bedtools_match
         RuntimeAttr? runtime_attr_build_annotation_tsv
         RuntimeAttr? runtime_attr_collect_matched_ids
         RuntimeAttr? runtime_attr_extract_eval_vep_header
@@ -234,16 +231,12 @@ workflow AnnotateCallsetOverlap {
                     min_sv_length_truth = min_sv_length_truth_bedtools_closest,
                     type_field_eval = type_field_eval,
                     length_field_eval = length_field_eval,
-                    benchmark_annotations_docker = benchmark_annotations_docker,
+                    sv_pipeline_docker = select_first([sv_pipeline_docker, benchmark_annotations_docker]),
                     utils_docker = utils_docker,
                     runtime_attr_subset_eval = runtime_attr_bedtools_subset_eval,
                     runtime_attr_subset_truth = runtime_attr_bedtools_subset_truth,
                     runtime_attr_convert_to_symbolic = runtime_attr_bedtools_convert_to_symbolic,
-                    runtime_attr_split_eval = runtime_attr_bedtools_split_eval,
-                    runtime_attr_split_truth = runtime_attr_bedtools_split_truth,
-                    runtime_attr_compare = runtime_attr_bedtools_compare,
-                    runtime_attr_calculate = runtime_attr_bedtools_calculate,
-                    runtime_attr_merge_comparisons = runtime_attr_bedtools_merge_comparisons
+                    runtime_attr_match = runtime_attr_bedtools_match
             }
         }
 

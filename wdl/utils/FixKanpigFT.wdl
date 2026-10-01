@@ -1,6 +1,14 @@
 version 1.0
 
-import "Structs.wdl"
+struct RuntimeAttr {
+    Float? mem_gb
+    Int? cpu_cores
+    Int? disk_gb
+    Int? boot_disk_gb
+    Int? preemptible_tries
+    Int? max_retries
+    String? docker
+}
 
 # Kanpig writes a genotype-level FORMAT/FT field with integer values (0, 1, ...).
 # Per the VCF spec, FT is a *reserved* per-sample genotype-filter key, so strict
@@ -18,7 +26,7 @@ workflow FixKanpigFT {
         String prefix
         Boolean drop_ft = false
         String new_ft_name = "FTK"
-        String docker
+        String docker = "quay.io/ymostovoy/lr-utils-basic:latest"
         RuntimeAttr? runtime_attr_override
     }
 
@@ -46,15 +54,19 @@ task RenameOrDropFT {
         String prefix
         Boolean drop_ft
         String new_ft_name
-        String docker
+        String docker = "quay.io/ymostovoy/lr-utils-basic:latest"
         RuntimeAttr? runtime_attr_override
     }
 
     command <<<
         set -euo pipefail
 
+        # Grep a header file rather than piping into `grep -q`, which would close
+        # the pipe on first match and SIGPIPE bcftools (rc 141) under pipefail.
+        bcftools view -h ~{vcf} > header.txt
+
         # No-op safely if the VCF has no FORMAT/FT to begin with.
-        if ! bcftools view -h ~{vcf} | grep -q '^##FORMAT=<ID=FT,'; then
+        if ! grep -q '^##FORMAT=<ID=FT,' header.txt; then
             echo "No FORMAT/FT field present; copying input through unchanged." >&2
             cp ~{vcf} ~{prefix}.vcf.gz
         elif ~{if drop_ft then "true" else "false"}; then

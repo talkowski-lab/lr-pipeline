@@ -1,4 +1,4 @@
-FROM bioconductor/bioconductor_docker:RELEASE_3_20
+FROM bioconductor/bioconductor_docker:RELEASE_3_23
 
 MAINTAINER Yossi Mostovoy
 
@@ -11,6 +11,7 @@ RUN R -e 'BiocManager::install(c("UPDhmm", "VariantAnnotation", "BiocParallel"),
     R -e 'stopifnot(requireNamespace("UPDhmm", quietly = TRUE))'
 
 COPY ./scripts/updhmm/updhmm.R /opt/gnomad-lr/scripts/updhmm/updhmm.R
+COPY ./scripts/updhmm/mark_recurrent_regions.R /opt/gnomad-lr/scripts/updhmm/mark_recurrent_regions.R
 
 # Build from the repository root so the COPY path resolves, e.g.:
 #   docker build -f dockerfiles/Dockerfile.UPDhmm -t quay.io/ymostovoy/lr-updhmm:latest .
