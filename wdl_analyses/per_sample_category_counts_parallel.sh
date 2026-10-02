@@ -22,6 +22,11 @@
 # category (default: all) is passed through to per_sample_category_counts.py.
 set -euo pipefail
 
+if [ $# -lt 5 ] || [ $# -gt 6 ]; then
+    echo "ERROR: expected 5 or 6 args, got $#" >&2
+    exit 1
+fi
+
 VCF=$1
 OUT_PREFIX=$2
 N_CHUNKS=$3

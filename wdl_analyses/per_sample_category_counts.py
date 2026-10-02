@@ -83,6 +83,8 @@ def is_non_ref(gt):
 
 
 def main():
+    if len(sys.argv) not in (3, 4):
+        sys.exit(f"usage: {sys.argv[0]} <in.vcf.gz> <out_prefix> [category]; got {len(sys.argv) - 1} args")
     vcf, out_prefix = sys.argv[1], sys.argv[2]
     category = sys.argv[3] if len(sys.argv) > 3 else "all"
     if category != "all" and category not in CATEGORY_TERMS:

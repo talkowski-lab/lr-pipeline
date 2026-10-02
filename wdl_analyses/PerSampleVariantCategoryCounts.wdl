@@ -165,6 +165,13 @@ task PerSampleCategoryCounts {
         set -euo pipefail
         export DEBIAN_FRONTEND=noninteractive
         apt-get update -qq && apt-get install -y -qq bcftools tabix > /dev/null
+        # Fail fast on stale staged scripts that predate per-category runs:
+        # they would ignore the category arg and count every category,
+        # inflating the summed counts in ConcatCategoryCounts.
+        if ! grep -q 'CATEGORY=' ~{parallel_script} || ! grep -q 'CATEGORY_TERMS' ~{per_sample_script}; then
+            echo "ERROR: per_sample_category_counts scripts do not support per-category runs; re-upload them" >&2
+            exit 1
+        fi
         # tabix -l / bcftools view -r need the index next to the VCF; the
         # index may have been localized to a different directory.
         ln -s ~{vcf} input.vcf.gz
