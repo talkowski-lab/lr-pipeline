@@ -326,18 +326,106 @@ PYEOF
     }
 }
 
-# Runs every qualifying methylation site on the contig: for each, SAIGE
+# Splits a contig's filtered (call-rate-passing) sites into fixed-size
+# shards, writing one gzipped TSV per shard (same columns as
+# filtered_sites, header repeated in each). Returns a dynamically-sized
+# Array[File] via glob - the number of shards depends on n_sites and
+# sites_per_shard and isn't known until this task runs, which is exactly
+# why this is its own task rather than a WDL-level computation: an
+# Array[File] built by one task's glob() is a plain value by the time the
+# workflow sees it, so scattering over it afterward is a single, ordinary
+# scatter level - unlike trying to scatter per-shard work directly inside
+# the per-contig scatter (see RunCisMeQTLChunk's comment for why that's a
+# problem here).
+task SplitFilteredSites {
+    input {
+        File filtered_sites
+        Int sites_per_shard
+        String prefix
+        String docker
+        RuntimeAttr? runtime_attr_override
+    }
+
+    command <<<
+        set -euo pipefail
+
+        cat <<'PYEOF' > split_sites.py
+import gzip
+import sys
+
+in_path = sys.argv[1]
+sites_per_shard = int(sys.argv[2])
+prefix = sys.argv[3]
+
+with gzip.open(in_path, "rt") as fin:
+    header = fin.readline()
+    shard_idx = -1
+    lines_in_shard = 0
+    fout = None
+    for line in fin:
+        if fout is None or lines_in_shard >= sites_per_shard:
+            if fout is not None:
+                fout.close()
+            shard_idx += 1
+            fout = gzip.open(f"{prefix}.shard{shard_idx:05d}.tsv.gz", "wt")
+            fout.write(header)
+            lines_in_shard = 0
+        fout.write(line)
+        lines_in_shard += 1
+    if fout is not None:
+        fout.close()
+PYEOF
+        python3 split_sites.py ~{filtered_sites} ~{sites_per_shard} ~{prefix}
+    >>>
+
+    output {
+        Array[File] shards = glob("~{prefix}.shard*.tsv.gz")
+    }
+
+    RuntimeAttr default_attr = object {
+        cpu_cores: 1,
+        mem_gb: 2,
+        disk_gb: 3 * ceil(size(filtered_sites, "GB")) + 10,
+        boot_disk_gb: 10,
+        preemptible_tries: 2,
+        max_retries: 0
+    }
+    RuntimeAttr runtime_attr = select_first([runtime_attr_override, default_attr])
+    runtime {
+        cpu: select_first([runtime_attr.cpu_cores, default_attr.cpu_cores])
+        memory: select_first([runtime_attr.mem_gb, default_attr.mem_gb]) + " GiB"
+        disks: "local-disk " + select_first([runtime_attr.disk_gb, default_attr.disk_gb]) + " HDD"
+        bootDiskSizeGb: select_first([runtime_attr.boot_disk_gb, default_attr.boot_disk_gb])
+        docker: docker
+        preemptible: select_first([runtime_attr.preemptible_tries, default_attr.preemptible_tries])
+        maxRetries: select_first([runtime_attr.max_retries, default_attr.max_retries])
+    }
+}
+
+# Runs every qualifying methylation site in one shard (a slice of a
+# contig's filtered sites, produced by SplitFilteredSites): for each, SAIGE
 # step1_fitNULLGLMM.R (sparse-GRM null model for that site's phenotype)
 # followed by step2_SPAtests.R restricted to a +/- cis_window region around
-# the site via --rangestoIncludeFile. Sites are parallelized across CPU
-# cores within this one task via Python multiprocessing, rather than as
-# separate Cromwell-scheduled shards - a nested WDL scatter (one level for
-# contigs, one for site chunks) hit a Cromwell input-resolution bug on
-# optional inputs (covariates_file, runtime_attr_override) referenced two
-# scatter levels deep ("Failed to lookup input value for required input"
-# even though both are declared optional), so parallelism across sites is
-# kept inside this task instead of a second WDL scatter level.
-task RunCisMeQTLContig {
+# the site via --rangestoIncludeFile. Sites within one shard are further
+# parallelized across CPU cores via Python multiprocessing, so parallelism
+# compounds across two levels: many shards scattered as separate Cromwell
+# jobs, each running n_parallel_workers sites concurrently.
+#
+# This task is called from a single, top-level (not nested) scatter in the
+# workflow - the per-contig setup (VCF indexing, LD-pruning, sparse GRM,
+# site filtering, and splitting into shards) all happens in an earlier,
+# separate scatter over contigs, and its outputs are flattened into flat
+# per-shard arrays before this task's scatter begins. This specific shape
+# matters: an earlier design nested the per-shard scatter directly inside
+# the per-contig scatter, and that hit a real Cromwell input-resolution bug
+# on this task's optional inputs (covariates_file, runtime_attr_override)
+# when they were referenced two scatter levels deep ("Failed to lookup
+# input value for required input", even though both are declared optional).
+# Flattening first keeps this task's call site at a single scatter level,
+# structurally identical to every other (already-working) task call in
+# this workflow - reasoned to avoid that bug, but not verified against a
+# live Cromwell/GCP Batch backend (no local way to reproduce it).
+task RunCisMeQTLChunk {
     input {
         File filtered_sites
         String contig
@@ -596,7 +684,7 @@ PYEOF
     >>>
 
     output {
-        File contig_assoc = "~{prefix}.assoc.txt"
+        File chunk_assoc = "~{prefix}.assoc.txt"
         File skipped_sites_log = "~{prefix}.skipped_sites.log"
     }
 
@@ -649,6 +737,73 @@ task ConcatenateTsvs {
         cpu_cores: 1,
         mem_gb: 2,
         disk_gb: 5 * ceil(size(tsvs, "GB")) + 10,
+        boot_disk_gb: 10,
+        preemptible_tries: 2,
+        max_retries: 0
+    }
+    RuntimeAttr runtime_attr = select_first([runtime_attr_override, default_attr])
+    runtime {
+        cpu: select_first([runtime_attr.cpu_cores, default_attr.cpu_cores])
+        memory: select_first([runtime_attr.mem_gb, default_attr.mem_gb]) + " GiB"
+        disks: "local-disk " + select_first([runtime_attr.disk_gb, default_attr.disk_gb]) + " HDD"
+        bootDiskSizeGb: select_first([runtime_attr.boot_disk_gb, default_attr.boot_disk_gb])
+        docker: docker
+        preemptible: select_first([runtime_attr.preemptible_tries, default_attr.preemptible_tries])
+        maxRetries: select_first([runtime_attr.max_retries, default_attr.max_retries])
+    }
+}
+
+# Groups a flat array of per-shard assoc TSVs back by contig (since
+# RunCisMeQTLChunk is now called from one flat scatter spanning every
+# contig's shards combined, not a per-contig scatter), concatenating each
+# contig's shards into one file, header kept once per contig. chunk_files
+# and contigs must be the same length and in corresponding order.
+task GatherChunksByContig {
+    input {
+        Array[File] chunk_files
+        Array[String] contigs
+        String prefix
+        String docker
+        RuntimeAttr? runtime_attr_override
+    }
+
+    command <<<
+        set -euo pipefail
+
+        cat <<'PYEOF' > gather.py
+import sys
+
+chunk_files = sys.argv[1].split(",")
+contigs = sys.argv[2].split(",")
+prefix = sys.argv[3]
+
+by_contig = {}
+for chunk_file, contig in zip(chunk_files, contigs):
+    by_contig.setdefault(contig, []).append(chunk_file)
+
+for contig, files in by_contig.items():
+    wrote_header = False
+    with open(f"{prefix}.{contig}.assoc.txt", "w") as out:
+        for chunk_file in files:
+            with open(chunk_file) as fin:
+                header = fin.readline()
+                if not wrote_header:
+                    out.write(header)
+                    wrote_header = True
+                for line in fin:
+                    out.write(line)
+PYEOF
+        python3 gather.py "~{sep="," chunk_files}" "~{sep="," contigs}" ~{prefix}
+    >>>
+
+    output {
+        Array[File] per_contig_assoc = glob("~{prefix}.*.assoc.txt")
+    }
+
+    RuntimeAttr default_attr = object {
+        cpu_cores: 1,
+        mem_gb: 2,
+        disk_gb: 5 * ceil(size(chunk_files, "GB")) + 10,
         boot_disk_gb: 10,
         preemptible_tries: 2,
         max_retries: 0

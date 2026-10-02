@@ -59,8 +59,9 @@ calls), that's fine and expected.
 |---|---|---|
 | `min_call_rate` | 0.9 | Per-site minimum fraction of non-missing samples to test |
 | `cis_window` | 2,000,000 | +/- bp window around each site's position for the association scan |
-| `n_parallel_workers` | 8 | How many sites `RunCisMeQTLContig` processes concurrently (Python multiprocessing) within its one VM per contig |
-| `max_sites_without_override` | 5000 | If a contig has more qualifying sites than this, the task fails immediately with a clear error instead of silently running for days (see below) |
+| `sites_per_shard` | 200 | How many qualifying sites each `RunCisMeQTLChunk` shard (one Cromwell job) processes |
+| `n_parallel_workers` | 4 | How many sites within one shard `RunCisMeQTLChunk` processes concurrently (Python multiprocessing) - parallelism compounds with `sites_per_shard`: many shards x many workers each |
+| `max_sites_without_override` | 5000 | If a single shard somehow has more qualifying sites than this (e.g. `sites_per_shard` set too high), the task fails immediately with a clear error instead of silently running for days (see below) |
 | `allow_large_scan` | false | Set true to bypass the above guard and run anyway |
 | `ld_prune_window_kb` / `ld_prune_step` / `ld_prune_r2` | 50 / 5 / 0.2 | `plink --indep-pairwise` params |
 | `vcf_half_call` | `"missing"` | How plink treats GT half-calls (e.g. `0/.`); long-read phased VCFs can have these |
@@ -97,34 +98,52 @@ editing the WDL.
   `--rangestoIncludeFile`** on the whole-contig VCF, rather than pre-slicing
   a per-site plink/VCF subset. Functionally equivalent, avoids an extra
   per-site file-prep step.
-- **Sites are processed inside one task per contig (`RunCisMeQTLContig`),
-  parallelized across CPU cores via Python `multiprocessing`, not via a
-  second WDL scatter level.** A contig can have hundreds of thousands of
-  qualifying sites, so a per-site Cromwell task is impractical - but an
-  earlier design that nested a `scatter (chunk_idx in ...)` inside
-  the per-contig `scatter (i in ...)` hit a real Cromwell bug in practice
-  (observed on Terra): optional inputs (`covariates_file`,
-  `runtime_attr_*`) referenced two scatter levels deep failed with `Failed
-  to lookup input value for required input`, even though both are declared
-  optional and the WDL passes `womtool validate` cleanly. Tune
-  `n_parallel_workers` (and the task's CPU/memory `RuntimeAttr`) to control
-  how many sites run concurrently per contig instead.
-- **SAIGE's per-site design does not scale to genome-wide site counts, and
-  there's a guard against accidentally trying anyway.** step1+step2 costs
-  roughly 15 seconds per site (measured directly against real data), and
-  that cost is fundamentally per-site - SAIGE fits a fresh null model for
-  every phenotype, so it doesn't amortize across sites the way a vectorized
-  tool does. A real chr22 scan (572,893 sites passing a 90% call-rate
-  filter) ran for 10+ hours at `n_parallel_workers=8` and was killed having
-  completed only ~3.7% of sites - it would have taken ~12 days. If
-  `RunCisMeQTLContig` sees more than `max_sites_without_override` qualifying
-  sites, it now fails immediately with an estimated runtime instead of
-  silently running for days; set `allow_large_scan=true` to proceed anyway.
-  **For genome-wide or other large-scale scans, use the tensorQTL workflows
-  instead** (`GenotypeMeQTL_tensorQTL.wdl` / `HaplotypeMeQTL_tensorQTL.wdl`),
-  which test every qualifying site on a contig in one vectorized call with
-  no per-site overhead. Reserve these SAIGE workflows for smaller, targeted
-  site lists where sparse-GRM relatedness correction matters more than scale.
+- **Sites are sharded and scattered across many Cromwell jobs, further
+  parallelized within each job across CPU cores via Python
+  `multiprocessing`.** step1+step2 costs roughly 15 seconds per site
+  (measured directly against real data) and that cost is fundamentally
+  per-site - SAIGE fits a fresh null model for every phenotype, so it
+  doesn't amortize across sites the way a vectorized tool does. A real
+  chr22 scan (572,893 sites passing a 90% call-rate filter) ran for 10+
+  hours on a single VM and was killed having completed only ~3.7% of sites
+  - it would have taken ~12 days on one VM. Splitting into
+  `sites_per_shard`-sized shards and scattering each as its own Cromwell job
+  (in addition to `n_parallel_workers` concurrency within each shard) adds
+  a second, multiplicative axis of parallelism: e.g. 200 sites/shard x 4
+  workers/shard cuts a 572,893-site contig to ~717 shards run in parallel
+  instead of one 12-day job.
+  **Why this isn't just a nested WDL scatter**: an earlier design put
+  `scatter (chunk_idx in ...)` directly inside the per-contig
+  `scatter (i in ...)`, and that hit a real Cromwell bug in practice
+  (observed on Terra): optional inputs (`covariates_file`, `runtime_attr_*`)
+  referenced two scatter levels deep failed with `Failed to lookup input
+  value for required input`, even though both are declared optional and
+  the WDL passes `womtool validate` cleanly. The fix: per-contig setup
+  (`IndexVcf` through `SplitFilteredSites`, which splits a contig's
+  filtered sites into shard files via `glob()`) stays in one scatter over
+  contigs; that scatter's per-contig outputs are broadcast onto each
+  contig's shard count via an inner scatter that does *only* plain value
+  repetition (no task calls - the thing that actually triggered the bug),
+  then `flatten()`'d into flat, per-shard arrays; `RunCisMeQTLChunk` is
+  then called from one *separate, top-level* scatter over the flattened
+  arrays - structurally a single scatter level, like every other
+  (already-working) task call in this workflow. Verified end-to-end with
+  `miniwdl run` against real data (two fake "contigs" with deliberately
+  uneven shard counts, 3 vs. 4, to stress-test the flatten correspondence)
+  before this was trusted - reasoning about WDL scatter semantics alone
+  wasn't enough after the first nested-scatter bug.
+- **SAIGE's per-site design does not scale to genome-wide site counts even
+  with sharding, and there's a guard against accidentally trying anyway
+  with too few shards.** If a single shard (normally `sites_per_shard`
+  sites) has more than `max_sites_without_override` qualifying sites, it
+  fails immediately with an estimated runtime instead of silently running
+  for days; set `allow_large_scan=true` to proceed anyway. **For
+  genome-wide or other very large-scale scans, the tensorQTL workflows are
+  still the better fit** (`GenotypeMeQTL_tensorQTL.wdl` /
+  `HaplotypeMeQTL_tensorQTL.wdl`), which test every qualifying site on a
+  contig in one vectorized call with no per-site overhead at all. Use these
+  SAIGE workflows where sparse-GRM relatedness correction matters more than
+  raw scale.
 - **Multiallelic sites are silently skipped by SAIGE step2** (its VCF reader
   only handles biallelic records) - this showed up as `Warning: skipping
   multiallelic variant` in interactive testing. The tensorQTL workflows
@@ -157,15 +176,16 @@ editing the WDL.
 
 ### Outputs
 
-- `combined_assoc`: one TSV across all contigs, all tested sites. Columns:
-  `pheno_site_id`, `pheno_chrom`, `pheno_pos`, `n_samples`, then SAIGE's own
-  step2 columns (`CHR POS MarkerID Allele1 Allele2 AC_Allele2 AF_Allele2
-  MissingRate BETA SE Tstat var p.value N`).
-- `per_contig_assoc`: same, split per contig.
+- `combined_assoc`: one TSV across all contigs, all shards, all tested
+  sites. Columns: `pheno_site_id`, `pheno_chrom`, `pheno_pos`, `n_samples`,
+  then SAIGE's own step2 columns (`CHR POS MarkerID Allele1 Allele2
+  AC_Allele2 AF_Allele2 MissingRate BETA SE Tstat var p.value N`).
+- `per_contig_assoc`: same, split per contig (`GatherChunksByContig`
+  groups the flat per-shard results back by contig name).
 - `per_contig_pruned_bed` / `per_contig_sparse_grm`: intermediate plink/GRM
   files, in case you want to reuse them outside this workflow.
-- `per_contig_skipped_logs`: per-contig skip reasons (insufficient samples,
-  step1/step2 failures).
+- `per_shard_skipped_logs`: per-shard skip reasons (insufficient samples,
+  step1/step2 failures) - flat, one per shard across every contig combined.
 
 ---
 
