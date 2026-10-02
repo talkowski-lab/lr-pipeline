@@ -4,16 +4,11 @@ version 1.0
 ##
 ## Given a set of per-chromosome, jointly-genotyped VCFs from the same cohort
 ## (e.g. chr1.chr1.annotated.vcf.gz .. chr22.chr22.annotated.vcf.gz, as
-## produced by this cohort's AnnotateVcf -> VCFToBED pipeline) plus the
-## matching plain-text VCFToBED bed outputs:
-##   1. bgzip + tabix-index each bed (kept as a standalone deliverable; the
-##      per-sample counting below reads directly from the VCFs' own
-##      INFO/vep + INFO/allele_type + INFO/allele_length fields instead, since
-##      those carry the same content as the bed and avoid a bed/VCF join).
-##   1b. extract the sample list once, from the first VCF (bcftools query -l;
-##       all contig VCFs are assumed to share the same sample set, matching
-##       PerSampleVariantBurden.wdl's convention -- not enforced here, just
-##       surfaced for the caller to sanity-check).
+## produced by this cohort's AnnotateVcf pipeline):
+##   1. extract the sample list once, from the first VCF (bcftools query -l;
+##      all contig VCFs are assumed to share the same sample set, matching
+##      PerSampleVariantBurden.wdl's convention -- not enforced here, just
+##      surfaced for the caller to sanity-check).
 ##   2-2c. for each contig VCF, restricted to FILTER=PASS: for each sample,
 ##       count pLoF SNVs, pLoF indels (DEL/INS, <50bp), pLoF SVs (DEL/INS,
 ##       >=50bp), missense, synonymous, intronic and intergenic non-ref
@@ -40,7 +35,6 @@ workflow PerSampleVariantCategoryCounts {
 
     input {
         Array[File] vcfs
-        Array[File] beds
         String      output_basename
         File        per_sample_category_counts_script
         File        concat_sample_category_counts_script
@@ -58,15 +52,6 @@ workflow PerSampleVariantCategoryCounts {
             mem_gb      = mem_gb,
             disk_gb     = disk_gb,
             preemptible = preemptible
-    }
-
-    scatter (bed in beds) {
-        call BgzipBed {
-            input:
-                bed         = bed,
-                docker      = bcftools_docker,
-                preemptible = preemptible
-        }
     }
 
     scatter (vcf in vcfs) {
@@ -93,11 +78,9 @@ workflow PerSampleVariantCategoryCounts {
     }
 
     output {
-        File        sample_ids                 = ExtractSampleIds.samples
-        Array[File] bgzipped_beds               = BgzipBed.bed_gz
-        Array[File] bgzipped_bed_indices         = BgzipBed.bed_gz_tbi
-        Array[File] per_contig_category_counts   = PerSampleCategoryCounts.category_counts
-        File        sample_variant_category_table = ConcatAcrossContigs.out_table
+        File        sample_ids                    = ExtractSampleIds.samples
+        Array[File] per_contig_category_counts     = PerSampleCategoryCounts.category_counts
+        File        sample_variant_category_table  = ConcatAcrossContigs.out_table
     }
 
     meta {
@@ -128,36 +111,6 @@ task ExtractSampleIds {
         docker:      docker
         memory:      mem_gb + " GB"
         cpu:         1
-        disks:       "local-disk " + disk_gb + " HDD"
-        preemptible: preemptible
-    }
-}
-
-task BgzipBed {
-    input {
-        File   bed
-        String docker
-        Int    preemptible
-    }
-
-    String out_prefix = basename(bed)
-    Int disk_gb = ceil(size(bed, "GB") * 3) + 20
-
-    command <<<
-        set -euo pipefail
-        bgzip -c ~{bed} > ~{out_prefix}.gz
-        tabix -p bed ~{out_prefix}.gz
-    >>>
-
-    output {
-        File bed_gz     = out_prefix + ".gz"
-        File bed_gz_tbi = out_prefix + ".gz.tbi"
-    }
-
-    runtime {
-        docker:      docker
-        memory:      "4 GB"
-        cpu:         2
         disks:       "local-disk " + disk_gb + " HDD"
         preemptible: preemptible
     }
