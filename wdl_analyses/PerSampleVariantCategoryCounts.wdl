@@ -130,6 +130,8 @@ task PerSampleCategoryCounts {
 
     command <<<
         set -euo pipefail
+        export DEBIAN_FRONTEND=noninteractive
+        apt-get update -qq && apt-get install -y -qq bcftools > /dev/null
         python3 ~{script} ~{vcf} ~{out_prefix}
     >>>
 
