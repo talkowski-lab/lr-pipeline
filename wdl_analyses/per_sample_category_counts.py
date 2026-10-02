@@ -22,7 +22,13 @@ transcripts' symbols.
 pLoF SNV/indel/SV uses INFO/allele_type + abs(INFO/allele_length), with the
 indel/SV boundary at 50bp (matching per_sample_type_counts.sh's size bins).
 
-Usage: per_sample_category_counts.py <in.vcf.gz> <out_prefix>
+Usage: per_sample_category_counts.py <in.vcf.gz> <out_prefix> [category]
+category is one of plof, missense, synonymous, intronic, intergenic, or all
+(default). With a single category, bcftools pre-filters rows to those whose
+INFO/vep mentions that category's term(s) (a superset; exact matching is still
+done in Python), and only that category's columns are filled -- the others are
+written as 0 / empty, so per-category outputs can be summed/unioned back into
+the full table by concat_sample_category_counts.py.
 Writes <out_prefix>.category_counts.tsv with columns:
   sample,
   n_plof_snv, n_plof_indel_del, n_plof_indel_ins, n_plof_sv_del, n_plof_sv_ins,
@@ -45,6 +51,13 @@ COUNT_CATEGORIES = [
     "n_missense", "n_synonymous", "n_intronic", "n_intergenic",
 ]
 GENE_CATEGORIES = ["plof_snv_genes", "plof_indel_genes", "plof_sv_genes"]
+CATEGORY_TERMS = {
+    "plof": sorted(HIGH_IMPACT_TERMS),
+    "missense": ["missense_variant"],
+    "synonymous": ["synonymous_variant"],
+    "intronic": ["intron_variant"],
+    "intergenic": ["intergenic_variant"],
+}
 
 
 def parse_vep(vep_field):
@@ -71,6 +84,15 @@ def is_non_ref(gt):
 
 def main():
     vcf, out_prefix = sys.argv[1], sys.argv[2]
+    category = sys.argv[3] if len(sys.argv) > 3 else "all"
+    if category != "all" and category not in CATEGORY_TERMS:
+        sys.exit(f"unknown category {category}; expected one of {sorted(CATEGORY_TERMS)} or all")
+    selected = set(CATEGORY_TERMS) if category == "all" else {category}
+
+    filter_expr = 'FILTER="PASS"'
+    if category != "all":
+        term_expr = " || ".join(f'INFO/vep~"{t}"' for t in CATEGORY_TERMS[category])
+        filter_expr += f" && ({term_expr})"
 
     samples = subprocess.run(
         ["bcftools", "query", "-l", vcf], check=True, capture_output=True, text=True
@@ -81,7 +103,7 @@ def main():
 
     query_fmt = "%CHROM\t%POS\t%INFO/allele_type\t%INFO/allele_length\t%INFO/vep[\t%GT]\n"
     proc = subprocess.Popen(
-        ["bcftools", "query", "-i", 'FILTER="PASS"', "-f", query_fmt, vcf],
+        ["bcftools", "query", "-i", filter_expr, "-f", query_fmt, vcf],
         stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True,
     )
 
@@ -93,11 +115,11 @@ def main():
         gts = fields[5:]
 
         terms, plof_genes = parse_vep(vep_field)
-        is_plof = bool(plof_genes)
-        is_missense = "missense_variant" in terms
-        is_synonymous = "synonymous_variant" in terms
-        is_intronic = "intron_variant" in terms
-        is_intergenic = "intergenic_variant" in terms
+        is_plof = "plof" in selected and bool(plof_genes)
+        is_missense = "missense" in selected and "missense_variant" in terms
+        is_synonymous = "synonymous" in selected and "synonymous_variant" in terms
+        is_intronic = "intronic" in selected and "intron_variant" in terms
+        is_intergenic = "intergenic" in selected and "intergenic_variant" in terms
 
         if not (is_plof or is_missense or is_synonymous or is_intronic or is_intergenic):
             continue

@@ -20,8 +20,12 @@ version 1.0
 ##       symbols disrupted by pLoF SNVs/indels/SVs (genes are only credited
 ##       from transcript annotations that themselves carry a HIGH-impact
 ##       consequence term).
-##   3. sum each sample's counts and union each sample's pLoF gene sets
-##      across all contig shards into one genome-wide table.
+##      Each category (plof, missense, synonymous, intronic, intergenic) runs
+##      as its own independent task per contig VCF, all in parallel; each
+##      task fills only its own category's columns (others are 0 / empty).
+##   3. ConcatCategoryCounts: sum each sample's counts and union each
+##      sample's pLoF gene sets across all (contig, category) task outputs
+##      into one genome-wide table with every category's columns.
 ##
 ## pLoF is defined by VEP's documented HIGH-impact consequence terms
 ## (transcript_ablation, splice_acceptor_variant, splice_donor_variant,
@@ -54,6 +58,7 @@ workflow PerSampleVariantCategoryCounts {
         File        concat_sample_category_counts_script
         String      bcftools_docker = "quay.io/biocontainers/bcftools:1.20--h8b25389_0"
         String      python_docker   = "python:3.11-slim"
+        Array[String] categories = ["plof", "missense", "synonymous", "intronic", "intergenic"]
         Int         n_chunks_per_contig = 6
         Int         mem_gb      = 8
         Int         disk_gb     = 50
@@ -69,11 +74,15 @@ workflow PerSampleVariantCategoryCounts {
             preemptible = preemptible
     }
 
-    scatter (i in range(length(vcfs))) {
+    # One independent task per (contig VCF, category): each data collection
+    # runs as its own job, in parallel. Flattened into a single scatter via
+    # cross() rather than nesting scatters.
+    scatter (job in cross(range(length(vcfs)), categories)) {
         call PerSampleCategoryCounts {
             input:
-                vcf             = vcfs[i],
-                vcf_idx         = vcf_idxs[i],
+                vcf             = vcfs[job.left],
+                vcf_idx         = vcf_idxs[job.left],
+                category        = job.right,
                 per_sample_script = per_sample_category_counts_script,
                 parallel_script   = per_sample_category_counts_parallel_script,
                 concat_script     = concat_sample_category_counts_script,
@@ -85,9 +94,9 @@ workflow PerSampleVariantCategoryCounts {
         }
     }
 
-    call ConcatAcrossContigs {
+    call ConcatCategoryCounts {
         input:
-            per_contig_tsvs = PerSampleCategoryCounts.category_counts,
+            category_count_tsvs = PerSampleCategoryCounts.category_counts,
             output_basename = output_basename,
             script          = concat_sample_category_counts_script,
             docker          = python_docker,
@@ -98,8 +107,8 @@ workflow PerSampleVariantCategoryCounts {
 
     output {
         File        sample_ids                    = ExtractSampleIds.samples
-        Array[File] per_contig_category_counts     = PerSampleCategoryCounts.category_counts
-        File        sample_variant_category_table  = ConcatAcrossContigs.out_table
+        Array[File] per_contig_per_category_counts = PerSampleCategoryCounts.category_counts
+        File        sample_variant_category_table  = ConcatCategoryCounts.out_table
     }
 
     meta {
@@ -139,6 +148,7 @@ task PerSampleCategoryCounts {
     input {
         File   vcf
         File   vcf_idx
+        String category
         File   per_sample_script
         File   parallel_script
         File   concat_script
@@ -149,7 +159,7 @@ task PerSampleCategoryCounts {
         Int    preemptible
     }
 
-    String out_prefix = basename(vcf, ".vcf.gz")
+    String out_prefix = basename(vcf, ".vcf.gz") + "." + category
 
     command <<<
         set -euo pipefail
@@ -159,7 +169,7 @@ task PerSampleCategoryCounts {
         # index may have been localized to a different directory.
         ln -s ~{vcf} input.vcf.gz
         ln -s ~{vcf_idx} input.vcf.gz.tbi
-        bash ~{parallel_script} input.vcf.gz ~{out_prefix} ~{n_chunks} ~{per_sample_script} ~{concat_script}
+        bash ~{parallel_script} input.vcf.gz ~{out_prefix} ~{n_chunks} ~{per_sample_script} ~{concat_script} ~{category}
     >>>
 
     output {
@@ -175,9 +185,9 @@ task PerSampleCategoryCounts {
     }
 }
 
-task ConcatAcrossContigs {
+task ConcatCategoryCounts {
     input {
-        Array[File] per_contig_tsvs
+        Array[File] category_count_tsvs
         String      output_basename
         File        script
         String      docker
@@ -190,7 +200,7 @@ task ConcatAcrossContigs {
 
     command <<<
         set -euo pipefail
-        python3 ~{script} ~{out_name} ~{sep=" " per_contig_tsvs}
+        python3 ~{script} ~{out_name} ~{sep=" " category_count_tsvs}
     >>>
 
     output {
