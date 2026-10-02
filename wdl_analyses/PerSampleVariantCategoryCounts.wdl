@@ -69,9 +69,13 @@ workflow PerSampleVariantCategoryCounts {
     }
 
     scatter (vcf in vcfs) {
+        # The parallel script's `tabix -l` / `bcftools view -r` need the
+        # tabix index; AnnotateVcf writes it alongside each VCF as .tbi.
+        # Passing it as a File makes Cromwell localize it next to the VCF.
         call PerSampleCategoryCounts {
             input:
                 vcf             = vcf,
+                vcf_idx         = vcf + ".tbi",
                 per_sample_script = per_sample_category_counts_script,
                 parallel_script   = per_sample_category_counts_parallel_script,
                 concat_script     = concat_sample_category_counts_script,
@@ -136,6 +140,7 @@ task ExtractSampleIds {
 task PerSampleCategoryCounts {
     input {
         File   vcf
+        File   vcf_idx
         File   per_sample_script
         File   parallel_script
         File   concat_script

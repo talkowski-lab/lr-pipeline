@@ -51,7 +51,7 @@ for (( i=0; i<N_CHUNKS; i++ )); do
     end=$(( (i + 1) * CHUNK_SIZE ))
     if [ "$end" -gt "$LENGTH" ]; then end=$LENGTH; fi
     (
-        bcftools view -r "${CONTIG}:${start}-${end}" "$VCF" -Ob -o "$WORKDIR/chunk_${i}.bcf" --write-index
+        bcftools view -r "${CONTIG}:${start}-${end}" --regions-overlap pos "$VCF" -Ob -o "$WORKDIR/chunk_${i}.bcf"
     ) &
 done
 wait
