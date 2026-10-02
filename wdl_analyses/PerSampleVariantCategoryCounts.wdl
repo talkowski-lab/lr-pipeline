@@ -30,6 +30,18 @@ version 1.0
 ## against INFO/vep (format: Allele|Consequence|IMPACT|SYMBOL|Gene|...,
 ## comma-separated across overlapping transcripts), since IMPACT is not
 ## independently exposed as its own INFO field in this dataset.
+##
+## Step 2's per-contig counting itself runs in parallel across
+## n_chunks_per_contig genomic-position chunks (per_sample_category_counts_
+## parallel.sh): each chunk is sliced out with `bcftools view -r`, which is
+## tabix-index-seekable, so N concurrent chunk workers divide the contig's
+## total work by N rather than each rescanning the whole file -- true data
+## parallelism. (An earlier design instead ran each of the 9 count
+## categories + 3 gene-list categories as its own concurrent `bcftools view
+## -i <category filter>` pass over the full file; measured SLOWER in
+## practice, since an arbitrary INFO-field `-i` filter can't use the index
+## and still requires a full linear scan, so parallelizing across
+## categories just multiplied total I/O instead of dividing it.)
 
 workflow PerSampleVariantCategoryCounts {
 
@@ -37,9 +49,11 @@ workflow PerSampleVariantCategoryCounts {
         Array[File] vcfs
         String      output_basename
         File        per_sample_category_counts_script
+        File        per_sample_category_counts_parallel_script
         File        concat_sample_category_counts_script
         String      bcftools_docker = "quay.io/biocontainers/bcftools:1.20--h8b25389_0"
         String      python_docker   = "python:3.11-slim"
+        Int         n_chunks_per_contig = 6
         Int         mem_gb      = 8
         Int         disk_gb     = 50
         Int         preemptible = 1
@@ -57,12 +71,15 @@ workflow PerSampleVariantCategoryCounts {
     scatter (vcf in vcfs) {
         call PerSampleCategoryCounts {
             input:
-                vcf         = vcf,
-                script      = per_sample_category_counts_script,
-                docker      = python_docker,
-                mem_gb      = mem_gb,
-                disk_gb     = disk_gb,
-                preemptible = preemptible
+                vcf             = vcf,
+                per_sample_script = per_sample_category_counts_script,
+                parallel_script   = per_sample_category_counts_parallel_script,
+                concat_script     = concat_sample_category_counts_script,
+                n_chunks        = n_chunks_per_contig,
+                docker          = python_docker,
+                mem_gb          = mem_gb,
+                disk_gb         = disk_gb,
+                preemptible     = preemptible
         }
     }
 
@@ -119,7 +136,10 @@ task ExtractSampleIds {
 task PerSampleCategoryCounts {
     input {
         File   vcf
-        File   script
+        File   per_sample_script
+        File   parallel_script
+        File   concat_script
+        Int    n_chunks
         String docker
         Int    mem_gb
         Int    disk_gb
@@ -131,8 +151,8 @@ task PerSampleCategoryCounts {
     command <<<
         set -euo pipefail
         export DEBIAN_FRONTEND=noninteractive
-        apt-get update -qq && apt-get install -y -qq bcftools > /dev/null
-        python3 ~{script} ~{vcf} ~{out_prefix}
+        apt-get update -qq && apt-get install -y -qq bcftools tabix > /dev/null
+        bash ~{parallel_script} ~{vcf} ~{out_prefix} ~{n_chunks} ~{per_sample_script} ~{concat_script}
     >>>
 
     output {
@@ -142,7 +162,7 @@ task PerSampleCategoryCounts {
     runtime {
         docker:      docker
         memory:      mem_gb + " GB"
-        cpu:         2
+        cpu:         n_chunks
         disks:       "local-disk " + disk_gb + " HDD"
         preemptible: preemptible
     }
