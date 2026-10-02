@@ -43,7 +43,9 @@ trap 'rm -rf "$WORKDIR"' EXIT
 # and unsafe under `set -o pipefail` (head's early exit sends SIGPIPE
 # upstream, which pipefail then reports as the pipeline's exit status).
 CONTIG=$(tabix -l "$VCF" | awk 'NR==1')
-LENGTH=$(bcftools view -h "$VCF" | grep -m1 "^##contig=<ID=${CONTIG},length=" | sed -E 's/.*length=([0-9]+).*/\1/')
+# awk reads the whole header (no early exit like grep -m1), so bcftools is
+# never SIGPIPEd mid-write -- which pipefail would turn into exit 141.
+LENGTH=$(bcftools view -h "$VCF" | awk -v c="$CONTIG" 'index($0, "##contig=<ID=" c ",length=") == 1 && len == "" { len = $0; sub(/.*length=/, "", len); sub(/[^0-9].*/, "", len) } END { print len }')
 
 if [ -z "$CONTIG" ] || [ -z "$LENGTH" ]; then
     echo "ERROR: could not determine contig/length from $VCF" >&2
