@@ -47,6 +47,7 @@ workflow PerSampleVariantCategoryCounts {
 
     input {
         Array[File] vcfs
+        Array[File] vcf_idxs
         String      output_basename
         File        per_sample_category_counts_script
         File        per_sample_category_counts_parallel_script
@@ -68,14 +69,11 @@ workflow PerSampleVariantCategoryCounts {
             preemptible = preemptible
     }
 
-    scatter (vcf in vcfs) {
-        # The parallel script's `tabix -l` / `bcftools view -r` need the
-        # tabix index; AnnotateVcf writes it alongside each VCF as .tbi.
-        # Passing it as a File makes Cromwell localize it next to the VCF.
+    scatter (i in range(length(vcfs))) {
         call PerSampleCategoryCounts {
             input:
-                vcf             = vcf,
-                vcf_idx         = vcf + ".tbi",
+                vcf             = vcfs[i],
+                vcf_idx         = vcf_idxs[i],
                 per_sample_script = per_sample_category_counts_script,
                 parallel_script   = per_sample_category_counts_parallel_script,
                 concat_script     = concat_sample_category_counts_script,
@@ -157,7 +155,11 @@ task PerSampleCategoryCounts {
         set -euo pipefail
         export DEBIAN_FRONTEND=noninteractive
         apt-get update -qq && apt-get install -y -qq bcftools tabix > /dev/null
-        bash ~{parallel_script} ~{vcf} ~{out_prefix} ~{n_chunks} ~{per_sample_script} ~{concat_script}
+        # tabix -l / bcftools view -r need the index next to the VCF; the
+        # index may have been localized to a different directory.
+        ln -s ~{vcf} input.vcf.gz
+        ln -s ~{vcf_idx} input.vcf.gz.tbi
+        bash ~{parallel_script} input.vcf.gz ~{out_prefix} ~{n_chunks} ~{per_sample_script} ~{concat_script}
     >>>
 
     output {
