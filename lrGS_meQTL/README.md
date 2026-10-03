@@ -1,0 +1,348 @@
+# lrGS_meQTL
+
+Cis-meQTL scanning, scattered per contig, with two interchangeable backends
+that share the same VCF + wide-format methylation table inputs:
+
+- **SAIGE** (`MeQTLTasks.wdl`, sparse-GRM null model + SPA test) - handles
+  related samples via a sparse GRM; tests one phenotype (site) at a time.
+- **tensorQTL** (`MeQTLTensorQTLTasks.wdl`, permutation-based cis mapping) -
+  wraps the core task from
+  [AoU-Multiomics-Analysis/tensorQTL_cis_permutations](https://github.com/AoU-Multiomics-Analysis/tensorQTL_cis_permutations),
+  which normally expects pre-made plink2 files + phenotype bed + covariates;
+  here it builds those from a VCF + methylation table instead. Vectorized,
+  CPU-only (see design decisions below), no sparse-GRM relatedness
+  correction, tests every qualifying site on a contig in one call.
+
+Each backend has a genotype (diploid) and a haplotype workflow:
+
+| Backend | Genotype | Haplotype |
+|---|---|---|
+| SAIGE | `GenotypeMeQTL_SAIGE.wdl` | `HaplotypeMeQTL_SAIGE.wdl` |
+| tensorQTL | `GenotypeMeQTL_tensorQTL.wdl` | `HaplotypeMeQTL_tensorQTL.wdl` |
+
+All four take the same `vcfs` / `methylation_files` / `contigs` / `prefix`
+inputs (see below) and the haplotype variant of each backend requires a
+fully phased input VCF.
+
+## Common inputs
+
+`vcfs`, `methylation_files`, and `contigs` are parallel arrays - index `i` in
+all three must describe the same contig (e.g. `vcfs[2]` and
+`methylation_files[2]` are both chr22, `contigs[2] = "chr22"`).
+
+`prefix` (required, all four workflows) is the run name, prefixed onto every
+output file: `~{prefix}.~{contig}...`.
+
+## Methylation file format
+
+A gzipped, tab-separated, wide-format bed: `chrom`, `start`, `end`, then one
+column per sample (or per haplotype, `sample_hap1`/`sample_hap2`, for the
+haplotype workflows), values missing as `.`/`NA`/empty. This matches
+`hprc_methylated.chr22.combined.bed.gz` (genotype workflows) and
+`hprc_methylated.chr22.haplotype.bed.gz` (haplotype workflows).
+
+Both backends compute each row's call rate as `(non-missing sample values) /
+(total sample columns in the file)` and keep rows >= `min_call_rate`.
+**Note:** a site's call rate is defined against every sample column present
+in that contig's methylation file - if the genotype VCF covers a broader
+sample set than the methylation file (as in the exploratory session this
+pipeline was built from: 292 genotyped samples vs. 231 with methylation
+calls), that's fine and expected.
+
+---
+
+## SAIGE workflows
+
+### Inputs
+
+| Input | Default | Notes |
+|---|---|---|
+| `min_call_rate` | 0.9 | Per-site minimum fraction of non-missing samples to test |
+| `cis_window` | 2,000,000 | +/- bp window around each site's position for the association scan |
+| `sites_per_shard` | 200 | How many qualifying sites each `RunCisMeQTLChunk` shard (one Cromwell job) processes |
+| `n_parallel_workers` | 4 | How many sites within one shard `RunCisMeQTLChunk` processes concurrently (Python multiprocessing) - parallelism compounds with `sites_per_shard`: many shards x many workers each |
+| `max_sites_without_override` | 5000 | If a single shard somehow has more qualifying sites than this (e.g. `sites_per_shard` set too high), the task fails immediately with a clear error instead of silently running for days (see below) |
+| `allow_large_scan` | false | Set true to bypass the above guard and run anyway |
+| `ld_prune_window_kb` / `ld_prune_step` / `ld_prune_r2` | 50 / 5 / 0.2 | `plink --indep-pairwise` params |
+| `vcf_half_call` | `"missing"` | How plink treats GT half-calls (e.g. `0/.`); long-read phased VCFs can have these |
+| `num_random_markers_for_grm` / `relatedness_cutoff` / `min_maf_for_grm` / `max_missing_rate_for_grm` | 2000 / 0.125 / 0.01 / 0.15 | `createSparseGRM.R` params |
+| `covariates_file` | none | Optional TSV: `person_id` + covariate columns, tab-separated |
+| `covar_col_list` / `qcovar_col_list` | `""` | Comma-separated covariate column names (qcovar = categorical); passed straight to SAIGE |
+| `min_samples_per_site` | 20 | Sites with fewer non-missing, covariate-complete samples than this are skipped (logged, not fatal) |
+| `inv_normalize` | true | Inverse-normalize the phenotype in step1 (`--invNormalize`) |
+
+`plink_docker`, `bcftools_docker`, and `saige_docker` default to pre-verified
+images (`quay.io/biocontainers/plink:1.90b6.21--h031d066_5`,
+`quay.io/biocontainers/bcftools:1.19--h8b25389_1`, `wzhou88/saige:1.3.6`) but
+can be overridden. Note this deviates from this repo's usual "docker is
+never hardcoded" convention, at the user's request, for convenience filling
+out the Terra UI.
+
+Every task also takes a `RuntimeAttr? runtime_attr_override`, exposed at the
+workflow level as one `runtime_attr_<task>` input per task (e.g.
+`runtime_attr_create_grm`), so resources can be tuned per task without
+editing the WDL.
+
+### Design decisions worth knowing about
+
+- **GRM scope is per contig, not genome-wide.** Since the only input
+  parallelism is "one VCF per contig," each contig's sparse GRM is built from
+  that contig's own LD-pruned markers. If you want a single genome-wide GRM
+  shared across contigs instead, that requires restructuring (build the GRM
+  once outside the contig scatter, e.g. from a genome-wide pruned marker
+  set) - ask if you want that variant.
+- **One null model (step1) per site, not per contig.** SAIGE's step1 null
+  model is specific to one phenotype; the pruned marker set and sparse GRM
+  (both contig-level) are reused unchanged across every site's step1 call.
+- **Cis-window restriction is applied via SAIGE's own
+  `--rangestoIncludeFile`** on the whole-contig VCF, rather than pre-slicing
+  a per-site plink/VCF subset. Functionally equivalent, avoids an extra
+  per-site file-prep step.
+- **Sites are sharded and scattered across many Cromwell jobs, further
+  parallelized within each job across CPU cores via Python
+  `multiprocessing`.** step1+step2 costs roughly 15 seconds per site
+  (measured directly against real data) and that cost is fundamentally
+  per-site - SAIGE fits a fresh null model for every phenotype, so it
+  doesn't amortize across sites the way a vectorized tool does. A real
+  chr22 scan (572,893 sites passing a 90% call-rate filter) ran for 10+
+  hours on a single VM and was killed having completed only ~3.7% of sites
+  - it would have taken ~12 days on one VM. Splitting into
+  `sites_per_shard`-sized shards and scattering each as its own Cromwell job
+  (in addition to `n_parallel_workers` concurrency within each shard) adds
+  a second, multiplicative axis of parallelism: e.g. 200 sites/shard x 4
+  workers/shard cuts a 572,893-site contig to ~717 shards run in parallel
+  instead of one 12-day job.
+  **Why this isn't just a nested WDL scatter**: an earlier design put
+  `scatter (chunk_idx in ...)` directly inside the per-contig
+  `scatter (i in ...)`, and that hit a real Cromwell bug in practice
+  (observed on Terra): optional inputs (`covariates_file`, `runtime_attr_*`)
+  referenced two scatter levels deep failed with `Failed to lookup input
+  value for required input`, even though both are declared optional and
+  the WDL passes `womtool validate` cleanly. The fix: per-contig setup
+  (`IndexVcf` through `SplitFilteredSites`, which splits a contig's
+  filtered sites into shard files via `glob()`) stays in one scatter over
+  contigs; that scatter's per-contig outputs are broadcast onto each
+  contig's shard count via an inner scatter that does *only* plain value
+  repetition (no task calls - the thing that actually triggered the bug),
+  then `flatten()`'d into flat, per-shard arrays; `RunCisMeQTLChunk` is
+  then called from one *separate, top-level* scatter over the flattened
+  arrays - structurally a single scatter level, like every other
+  (already-working) task call in this workflow. Verified end-to-end with
+  `miniwdl run` against real data (two fake "contigs" with deliberately
+  uneven shard counts, 3 vs. 4, to stress-test the flatten correspondence)
+  before this was trusted - reasoning about WDL scatter semantics alone
+  wasn't enough after the first nested-scatter bug.
+- **SAIGE's per-site design does not scale to genome-wide site counts even
+  with sharding, and there's a guard against accidentally trying anyway
+  with too few shards.** If a single shard (normally `sites_per_shard`
+  sites) has more than `max_sites_without_override` qualifying sites, it
+  fails immediately with an estimated runtime instead of silently running
+  for days; set `allow_large_scan=true` to proceed anyway. **For
+  genome-wide or other very large-scale scans, the tensorQTL workflows are
+  still the better fit** (`GenotypeMeQTL_tensorQTL.wdl` /
+  `HaplotypeMeQTL_tensorQTL.wdl`), which test every qualifying site on a
+  contig in one vectorized call with no per-site overhead at all. Use these
+  SAIGE workflows where sparse-GRM relatedness correction matters more than
+  raw scale.
+- **Multiallelic sites are silently skipped by SAIGE step2** (its VCF reader
+  only handles biallelic records) - this showed up as `Warning: skipping
+  multiallelic variant` in interactive testing. The tensorQTL workflows
+  instead split multiallelics upstream (`bcftools norm -m -any`) rather than
+  dropping them; the SAIGE workflows don't do this today.
+- **Failed or under-powered sites are skipped, not fatal.** Both
+  insufficient-sample-count sites and SAIGE step1/step2 failures are logged
+  to `skipped_sites.log` (per contig, surfaced as `per_contig_skipped_logs`
+  in the workflow outputs) and excluded from that contig's assoc file, so
+  one bad site doesn't fail the whole contig.
+- **Haplotype encoding**: `SplitPhasedVcfToHaplotypes` rewrites each phased
+  record's `sample` genotype (`a|b`) into two homozygous pseudo-diploid
+  genotypes (`a/a` for `sample_hap1`, `b/b` for `sample_hap2`), so plink and
+  SAIGE - both diploid-oriented - work unchanged on 2x the (pseudo-)samples.
+  An unphased genotype (`a/b`) is still split, but the hap1/hap2 assignment
+  in that case is arbitrary since there's no real phase information. A
+  single-allele GT (e.g. hemizygous chrX/chrY in males) is duplicated onto
+  both haplotypes rather than left truly haploid - a simplification worth
+  revisiting if sex chromosomes matter for your analysis. tensorQTL's
+  haplotype workflow reuses this same task. Its `mem_gb` default is 64GB for
+  the same reason `NormalizeVcf`'s is (see below): one extreme multiallelic
+  site makes a single record far larger than the file's average, and both
+  `bcftools view` and `awk` hold a whole record at a time. The tensorQTL
+  haplotype path feeds it the post-`norm` VCF, which on chr22 is 11GB from a
+  2GB input, so the old 4GB default OOM-killed it 32 minutes in.
+- **Output coordinate convention**: a site's "position" for both the cis
+  window and the `pheno_pos` output column is its bed `start` (0-based),
+  matching the ad hoc convention used in the interactive session this
+  pipeline formalizes.
+
+### Outputs
+
+- `combined_assoc`: one TSV across all contigs, all shards, all tested
+  sites. Columns: `pheno_site_id`, `pheno_chrom`, `pheno_pos`, `n_samples`,
+  then SAIGE's own step2 columns (`CHR POS MarkerID Allele1 Allele2
+  AC_Allele2 AF_Allele2 MissingRate BETA SE Tstat var p.value N`).
+- `per_contig_assoc`: same, split per contig (`GatherChunksByContig`
+  groups the flat per-shard results back by contig name).
+- `per_contig_pruned_bed` / `per_contig_sparse_grm`: intermediate plink/GRM
+  files, in case you want to reuse them outside this workflow.
+- `per_shard_skipped_logs`: per-shard skip reasons (insufficient samples,
+  step1/step2 failures) - flat, one per shard across every contig combined.
+
+---
+
+## tensorQTL workflows
+
+### Inputs
+
+| Input | Default | Notes |
+|---|---|---|
+| `min_call_rate` | 0.9 | Per-site minimum fraction of non-missing samples to test |
+| `cis_window` | 1,000,000 | tensorQTL's `--window`, matching the upstream repo's own default |
+| `vcf_half_call` | `"missing"` | How plink2 treats GT half-calls |
+| `covariates_file` | none | Optional TSV: `person_id` + covariate columns, tab-separated (same shape as the SAIGE workflows' `covariates_file`) - transposed internally into tensorQTL's `covariates x samples` layout. If omitted, an intercept-only (zero-covariate) file is generated automatically |
+| `phenotype_groups` / `fdr` / `qvalue_lambda` / `pval_threshold` / `seed` / `flags` | none | Passed straight through to `python3 -m tensorqtl`, same as the upstream repo's workflow |
+
+`plink2_docker`, `bcftools_docker`, `python_docker`, and `tensorqtl_docker`
+default to pre-verified images but can be overridden (as with the SAIGE
+workflows, this deviates from this repo's usual "docker is never hardcoded"
+convention at the user's request): `quay.io/biocontainers/plink2:2.00a5.10--h4ac6f70_0`,
+`quay.io/biocontainers/bcftools:1.19--h8b25389_1`, `wzhou88/saige:1.3.6` for
+`python_docker` (already has Python 3.8; any other dependency-free Python 3
+image also works), and `gcr.io/broad-cga-francois-gtex/tensorqtl:latest`
+(the upstream repo's own image).
+
+`TensorQTLCisPermutations` is CPU-only - no GPU inputs to set. See design
+decisions below for why.
+
+Same `RuntimeAttr? runtime_attr_<task>` pattern as the SAIGE workflows.
+
+### Design decisions worth knowing about
+
+- **No per-site chunking.** tensorQTL is vectorized and reads the whole
+  phenotype matrix for a contig in one call, unlike SAIGE's one
+  null-model-per-site loop - so there's no `sites_per_shard` equivalent here.
+- **CPU-only, not GPU - removed after two separate real failures.**
+  tensorQTL's own code falls back to CPU automatically
+  (`torch.device("cuda" if torch.cuda.is_available() else "cpu")`).
+  `TensorQTLCisPermutations` originally requested a GPU (the upstream
+  repo's own `nvidia-tesla-p100`/`us-central1-c` default); that run failed
+  to even start (zero log output after being queued for 2+ hours),
+  consistent with a GPU quota/availability problem specific to that Google
+  Cloud project. Switching the default to `gpuCount=0` ("no GPU") then
+  failed differently: Cromwell/GCP Batch rejects the runtime attributes
+  outright with `Expecting gpuCount runtime attribute value greater than
+  0` - gpuCount can only be present with a value >= 1, or absent entirely,
+  never 0. Since CPU is the only path verified to actually work end-to-end,
+  GPU runtime attributes were removed from the task rather than fought
+  further for a feature nobody has a working configuration for. If you
+  have confirmed GPU quota and want the speed, `gpuType`/`gpuCount`/`zones`
+  need to be added back to `TensorQTLCisPermutations`'s runtime block
+  directly (only when requesting > 0 GPUs - the value can't be 0).
+  `mem_gb`'s default (64GB) is likewise generously sized, not precisely
+  profiled: a real CPU-mode run (chr22, 231 samples, 170,526 variants,
+  54,616 phenotypes with a cis-variant) was OOM-killed 12 phenotypes into
+  permutation testing under a 7.7GB local test ceiling.
+- **`covariates_file`'s sample columns must exactly match the phenotype
+  bed's, identity and order both** - tensorQTL asserts
+  `phenotype_df.columns.equals(covariates_df.index)`, not just that the two
+  sets overlap. `BuildCovariates` derives its sample list from the
+  phenotype bed's own header (not the plink2 `.psam`, which can be a
+  larger/differently-ordered set - e.g. all VCF samples vs. only those with
+  methylation calls); getting this wrong fails fast with an `AssertionError`
+  before any real computation happens, which is how it was originally
+  caught.
+- **Multiallelic sites are split, not dropped**: `NormalizeVcf` runs
+  `bcftools norm -m -any` on every contig VCF before plink2 ever sees it.
+  This also sidesteps plink2's ~254-ALT-allele import limit on the rare
+  complex multiallelic site. This is a deliberate improvement over the SAIGE
+  workflows, which silently skip multiallelics instead (see above) - not
+  something either pipeline's behavior depends on the other for.
+  Chromosome naming (`chr22` vs `22`) is preserved through the pgen
+  conversion via plink2's `--output-chr chrM`, since it defaults to
+  stripping the `chr` prefix, which would otherwise silently break tensorQTL's
+  cis-window matching against the methylation bed's `#chr` column.
+  `NormalizeVcf` also needs considerably more memory than its VCF size would
+  suggest - observed OOM-killed on Terra (`rc=137`) and locally reproduced
+  failing even at 7GB on a ~2GB chr22 VCF, almost certainly from splitting
+  this dataset's one extreme multiallelic site (576 ALT alleles). Its
+  `mem_gb` default (64GB) is a generously-sized value backed by that
+  empirical lower bound, not a precisely profiled number.
+- **Missing phenotype values are mean-imputed, not sample-subsetted.**
+  tensorQTL needs one rectangular, complete phenotype x sample matrix for
+  the whole contig (unlike SAIGE, which fits a fresh null model per site
+  over whatever samples that site has); after the call-rate filter, any
+  remaining missing values in a qualifying site are filled with that site's
+  own mean across present samples.
+- **Covariates file is auto-generated, including the no-covariates case.**
+  tensorQTL's core task requires a `--covariates` file (unlike SAIGE, where
+  `covarColList`/`qCovarColList` can simply be empty); `BuildCovariates`
+  always produces one, transposed from `covariates_file` if supplied, or
+  header-only (zero covariate rows, intercept-only model) if not.
+- **`phenotype_groups` is exposed but not meQTL-specific.** It's tensorQTL's
+  mechanism for grouping phenotypes that should share one permutation test
+  (e.g. multiple splice junctions per gene, per the upstream repo's sQTL
+  workflow) - left as a pass-through optional input in case you want to
+  group CpG sites by region, but no methylation-specific grouping is applied
+  by default.
+
+### Outputs
+
+- `combined_cis_qtl`: one gzipped TSV across all contigs, tensorQTL's own
+  `cis_qtl.txt.gz` columns (one row per tested phenotype/site: top variant,
+  permutation-derived p-value, q-value, etc.), headers de-duplicated across
+  contigs.
+- `per_contig_cis_qtl` / `per_contig_log`: same, split per contig, plus
+  tensorQTL's own run log.
+- `per_contig_phenotype_bed` / `per_contig_covariates`: the generated
+  tensorQTL inputs, in case you want to reuse or inspect them.
+- `per_contig_n_sites`: qualifying (call-rate-passing) site count per contig.
+
+---
+
+## MethylationPopulationAnalysis (sample QC, variable regions, ASM)
+
+`MethylationPopulationAnalysis.wdl` + `methylation_population_analysis.py`
+(passed in as `analysis_script`; `font_ttf` is an Arial TTF used for all PDF
+text). Inputs are the same per-contig wide-format tables as above
+(`methylation_beds` = `*.combined.bed.gz`, `haplotype_methylation_beds` =
+`*.haplotype.bed.gz`); the contig is the second dot-delimited field of each file name.
+
+1. **Sample QC.** Per contig x sample mean / median / call rate tables.
+   Autosomal genome-wide metrics per sample; a sample is excluded when its
+   mean, median, or fraction of intermediate (20-80%) CpGs is a robust-z
+   outlier (|z| >= `sample_qc_z`, default 5), its correlation with the
+   cohort per-CpG median is low (z <= -5), or call rate < 0.5. Sex is
+   inferred from chrY call rate (used to restrict chrY to males).
+2. **Variable regions.** CpGs called in >= 80% of passing samples, grouped
+   into non-overlapping 10-CpG tiles (span <= 2 kb). Single-CpG values are
+   too noisy (across-sample SD ~20 points at intermediate levels); tile
+   averages roughly halve that. A tile is variable when its across-sample
+   SD is >= `variable_z` (4) robust SDs above tiles of similar mean
+   methylation (5%-wide bins, per contig). Variable tiles within 1 kb are
+   merged. Per region, each sample's CpG-level difference from the per-CpG
+   cohort median is tested (Wilcoxon signed-rank, BH across samples):
+   q < 0.05 and mean shift >= +20 points = hyper (blue in the plots),
+   <= -20 = hypo (red); other samples grey.
+3. **Allele-specific methylation.** Per sample, CpGs called on both
+   haplotypes, 10-CpG tiles of hap1 - hap2; tiles with
+   |delta| >= max(20, 4 x the sample's robust SD of tile deltas on that
+   contig) are merged (same sign, within 1 kb) into regions, tested by
+   Wilcoxon signed-rank over CpGs (BH per contig, q < 0.05). Haplotype QC
+   additionally drops samples with < 25% of the cohort-median number of
+   both-haplotype CpGs, or outlying delta noise / hap1-hap2 imbalance.
+   Per-sample regions are unioned into population ASM regions with
+   `n_asm_samples` / `n_informative_samples`. Phase orientation is arbitrary
+   across samples, so only |delta| is comparable between samples.
+
+Outputs: `mean_methylation_by_contig`, `median_methylation_by_contig`,
+`call_rate_by_contig`, `sample_qc` (+ `excluded_samples`, `sample_qc_pdf`),
+`variable_regions_bed`, `variable_region_sample_calls`,
+`variable_region_pdfs` (one page per region, top `variable_max_plots` per
+contig by tile z), `haplotype_sample_qc`, `asm_regions_per_sample`,
+`asm_regions_population_bed`, `asm_region_pdfs` (top `asm_max_plots`
+recurrent regions per contig; higher allele blue, lower allele red).
+
+Caveats: chrX variability and ASM are dominated by X inactivation in
+females (`female_minus_male` column in the variable-region bed helps
+separate these); there is no per-CpG read depth in the input tables, so
+"expected" variability is empirical (tiles of similar mean on the same
+contig), not a binomial model.
