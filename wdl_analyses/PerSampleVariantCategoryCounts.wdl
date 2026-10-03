@@ -56,7 +56,7 @@ workflow PerSampleVariantCategoryCounts {
         File        per_sample_category_counts_script
         File        per_sample_category_counts_parallel_script
         File        concat_sample_category_counts_script
-        String      bcftools_docker = "quay.io/biocontainers/bcftools:1.20--h8b25389_0"
+        String      bcftools_docker = "quay.io/biocontainers/bcftools@sha256:badc3a0c7af72a83e5761ab0e881aa84204694bdead003b47552cb283958f78d"
         String      python_docker   = "python:3.11-slim"
         Array[String] categories = ["plof", "missense", "synonymous", "intronic", "intergenic"]
         Int         n_chunks_per_contig = 6
