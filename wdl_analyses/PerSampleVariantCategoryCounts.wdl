@@ -26,6 +26,10 @@ version 1.0
 ##   3. ConcatCategoryCounts: sum each sample's counts and union each
 ##      sample's pLoF gene sets across all (contig, category) task outputs
 ##      into one genome-wide table with every category's columns.
+##   4. Steps 2-3 are run a second time additionally restricted to rare sites
+##      (MAX(INFO/<af_field>) < max_af, default cohort INFO/AF < 0.01; a
+##      multiallelic site is kept only if all its ALT alleles are rare),
+##      producing sample_variant_category_table_rare.
 ##
 ## pLoF is defined by VEP's documented HIGH-impact consequence terms
 ## (transcript_ablation, splice_acceptor_variant, splice_donor_variant,
@@ -59,6 +63,8 @@ workflow PerSampleVariantCategoryCounts {
         String      bcftools_docker = "quay.io/biocontainers/bcftools@sha256:badc3a0c7af72a83e5761ab0e881aa84204694bdead003b47552cb283958f78d"
         String      python_docker   = "python:3.11-slim"
         Array[String] categories = ["plof", "missense", "synonymous", "intronic", "intergenic"]
+        String      af_field = "AF"
+        String      max_af   = "0.01"
         Int         n_chunks_per_contig = 6
         Int         mem_gb      = 8
         Int         disk_gb     = 50
@@ -94,6 +100,27 @@ workflow PerSampleVariantCategoryCounts {
         }
     }
 
+    # Same per-(contig, category) tasks, additionally restricted to rare
+    # sites: MAX(INFO/<af_field>) < max_af.
+    scatter (job in cross(range(length(vcfs)), categories)) {
+        call PerSampleCategoryCounts as PerSampleCategoryCountsRare {
+            input:
+                vcf             = vcfs[job.left],
+                vcf_idx         = vcf_idxs[job.left],
+                category        = job.right,
+                af_field        = af_field,
+                max_af          = max_af,
+                per_sample_script = per_sample_category_counts_script,
+                parallel_script   = per_sample_category_counts_parallel_script,
+                concat_script     = concat_sample_category_counts_script,
+                n_chunks        = n_chunks_per_contig,
+                docker          = python_docker,
+                mem_gb          = mem_gb,
+                disk_gb         = disk_gb,
+                preemptible     = preemptible
+        }
+    }
+
     call ConcatCategoryCounts {
         input:
             category_count_tsvs = PerSampleCategoryCounts.category_counts,
@@ -105,9 +132,22 @@ workflow PerSampleVariantCategoryCounts {
             preemptible     = preemptible
     }
 
+    call ConcatCategoryCounts as ConcatCategoryCountsRare {
+        input:
+            category_count_tsvs = PerSampleCategoryCountsRare.category_counts,
+            output_basename = output_basename + ".PASS_" + af_field + "_lt_" + max_af,
+            script          = concat_sample_category_counts_script,
+            docker          = python_docker,
+            mem_gb          = mem_gb,
+            disk_gb         = disk_gb,
+            preemptible     = preemptible
+    }
+
     output {
         File        sample_ids                    = ExtractSampleIds.samples
         Array[File] per_contig_per_category_counts = PerSampleCategoryCounts.category_counts
+        Array[File] per_contig_per_category_counts_rare = PerSampleCategoryCountsRare.category_counts
+        File        sample_variant_category_table_rare = ConcatCategoryCountsRare.out_table
         File        sample_variant_category_table  = ConcatCategoryCounts.out_table
     }
 
@@ -149,6 +189,8 @@ task PerSampleCategoryCounts {
         File   vcf
         File   vcf_idx
         String category
+        String af_field = "none"
+        String max_af   = "none"
         File   per_sample_script
         File   parallel_script
         File   concat_script
@@ -159,7 +201,8 @@ task PerSampleCategoryCounts {
         Int    preemptible
     }
 
-    String out_prefix = basename(vcf, ".vcf.gz") + "." + category
+    String af_suffix  = if max_af == "none" then "" else "." + af_field + "_lt_" + max_af
+    String out_prefix = basename(vcf, ".vcf.gz") + "." + category + af_suffix
 
     command <<<
         set -euo pipefail
@@ -168,15 +211,17 @@ task PerSampleCategoryCounts {
         # Fail fast on stale staged scripts that predate per-category runs:
         # they would ignore the category arg and count every category,
         # inflating the summed counts in ConcatCategoryCounts.
-        if ! grep -q 'CATEGORY=' ~{parallel_script} || ! grep -q 'CATEGORY_TERMS' ~{per_sample_script}; then
-            echo "ERROR: per_sample_category_counts scripts do not support per-category runs; re-upload them" >&2
+        # Likewise for the AF restriction: a stale script would silently
+        # ignore it and the "rare" table would equal the unrestricted one.
+        if ! grep -q 'MAX_AF=' ~{parallel_script} || ! grep -q 'af_field, max_af' ~{per_sample_script}; then
+            echo "ERROR: per_sample_category_counts scripts do not support per-category / AF-restricted runs; re-upload them" >&2
             exit 1
         fi
         # tabix -l / bcftools view -r need the index next to the VCF; the
         # index may have been localized to a different directory.
         ln -s ~{vcf} input.vcf.gz
         ln -s ~{vcf_idx} input.vcf.gz.tbi
-        bash ~{parallel_script} input.vcf.gz ~{out_prefix} ~{n_chunks} ~{per_sample_script} ~{concat_script} ~{category}
+        bash ~{parallel_script} input.vcf.gz ~{out_prefix} ~{n_chunks} ~{per_sample_script} ~{concat_script} ~{category} ~{af_field} ~{max_af}
     >>>
 
     output {

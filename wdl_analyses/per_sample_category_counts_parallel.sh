@@ -18,12 +18,13 @@
 # multiplies total I/O instead of dividing it. Position-range splitting
 # avoids this because -r IS index-seekable.)
 #
-# Usage: per_sample_category_counts_parallel.sh <in.vcf.gz> <out_prefix> <n_chunks> <per_sample_category_counts.py> <concat_sample_category_counts.py> [category]
-# category (default: all) is passed through to per_sample_category_counts.py.
+# Usage: per_sample_category_counts_parallel.sh <in.vcf.gz> <out_prefix> <n_chunks> <per_sample_category_counts.py> <concat_sample_category_counts.py> [category] [af_field max_af]
+# category (default: all) and af_field/max_af (default: none none, i.e. no AF
+# restriction) are passed through to per_sample_category_counts.py.
 set -euo pipefail
 
-if [ $# -lt 5 ] || [ $# -gt 6 ]; then
-    echo "ERROR: expected 5 or 6 args, got $#" >&2
+if [ $# -lt 5 ] || [ $# -gt 8 ] || [ $# -eq 7 ]; then
+    echo "ERROR: expected 5, 6 or 8 args, got $#" >&2
     exit 1
 fi
 
@@ -33,6 +34,8 @@ N_CHUNKS=$3
 PER_SAMPLE_SCRIPT=$4
 CONCAT_SCRIPT=$5
 CATEGORY=${6:-all}
+AF_FIELD=${7:-none}
+MAX_AF=${8:-none}
 
 WORKDIR=$(mktemp -d)
 trap 'rm -rf "$WORKDIR"' EXIT
@@ -68,7 +71,7 @@ wait
 # --- process each chunk concurrently with the existing per-sample script ---
 for (( i=0; i<N_CHUNKS; i++ )); do
     (
-        python3 "$PER_SAMPLE_SCRIPT" "$WORKDIR/chunk_${i}.bcf" "$WORKDIR/chunk_${i}" "$CATEGORY"
+        python3 "$PER_SAMPLE_SCRIPT" "$WORKDIR/chunk_${i}.bcf" "$WORKDIR/chunk_${i}" "$CATEGORY" "$AF_FIELD" "$MAX_AF"
     ) &
 done
 wait

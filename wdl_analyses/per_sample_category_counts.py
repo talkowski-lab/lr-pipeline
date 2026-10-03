@@ -22,7 +22,11 @@ transcripts' symbols.
 pLoF SNV/indel/SV uses INFO/allele_type + abs(INFO/allele_length), with the
 indel/SV boundary at 50bp (matching per_sample_type_counts.sh's size bins).
 
-Usage: per_sample_category_counts.py <in.vcf.gz> <out_prefix> [category]
+Usage: per_sample_category_counts.py <in.vcf.gz> <out_prefix> [category] [af_field max_af]
+af_field/max_af (default: none none) additionally restrict to sites where every
+ALT allele's INFO/<af_field> is < max_af, i.e. MAX(INFO/<af_field>) < max_af.
+Counting is per site, so a multiallelic site is kept only if all its ALT
+alleles are rare.
 category is one of plof, missense, synonymous, intronic, intergenic, or all
 (default). With a single category, bcftools pre-filters rows to those whose
 INFO/vep mentions that category's term(s) (a superset; exact matching is still
@@ -83,10 +87,13 @@ def is_non_ref(gt):
 
 
 def main():
-    if len(sys.argv) not in (3, 4):
-        sys.exit(f"usage: {sys.argv[0]} <in.vcf.gz> <out_prefix> [category]; got {len(sys.argv) - 1} args")
+    if len(sys.argv) not in (3, 4, 6):
+        sys.exit(f"usage: {sys.argv[0]} <in.vcf.gz> <out_prefix> [category] [af_field max_af]; got {len(sys.argv) - 1} args")
     vcf, out_prefix = sys.argv[1], sys.argv[2]
     category = sys.argv[3] if len(sys.argv) > 3 else "all"
+    af_field, max_af = (sys.argv[4], sys.argv[5]) if len(sys.argv) == 6 else ("none", "none")
+    if (af_field == "none") != (max_af == "none"):
+        sys.exit("af_field and max_af must both be set or both be none")
     if category != "all" and category not in CATEGORY_TERMS:
         sys.exit(f"unknown category {category}; expected one of {sorted(CATEGORY_TERMS)} or all")
     selected = set(CATEGORY_TERMS) if category == "all" else {category}
@@ -95,6 +102,8 @@ def main():
     if category != "all":
         term_expr = " || ".join(f'INFO/vep~"{t}"' for t in CATEGORY_TERMS[category])
         filter_expr += f" && ({term_expr})"
+    if max_af != "none":
+        filter_expr += f" && MAX(INFO/{af_field})<{float(max_af)}"
 
     samples = subprocess.run(
         ["bcftools", "query", "-l", vcf], check=True, capture_output=True, text=True
