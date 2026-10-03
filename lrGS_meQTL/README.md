@@ -295,3 +295,54 @@ Same `RuntimeAttr? runtime_attr_<task>` pattern as the SAIGE workflows.
 - `per_contig_phenotype_bed` / `per_contig_covariates`: the generated
   tensorQTL inputs, in case you want to reuse or inspect them.
 - `per_contig_n_sites`: qualifying (call-rate-passing) site count per contig.
+
+---
+
+## MethylationPopulationAnalysis (sample QC, variable regions, ASM)
+
+`MethylationPopulationAnalysis.wdl` + `methylation_population_analysis.py`
+(passed in as `analysis_script`; `font_ttf` is an Arial TTF used for all PDF
+text). Inputs are the same per-contig wide-format tables as above
+(`methylation_beds` = `*.combined.bed.gz`, `haplotype_methylation_beds` =
+`*.haplotype.bed.gz`); the contig is the second dot-delimited field of each file name.
+
+1. **Sample QC.** Per contig x sample mean / median / call rate tables.
+   Autosomal genome-wide metrics per sample; a sample is excluded when its
+   mean, median, or fraction of intermediate (20-80%) CpGs is a robust-z
+   outlier (|z| >= `sample_qc_z`, default 5), its correlation with the
+   cohort per-CpG median is low (z <= -5), or call rate < 0.5. Sex is
+   inferred from chrY call rate (used to restrict chrY to males).
+2. **Variable regions.** CpGs called in >= 80% of passing samples, grouped
+   into non-overlapping 10-CpG tiles (span <= 2 kb). Single-CpG values are
+   too noisy (across-sample SD ~20 points at intermediate levels); tile
+   averages roughly halve that. A tile is variable when its across-sample
+   SD is >= `variable_z` (4) robust SDs above tiles of similar mean
+   methylation (5%-wide bins, per contig). Variable tiles within 1 kb are
+   merged. Per region, each sample's CpG-level difference from the per-CpG
+   cohort median is tested (Wilcoxon signed-rank, BH across samples):
+   q < 0.05 and mean shift >= +20 points = hyper (blue in the plots),
+   <= -20 = hypo (red); other samples grey.
+3. **Allele-specific methylation.** Per sample, CpGs called on both
+   haplotypes, 10-CpG tiles of hap1 - hap2; tiles with
+   |delta| >= max(20, 4 x the sample's robust SD of tile deltas on that
+   contig) are merged (same sign, within 1 kb) into regions, tested by
+   Wilcoxon signed-rank over CpGs (BH per contig, q < 0.05). Haplotype QC
+   additionally drops samples with < 25% of the cohort-median number of
+   both-haplotype CpGs, or outlying delta noise / hap1-hap2 imbalance.
+   Per-sample regions are unioned into population ASM regions with
+   `n_asm_samples` / `n_informative_samples`. Phase orientation is arbitrary
+   across samples, so only |delta| is comparable between samples.
+
+Outputs: `mean_methylation_by_contig`, `median_methylation_by_contig`,
+`call_rate_by_contig`, `sample_qc` (+ `excluded_samples`, `sample_qc_pdf`),
+`variable_regions_bed`, `variable_region_sample_calls`,
+`variable_region_pdfs` (one page per region, top `variable_max_plots` per
+contig by tile z), `haplotype_sample_qc`, `asm_regions_per_sample`,
+`asm_regions_population_bed`, `asm_region_pdfs` (top `asm_max_plots`
+recurrent regions per contig; higher allele blue, lower allele red).
+
+Caveats: chrX variability and ASM are dominated by X inactivation in
+females (`female_minus_male` column in the variable-region bed helps
+separate these); there is no per-CpG read depth in the input tables, so
+"expected" variability is empirical (tiles of similar mean on the same
+contig), not a binomial model.
