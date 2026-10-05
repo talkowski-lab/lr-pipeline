@@ -1137,6 +1137,24 @@ Inputs:
 Outputs:
 - `File overlapping_loci_tsv`: One row per evaluated locus pair, with the `INFO/TRID` and `INFO/MOTIFS` of both records reproduced verbatim, the shared reference interval and its length, the projected haplotype sequences of both records (`-` where the interval is deleted on that haplotype, `.` where the record is haploid), `min_edit_distance` - the edit distance summed over both haplotype pairs under the better of the two assignments - and `max_similarity`, that distance divided by the shared interval length times the number of compared haplotypes and subtracted from `1`, so `1` means the records agree exactly.
 
+### [EvaluateNCRCutoffs](../wdl/annotation_utils/EvaluateNCRCutoffs.wdl)
+This utility tabulates precision and recall of a callset across a sweep of `INFO/NCR` (no-call rate) cutoffs, so a cutoff can be chosen from the resulting precision-recall curve. A site passes a cutoff when its `NCR` is at or below it. Precision is estimated from trio transmission: trios whose child and both parents are VCF samples are taken from the PED, and each site where a trio child carries a non-reference allele is one observation, counted as transmitted when either parent also carries a non-reference allele and as de novo when both parents are homozygous reference. Phasing and zygosity are ignored, so `0/1`, `1/1` and `0|1` all count as carriers. Observations where the child or either parent has a missing allele are skipped, since treating missing as non-carrier would inflate the de novo count precisely at high-`NCR` sites. Precision is the transmitted fraction of observations. Recall is the fraction of sites, and separately of trio observations, retained relative to the full set after `args_string_vcf`. Sites without `INFO/NCR` are excluded from every row and their count is printed to the summary task log.
+
+Inputs:
+- `File vcf`: VCF carrying `INFO/NCR` to evaluate.
+- `File vcf_idx`: Index for `vcf`.
+- `String contig`: Contig to evaluate.
+- `Int? records_per_shard`: Number of variants to keep within a single shard during evaluation.
+- `File ped`: PED file used to identify the trios whose transmission estimates precision.
+- `String? args_string_vcf`: `bcftools view` include expression applied to the VCF before evaluation.
+- `Float cutoff_step`: Spacing of the `NCR` cutoffs evaluated from `0` to `1` inclusive. (default `0.01`)
+- `String prefix`: Prefix for output file names.
+- `String utils_docker`: Container image.
+- `RuntimeAttr? runtime_attr_*`: Optional per-task runtime overrides (4).
+
+Outputs:
+- `File ncr_cutoffs_tsv`: One row per cutoff with columns `cutoff`, `n_sites` passing it, `recall_sites`, `n_trio_carrier_obs` (trio child carrier observations at passing sites), `recall_trio_carrier_obs`, `n_transmitted`, `n_denovo` and `precision`, the transmitted fraction of observations (empty when there are none).
+
 ### [PostprocessCallset](../wdl/annotation_utils/PostprocessCallset.wdl)
 This utility bundles every genotype-update and post-processing step applied to a near-final callset into one workflow, with a required `run_` Boolean guarding each step so that the input VCF is left untouched when all are set to `false`. The per-record steps are applied in a single pass over the VCF: each variant is first matched against `transfer_vcf` and has its genotypes transferred (when `run_transfer_genotypes` is set) using its unmodified properties, after which the remaining steps - unphasing, ploidy normalization, TR-ID decrementing, MEI pruning, homopolymer flagging, singleton filtering and same-coordinate sorting - run in order. Some steps require an accompanying field - `run_transfer_genotypes` needs `transfer_vcf`, `run_unphase_samples` needs `unphase_samples`, and `run_normalize_ploidy` needs `ped`. The per-record pass can optionally be region-sharded via `shard_bin_size`.
 

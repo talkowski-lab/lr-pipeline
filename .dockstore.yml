@@ -483,6 +483,16 @@ workflows:
         - /.*/
 
   - subclass: WDL
+    name: EvaluateNCRCutoffs
+    primaryDescriptorPath: /wdl/annotation_utils/EvaluateNCRCutoffs.wdl
+    filters:
+      branches:
+        - main
+        - kj-ncr-cutoff-eval
+      tags:
+        - /.*/
+
+  - subclass: WDL
     name: PostprocessCallset
     primaryDescriptorPath: /wdl/annotation_utils/PostprocessCallset.wdl
     filters:
