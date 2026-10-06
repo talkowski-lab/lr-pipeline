@@ -22,8 +22,8 @@ workflow SummarizeVariantBases {
         subset_vcf_string: "`bcftools view` arguments applied to each callset before counting, such as an include expression or a sample list. Must not contain -r, -t, -G or -o."
         ref_fai: "From references."
         shard_bin_size: "Width in base pairs of the regions the contig is sharded into."
-        summary_sites_tsv: "TSV with one row per variant class and size bin and, for each entry of `vcf_names`, the number of distinct reference bases altered across the callset and its proportion of the contig length."
-        summary_samples_tsv: "TSV laid out as `summary_sites_tsv` holding the mean number of bases altered per sample, counting each altered allele, and its proportion of the contig length."
+        site_bases_tsv: "TSV with one row per variant class and size bin and, for each entry of `vcf_names`, the number of distinct reference bases altered across the callset and its proportion of the contig length."
+        sample_bases_tsv: "TSV laid out as `site_bases_tsv` holding the mean number of bases altered per sample, counting each altered allele, and its proportion of the contig length."
     }
 
     input {
@@ -87,8 +87,8 @@ workflow SummarizeVariantBases {
     }
 
     output {
-        File summary_sites_tsv = MergeVariantBaseCounts.sites_tsv
-        File summary_samples_tsv = MergeVariantBaseCounts.samples_tsv
+        File site_bases_tsv = MergeVariantBaseCounts.site_bases_tsv
+        File sample_bases_tsv = MergeVariantBaseCounts.sample_bases_tsv
     }
 }
 
@@ -257,7 +257,7 @@ with open("counts.tsv") as handle:
         allele_bases[(vcf_name, category)] += int(alleles)
         n_samples[vcf_name] = int(samples)
 
-with open("~{prefix}.sites.tsv", "w") as sites_out, open("~{prefix}.samples.tsv", "w") as samples_out:
+with open("~{prefix}.site_bases.tsv", "w") as sites_out, open("~{prefix}.sample_bases.tsv", "w") as samples_out:
     header = ["category"]
     for name in NAMES:
         header += [f"{name}_bases", f"{name}_proportion"]
@@ -277,8 +277,8 @@ CODE
     >>>
 
     output {
-        File sites_tsv = "~{prefix}.sites.tsv"
-        File samples_tsv = "~{prefix}.samples.tsv"
+        File site_bases_tsv = "~{prefix}.site_bases.tsv"
+        File sample_bases_tsv = "~{prefix}.sample_bases.tsv"
     }
 
     RuntimeAttr default_attr = object {

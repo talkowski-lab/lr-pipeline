@@ -714,8 +714,8 @@ Inputs:
 - `RuntimeAttr? runtime_attr_*`: Optional per-task runtime overrides (3).
 
 Outputs:
-- `File summary_sites_tsv`: TSV with one row per variant class and size bin and, for each entry of `vcf_names`, the number of distinct reference bases altered across the callset and its proportion of the contig length.
-- `File summary_samples_tsv`: TSV laid out as `summary_sites_tsv` holding the mean number of bases altered per sample, counting each altered allele, and its proportion of the contig length.
+- `File site_bases_tsv`: TSV with one row per variant class and size bin and, for each entry of `vcf_names`, the number of distinct reference bases altered across the callset and its proportion of the contig length.
+- `File sample_bases_tsv`: TSV laid out as `site_bases_tsv` holding the mean number of bases altered per sample, counting each altered allele, and its proportion of the contig length.
 
 ### [CreateCohortMethylationFile](../wdl/annotation_utils/CreateCohortMethylationFile.wdl)
 This utility builds cohort-level CpG methylation matrices from per-sample `MethylationProfiling` BED outputs. For each contig, it merges every sample's combined and per-haplotype modification-score BEDs into a wide site-by-sample(/haplotype) matrix, filling `.` for sites missing in a given sample or haplotype. Samples can optionally be processed in shards (merged independently, then joined column-wise) to bound how many sample files are localized onto a single task at once.
