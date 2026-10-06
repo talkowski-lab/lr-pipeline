@@ -289,7 +289,7 @@ task RunTruvari {
     RuntimeAttr runtime_attr = select_first([runtime_attr_override, default_attr])
     runtime {
         cpu: select_first([runtime_attr.cpu_cores, default_attr.cpu_cores])
-        memory: if tag_value == "TRUVARI_0.9" then "4 GiB" else if tag_value == "TRUVARI_0.7" then "4 GiB" else "4 GiB"
+        memory: if tag_value == "TRUVARI_0.9" then "8 GiB" else if tag_value == "TRUVARI_0.7" then "4 GiB" else "4 GiB"
         disks: "local-disk " + select_first([runtime_attr.disk_gb, default_attr.disk_gb]) + " HDD"
         bootDiskSizeGb: select_first([runtime_attr.boot_disk_gb, default_attr.boot_disk_gb])
         docker: docker
