@@ -6,9 +6,9 @@ import "../utils/Structs.wdl"
 workflow SummarizeVariantBases {
     meta {
         description: [
-            "This utility measures how many bases are altered by variation in each of several callsets for one contig, producing a site-level table of the reference bases altered across the callset and a sample-level table of the bases altered per genome, each with one row per variant class and size bin and, for each entry of `vcf_names`, a column of bases and a column of those bases as a proportion of the contig length, all rounded to three decimal places.",
+            "This utility measures how many bases are altered by variation in each of several callsets for one contig, producing a site-level table of the reference bases altered across the callset and a sample-level table of the bases altered per genome, each with one row per variant class and size bin and, for each entry of `vcf_names`, a column of bases and a column of those bases as a proportion of the contig length, all rounded to six decimal places.",
             "Records are classed by `INFO/allele_type` as SNV, DEL or INS, with any type containing 'dup' counted as INS, and DEL and INS are split by the absolute `INFO/allele_length` into 1-49, 50-499 and 500+ bp bins. Other types, such as tandem repeats, and records with an AC of zero are not counted.",
-            "The site-level table measures how much of the reference is altered. The reference bases an ALT allele alters are those left in REF once the bases it shares with that ALT at either end are trimmed, so an SNV alters its own position, a deletion the bases after its anchor base, and a pure insertion none at all. The value is the number of distinct reference bases altered by any ALT allele with a nonzero AC in the bin, so different ALT alleles or overlapping records at one base count it once.",
+            "The site-level table measures how much of the reference is altered. Only records whose `INFO/allele_type` is snv or del alter reference bases, an SNV its own position and a deletion the `INFO/allele_length` bases after its anchor base, so insertion rows are always zero and a replaced anchor base is never counted. The value is the number of distinct reference bases altered by any record with a nonzero AC in the bin, so different ALT alleles or overlapping records at one base count it once.",
             "The sample-level table measures how much each genome differs from the reference. Every altered allele counts, with an SNV or insertion contributing 1 or its inserted length and a deletion its deleted length, and the value is the sum over records of AC times those bases divided by the number of samples, computed from `INFO/AC` alone rather than from the genotypes. Two different ALT alleles at one base in a sample, or a homozygous-alternate genotype, therefore count that base twice.",
             "The contig is cut into regions of `shard_bin_size` and each callset is streamed region by region straight from the bucket. Each reference base is counted only in the region containing it and each record's AC only in the region containing its position, so no base or record is counted twice across regions."
         ]
@@ -119,7 +119,7 @@ task CountShardBases {
 
         # Omit -t so deletions starting in an earlier region still reach the bases they cover in this one
         bcftools view -r ~{region} ~{subset_vcf_string} ~{vcf} -Ou \
-            | bcftools query -f '%POS\t%REF\t%ALT\t%INFO/allele_type\t%INFO/allele_length\t%INFO/AC\n' - \
+            | bcftools query -f '%POS\t%INFO/allele_type\t%INFO/allele_length\t%INFO/AC\n' - \
             > records.tsv
 
         python3 <<CODE
@@ -141,16 +141,6 @@ def size_label(length):
     return "500+"
 
 
-def altered_reference_span(pos, ref, alt):
-    prefix = 0
-    while prefix < min(len(ref), len(alt)) and ref[prefix] == alt[prefix]:
-        prefix += 1
-    suffix = 0
-    while suffix < min(len(ref), len(alt)) - prefix and ref[-1 - suffix] == alt[-1 - suffix]:
-        suffix += 1
-    return pos + prefix, pos + len(ref) - suffix - 1
-
-
 region_start, region_end = (int(value) for value in REGION.rsplit(":", 1)[1].split("-"))
 
 site_bases = {category: 0 for category in CATEGORIES}
@@ -159,7 +149,7 @@ altered_spans = {category: [] for category in CATEGORIES}
 
 with open("records.tsv") as handle:
     for line in handle:
-        pos, ref, alts, allele_type, allele_length, ac = line.rstrip("\n").split("\t")
+        pos, allele_type, allele_length, ac = line.rstrip("\n").split("\t")
         pos = int(pos)
         allele_type = allele_type.lower()
         if allele_type == "snv":
@@ -170,22 +160,24 @@ with open("records.tsv") as handle:
         else:
             continue
 
-        alt_counts = [int(value) if value != "." else 0 for value in ac.split(",")]
+        alt_count = sum(int(value) for value in ac.split(",") if value != ".")
+        if alt_count == 0:
+            continue
 
         # Count a record's AC only in the region holding its position
         if region_start <= pos <= region_end:
-            allele_bases[category] += sum(alt_counts) * length
+            allele_bases[category] += alt_count * length
 
-        # Keep the reference bases each carried ALT rewrites, clipped to the region, so a pure insertion keeps none
-        for alt, alt_count in zip(alts.split(","), alt_counts):
-            if alt_count == 0:
-                continue
-            span_start, span_end = altered_reference_span(pos, ref, alt)
-            span_start = max(span_start, region_start)
-            if not IS_LAST_SHARD:
-                span_end = min(span_end, region_end)
-            if span_end >= span_start:
-                altered_spans[category].append((span_start, span_end))
+        # Keep the reference bases an SNV or deletion alters, clipped to the region, as insertions alter none
+        if allele_type not in ("snv", "del"):
+            continue
+        span_start = pos if allele_type == "snv" else pos + 1
+        span_end = span_start + length - 1
+        span_start = max(span_start, region_start)
+        if not IS_LAST_SHARD:
+            span_end = min(span_end, region_end)
+        if span_end >= span_start:
+            altered_spans[category].append((span_start, span_end))
 
 # Count each altered reference base once per bin, however many records alter it
 for category, spans in altered_spans.items():
@@ -277,8 +269,8 @@ with open("~{prefix}.sites.tsv", "w") as sites_out, open("~{prefix}.samples.tsv"
         for name in NAMES:
             sites = site_bases[(name, category)]
             samples = allele_bases[(name, category)] / n_samples[name]
-            site_values += [f"{sites:.3f}", f"{sites / CONTIG_LENGTH:.3f}"]
-            sample_values += [f"{samples:.3f}", f"{samples / CONTIG_LENGTH:.3f}"]
+            site_values += [f"{sites:.6f}", f"{sites / CONTIG_LENGTH:.6f}"]
+            sample_values += [f"{samples:.6f}", f"{samples / CONTIG_LENGTH:.6f}"]
         sites_out.write("\t".join([category] + site_values) + "\n")
         samples_out.write("\t".join([category] + sample_values) + "\n")
 CODE
