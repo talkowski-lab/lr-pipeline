@@ -690,6 +690,33 @@ Outputs:
 - `File coding_alleles_tsv`: TSV with one row per coding TRV ALT allele, giving its record, allele index, carrier count and the genes whose CDS it overlaps.
 - `File coding_genes_tsv`: TSV with one row per gene hit by a coding TRV ALT allele, giving the number of such alleles and of samples carrying at least one of them.
 
+### [SummarizeVariantBases](../wdl/annotation_utils/SummarizeVariantBases.wdl)
+This utility measures how many bases are altered by variation in each of several callsets for one contig, producing a site-level table of the reference bases altered across the callset and a sample-level table of the bases altered per genome, each with one row per variant class and size bin and, for each entry of `vcf_names`, a column of bases and a column of those bases as a proportion of the contig length, all rounded to three decimal places.
+
+Records are classed by `INFO/allele_type` as SNV, DEL or INS, with any type containing 'dup' counted as INS, and DEL and INS are split by the absolute `INFO/allele_length` into 1-49, 50-499 and 500+ bp bins. Other types, such as tandem repeats, and records with an AC of zero are not counted.
+
+The site-level table measures how much of the reference is altered. The reference bases an ALT allele alters are those left in REF once the bases it shares with that ALT at either end are trimmed, so an SNV alters its own position, a deletion the bases after its anchor base, and a pure insertion none at all. The value is the number of distinct reference bases altered by any ALT allele with a nonzero AC in the bin, so different ALT alleles or overlapping records at one base count it once.
+
+The sample-level table measures how much each genome differs from the reference. Every altered allele counts, with an SNV or insertion contributing 1 or its inserted length and a deletion its deleted length, and the value is the sum over records of AC times those bases divided by the number of samples, computed from `INFO/AC` alone rather than from the genotypes. Two different ALT alleles at one base in a sample, or a homozygous-alternate genotype, therefore count that base twice.
+
+The contig is cut into regions of `shard_bin_size` and each callset is streamed region by region straight from the bucket. Each reference base is counted only in the region containing it and each record's AC only in the region containing its position, so no base or record is counted twice across regions.
+
+Inputs:
+- `Array[File] vcfs`: Callsets to summarize. Read region by region, so each may hold any set of contigs.
+- `Array[File] vcf_idxs`: Index for vcfs, each stored at its VCF's path with a '.tbi' suffix.
+- `Array[String] vcf_names`: Name of each entry of `vcfs`, in the same order, used as its column header.
+- `String contig`: Contig being summarized.
+- `String subset_vcf_string`: `bcftools view` arguments applied to each callset before counting, such as an include expression or a sample list. Must not contain -r, -t, -G or -o. (default empty)
+- `File ref_fai`: From references.
+- `Int shard_bin_size`: Width in base pairs of the regions the contig is sharded into. (default `5000000`)
+- `String prefix`: Prefix for output file names.
+- `String utils_docker`: Container image.
+- `RuntimeAttr? runtime_attr_*`: Optional per-task runtime overrides (3).
+
+Outputs:
+- `File summary_sites_tsv`: TSV with one row per variant class and size bin and, for each entry of `vcf_names`, the number of distinct reference bases altered across the callset and its proportion of the contig length.
+- `File summary_samples_tsv`: TSV laid out as `summary_sites_tsv` holding the mean number of bases altered per sample, counting each altered allele, and its proportion of the contig length.
+
 ### [CreateCohortMethylationFile](../wdl/annotation_utils/CreateCohortMethylationFile.wdl)
 This utility builds cohort-level CpG methylation matrices from per-sample `MethylationProfiling` BED outputs. For each contig, it merges every sample's combined and per-haplotype modification-score BEDs into a wide site-by-sample(/haplotype) matrix, filling `.` for sites missing in a given sample or haplotype. Samples can optionally be processed in shards (merged independently, then joined column-wise) to bound how many sample files are localized onto a single task at once.
 

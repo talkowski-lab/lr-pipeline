@@ -271,6 +271,16 @@ workflows:
         - /.*/
 
   - subclass: WDL
+    name: SummarizeVariantBases
+    primaryDescriptorPath: /wdl/annotation_utils/SummarizeVariantBases.wdl
+    filters:
+      branches:
+        - main
+        - kj-summarize-variant-bases
+      tags:
+        - /.*/
+
+  - subclass: WDL
     name: CreateCohortMethylationFile
     primaryDescriptorPath: /wdl/annotation_utils/CreateCohortMethylationFile.wdl
     filters:
