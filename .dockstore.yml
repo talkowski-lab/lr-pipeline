@@ -18,6 +18,7 @@ workflows:
     filters:
       branches:
         - main
+        - kj-truvari-stage-memory
       tags:
         - /.*/
 
