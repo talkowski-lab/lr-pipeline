@@ -44,14 +44,14 @@ workflow MergeVcfs {
         String contig
         String prefix
 
-        Int min_truvari_match = 20
-        Int truvari_breakpoint_window = 500
-        Float truvari_reciprocal_overlap = 0.0
-        Float truvari_sample_similarity = 0.0
-        Float truvari_sequence_similarity = 0.7
-        Float truvari_size_similarity = 0.7
-        Int truvari_size_max = 50000
-        Int truvari_size_min = 20
+        Int min_truvari_match
+        Int truvari_breakpoint_window
+        Float truvari_reciprocal_overlap = 0.7
+        Float truvari_sample_similarity
+        Float truvari_sequence_similarity
+        Float truvari_size_similarity
+        Int truvari_size_max
+        Int truvari_size_min
 
         File ref_fa
         File ref_fai

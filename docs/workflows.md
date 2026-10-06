@@ -1038,14 +1038,14 @@ Inputs:
 - `Array[File] vcf_idxs`: Indexes for `vcfs`.
 - `Array[String] vcf_names`: Name of each entry of `vcfs`, in the same order, recorded in `SOURCE_NAMES`. A name must not contain a comma, semicolon, pipe or whitespace.
 - `String contig`: Contig being merged.
-- `Int min_truvari_match`: Minimum variant length for Truvari matching. (default `20`)
-- `Int truvari_breakpoint_window`: Maximum breakpoint distance, in bp, for merging non-TR variants. (default `500`)
-- `Float truvari_reciprocal_overlap`: Minimum reciprocal overlap for merging non-TR variants. (default `0.0`)
-- `Float truvari_sample_similarity`: Minimum sample similarity for merging non-TR variants. (default `0.0`)
-- `Float truvari_sequence_similarity`: Minimum sequence similarity for merging non-TR variants. (default `0.7`)
-- `Float truvari_size_similarity`: Minimum size similarity for merging non-TR variants. (default `0.7`)
-- `Int truvari_size_max`: Maximum variant length Truvari will consider when collapsing. (default `50000`)
-- `Int truvari_size_min`: Minimum variant length Truvari will consider when collapsing. (default `20`)
+- `Int min_truvari_match`: Minimum variant length for Truvari matching.
+- `Int truvari_breakpoint_window`: Maximum breakpoint distance, in bp, for merging non-TR variants.
+- `Float truvari_reciprocal_overlap`: Minimum reciprocal overlap for merging non-TR variants. (default `0.7`)
+- `Float truvari_sample_similarity`: Minimum sample similarity for merging non-TR variants.
+- `Float truvari_sequence_similarity`: Minimum sequence similarity for merging non-TR variants.
+- `Float truvari_size_similarity`: Minimum size similarity for merging non-TR variants.
+- `Int truvari_size_max`: Maximum variant length Truvari will consider when collapsing.
+- `Int truvari_size_min`: Minimum variant length Truvari will consider when collapsing.
 - `File ref_fa`: From references.
 - `File ref_fai`: From references.
 - `Int shard_bin_size`: Region-bin size, in bp, used when sharding the contig.
