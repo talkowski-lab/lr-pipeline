@@ -346,3 +346,27 @@ females (`female_minus_male` column in the variable-region bed helps
 separate these); there is no per-CpG read depth in the input tables, so
 "expected" variability is empirical (tiles of similar mean on the same
 contig), not a binomial model.
+
+## OutlierVariantLinkage (rare variants near methylation outlier haplotypes)
+
+`OutlierVariantLinkage.wdl` + `outlier_variant_linkage.py` (passed as `analysis_script`). Inputs: the genome-wide
+`outlier_calls` and `mean_matrix` from `RegionHaplotypeMethylation`, optional `excluded_samples`, and per-contig
+parallel arrays `vcfs` / `vcf_idxs` / `contigs` (phased cohort VCF, e.g. `LR_contig.hprc_hgsvc_vcf_V10`).
+
+Per contig: merged windows of `window` (default 1 Mb) around the outlier regions -> `bcftools view -R` (records with
+INFO/AF <= `prefilter_max_af` = 0.05 in some ALT allele) -> `bcftools query` GT:PS -> linkage. Retained samples are
+in both the VCF and the methylation matrix and not excluded; a rare allele has AF <= `max_af` (0.01) among their
+called haplotypes (each ALT of a multiallelic record separately). The outlier haplotype is, for HyperASM/HypoASM, the
+haplotype whose region mean is farther from the cohort median of haplotype means; for Hyper/HypoMethylated both.
+
+Outputs:
+- `outlier_variants.tsv.gz`: one row per outlier call x rare allele carried by the outlier sample within the window
+  (distance 0 = overlaps the region; zygosity; `alt_haplotype` 1/2 for phased hets, `unphased`, or `both`; PS;
+  `alt_on_outlier_haplotype`; cohort AC/AN/AF; number of carriers and of the region's outlier samples carrying it).
+- `outlier_burden.tsv.gz`: one row per outlier call: hap1/hap2 means, outlier haplotype, and per distance in
+  `distances` (default 10 kb, 100 kb, 1 Mb) the number of rare alleles carried (all / heterozygous) with an
+  empirical p-value against all other retained samples.
+
+Caveat: the methylation hap1/hap2 come from read HP tags and the VCF phase from GT/PS; they are consistent only if
+both derive from the same phasing, and only within a phase block. Treat `alt_on_outlier_haplotype` as provisional
+until checked (e.g. concordance for variants inside HyperASM regions); the phase-agnostic columns do not depend on it.
