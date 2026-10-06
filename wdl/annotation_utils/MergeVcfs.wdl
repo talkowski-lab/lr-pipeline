@@ -46,7 +46,7 @@ workflow MergeVcfs {
 
         Int min_truvari_match
         Int truvari_breakpoint_window
-        Float truvari_reciprocal_overlap = 0.7
+        Float truvari_reciprocal_overlap
         Float truvari_sample_similarity
         Float truvari_sequence_similarity
         Float truvari_size_similarity

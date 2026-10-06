@@ -1040,7 +1040,7 @@ Inputs:
 - `String contig`: Contig being merged.
 - `Int min_truvari_match`: Minimum variant length for Truvari matching.
 - `Int truvari_breakpoint_window`: Maximum breakpoint distance, in bp, for merging non-TR variants.
-- `Float truvari_reciprocal_overlap`: Minimum reciprocal overlap for merging non-TR variants. (default `0.7`)
+- `Float truvari_reciprocal_overlap`: Minimum reciprocal overlap for merging non-TR variants.
 - `Float truvari_sample_similarity`: Minimum sample similarity for merging non-TR variants.
 - `Float truvari_sequence_similarity`: Minimum sequence similarity for merging non-TR variants.
 - `Float truvari_size_similarity`: Minimum size similarity for merging non-TR variants.
