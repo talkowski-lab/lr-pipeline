@@ -8,10 +8,10 @@ workflow MergeVcfs {
         description: [
             "This utility merges per-contig VCFs that were called across distinct sample sets into a single callset for the contig, handling tandem-repeat and non-tandem-repeat variants separately.",
             "Tandem-repeat variants are merged on CHROM, POS and REF alone, so records that describe the same locus with different ALT alleles collapse into one multiallelic record whose ALT list is the union of the inputs and whose genotypes are remapped onto it.",
-            "Non-tandem-repeat variants are first merged on an exact CHROM, POS, REF and ALT match. Records that stay unmatched and are at least `min_truvari_match` long are then collapsed with Truvari (https://github.com/ACEnglish/truvari) using a breakpoint distance, reciprocal overlap, and sequence, size and sample similarity; shorter unmatched records pass through untouched.",
+            "Non-tandem-repeat variants are first merged on an exact CHROM, POS, REF and ALT match. Records that stay unmatched and are at least `min_truvari_match` long are then collapsed with Truvari (https://github.com/ACEnglish/truvari) using a breakpoint distance, reciprocal overlap, and sequence, size and sample similarity; shorter unmatched records pass through untouched. Each Truvari cluster is split so that it keeps at most one record per callset: starting from the record Truvari keeps, each other callset contributes its best-scoring match, and the leftover records are grouped again the same way or stay on their own.",
             "The contig is split into bins of `shard_bin_size` and every merging step runs per shard, so Truvari never pairs records more than one bin apart. Both merged and unmerged records reach the output.",
             "Every output record carries `MERGE_COUNT`, the number of input records merged into it, and `MERGE_TYPE`, one of EXACT, TRV_EXACT, TRUVARI or UNIQUE.",
-            "Provenance is recorded in four parallel lists with one entry per merged input record: `SOURCE_NAMES`, the `vcf_names` entry of the callset that carried it, `SOURCE_IDS`, its ID there, and `SOURCE_REFS` and `SOURCE_ALTS`, its REF and ALT as that callset wrote them. The ALT alleles of a single record are separated by a pipe, so that a multiallelic record stays one entry. A name repeats when Truvari collapses records that came from the same callset.",
+            "Provenance is recorded in four parallel lists with one entry per merged input record: `SOURCE_NAMES`, the `vcf_names` entry of the callset that carried it, `SOURCE_IDS`, its ID there, and `SOURCE_REFS` and `SOURCE_ALTS`, its REF and ALT as that callset wrote them. The ALT alleles of a single record are separated by a pipe, so that a multiallelic record stays one entry. A merged record holds at most one record from each callset, so a name never repeats.",
             "Where a merged record cannot hold both inputs' values, the ID and any INFO field other than `MERGE_COUNT` and the `SOURCE_` lists are taken from the first input VCF that carried the record, and AC, AN and AF are recomputed over the merged samples."
         ]
     }
@@ -135,6 +135,7 @@ workflow MergeVcfs {
                 set_merge_annotations = true,
                 strip_format_to_gt = true,
                 join_info_fields = ["SOURCE_IDS", "SOURCE_NAMES", "SOURCE_REFS", "SOURCE_ALTS"],
+                source_field = "SOURCE_NAMES",
                 prefix = "~{prefix}.shard_~{j}.non_trv.truvari",
                 docker = utils_docker,
                 runtime_attr_override = runtime_attr_consolidate_non_trv
@@ -212,7 +213,7 @@ task MergeTrvVcfs {
         set -euo pipefail
 
         echo '##INFO=<ID=SOURCE_IDS,Number=.,Type=String,Description="ID of each input record merged into this site, parallel to SOURCE_NAMES">' > merge_hdr.txt
-        echo '##INFO=<ID=SOURCE_NAMES,Number=.,Type=String,Description="Name of the input VCF that carried each merged record; a name repeats when Truvari collapsed records from one callset">' >> merge_hdr.txt
+        echo '##INFO=<ID=SOURCE_NAMES,Number=.,Type=String,Description="Name of the input VCF that carried each merged record; each name appears at most once">' >> merge_hdr.txt
         echo '##INFO=<ID=SOURCE_REFS,Number=.,Type=String,Description="REF allele of each merged input record as written in its callset, parallel to SOURCE_NAMES">' >> merge_hdr.txt
         echo '##INFO=<ID=SOURCE_ALTS,Number=.,Type=String,Description="ALT alleles of each merged input record as written in its callset, parallel to SOURCE_NAMES, with the ALTs of one record separated by |">' >> merge_hdr.txt
         echo '##INFO=<ID=MERGE_COUNT,Number=1,Type=Integer,Description="Number of input records merged into this site">' >> merge_hdr.txt
@@ -422,7 +423,7 @@ task MergeNonTrvVcfs {
         set -euo pipefail
 
         echo '##INFO=<ID=SOURCE_IDS,Number=.,Type=String,Description="ID of each input record merged into this site, parallel to SOURCE_NAMES">' > merge_hdr.txt
-        echo '##INFO=<ID=SOURCE_NAMES,Number=.,Type=String,Description="Name of the input VCF that carried each merged record; a name repeats when Truvari collapsed records from one callset">' >> merge_hdr.txt
+        echo '##INFO=<ID=SOURCE_NAMES,Number=.,Type=String,Description="Name of the input VCF that carried each merged record; each name appears at most once">' >> merge_hdr.txt
         echo '##INFO=<ID=SOURCE_REFS,Number=.,Type=String,Description="REF allele of each merged input record as written in its callset, parallel to SOURCE_NAMES">' >> merge_hdr.txt
         echo '##INFO=<ID=SOURCE_ALTS,Number=.,Type=String,Description="ALT alleles of each merged input record as written in its callset, parallel to SOURCE_NAMES, with the ALTs of one record separated by |">' >> merge_hdr.txt
         echo '##INFO=<ID=MERGE_COUNT,Number=1,Type=Integer,Description="Number of input records merged into this site">' >> merge_hdr.txt
@@ -683,27 +684,8 @@ task FinalizeNonTrvMerge {
 
         rm -f concat.unsorted.vcf.gz
 
-        # Truvari re-emits records it declined to collapse on sample similarity without a MERGE_TYPE
-        bcftools query \
-            -e 'INFO/MERGE_TYPE!="."' \
-            -f '%CHROM\t%POS\t%REF\t%ALT\tUNIQUE\n' \
-            sorted.vcf.gz \
-            | bgzip > missing_mt.tsv.gz
-
-        tabix -s1 -b2 -e2 missing_mt.tsv.gz
-
-        bcftools annotate \
-            -a missing_mt.tsv.gz \
-            -c CHROM,POS,REF,ALT,MERGE_TYPE \
-            -Oz -o type_filled.vcf.gz \
-            sorted.vcf.gz
-
-        tabix -f -p vcf type_filled.vcf.gz
-
-        rm -f sorted.vcf.gz sorted.vcf.gz.tbi missing_mt.tsv.gz*
-
         # Take back the ID that the callset prefix overwrote, now that Truvari no longer needs it
-        bcftools view type_filled.vcf.gz \
+        bcftools view sorted.vcf.gz \
             | awk -F'\t' -v OFS='\t' '
                 /^#/ { print; next }
                 {
@@ -720,7 +702,7 @@ task FinalizeNonTrvMerge {
 
         tabix -f -p vcf id_restored.vcf.gz
 
-        rm -f type_filled.vcf.gz*
+        rm -f sorted.vcf.gz*
 
         bcftools +fill-tags id_restored.vcf.gz -Oz -o ~{prefix}.vcf.gz -- -t AC,AN,AF
 
@@ -833,6 +815,8 @@ with open("output_slots.tsv") as handle:
             sys.exit(
                 "SOURCE_NAMES/SOURCE_IDS length does not match MERGE_COUNT: " + line
             )
+        if len(set(record_names)) != count:
+            sys.exit("SOURCE_NAMES repeats a callset within one record: " + line)
         target = merged_pairs if count > 1 else unmerged_pairs
         for pair in zip(record_names, record_ids):
             if pair in merged_pairs or pair in unmerged_pairs:

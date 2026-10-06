@@ -1124,6 +1124,7 @@ task ConsolidateCollapsedSites {
         Boolean set_merge_annotations
         Boolean strip_format_to_gt
         Array[String] join_info_fields = []
+        String source_field
         String prefix
         String docker
         RuntimeAttr? runtime_attr_override
@@ -1170,6 +1171,7 @@ task ConsolidateCollapsedSites {
         python3 <<CODE
 import sys
 import pysam
+import truvari
 from collections import defaultdict
 
 def get_nonref_samples(record):
@@ -1187,9 +1189,59 @@ def sample_overlap(set_a, set_b):
         return 0.0
     return len(set_a & set_b) / len(set_a | set_b)
 
+def is_missing(gt):
+    return gt is None or all(a is None for a in gt)
+
+def is_ref(gt):
+    return not is_missing(gt) and all(a is None or a == 0 for a in gt)
+
+def source_of(record):
+    return record.info[source_field][0]
+
+# Split a Truvari cluster into groups holding at most one record per source, taking each source's best match first
+def partition(members):
+    pool = sorted(
+        (truvari.VariantRecord(member, params) for member in members),
+        key=lambda r: (r.pos, -r.var_size(), r.id),
+    )
+    groups = []
+    while pool:
+        center = pool.pop(0)
+        taken = {source_of(center)}
+        center_nonref = get_nonref_samples(center)
+        scored = []
+        for candidate in pool:
+            if source_of(candidate) in taken:
+                continue
+            if sample_sim_threshold > 0 and sample_overlap(center_nonref, get_nonref_samples(candidate)) < sample_sim_threshold:
+                continue
+            result = center.match(candidate)
+            if result.state:
+                scored.append((-result.score, abs(result.st_dist), candidate.id, candidate))
+        group = [center.get_record()]
+        for _, _, _, candidate in sorted(scored, key=lambda s: s[:3]):
+            if source_of(candidate) in taken:
+                continue
+            taken.add(source_of(candidate))
+            group.append(candidate.get_record())
+            pool.remove(candidate)
+        groups.append(group)
+    return groups
+
 sample_sim_threshold = ~{sample_similarity}
 set_merge_annot = ~{true="True" false="False" set_merge_annotations}
 join_fields = [f for f in "~{sep=',' join_info_fields}".split(",") if f]
+source_field = "~{source_field}"
+params = truvari.VariantParams(
+    refdist=~{breakpoint_window},
+    pctseq=~{sequence_similarity},
+    pctsize=~{size_similarity},
+    pctovl=~{reciprocal_overlap},
+    sizemin=~{size_min},
+    sizemax=~{size_max},
+    skip_gt=True,
+    short_circuit=True,
+)
 
 original_records = {}
 orig_vcf = pysam.VariantFile("~{vcf}")
@@ -1225,65 +1277,55 @@ for kept_record in kept_vcf:
     if orig_kept is None:
         continue
 
-    cluster_size = 1
+    members = [orig_kept]
     collapse_id = kept_record.info.get("CollapseId", None)
+    if collapse_id:
+        members += [original_records[removed_id] for removed_id in collapse_groups.get(collapse_id, [])]
 
-    if collapse_id and collapse_id in collapse_groups:
-        kept_nonref = get_nonref_samples(orig_kept)
-        for removed_id in collapse_groups[collapse_id]:
-            orig_removed = original_records.get(removed_id)
-            if orig_removed is None:
-                continue
-            removed_nonref = get_nonref_samples(orig_removed)
-
-            if sample_sim_threshold > 0:
-                overlap = sample_overlap(kept_nonref, removed_nonref)
-                if overlap < sample_sim_threshold:
-                    out_vcf.write(orig_removed)
-                    continue
-
-            # Append list-valued provenance here so it stays parallel to the cluster_size increment below
+    for group in (partition(members) if len(members) > 1 else [members]):
+        center = group[0]
+        for other in group[1:]:
+            # Append list-valued provenance here so it stays parallel to MERGE_COUNT
             for join_key in join_fields:
-                if join_key not in orig_removed.info:
+                if join_key not in other.info:
                     continue
-                kept_values = tuple(orig_kept.info.get(join_key, ()))
-                orig_kept.info[join_key] = kept_values + tuple(orig_removed.info[join_key])
+                center_values = tuple(center.info.get(join_key, ()))
+                center.info[join_key] = center_values + tuple(other.info[join_key])
 
-            # Pull INFO fields that exist on the removed record but not the kept record
-            for info_key in orig_removed.info.keys():
-                if info_key in orig_kept.info or info_key in join_fields:
+            # Pull INFO fields that exist on the merged record but not the center
+            for info_key in other.info.keys():
+                if info_key in center.info or info_key in join_fields:
                     continue
-                if info_key not in orig_kept.header.info:
+                if info_key not in center.header.info:
                     continue
                 try:
-                    orig_kept.info[info_key] = orig_removed.info[info_key]
+                    center.info[info_key] = other.info[info_key]
                 except (TypeError, ValueError) as err:
-                    hdr = orig_kept.header.info[info_key]
+                    hdr = center.header.info[info_key]
                     print(
                         f"[ConsolidateCollapsedSites] dropped INFO/{info_key} "
                         f"(header Number={hdr.number} Type={hdr.type}; "
-                        f"kept {kept_record.id} nalts={len(orig_kept.alts or ())}, "
-                        f"removed {removed_id} nalts={len(orig_removed.alts or ())}, "
-                        f"value={orig_removed.info[info_key]!r}): {err}",
+                        f"kept {center.id} nalts={len(center.alts or ())}, "
+                        f"removed {other.id} nalts={len(other.alts or ())}, "
+                        f"value={other.info[info_key]!r}): {err}",
                         file=sys.stderr,
                     )
                     continue
 
-            # Pull non-ref GTs from the removed record for samples missing on kept
-            for sample in orig_kept.samples:
-                kept_gt = orig_kept.samples[sample]['GT']
-                rm_gt = orig_removed.samples[sample]['GT']
-                if kept_gt is None or all(a is None or a == 0 for a in kept_gt):
-                    if rm_gt is not None and any(a is not None and a != 0 for a in rm_gt):
-                        orig_kept.samples[sample]['GT'] = rm_gt
+            # Fill missing GTs from the merged record, and upgrade hom-ref to its non-ref GT
+            for sample in center.samples:
+                center_gt = center.samples[sample]['GT']
+                other_gt = other.samples[sample]['GT']
+                if is_missing(other_gt):
+                    continue
+                if is_missing(center_gt) or (is_ref(center_gt) and not is_ref(other_gt)):
+                    center.samples[sample]['GT'] = other_gt
 
-            cluster_size += 1
+        if set_merge_annot:
+            center.info['MERGE_COUNT'] = len(group)
+            center.info['MERGE_TYPE'] = 'TRUVARI' if len(group) > 1 else 'UNIQUE'
 
-    if set_merge_annot:
-        orig_kept.info['MERGE_COUNT'] = cluster_size
-        orig_kept.info['MERGE_TYPE'] = 'TRUVARI' if cluster_size > 1 else 'UNIQUE'
-
-    out_vcf.write(orig_kept)
+        out_vcf.write(center)
 
 kept_vcf.close()
 out_vcf.close()

@@ -1050,13 +1050,13 @@ This utility merges per-contig VCFs that were called across distinct sample sets
 
 Tandem-repeat variants are merged on CHROM, POS and REF alone, so records that describe the same locus with different ALT alleles collapse into one multiallelic record whose ALT list is the union of the inputs and whose genotypes are remapped onto it.
 
-Non-tandem-repeat variants are first merged on an exact CHROM, POS, REF and ALT match. Records that stay unmatched and are at least `min_truvari_match` long are then collapsed with Truvari (https://github.com/ACEnglish/truvari) using a breakpoint distance, reciprocal overlap, and sequence, size and sample similarity; shorter unmatched records pass through untouched.
+Non-tandem-repeat variants are first merged on an exact CHROM, POS, REF and ALT match. Records that stay unmatched and are at least `min_truvari_match` long are then collapsed with Truvari (https://github.com/ACEnglish/truvari) using a breakpoint distance, reciprocal overlap, and sequence, size and sample similarity; shorter unmatched records pass through untouched. Each Truvari cluster is split so that it keeps at most one record per callset: starting from the record Truvari keeps, each other callset contributes its best-scoring match, and the leftover records are grouped again the same way or stay on their own.
 
 The contig is split into bins of `shard_bin_size` and every merging step runs per shard, so Truvari never pairs records more than one bin apart. Both merged and unmerged records reach the output.
 
 Every output record carries `MERGE_COUNT`, the number of input records merged into it, and `MERGE_TYPE`, one of EXACT, TRV_EXACT, TRUVARI or UNIQUE.
 
-Provenance is recorded in four parallel lists with one entry per merged input record: `SOURCE_NAMES`, the `vcf_names` entry of the callset that carried it, `SOURCE_IDS`, its ID there, and `SOURCE_REFS` and `SOURCE_ALTS`, its REF and ALT as that callset wrote them. The ALT alleles of a single record are separated by a pipe, so that a multiallelic record stays one entry. A name repeats when Truvari collapses records that came from the same callset.
+Provenance is recorded in four parallel lists with one entry per merged input record: `SOURCE_NAMES`, the `vcf_names` entry of the callset that carried it, `SOURCE_IDS`, its ID there, and `SOURCE_REFS` and `SOURCE_ALTS`, its REF and ALT as that callset wrote them. The ALT alleles of a single record are separated by a pipe, so that a multiallelic record stays one entry. A merged record holds at most one record from each callset, so a name never repeats.
 
 Where a merged record cannot hold both inputs' values, the ID and any INFO field other than `MERGE_COUNT` and the `SOURCE_` lists are taken from the first input VCF that carried the record, and AC, AN and AF are recomputed over the merged samples.
 
