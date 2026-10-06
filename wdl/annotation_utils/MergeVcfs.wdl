@@ -9,6 +9,7 @@ workflow MergeVcfs {
             "This utility merges per-contig VCFs that were called across distinct sample sets into a single callset for the contig, handling tandem-repeat and non-tandem-repeat variants separately.",
             "Tandem-repeat variants are merged on CHROM, POS and REF alone, so records that describe the same locus with different ALT alleles collapse into one multiallelic record whose ALT list is the union of the inputs and whose genotypes are remapped onto it.",
             "Non-tandem-repeat variants are first merged on an exact CHROM, POS, REF and ALT match. Records that stay unmatched and are at least `min_truvari_match` long are then collapsed with Truvari (https://github.com/ACEnglish/truvari) using a breakpoint distance, reciprocal overlap, and sequence, size and sample similarity; shorter unmatched records pass through untouched. Each Truvari cluster is split so that it keeps at most one record per callset: starting from the record Truvari keeps, each other callset contributes its best-scoring match, and the leftover records are grouped again the same way or stay on their own.",
+            "Each callset can first be subset with its own `bcftools view` arguments, so that only records passing that callset's filters, such as its FILTER status or a nonzero AC, take part in the merge and are counted by the summary.",
             "The contig is split into bins of `shard_bin_size` and every merging step runs per shard, so Truvari never pairs records more than one bin apart. Both merged and unmerged records reach the output.",
             "Every output record carries `MERGE_COUNT`, the number of input records merged into it, and `MERGE_TYPE`, one of EXACT, TRV_EXACT, TRUVARI or UNIQUE.",
             "Provenance is recorded in four parallel lists with one entry per merged input record: `SOURCE_NAMES`, the `vcf_names` entry of the callset that carried it, `SOURCE_IDS`, its ID there, and `SOURCE_REFS` and `SOURCE_ALTS`, its REF and ALT as that callset wrote them. The ALT alleles of a single record are separated by a pipe, so that a multiallelic record stays one entry. A merged record holds at most one record from each callset, so a name never repeats.",
@@ -21,6 +22,7 @@ workflow MergeVcfs {
         vcf_idxs: "Indexes for `vcfs`."
         vcf_names: "Name of each entry of `vcfs`, in the same order, recorded in `SOURCE_NAMES`. A name must not contain a comma, semicolon, pipe or whitespace."
         contig: "Contig being merged."
+        subset_vcf_strings: "`bcftools view` arguments used to pre-subset each entry of `vcfs`, in the same order. An empty string leaves that VCF unsubset, as does leaving the input unset."
         min_truvari_match: "Minimum variant length for Truvari matching."
         truvari_breakpoint_window: "Maximum breakpoint distance, in bp, for merging non-TR variants."
         truvari_reciprocal_overlap: "Minimum reciprocal overlap for merging non-TR variants."
@@ -44,6 +46,7 @@ workflow MergeVcfs {
         String contig
         String prefix
 
+        Array[String]? subset_vcf_strings
         Int min_truvari_match
         Int truvari_breakpoint_window
         Float truvari_reciprocal_overlap
@@ -60,6 +63,7 @@ workflow MergeVcfs {
 
         String utils_docker
 
+        RuntimeAttr? runtime_attr_subset_callset
         RuntimeAttr? runtime_attr_create_shards
         RuntimeAttr? runtime_attr_subset_shard
         RuntimeAttr? runtime_attr_merge_trv
@@ -71,10 +75,29 @@ workflow MergeVcfs {
         RuntimeAttr? runtime_attr_summarize_merge
     }
 
+    scatter (i in range(length(vcfs))) {
+        String subset_vcf_string = if defined(subset_vcf_strings) then select_first([subset_vcf_strings])[i] else ""
+
+        if (subset_vcf_string != "") {
+            call Helpers.SubsetVcfByArgs as SubsetCallset {
+                input:
+                    vcf = vcfs[i],
+                    vcf_idx = vcf_idxs[i],
+                    extra_args = subset_vcf_string,
+                    prefix = "~{prefix}.callset_~{i}.subset",
+                    docker = utils_docker,
+                    runtime_attr_override = runtime_attr_subset_callset
+            }
+        }
+
+        File callset_vcf = select_first([SubsetCallset.subset_vcf, vcfs[i]])
+        File callset_vcf_idx = select_first([SubsetCallset.subset_vcf_idx, vcf_idxs[i]])
+    }
+
     call Helpers.CreateContigShards {
         input:
-            vcfs = vcfs,
-            vcf_idxs = vcf_idxs,
+            vcfs = callset_vcf,
+            vcf_idxs = callset_vcf_idx,
             contig = contig,
             shard_bin_size = shard_bin_size,
             prefix = "~{prefix}.shards",
@@ -86,8 +109,8 @@ workflow MergeVcfs {
         scatter (i in range(length(vcfs))) {
             call Helpers.SubsetVcfToRegion as SubsetCallsetToShard {
                 input:
-                    vcf = vcfs[i],
-                    vcf_idx = vcf_idxs[i],
+                    vcf = callset_vcf[i],
+                    vcf_idx = callset_vcf_idx[i],
                     region = CreateContigShards.shard_regions[j],
                     prefix = "~{prefix}.shard_~{j}.callset_~{i}",
                     docker = utils_docker,
@@ -180,8 +203,8 @@ workflow MergeVcfs {
 
     call SummarizeMerge {
         input:
-            vcfs = vcfs,
-            vcf_idxs = vcf_idxs,
+            vcfs = callset_vcf,
+            vcf_idxs = callset_vcf_idx,
             vcf_names = vcf_names,
             merged_vcf = ConcatShards.concat_vcf,
             merged_vcf_idx = ConcatShards.concat_vcf_idx,
