@@ -706,7 +706,7 @@ Inputs:
 - `Array[File] vcf_idxs`: Index for vcfs, each stored at its VCF's path with a '.tbi' suffix.
 - `Array[String] vcf_names`: Name of each entry of `vcfs`, in the same order, used as its column header.
 - `String contig`: Contig being summarized.
-- `String subset_vcf_string`: `bcftools view` arguments applied to each callset before counting, such as an include expression or a sample list. Must not contain -r, -t, -G or -o. (default empty)
+- `Array[String] subset_vcf_strings`: `bcftools view` arguments applied to each entry of `vcfs` before counting, in the same order, such as an include expression or a sample list, with an empty string applying none. Must not contain -r, -t, -G or -o.
 - `File ref_fai`: From references.
 - `Int shard_bin_size`: Width in base pairs of the regions the contig is sharded into. (default `5000000`)
 - `String prefix`: Prefix for output file names.

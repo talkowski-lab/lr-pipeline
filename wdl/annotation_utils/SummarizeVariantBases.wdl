@@ -19,7 +19,7 @@ workflow SummarizeVariantBases {
         vcf_idxs: "Index for vcfs, each stored at its VCF's path with a '.tbi' suffix."
         vcf_names: "Name of each entry of `vcfs`, in the same order, used as its column header."
         contig: "Contig being summarized."
-        subset_vcf_string: "`bcftools view` arguments applied to each callset before counting, such as an include expression or a sample list. Must not contain -r, -t, -G or -o."
+        subset_vcf_strings: "`bcftools view` arguments applied to each entry of `vcfs` before counting, in the same order, such as an include expression or a sample list, with an empty string applying none. Must not contain -r, -t, -G or -o."
         ref_fai: "From references."
         shard_bin_size: "Width in base pairs of the regions the contig is sharded into."
         site_bases_tsv: "TSV with one row per variant class and size bin plus a Total row, the contig length in `contig_bases`, and, for each entry of `vcf_names`, the number of distinct reference bases altered across the callset and its proportion of the contig length."
@@ -33,7 +33,7 @@ workflow SummarizeVariantBases {
         String contig
         String prefix
 
-        String subset_vcf_string = ""
+        Array[String] subset_vcf_strings
 
         File ref_fai
 
@@ -68,7 +68,7 @@ workflow SummarizeVariantBases {
                     region = CreateContigShards.shard_regions[j],
                     is_last_shard = is_last_shard,
                     prefix = "~{prefix}.shard_~{j}.callset_~{i}",
-                    subset_vcf_string = subset_vcf_string,
+                    subset_vcf_string = subset_vcf_strings[i],
                     docker = utils_docker,
                     runtime_attr_override = runtime_attr_count_shard
             }
