@@ -20,7 +20,9 @@ Outputs (prefix --out-prefix):
   .bed.gz   one row per TRV (sorted, bgzip-compatible gzip): chrom start end ID FILTER source motif_len size genic_context genes
             n_alt n_variants n_novel frac_novel novel_all novel_any n_snv n_novel_snv
   .pdf      2 x 2 panels: rows = novel_all / novel_any proportion, columns = size / motif; lines = context
-  .tsv      plotted proportions per context x bin (n_TRV, n_novel_all, prop_novel_all, CI, prop_novel_any, mean frac_novel)
+  .variant_fraction.pdf  fraction of in-repeat variants that are lrGS-unique: mean of per-TRV frac_novel (+-95% CI, solid)
+            and pooled sum(n_novel) / sum(n_variants) (dashed) vs size and motif, lines = context
+  .tsv      plotted values per context x bin (n_TRV, novel_all / novel_any proportions with CI, mean / pooled frac_novel)
 
 Usage:
   trv_novelty.py --loci hprc_hgsvc.TRV_loci.tsv.gz --counts hprc_hgsvc.variants_in_TRV.tsv.gz --label hprc_hgsvc \
@@ -76,7 +78,11 @@ def proportions(d, col, edges, min_n):
             rows.append({"x_variable": col, "genic_context": ctx, "bin": lab, "bin_index": i, "n_TRV": n, "n_novel_all": k,
                          "prop_novel_all": k / n if n else np.nan, "ci_lo": lo, "ci_hi": hi,
                          "prop_novel_any": k2 / n if n else np.nan, "ci_lo_any": lo2, "ci_hi_any": hi2,
-                         "mean_frac_novel": float(s["frac_novel"].mean()) if n else np.nan, "plotted": n >= min_n})
+                         "mean_frac_novel": float(s["frac_novel"].mean()) if n else np.nan,
+                         "se_frac_novel": float(s["frac_novel"].std() / np.sqrt(n)) if n > 1 else np.nan,
+                         "n_variants": int(s["n_variants"].sum()), "n_novel_variants": int(s["n_novel"].sum()),
+                         "pooled_frac_novel": float(s["n_novel"].sum() / s["n_variants"].sum()) if n else np.nan,
+                         "plotted": n >= min_n})
     return pd.DataFrame(rows), labels
 
 
@@ -149,6 +155,42 @@ def main():
     fig.savefig(f"{args.out_prefix}.pdf")
     plt.close(fig)
     pd.concat(tabs).to_csv(f"{args.out_prefix}.tsv", sep="\t", index=False, float_format="%.4g")
+    plot_variant_fraction(tabs, pl, args)
+
+
+def plot_variant_fraction(tabs, pl, args):
+    """Fraction of in-repeat variants that are lrGS-unique: mean of per-TRV fractions (+-95% CI) and pooled (dashed)."""
+    fig, axes = plt.subplots(1, 2, figsize=(14, 4.8))
+    xdefs = [("size", "TRV size (bp; TRID span)"), ("motif_len", "Motif length (bp; shortest TRID motif)")]
+    for ax, t, (col, xlabel) in zip(axes, tabs, xdefs):
+        labels = list(dict.fromkeys(t.sort_values("bin_index")["bin"]))
+        for ctx in CONTEXTS:
+            s = t[(t["genic_context"] == ctx) & t["plotted"]]
+            y = s["mean_frac_novel"].to_numpy()
+            ci = 1.96 * s["se_frac_novel"].fillna(0).to_numpy()
+            ax.fill_between(s["bin_index"], y - ci, y + ci, color=COLORS[ctx], alpha=0.18, linewidth=0)
+            ax.plot(s["bin_index"], y, color=COLORS[ctx], linewidth=2, marker="o", markersize=4,
+                    label=f"{ctx}: mean per TRV (n = {int((pl['genic_context'] == ctx).sum()):,} TRVs)")
+            ax.plot(s["bin_index"], s["pooled_frac_novel"], color=COLORS[ctx], linewidth=1.2, linestyle="--",
+                    label=f"{ctx}: pooled over variants")
+        ax.set_xticks(range(len(labels)))
+        ax.set_xticklabels(labels, rotation=40, ha="right", fontsize=8)
+        ax.set_xlabel(xlabel, fontsize=9, color=INK)
+        ax.set_ylabel("Fraction of in-repeat variants lrGS-unique", fontsize=9, color=INK)
+        ax.set_ylim(0, None)
+        ax.set_title(f"By {'TRV size' if col == 'size' else 'motif length'}", fontsize=10, color=INK)
+        for sp in ["top", "right"]:
+            ax.spines[sp].set_visible(False)
+        ax.tick_params(colors=INK2, labelsize=8)
+        ax.grid(color=GRID, linewidth=0.6)
+        ax.set_axisbelow(True)
+        ax.legend(frameon=False, fontsize=7, labelcolor=INK, loc="upper left", ncol=1)
+    fig.suptitle(f"{args.label}: fraction of routine variants inside each TRV lacking a dbGaP and gnomAD v4 match "
+                 f"(solid = mean of per-TRV fractions ± 95% CI; dashed = pooled; bins with ≥{args.min_n} TRVs)",
+                 fontsize=10, color=INK)
+    fig.tight_layout()
+    fig.savefig(f"{args.out_prefix}.variant_fraction.pdf")
+    plt.close(fig)
 
 
 if __name__ == "__main__":
