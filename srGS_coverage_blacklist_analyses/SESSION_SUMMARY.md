@@ -30,6 +30,14 @@ form directly comparable to the lrGS (HPRC+HGSVC mosdepth) bins in
   bins with srGS `low5_frac >= SR_MIN` and lrGS low-sample fraction `< LR_MAX`, merged into regions and
   annotated with TR catalogs (STR = shortest motif <= MAX_STR_MOTIF, VNTR otherwise), TRF simple
   repeats, SegDup and centromere. Writes `regions.bed.gz`, `tr_loci.bed.gz`, `summary.tsv`.
+- `gene_TR_coverage_lrGS_vs_srGS.py --gene G --gtf GTF --sr-bins SR.bed.gz --lr-summary LR_RD.summary.bed.gz
+  --lr-n-samples N --sr-norm X --lr-norm Y --catalog LABEL=cat.bed.gz ... [--transcript T] [--flank 1000] --out-prefix P` -
+  TR catalog loci in one gene (+flank) with per-locus and per-100bp-bin srGS vs lrGS depth (raw and
+  normalized to the genome-wide autosomal mean) and fraction of samples < 5x; PDF track plot.
+  Compound loci are classed by the dominant motif (component spanning most bp). Needs tabix-indexed
+  bin files. Normalizers: autosomal bins fully present in the HT - srGS 30.657x, lrGS 54.963x
+  (lrGS RD summary `../../analyses/.../low_cov_benchmark/gnomAD_lrGS.hgsvc_hprc.RD.summary.bed.gz`,
+  292 samples; it omits each chromosome's final partial bin).
 - `mask_low_dp_genotypes.py`, `bed_from_filtered_chr22.py`, `bed_from_masked_chr22.py` -
   earlier chr22 genotype-masking work (not part of this extraction).
 
@@ -83,6 +91,16 @@ form directly comparable to the lrGS (HPRC+HGSVC mosdepth) bins in
     other 1,622 / 1.06 Mb.
   - By bp, the srGS-only deficit is centromeric satellite (absent from both TR catalogs) and SegDups.
     STR/VNTR-explained regions are ~16% of regions but < 3% of bp.
+
+- CEL (`gene_TR_coverage/CEL.{TR_loci.tsv,bins.tsv,pdf}`; chr9:133,061,981-133,071,861, CEL-201):
+  25 catalog TR loci in gene +/- 1 kb (20 STR, 5 VNTR); 3 exonic - CTG STR (exon 1), AAG STR (exon 8)
+  and the exon 11 33-bp VNTR (MODY8 locus, chr9:133,071,240-133,071,608; TRExplorer variation
+  cluster whose MOTIFS also list single-C components).
+  - lrGS is flat across the whole gene, VNTR included: 47.6-48.1x (0.87x of genome mean), 0% of
+    samples < 5x in every bin.
+  - srGS: ~1.0x over most STRs, but the 33-bp VNTR averages 11.9x (0.39x), 31% of samples < 5x,
+    with the worst bin (133,071,300-400) at 4.1x (0.13x), 66% of samples < 5x. Milder srGS dips at the
+    exon 8 AAG STR (0.56x, 4.5% < 5x) and intronic GTG/GGA STRs (0.68-0.84x).
 
 ## Caveats
 - No per-sample data: per-sample relative cutoffs and sex-aware chrX/chrY rules
