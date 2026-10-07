@@ -20,12 +20,13 @@ Outputs (<prefix>.*):
   flagged.tsv            flagged regions (gene, region, lrGS / srGS coverage)
   flagged_genes.txt      genes with >= 1 flagged region
   size_table.tsv         size-range breakdown (regions, genes, flagged)
-  size_summary.pdf       total coding TRs by size (log y) and % flagged by size
+  size_summary.pdf       total coding TRs by size and % flagged by size
 """
 import argparse
 import bisect
 import gzip
 
+import matplotlib.ticker
 import pysam
 from matplotlib import font_manager
 from matplotlib import pyplot as plt
@@ -226,14 +227,14 @@ def plot_size_summary(path, binned, crit):
     ax1.bar(xs, total, width=0.7, color=TOTAL_COLOR)
     for x, t in zip(xs, total):
         ax1.text(x, t, f"{t:,}", ha="center", va="bottom", fontsize=15)
-    ax1.set_yscale("log")
-    ax1.set_ylim(top=max(total) * 3)
+    ax1.set_ylim(0, max(total) * 1.1)
+    ax1.yaxis.set_major_formatter(matplotlib.ticker.StrMethodFormatter("{x:,.0f}"))
     ax1.set_ylabel("Coding TR regions", fontsize=20)
     ax1.set_title("Coding TRs by size", fontsize=22, loc="left")
     ax2.bar(xs, prop, width=0.7, color=FLAG_COLOR)
     for x, p_, f in zip(xs, prop, flag):
         ax2.text(x, p_, f"{f:,}", ha="center", va="bottom", fontsize=15)
-    ax2.set_ylim(top=max(prop) * 1.15)
+    ax2.set_ylim(0, 50)
     ax2.set_ylabel("% poorly covered in srGS,\nwell covered in lrGS", fontsize=20)
     ax2.set_title(f"Proportion poorly covered by srGS only\n({crit})", fontsize=20, loc="left")
     ax2.set_xticks(xs)
