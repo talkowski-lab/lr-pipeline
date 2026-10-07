@@ -109,7 +109,7 @@ def main():
     bins = hl.utils.range_table(n_bins)
     bins = bins.annotate(bin_start=hl.int32(bins.idx * args.bin_size)).key_by("bin_start")
     bins = bins.annotate(end=hl.min(bins.bin_start + args.bin_size, chrom_len))
-    bins = bins.annotate(**grouped[bins.bin_start])
+    bins = bins.annotate(**grouped[bins.bin_start]).key_by()
     bin_len = bins.end - bins.bin_start
     n_loci = hl.or_else(bins.n_loci, 0)
     out_exprs = {
@@ -121,7 +121,7 @@ def main():
     }
     for x in thresholds:
         out_exprs[f"low{x}_frac"] = (hl.or_else(bins[f"sum_low{x}"], 0.0) + hl.float64(bin_len - n_loci)) / bin_len
-    bins = bins.key_by().select(**out_exprs)
+    bins = bins.select(**out_exprs)
     bins.export(args.out_bed, header=False)
 
 
