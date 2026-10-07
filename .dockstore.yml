@@ -537,6 +537,16 @@ workflows:
       tags:
         - /.*/
 
+  - subclass: WDL
+    name: ExtractTRVLengthDeltas
+    primaryDescriptorPath: /wdl/annotation_utils/ExtractTRVLengthDeltas.wdl
+    filters:
+      branches:
+        - main
+        - kj-trv-length-deltas
+      tags:
+        - /.*/
+
   # -----
   # Tools
   # -----
