@@ -25,6 +25,11 @@ form directly comparable to the lrGS (HPRC+HGSVC mosdepth) bins in
   concatenates. Script is staged at
   `gs://fc-a22a385b-ed3b-45ba-9d6c-87ca01c1e6b8/XZ/scripts/extract_chrom_coverage_bins.py`.
   Terra config `ExtractHailCoverageBins_agora` (Agora `xzhao_methods/ExtractHailCoverageBins`).
+- `srGS_low_lrGS_ok_TR_overlap.sh <srGS_bins.bed.gz> <lrGS_coverage_counts.tsv> <out_dir> <SR_MIN> <LR_MAX>
+  <MAX_STR_MOTIF> <exclude_chroms> <segdup.bed.gz> <simprep.bed.gz> <centromere.bed.gz> LABEL=catalog.bed.gz ...` -
+  bins with srGS `low5_frac >= SR_MIN` and lrGS low-sample fraction `< LR_MAX`, merged into regions and
+  annotated with TR catalogs (STR = shortest motif <= MAX_STR_MOTIF, VNTR otherwise), TRF simple
+  repeats, SegDup and centromere. Writes `regions.bed.gz`, `tr_loci.bed.gz`, `summary.tsv`.
 - `mask_low_dp_genotypes.py`, `bed_from_filtered_chr22.py`, `bed_from_masked_chr22.py` -
   earlier chr22 genotype-masking work (not part of this extraction).
 
@@ -65,6 +70,19 @@ form directly comparable to the lrGS (HPRC+HGSVC mosdepth) bins in
   ~65 Mb of extra poorly-covered sequence outside chrY. Cutoffs differ (srGS:
   absolute <5x; lrGS: <20% of each sample's median), so treat as approximate.
   srGS chrY is low almost everywhere at p50 because ~half the cohort is XX.
+
+- srGS-low / lrGS-well-covered regions (`srGS_low_lrGS_ok.sr90_lr10/`: srGS low5_frac >= 0.9,
+  lrGS < 10% samples low, chrY excluded; catalogs TRExplorer v1.0.1 + Vamos v2.1 from
+  `final_vcfs/STR_catalog/`, tracks from `final_vcfs/low_cov_benchmark/`):
+  14,784 regions, 35.70 Mb. Most are small (10,155 < 1 kb) but bp is dominated by large ones.
+  - Any overlap with a catalog TR: 6,032 regions (40.8%) - STR only 3,479, VNTR only 1,242,
+    both 1,311; 8,752 (59.2%) overlap none. Catalog TR loci cover only 1.34 Mb (3.8%) of region bp.
+  - Majority-bp class (priority centromere > catalog TR > TRF simple repeat > SegDup > other):
+    centromere 1,364 regions / 19.29 Mb (54%); SegDup 8,539 / 12.82 Mb (36%);
+    STR 1,490 / 0.61 Mb; VNTR 925 / 0.35 Mb; non-catalog TRF simple repeat 844 / 1.56 Mb;
+    other 1,622 / 1.06 Mb.
+  - By bp, the srGS-only deficit is centromeric satellite (absent from both TR catalogs) and SegDups.
+    STR/VNTR-explained regions are ~16% of regions but < 3% of bp.
 
 ## Caveats
 - No per-sample data: per-sample relative cutoffs and sex-aware chrX/chrY rules
