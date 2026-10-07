@@ -12,6 +12,8 @@ Loci are binned by size (bp) and by copy number within each motif length; bins w
 
 Outputs (prefix --out-prefix):
   .lines.pdf    rows = n_alt / nonref_AF (mean +-95% CI); columns = source x (size bp, copy number); one line per motif
+  .by_motif.pdf x = motif length; rows = n_alt / nonref_AF; columns = source x (lines = copy-number bins, lines = size bins);
+                tests motif effect at fixed copy number vs at fixed bp size
   .heatmap.pdf  rows = source; motif x size-bin heatmaps of mean n_alt and mean nonref_AF (loci counts in the TSV)
   .tsv          per source x motif x bin: n_loci, mean/median n_alt, fraction with >= 2 ALT alleles, mean/median nonref_AF
 
@@ -36,6 +38,8 @@ GRID = "#e4e3df"
 MOTIF_COLORS = ["#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4", "#008300", "#4a3aa7", "#e34948"]
 SIZE_EDGES = [1, 10, 12, 15, 20, 25, 30, 40, 50, 75, 100, 150, 250, 500, np.inf]
 COPY_EDGES = [0, 2, 3, 4, 5, 6, 8, 10, 15, 20, 30, 50, 100, np.inf]
+BYMOTIF_COPY_EDGES = [2, 3, 4, 5, 7, 10, 15, 25, np.inf]
+BYMOTIF_SIZE_EDGES = [10, 15, 20, 30, 50, 100, np.inf]
 METRICS = [("n_alt", "Mean distinct ALT alleles per locus"), ("nonref_AF", "Mean non-ref allele frequency")]
 
 
@@ -119,6 +123,59 @@ def plot_lines(tabs, label, min_loci, out):
     plt.close(fig)
 
 
+def bin_label(b):
+    lo, hi = b.left, b.right
+    if np.isinf(hi):
+        return f"≥{lo:g}"
+    return f"{lo:g}" if hi - lo == 1 else f"{lo:g}–{hi - 1:g}"
+
+
+def plot_by_motif(d, label, min_loci, out):
+    sources = sorted(d["source"].unique())
+    strata = [("copies", BYMOTIF_COPY_EDGES, "copies"), ("size", BYMOTIF_SIZE_EDGES, "bp")]
+    cols = [(col, edges, unit, src) for col, edges, unit in strata for src in sources]
+    fig, axes = plt.subplots(2, len(cols), figsize=(4.3 * len(cols), 7.6), squeeze=False)
+    motifs = sorted(d["motif"].unique())
+    for j, (col, edges, unit, src) in enumerate(cols):
+        sub = d[d["source"] == src].assign(bin=pd.cut(d.loc[d["source"] == src, col], edges, right=False))
+        g = sub.groupby(["bin", "motif"], observed=True).agg(
+            n=("n_alt", "size"), n_alt_mean=("n_alt", "mean"), n_alt_sd=("n_alt", "std"),
+            nonref_AF_mean=("nonref_AF", "mean"), nonref_AF_sd=("nonref_AF", "std")).reset_index()
+        g = g[g["n"] >= min_loci]
+        bins = sorted(g["bin"].unique(), key=lambda b: b.left)
+        cmap = plt.get_cmap("Blues")
+        for i, (metric, ylabel) in enumerate(METRICS):
+            ax = axes[i][j]
+            for k, b in enumerate(bins):
+                t = g[g["bin"] == b].sort_values("motif")
+                if len(t) < 2:
+                    continue
+                y = t[f"{metric}_mean"].to_numpy()
+                ci = 1.96 * t[f"{metric}_sd"].fillna(0).to_numpy() / np.sqrt(t["n"].to_numpy())
+                color = cmap(0.35 + 0.65 * k / max(len(bins) - 1, 1))
+                ax.fill_between(t["motif"], y - ci, y + ci, color=color, alpha=0.2, linewidth=0)
+                ax.plot(t["motif"], y, color=color, linewidth=2, marker="o", markersize=3.5, label=f"{bin_label(b)} {unit}")
+            ax.set_xticks(motifs)
+            if j == 0:
+                ax.set_ylabel(ylabel, fontsize=9, color=INK)
+            if i == 0:
+                ax.set_title(f"{src}: fixed {'copy number' if col == 'copies' else 'STR size'}", fontsize=10, color=INK)
+                ax.legend(frameon=False, fontsize=7, labelcolor=INK, loc="upper left",
+                          title="Copy number" if col == "copies" else "STR size", title_fontsize=7)
+            else:
+                ax.set_xlabel("Motif length (bp)", fontsize=9, color=INK)
+            style(ax)
+    for i in range(2):
+        hi = max(a.get_ylim()[1] for a in axes[i])
+        for a in axes[i]:
+            a.set_ylim(0, hi)
+    fig.suptitle(f"{label}: STR variability vs motif length at fixed copy number or fixed size "
+                 f"(PASS loci; mean ± 95% CI; cells with ≥{min_loci} loci)", fontsize=10, color=INK)
+    fig.tight_layout()
+    fig.savefig(out)
+    plt.close(fig)
+
+
 def plot_heatmap(tab, label, min_loci, out):
     bins = sorted(tab["bin"].unique(), key=lambda b: float(b.strip("[)").split(",")[0]))
     motifs = sorted(tab["motif"].unique())
@@ -175,6 +232,7 @@ def main():
     print(overall.round(3).to_string())
     plot_lines(tabs, args.label, args.min_loci, f"{args.out_prefix}.lines.pdf")
     plot_heatmap(tabs["size"], args.label, args.min_loci, f"{args.out_prefix}.heatmap.pdf")
+    plot_by_motif(d, args.label, args.min_loci, f"{args.out_prefix}.by_motif.pdf")
 
 
 if __name__ == "__main__":
