@@ -11,14 +11,15 @@ Per TRV:
   frac_novel  n_novel / n_variants
   novel_all   1 if n_variants > 0 and every routine variant inside it is lrGS-unique (TR locus unseen by short-read resources)
   novel_any   1 if >= 1 routine variant inside it is lrGS-unique
-Plot: TRVs that are PASS, non-ref (n_alt > 0) and have >= 1 routine variant; proportion novel_all with Wilson 95% CI vs TRV
+Plot: TRVs that are PASS, non-ref (n_alt > 0) and have >= 1 routine variant; proportions novel_all and novel_any with
+Wilson 95% CI vs TRV
 size and vs motif length, one line per genic context (coding = TR span inside one CDS block, intronic, intergenic).
 Bins with fewer than --min-n TRVs are not drawn.
 
 Outputs (prefix --out-prefix):
   .bed.gz   one row per TRV (sorted, bgzip-compatible gzip): chrom start end ID FILTER source motif_len size genic_context genes
             n_alt n_variants n_novel frac_novel novel_all novel_any n_snv n_novel_snv
-  .pdf      2 panels (size, motif) x lines = context
+  .pdf      2 x 2 panels: rows = novel_all / novel_any proportion, columns = size / motif; lines = context
   .tsv      plotted proportions per context x bin (n_TRV, n_novel_all, prop_novel_all, CI, prop_novel_any, mean frac_novel)
 
 Usage:
@@ -69,10 +70,12 @@ def proportions(d, col, edges, min_n):
             s = d[(d["genic_context"] == ctx) & (d["bin"] == lab)]
             n = len(s)
             k = int(s["novel_all"].sum())
+            k2 = int(s["novel_any"].sum())
             lo, hi = wilson(k, n) if n else (np.nan, np.nan)
+            lo2, hi2 = wilson(k2, n) if n else (np.nan, np.nan)
             rows.append({"x_variable": col, "genic_context": ctx, "bin": lab, "bin_index": i, "n_TRV": n, "n_novel_all": k,
                          "prop_novel_all": k / n if n else np.nan, "ci_lo": lo, "ci_hi": hi,
-                         "prop_novel_any": float(s["novel_any"].mean()) if n else np.nan,
+                         "prop_novel_any": k2 / n if n else np.nan, "ci_lo_any": lo2, "ci_hi_any": hi2,
                          "mean_frac_novel": float(s["frac_novel"].mean()) if n else np.nan, "plotted": n >= min_n})
     return pd.DataFrame(rows), labels
 
@@ -113,31 +116,34 @@ def main():
                                           variants_per_TRV=("n_variants", "mean")).reindex(CONTEXTS).round(4).to_string())
 
     tabs = []
-    fig, axes = plt.subplots(1, 2, figsize=(14, 4.8))
-    for ax, (col, edges, xlabel) in zip(axes, [("size", SIZE_EDGES, "TRV size (bp; TRID span)"),
-                                               ("motif_len", MOTIF_EDGES, "Motif length (bp; shortest TRID motif)")]):
+    fig, axes = plt.subplots(2, 2, figsize=(14, 9))
+    rows_def = [("prop_novel_all", "ci_lo", "ci_hi", "All in-repeat variants lrGS-unique"),
+                ("prop_novel_any", "ci_lo_any", "ci_hi_any", "≥1 in-repeat variant lrGS-unique")]
+    for j, (col, edges, xlabel) in enumerate([("size", SIZE_EDGES, "TRV size (bp; TRID span)"),
+                                              ("motif_len", MOTIF_EDGES, "Motif length (bp; shortest TRID motif)")]):
         t, labels = proportions(pl, col, edges, args.min_n)
         tabs.append(t)
-        for ctx in CONTEXTS:
-            s = t[(t["genic_context"] == ctx) & t["plotted"]]
-            ax.fill_between(s["bin_index"], s["ci_lo"], s["ci_hi"], color=COLORS[ctx], alpha=0.18, linewidth=0)
-            ax.plot(s["bin_index"], s["prop_novel_all"], color=COLORS[ctx], linewidth=2, marker="o", markersize=4,
-                    label=f"{ctx} (n = {int((pl['genic_context'] == ctx).sum()):,})")
-        ax.set_xticks(range(len(labels)))
-        ax.set_xticklabels(labels, rotation=40, ha="right", fontsize=8)
-        ax.set_xlabel(xlabel, fontsize=9, color=INK)
-        ax.set_ylabel("Proportion of TRVs novel to gnomAD-LR", fontsize=9, color=INK)
-        ax.set_ylim(0, None)
-        for sp in ["top", "right"]:
-            ax.spines[sp].set_visible(False)
-        ax.tick_params(colors=INK2, labelsize=8)
-        ax.grid(color=GRID, linewidth=0.6)
-        ax.set_axisbelow(True)
-        ax.legend(frameon=False, fontsize=8, labelcolor=INK, loc="upper left")
-    axes[0].set_title("By TRV size", fontsize=10, color=INK)
-    axes[1].set_title("By motif length", fontsize=10, color=INK)
-    fig.suptitle(f"{args.label}: TRVs whose in-repeat variants all lack a dbGaP / gnomAD v4 match "
-                 f"(PASS non-ref TRVs with ≥1 routine variant; 95% Wilson CI; bins with ≥{args.min_n} TRVs)",
+        for i, (ycol, lo_col, hi_col, ylab) in enumerate(rows_def):
+            ax = axes[i][j]
+            for ctx in CONTEXTS:
+                s = t[(t["genic_context"] == ctx) & t["plotted"]]
+                ax.fill_between(s["bin_index"], s[lo_col], s[hi_col], color=COLORS[ctx], alpha=0.18, linewidth=0)
+                ax.plot(s["bin_index"], s[ycol], color=COLORS[ctx], linewidth=2, marker="o", markersize=4,
+                        label=f"{ctx} (n = {int((pl['genic_context'] == ctx).sum()):,})")
+            ax.set_xticks(range(len(labels)))
+            ax.set_xticklabels(labels, rotation=40, ha="right", fontsize=8)
+            ax.set_xlabel(xlabel, fontsize=9, color=INK)
+            ax.set_ylabel(f"Proportion of TRVs\n{ylab}", fontsize=8.5, color=INK)
+            ax.set_ylim(0, None)
+            ax.set_title(f"{ylab} · by {'TRV size' if col == 'size' else 'motif length'}", fontsize=10, color=INK)
+            for sp in ["top", "right"]:
+                ax.spines[sp].set_visible(False)
+            ax.tick_params(colors=INK2, labelsize=8)
+            ax.grid(color=GRID, linewidth=0.6)
+            ax.set_axisbelow(True)
+            ax.legend(frameon=False, fontsize=8, labelcolor=INK, loc="upper left")
+    fig.suptitle(f"{args.label}: TRVs novel to gnomAD-LR (in-repeat routine variants lacking a dbGaP and gnomAD v4 match); "
+                 f"PASS non-ref TRVs with ≥1 routine variant; 95% Wilson CI; bins with ≥{args.min_n} TRVs",
                  fontsize=10, color=INK)
     fig.tight_layout()
     fig.savefig(f"{args.out_prefix}.pdf")
