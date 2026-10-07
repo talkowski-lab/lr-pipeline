@@ -3,9 +3,10 @@ version 1.0
 ## Scatter across chromosomes: for each chromosome, localize only the Hail
 ## Table partitions needed for that chromosome from a gnomAD-style coverage
 ## Hail Table (gs://.../*.ht -- a directory, not a single file), bin into
-## fixed-size windows, and compute the mean of the table's "mean" column per
-## bin. Combine into one genome-wide BED, and also report the per-chromosome
-## BEDs individually.
+## fixed-size windows, and report per-bin mean coverage (absent loci counted
+## as zero), loci present, and fraction of samples not over_<X> for each X in
+## low_thresholds. Combine into one genome-wide bgzipped BED, and also report
+## the per-chromosome BEDs individually.
 ##
 ## `binning_script` must point at a copy of extract_chrom_coverage_bins.py
 ## uploaded to a GCS path Terra can read (e.g. your workspace bucket). No
@@ -18,6 +19,7 @@ workflow ExtractHailCoverageBins {
     String hail_table_gcs_path
     Array[String] chroms = ["chr1", "chr2", "chr3", "chr4", "chr5", "chr6", "chr7", "chr8", "chr9", "chr10", "chr11", "chr12", "chr13", "chr14", "chr15", "chr16", "chr17", "chr18", "chr19", "chr20", "chr21", "chr22", "chrX", "chrY"]
     Int bin_size = 100
+    String low_thresholds = "5,10"
     File binning_script
     String output_basename = "coverage_bins"
     String docker = "hailgenetics/hail:0.2.135"
@@ -29,6 +31,7 @@ workflow ExtractHailCoverageBins {
         hail_table_gcs_path = hail_table_gcs_path,
         chrom = chrom,
         bin_size = bin_size,
+        low_thresholds = low_thresholds,
         binning_script = binning_script,
         docker = docker,
     }
@@ -53,6 +56,7 @@ task ExtractChromBins {
     String hail_table_gcs_path
     String chrom
     Int bin_size
+    String low_thresholds
     File binning_script
     String docker
   }
@@ -64,18 +68,19 @@ task ExtractChromBins {
       --hail-table-path ~{hail_table_gcs_path} \
       --chrom ~{chrom} \
       --bin-size ~{bin_size} \
-      --out-bed ~{chrom}.~{bin_size}bp_bins.bed \
+      --low-thresholds ~{low_thresholds} \
+      --out-bed ~{chrom}.~{bin_size}bp_bins.bed.bgz \
       2> ~{chrom}.log
   >>>
 
   output {
-    File out_bed = "~{chrom}.~{bin_size}bp_bins.bed"
+    File out_bed = "~{chrom}.~{bin_size}bp_bins.bed.bgz"
     File log = "~{chrom}.log"
   }
 
   runtime {
     docker: docker
-    cpu: 2
+    cpu: 4
     memory: "16 GB"
     disks: "local-disk 50 HDD"
     preemptible: 2
@@ -91,12 +96,12 @@ task CombineBeds {
 
   command <<<
     set -euo pipefail
-    cat ~{sep=" " beds} > ~{output_basename}.bed
-    wc -l ~{output_basename}.bed
+    cat ~{sep=" " beds} > ~{output_basename}.bed.gz
+    zcat ~{output_basename}.bed.gz | wc -l
   >>>
 
   output {
-    File combined_bed = "~{output_basename}.bed"
+    File combined_bed = "~{output_basename}.bed.gz"
   }
 
   runtime {
