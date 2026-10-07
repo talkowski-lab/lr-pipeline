@@ -219,7 +219,7 @@ def style_axes(ax):
 
 def size_bar_figure(path, labels, ys, bar_labels, color, ylabel, title, ylim, comma_y=False):
     xs = list(range(len(labels)))
-    fig, ax = plt.subplots(figsize=(14, 7))
+    fig, ax = plt.subplots(figsize=(11, 11))
     ax.bar(xs, ys, width=0.7, color=color)
     for x, y, lab in zip(xs, ys, bar_labels):
         ax.text(x, y, lab, ha="center", va="bottom", fontsize=15)
