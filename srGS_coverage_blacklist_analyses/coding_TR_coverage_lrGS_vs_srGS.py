@@ -20,7 +20,8 @@ Outputs (<prefix>.*):
   flagged.tsv            flagged regions (gene, region, lrGS / srGS coverage)
   flagged_genes.txt      genes with >= 1 flagged region
   size_table.tsv         size-range breakdown (regions, genes, flagged)
-  size_summary.pdf       total coding TRs by size and % flagged by size
+  size_counts.pdf        total coding TRs by size
+  size_proportion.pdf    % flagged by size (bar labels = flagged counts)
 """
 import argparse
 import bisect
@@ -216,36 +217,39 @@ def style_axes(ax):
         ax.spines[s].set_visible(False)
 
 
-def plot_size_summary(path, binned, crit):
-    """Top: total coding TRs per size bin. Bottom: % of them srGS-poor / lrGS-ok."""
+def size_bar_figure(path, labels, ys, bar_labels, color, ylabel, title, ylim, comma_y=False):
+    xs = list(range(len(labels)))
+    fig, ax = plt.subplots(figsize=(14, 7))
+    ax.bar(xs, ys, width=0.7, color=color)
+    for x, y, lab in zip(xs, ys, bar_labels):
+        ax.text(x, y, lab, ha="center", va="bottom", fontsize=15)
+    ax.set_ylim(*ylim)
+    if comma_y:
+        ax.yaxis.set_major_formatter(matplotlib.ticker.StrMethodFormatter("{x:,.0f}"))
+    ax.set_ylabel(ylabel, fontsize=20)
+    ax.set_title(title, fontsize=20, loc="left")
+    ax.set_xticks(xs)
+    ax.set_xticklabels(labels, rotation=45, ha="right", fontsize=18)
+    ax.set_xlabel("TR size in reference (bp)", fontsize=20)
+    ax.tick_params(axis="y", labelsize=18)
+    style_axes(ax)
+    fig.tight_layout()
+    fig.savefig(path)
+    plt.close(fig)
+
+
+def plot_size_figures(prefix, binned, crit):
+    """<prefix>.size_counts.pdf: total coding TRs per size bin.
+    <prefix>.size_proportion.pdf: % of them srGS-poor / lrGS-ok (bar labels = flagged counts)."""
     labels = [lab for lab, _ in binned]
     total = [len(m) for _, m in binned]
     flag = [sum(r["flag"] == "yes" for r in m) for _, m in binned]
     prop = [100 * f / t if t else 0 for f, t in zip(flag, total)]
-    xs = list(range(len(labels)))
-    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(14, 11), sharex=True, gridspec_kw={"height_ratios": [1, 1]})
-    ax1.bar(xs, total, width=0.7, color=TOTAL_COLOR)
-    for x, t in zip(xs, total):
-        ax1.text(x, t, f"{t:,}", ha="center", va="bottom", fontsize=15)
-    ax1.set_ylim(0, max(total) * 1.1)
-    ax1.yaxis.set_major_formatter(matplotlib.ticker.StrMethodFormatter("{x:,.0f}"))
-    ax1.set_ylabel("Coding TR regions", fontsize=20)
-    ax1.set_title("Coding TRs by size", fontsize=22, loc="left")
-    ax2.bar(xs, prop, width=0.7, color=FLAG_COLOR)
-    for x, p_, f in zip(xs, prop, flag):
-        ax2.text(x, p_, f"{f:,}", ha="center", va="bottom", fontsize=15)
-    ax2.set_ylim(0, 50)
-    ax2.set_ylabel("% poorly covered in srGS,\nwell covered in lrGS", fontsize=20)
-    ax2.set_title(f"Proportion poorly covered by srGS only\n({crit})", fontsize=20, loc="left")
-    ax2.set_xticks(xs)
-    ax2.set_xticklabels(labels, rotation=45, ha="right", fontsize=18)
-    ax2.set_xlabel("TR size in reference (bp)", fontsize=20)
-    for ax in (ax1, ax2):
-        style_axes(ax)
-        ax.tick_params(axis="y", labelsize=18)
-    fig.tight_layout()
-    fig.savefig(path)
-    plt.close(fig)
+    size_bar_figure(f"{prefix}.size_counts.pdf", labels, total, [f"{t:,}" for t in total], TOTAL_COLOR,
+                    "Coding TR regions", "Coding TRs by size", (0, max(total) * 1.1), comma_y=True)
+    size_bar_figure(f"{prefix}.size_proportion.pdf", labels, prop, [f"{f:,}" for f in flag], FLAG_COLOR,
+                    "% poorly covered in srGS,\nwell covered in lrGS",
+                    f"Proportion poorly covered by srGS only\n({crit})", (0, 50))
 
 
 def main():
@@ -312,7 +316,7 @@ def main():
 
     binned = bin_regions(regions, [int(x) for x in args.plot_breaks.split(",")])
     crit = f"srGS < {args.sr_max}x and lrGS >= {args.lr_min}x of genome mean in any 100 bp bin"
-    plot_size_summary(f"{args.out_prefix}.size_summary.pdf", binned, crit)
+    plot_size_figures(args.out_prefix, binned, crit)
 
 
 if __name__ == "__main__":
