@@ -158,6 +158,16 @@ workflows:
         - /.*/
 
   - subclass: WDL
+    name: AnnotateVEPTRVs
+    primaryDescriptorPath: /wdl/annotation/AnnotateVEPTRVs.wdl
+    filters:
+      branches:
+        - main
+        - kj-annotate-vep-trvs
+      tags:
+        - /.*/
+
+  - subclass: WDL
     name: AnnotateVRS
     primaryDescriptorPath: /wdl/annotation/AnnotateVRS.wdl
     filters:
