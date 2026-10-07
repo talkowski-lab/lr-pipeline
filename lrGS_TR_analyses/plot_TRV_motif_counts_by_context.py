@@ -3,10 +3,11 @@
 
 Input: per-locus table from build_trv_locus_table.py.
 Sites: FILTER PASS, >= 1 ALT allele with AC > 0, genic_context in --contexts (coding = TR span inside one CDS block).
-Motif length = shortest motif across TRID components. Bins (labelled by upper value v, covering (previous v, v]):
-1..10 bp singly, then 20, 30, ..., 100, then 200, 300, ... up to the largest motif. Empty bins are not drawn on the log axis.
+Motif length = shortest motif across TRID components. Counts are per exact motif length (1-bp resolution) in three
+panels: 1-10, 11-100 and 101-1000 bp, sharing one log10 y axis; motif lengths with zero sites are not drawn;
+the 101-1000 bp panel shows points only.
 
-Outputs: <out-prefix>.pdf and <out-prefix>.tsv (counts per context x bin).
+Outputs: <out-prefix>.pdf and <out-prefix>.tsv (counts per context x exact motif length).
 
 Usage:
   plot_TRV_motif_counts_by_context.py --loci hprc_hgsvc.TRV_loci.tsv.gz --label hprc_hgsvc \
@@ -30,13 +31,7 @@ GRID = "#e6e4df"
 COLORS = {"coding": "#2a78d6", "UTR": "#eb6834", "intronic": "#1baf7a", "intergenic": "#eda100", "coding_partial": "#4a3aa7"}
 
 
-def bin_uppers(max_len):
-    uppers = list(range(1, 11))
-    step = 10
-    while uppers[-1] < max_len:
-        uppers += list(range(uppers[-1] + step, uppers[-1] * 10 + 1, step))
-        step *= 10
-    return np.array([u for u in uppers if u < max_len] + [next(u for u in uppers if u >= max_len)])
+PANELS = [(1, 10), (11, 100), (101, 1000)]
 
 
 def main():
@@ -49,34 +44,42 @@ def main():
 
     d = pd.read_csv(args.loci, sep="\t", usecols=["FILTER", "n_alt", "genic_context", "motif_len"])
     d = d[(d["FILTER"] == "PASS") & (d["n_alt"] > 0) & d["genic_context"].isin(args.contexts)]
-    uppers = bin_uppers(d["motif_len"].max())
-    edges = np.concatenate([[0], uppers]) + 0.5
-    x = np.arange(len(uppers))
-
     rows = []
-    fig, ax = plt.subplots(figsize=(9, 4.6))
-    ax.axvspan(-0.4, 0.4, color=GRID, zorder=0)
-    for c in args.contexts:
-        n = np.histogram(d.loc[d["genic_context"] == c, "motif_len"], edges)[0]
-        rows += [{"cohort": args.label, "genic_context": c, "motif_bin_upper_bp": int(u), "n_sites": int(k)}
-                 for u, k in zip(uppers, n)]
-        y = np.where(n > 0, n, np.nan)
-        ax.plot(x, y, color=COLORS[c], linewidth=2, marker="o", markersize=4, label=f"{c} (n = {n.sum():,})")
-        print(f"{args.label} {c}: {n.sum():,} sites")
+    fig, axes = plt.subplots(1, 3, figsize=(15, 4.6), sharey=True, gridspec_kw={"width_ratios": [1, 1.6, 1.6]})
+    counts = {c: d.loc[d["genic_context"] == c, "motif_len"].value_counts() for c in args.contexts}
+    for c, vc in counts.items():
+        rows += [{"cohort": args.label, "genic_context": c, "motif_len": int(m), "n_sites": int(n)}
+                 for m, n in vc.sort_index().items()]
+        print(f"{args.label} {c}: {int(vc.sum()):,} sites")
     pd.DataFrame(rows).to_csv(f"{args.out_prefix}.tsv", sep="\t", index=False)
-
-    ax.set_yscale("log", base=10)
-    ax.set_xticks(x)
-    ax.set_xticklabels([str(u) for u in uppers], rotation=60, ha="right", fontsize=7)
-    ax.set_xlabel("TR motif length (bp; bins 1–10 single bp, then per 10, per 100)", fontsize=9, color=INK)
-    ax.set_ylabel("Non-ref PASS TRV sites (log10)", fontsize=9, color=INK)
-    for s in ["top", "right"]:
-        ax.spines[s].set_visible(False)
-    ax.tick_params(colors=INK2, labelsize=8)
-    ax.grid(color=GRID, linewidth=0.6)
-    ax.set_axisbelow(True)
-    ax.legend(frameon=False, fontsize=8, labelcolor=INK, loc="upper right")
-    ax.set_title(f"{args.label}: non-ref PASS TRV sites by motif length and genic context "
+    for ax, (lo, hi) in zip(axes, PANELS):
+        if lo == 1:
+            ax.axvspan(0.6, 1.4, color=GRID, zorder=0)
+        for c, vc in counts.items():
+            xs = np.arange(lo, hi + 1)
+            y = vc.reindex(xs).to_numpy(dtype=float)
+            n_panel = int(np.nansum(y))
+            y[y == 0] = np.nan
+            if lo >= 101:  # sparse: points only
+                ax.plot(xs, y, color=COLORS[c], linestyle="none", marker="o", markersize=2.5, alpha=0.7,
+                        label=f"{c} (n = {n_panel:,})")
+            else:
+                ax.plot(xs, y, color=COLORS[c], linewidth=1.6 if lo == 1 else 1, marker="o", markersize=4 if lo == 1 else 2.5,
+                        label=f"{c} (n = {n_panel:,})")
+        ax.set_yscale("log", base=10)
+        ax.set_xlim(lo - 0.6 if lo == 1 else lo - 2, hi + (0.6 if lo == 1 else 2))
+        if lo == 1:
+            ax.set_xticks(range(1, 11))
+        ax.set_xlabel(f"TR motif length (bp), {lo}–{hi}", fontsize=9, color=INK)
+        ax.set_title(f"Motif {lo}–{hi} bp", fontsize=10, color=INK)
+        for sp in ["top", "right"]:
+            ax.spines[sp].set_visible(False)
+        ax.tick_params(colors=INK2, labelsize=8)
+        ax.grid(color=GRID, linewidth=0.6)
+        ax.set_axisbelow(True)
+        ax.legend(frameon=False, fontsize=7.5, labelcolor=INK, loc="upper right", title="sites in panel", title_fontsize=7.5)
+    axes[0].set_ylabel("Non-ref PASS TRV sites per motif length (log10)", fontsize=9, color=INK)
+    fig.suptitle(f"{args.label}: non-ref PASS TRV sites by exact motif length and genic context "
                  f"(coding = inside one CDS block; grey band = homopolymers)", fontsize=10, color=INK)
     fig.tight_layout()
     fig.savefig(f"{args.out_prefix}.pdf")
