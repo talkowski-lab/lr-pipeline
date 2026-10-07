@@ -45,7 +45,7 @@ form directly comparable to the lrGS (HPRC+HGSVC mosdepth) bins in
   --lr-n-samples --sr-norm --lr-norm --sr-norm-x --lr-norm-x --segdup SegDup.bed.gz [--sr-max 0.5 --lr-min 0.7]
   --out-prefix P` - genome-wide coding TRs (catalog loci overlapping a protein_coding CDS, overlapping loci
   across catalogs merged; chrY excluded), flagged if any 100bp bin has srGS < sr-max and lrGS >= lr-min
-  (normalized depth). Writes all regions, flagged list, gene list, size table and two size figures.
+  (normalized depth). Writes all regions, flagged list, gene list, size table and `size_summary.pdf` (total coding TRs by size, log y; % flagged by size).
 - `mask_low_dp_genotypes.py`, `bed_from_filtered_chr22.py`, `bed_from_masked_chr22.py` -
   earlier chr22 genotype-masking work (not part of this extraction).
 
