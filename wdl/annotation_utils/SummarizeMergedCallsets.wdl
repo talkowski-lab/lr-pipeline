@@ -6,25 +6,25 @@ import "../utils/Structs.wdl"
 workflow SummarizeMergedCallsets {
     meta {
         description: [
-            "This utility counts the sites of merged VCFs from `MergeVcfs` by whether each site is supported by more than one callset, at the site level and per sample. Each sample is assigned to a callset by `sample_sources_tsv`; a site is matched when at least two callsets have a carrier among their own samples and unique to a callset when only that callset does, so a merged record whose other callset carries only reference or missing genotypes counts as unique. Sites with no carrier are skipped.",
-            "Counts are binned by allele class and size from INFO/allele_type and INFO/allele_length as in `SummarizeAnnotations`, split by INFO/REGION, and repeated for sites lacking dbSNP_ID and dbGaP_ID, lacking gnomAD_V4_match_ID, or lacking both. The site table reports the number of sites, the number of records each carrier-supported callset contributed to them according to SOURCE_NAMES, and the mean of those record counts across the supporting callsets, so a matched site built from one record of each callset counts once. The per-sample table reports how many matched and unique sites each sample carries."
+            "This utility counts the sites of a merged VCF from `MergeVcfs` by whether each site is supported by more than one callset, at the site level and per sample. Each sample is assigned to a callset by `sample_sources_tsv`; a site is matched when at least two callsets have a carrier among their own samples and unique to a callset when only that callset does, so a merged record whose other callset carries only reference or missing genotypes counts as unique. Sites with no carrier are skipped.",
+            "Counts are binned by allele class and size from INFO/allele_type and INFO/allele_length as in `SummarizeAnnotations`, split by INFO/REGION, and repeated for sites lacking dbSNP_ID and dbGaP_ID, lacking gnomAD_V4_match_ID, or lacking both. The site table reports how many sites are matched and how many are unique to each callset; the per-sample table reports how many matched and unique sites each sample carries. The task fails if a callset has a carrier at a site whose SOURCE_NAMES does not list it, which means the input was not produced by `MergeVcfs`."
         ]
     }
 
     parameter_meta {
-        vcfs: "Merged VCFs from `MergeVcfs`, such as one per contig."
-        vcf_idxs: "Indexes for `vcfs`."
-        sample_sources_tsv: "Two-column TSV without a header giving each sample ID and the SOURCE_NAMES callset name it belongs to. Every sample in `vcfs` must be listed."
-        subset_vcf_string: "`bcftools view` arguments used to pre-subset the VCFs."
+        merged_vcf: "Merged VCF from `MergeVcfs`, such as one contig. Pass only the merged VCF, not the callset VCFs merged into it."
+        merged_vcf_idx: "Index for `merged_vcf`."
+        sample_sources_tsv: "Two-column TSV without a header giving each sample ID and the SOURCE_NAMES callset name it belongs to. Every sample in `merged_vcf` must be listed."
+        subset_vcf_string: "`bcftools view` arguments used to pre-subset `merged_vcf`."
         length_bins: "Size-bin edges used for the DEL and INS columns."
         records_per_shard: "Number of variants to keep within a single shard."
-        site_counts_tsv: "Site-level counts per concordance group, region, merge status and count unit."
+        site_counts_tsv: "Number of matched sites and of sites unique to each callset, per concordance group and region."
         sample_counts_tsv: "Per-sample counts of matched and unique sites per concordance group and region."
     }
 
     input {
-        Array[File] vcfs
-        Array[File] vcf_idxs
+        File merged_vcf
+        File merged_vcf_idx
         String prefix
 
         File sample_sources_tsv
@@ -40,50 +40,48 @@ workflow SummarizeMergedCallsets {
         RuntimeAttr? runtime_attr_merge
     }
 
-    scatter (i in range(length(vcfs))) {
-        if (defined(records_per_shard)) {
-            call Helpers.ShardVcfByRecords {
-                input:
-                    vcf = vcfs[i],
-                    vcf_idx = vcf_idxs[i],
-                    records_per_shard = select_first([records_per_shard]),
-                    prefix = "~{prefix}.input_~{i}",
-                    docker = utils_docker,
-                    runtime_attr_override = runtime_attr_shard
-            }
+    if (defined(records_per_shard)) {
+        call Helpers.ShardVcfByRecords {
+            input:
+                vcf = merged_vcf,
+                vcf_idx = merged_vcf_idx,
+                records_per_shard = select_first([records_per_shard]),
+                prefix = prefix,
+                docker = utils_docker,
+                runtime_attr_override = runtime_attr_shard
+        }
+    }
+
+    Array[File] shard_vcfs = select_first([ShardVcfByRecords.shards, [merged_vcf]])
+    Array[File] shard_vcf_idxs = select_first([ShardVcfByRecords.shard_idxs, [merged_vcf_idx]])
+
+    scatter (j in range(length(shard_vcfs))) {
+        call Helpers.SubsetVcfByArgs {
+            input:
+                vcf = shard_vcfs[j],
+                vcf_idx = shard_vcf_idxs[j],
+                extra_args = subset_vcf_string,
+                prefix = "~{prefix}.shard_~{j}.subset",
+                docker = utils_docker,
+                runtime_attr_override = runtime_attr_subset
         }
 
-        Array[File] shard_vcfs = select_first([ShardVcfByRecords.shards, [vcfs[i]]])
-        Array[File] shard_vcf_idxs = select_first([ShardVcfByRecords.shard_idxs, [vcf_idxs[i]]])
-
-        scatter (j in range(length(shard_vcfs))) {
-            call Helpers.SubsetVcfByArgs {
-                input:
-                    vcf = shard_vcfs[j],
-                    vcf_idx = shard_vcf_idxs[j],
-                    extra_args = subset_vcf_string,
-                    prefix = "~{prefix}.input_~{i}.shard_~{j}.subset",
-                    docker = utils_docker,
-                    runtime_attr_override = runtime_attr_subset
-            }
-
-            call CountMergedCallsetShard {
-                input:
-                    vcf = SubsetVcfByArgs.subset_vcf,
-                    vcf_idx = SubsetVcfByArgs.subset_vcf_idx,
-                    sample_sources_tsv = sample_sources_tsv,
-                    length_bins = length_bins,
-                    prefix = "~{prefix}.input_~{i}.shard_~{j}",
-                    docker = utils_docker,
-                    runtime_attr_override = runtime_attr_count
-            }
+        call CountMergedCallsetShard {
+            input:
+                vcf = SubsetVcfByArgs.subset_vcf,
+                vcf_idx = SubsetVcfByArgs.subset_vcf_idx,
+                sample_sources_tsv = sample_sources_tsv,
+                length_bins = length_bins,
+                prefix = "~{prefix}.shard_~{j}",
+                docker = utils_docker,
+                runtime_attr_override = runtime_attr_count
         }
     }
 
     call MergeCallsetCountTables {
         input:
-            site_tsvs = flatten(CountMergedCallsetShard.site_counts_tsv),
-            sample_tsvs = flatten(CountMergedCallsetShard.sample_counts_tsv),
+            site_tsvs = CountMergedCallsetShard.site_counts_tsv,
+            sample_tsvs = CountMergedCallsetShard.sample_counts_tsv,
             sample_sources_tsv = sample_sources_tsv,
             length_bins = length_bins,
             prefix = prefix,
@@ -184,7 +182,9 @@ for chunk in chunks:
     n_supporting = in_callset.sum(axis=1)
     status = np.where(n_supporting >= 2, 0, 1 + in_callset.argmax(axis=1))
     source_names = chunk["SOURCE_NAMES"].str.split(",", expand=True).to_numpy()
-    records = np.stack([(source_names == c).sum(axis=1) for c in callsets], axis=1) * in_callset
+    listed = np.stack([(source_names == c).any(axis=1) for c in callsets], axis=1)
+    if (in_callset & ~listed).any():
+        raise SystemExit("A callset carries a site that SOURCE_NAMES does not list it in; pass only MergeVcfs outputs")
 
     type_lengths = chunk["allele_type"] + "|" + chunk["allele_length"]
     type_codes, type_uniques = pd.factorize(type_lengths)
@@ -197,10 +197,7 @@ for chunk in chunks:
         "bucket": buckets,
     })
 
-    site_values = keys.assign(sites=1, records_mean=records.sum(axis=1) / n_supporting)
-    for index, callset in enumerate(callsets):
-        site_values[f"records_{callset}"] = records[:, index]
-    site_tables.append(site_values.groupby(KEY_COLUMNS, as_index=False).sum())
+    site_tables.append(keys.groupby(KEY_COLUMNS, as_index=False).size().rename(columns={"size": "sites"}))
 
     # Count each carrier sample once per site under a matched or unique status
     sample_keys = keys.assign(status=np.where(status == 0, "matched", "unique"))
@@ -216,12 +213,11 @@ if proc.wait() != 0:
     raise SystemExit("bcftools query failed")
 
 # Write long-format shard tables that the merge task sums and pivots
-value_columns = ["sites"] + [f"records_{c}" for c in callsets] + ["records_mean"]
 if site_tables:
     site_table = pd.concat(site_tables).groupby(KEY_COLUMNS, as_index=False).sum()
 else:
-    site_table = pd.DataFrame(columns=KEY_COLUMNS + value_columns)
-site_table[KEY_COLUMNS + value_columns].to_csv(SITE_OUTPUT, sep="\t", index=False, float_format="%g")
+    site_table = pd.DataFrame(columns=KEY_COLUMNS + ["sites"])
+site_table.to_csv(SITE_OUTPUT, sep="\t", index=False)
 
 with open(SAMPLE_OUTPUT, "w") as handle:
     handle.write("\t".join(["sample", "callset"] + KEY_COLUMNS + ["count"]) + "\n")
@@ -293,7 +289,7 @@ RAW_KEYS = ["dbsnp_missing", "gnomad_missing", "region", "status", "bucket"]
 
 
 def read_tables(paths, keys):
-    frames = [pd.read_csv(p, sep="\t", dtype={"region": str}, keep_default_na=False) for p in paths]
+    frames = [pd.read_csv(p, sep="\t", dtype={"sample": str, "region": str}, keep_default_na=False) for p in paths]
     table = pd.concat([f for f in frames if not f.empty], ignore_index=True)
     table = table.groupby(keys, as_index=False).sum(numeric_only=True)
     table["both_missing"] = ((table["dbsnp_missing"] == 1) & (table["gnomad_missing"] == 1)).astype(int)
@@ -324,17 +320,14 @@ def pivot_buckets(table, index_columns, value_column, orders):
 callsets = list(dict.fromkeys(pd.read_csv(SOURCES_PATH, sep="\t", header=None, dtype=str)[1]))
 concordance_order = [g for g, _ in CONCORDANCE_GROUPS]
 
-# Sum the site shards, then put each count unit on its own row under each status
-units = ["sites"] + [f"records_{c}" for c in callsets] + ["records_mean"]
-site = expand_groups(read_tables(SITE_TSVS, RAW_KEYS), ["status", "bucket"], units)
-site = site.melt(id_vars=["concordance", "region", "status", "bucket"], value_vars=units, var_name="unit")
-site = pivot_buckets(site, ["concordance", "region", "status", "unit"], "value", {
+# Sum the site shards in each concordance and region group
+site = expand_groups(read_tables(SITE_TSVS, RAW_KEYS), ["status", "bucket"], ["sites"])
+site = pivot_buckets(site, ["concordance", "region", "status"], "sites", {
     "concordance": concordance_order,
     "region": REGION_ORDER,
-    "status": ["matched"] + [f"unique_{c}" for c in callsets],
-    "unit": units,
+    "status": [f"unique_{c}" for c in callsets] + ["matched"],
 })
-site.to_csv(SITE_OUTPUT, sep="\t", index=False, float_format="%g")
+site.to_csv(SITE_OUTPUT, sep="\t", index=False)
 
 # Sum the per-sample shards in the same concordance and region groups
 sample_raw = read_tables(SAMPLE_TSVS, ["sample", "callset"] + RAW_KEYS)

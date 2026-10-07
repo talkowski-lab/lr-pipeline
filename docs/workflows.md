@@ -1289,15 +1289,15 @@ Outputs:
 - `File variant_vcf_idx`: Index for `variant_vcf`.
 
 ### [SummarizeMergedCallsets](../wdl/annotation_utils/SummarizeMergedCallsets.wdl)
-This utility counts the sites of merged VCFs from `MergeVcfs` by whether each site is supported by more than one callset, at the site level and per sample. Each sample is assigned to a callset by `sample_sources_tsv`; a site is matched when at least two callsets have a carrier among their own samples and unique to a callset when only that callset does, so a merged record whose other callset carries only reference or missing genotypes counts as unique. Sites with no carrier are skipped.
+This utility counts the sites of a merged VCF from `MergeVcfs` by whether each site is supported by more than one callset, at the site level and per sample. Each sample is assigned to a callset by `sample_sources_tsv`; a site is matched when at least two callsets have a carrier among their own samples and unique to a callset when only that callset does, so a merged record whose other callset carries only reference or missing genotypes counts as unique. Sites with no carrier are skipped.
 
-Counts are binned by allele class and size from INFO/allele_type and INFO/allele_length as in `SummarizeAnnotations`, split by INFO/REGION, and repeated for sites lacking dbSNP_ID and dbGaP_ID, lacking gnomAD_V4_match_ID, or lacking both. The site table reports the number of sites, the number of records each carrier-supported callset contributed to them according to SOURCE_NAMES, and the mean of those record counts across the supporting callsets, so a matched site built from one record of each callset counts once. The per-sample table reports how many matched and unique sites each sample carries.
+Counts are binned by allele class and size from INFO/allele_type and INFO/allele_length as in `SummarizeAnnotations`, split by INFO/REGION, and repeated for sites lacking dbSNP_ID and dbGaP_ID, lacking gnomAD_V4_match_ID, or lacking both. The site table reports how many sites are matched and how many are unique to each callset; the per-sample table reports how many matched and unique sites each sample carries. The task fails if a callset has a carrier at a site whose SOURCE_NAMES does not list it, which means the input was not produced by `MergeVcfs`.
 
 Inputs:
-- `Array[File] vcfs`: Merged VCFs from `MergeVcfs`, such as one per contig.
-- `Array[File] vcf_idxs`: Indexes for `vcfs`.
-- `File sample_sources_tsv`: Two-column TSV without a header giving each sample ID and the SOURCE_NAMES callset name it belongs to. Every sample in `vcfs` must be listed.
-- `String subset_vcf_string`: `bcftools view` arguments used to pre-subset the VCFs. (default empty)
+- `File merged_vcf`: Merged VCF from `MergeVcfs`, such as one contig. Pass only the merged VCF, not the callset VCFs merged into it.
+- `File merged_vcf_idx`: Index for `merged_vcf`.
+- `File sample_sources_tsv`: Two-column TSV without a header giving each sample ID and the SOURCE_NAMES callset name it belongs to. Every sample in `merged_vcf` must be listed.
+- `String subset_vcf_string`: `bcftools view` arguments used to pre-subset `merged_vcf`. (default empty)
 - `Array[Int] length_bins`: Size-bin edges used for the DEL and INS columns. (default `[0, 1, 50, 500]`)
 - `Int? records_per_shard`: Number of variants to keep within a single shard.
 - `String prefix`: Prefix for output file names.
@@ -1305,7 +1305,7 @@ Inputs:
 - `RuntimeAttr? runtime_attr_*`: Optional per-task runtime overrides (4).
 
 Outputs:
-- `File site_counts_tsv`: Site-level counts per concordance group, region, merge status and count unit.
+- `File site_counts_tsv`: Number of matched sites and of sites unique to each callset, per concordance group and region.
 - `File sample_counts_tsv`: Per-sample counts of matched and unique sites per concordance group and region.
 
 
