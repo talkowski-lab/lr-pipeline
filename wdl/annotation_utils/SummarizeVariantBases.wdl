@@ -6,7 +6,7 @@ import "../utils/Structs.wdl"
 workflow SummarizeVariantBases {
     meta {
         description: [
-            "This utility measures how many bases are altered by variation in each of several callsets for one contig, producing a site-level table of the reference bases altered across the callset and a sample-level table of the bases altered per genome, each with one row per variant class and size bin and, for each entry of `vcf_names`, a column of bases and a column of those bases as a proportion of the contig length, all rounded to six decimal places.",
+            "This utility measures how many bases are altered by variation in each of several callsets for one contig, producing a site-level table of the reference bases altered across the callset and a sample-level table of the bases altered per genome, each with one row per variant class and size bin plus a Total row summing them, a `contig_bases` column holding the contig length so tables from several contigs can be summed, and, for each entry of `vcf_names`, a column of bases and a column of those bases as a proportion of the contig length, all rounded to six decimal places.",
             "Records are classed by `INFO/allele_type` as SNV, DEL or INS, with any type containing 'dup' counted as INS, and DEL and INS are split by the absolute `INFO/allele_length` into 1-49, 50-499 and 500+ bp bins. Other types, such as tandem repeats, and records with an AC of zero are not counted.",
             "The site-level table measures how much of the reference is altered. Only records whose `INFO/allele_type` is snv or del alter reference bases, an SNV its own position and a deletion the `INFO/allele_length` bases after its anchor base, so insertion rows are always zero and a replaced anchor base is never counted. The value is the number of distinct reference bases altered by any record with a nonzero AC in the bin, so different ALT alleles or overlapping records at one base count it once.",
             "The sample-level table measures how much each genome differs from the reference. Every altered allele counts, with an SNV or insertion contributing 1 or its inserted length and a deletion its deleted length, and the value is the sum over records of AC times those bases divided by the number of samples, computed from `INFO/AC` alone rather than from the genotypes. Two different ALT alleles at one base in a sample, or a homozygous-alternate genotype, therefore count that base twice.",
@@ -22,7 +22,7 @@ workflow SummarizeVariantBases {
         subset_vcf_string: "`bcftools view` arguments applied to each callset before counting, such as an include expression or a sample list. Must not contain -r, -t, -G or -o."
         ref_fai: "From references."
         shard_bin_size: "Width in base pairs of the regions the contig is sharded into."
-        site_bases_tsv: "TSV with one row per variant class and size bin and, for each entry of `vcf_names`, the number of distinct reference bases altered across the callset and its proportion of the contig length."
+        site_bases_tsv: "TSV with one row per variant class and size bin plus a Total row, the contig length in `contig_bases`, and, for each entry of `vcf_names`, the number of distinct reference bases altered across the callset and its proportion of the contig length."
         sample_bases_tsv: "TSV laid out as `site_bases_tsv` holding the mean number of bases altered per sample, counting each altered allele, and its proportion of the contig length."
     }
 
@@ -258,17 +258,20 @@ with open("counts.tsv") as handle:
         n_samples[vcf_name] = int(samples)
 
 with open("~{prefix}.site_bases.tsv", "w") as sites_out, open("~{prefix}.sample_bases.tsv", "w") as samples_out:
-    header = ["category"]
+    header = ["category", "contig_bases"]
     for name in NAMES:
         header += [f"{name}_bases", f"{name}_proportion"]
     sites_out.write("\t".join(header) + "\n")
     samples_out.write("\t".join(header) + "\n")
-    for category in CATEGORIES:
-        site_values = []
-        sample_values = []
+
+    # Write each bin, then a Total row summing the bins
+    for category in CATEGORIES + ["Total"]:
+        bin_categories = CATEGORIES if category == "Total" else [category]
+        site_values = [str(CONTIG_LENGTH)]
+        sample_values = [str(CONTIG_LENGTH)]
         for name in NAMES:
-            sites = site_bases[(name, category)]
-            samples = allele_bases[(name, category)] / n_samples[name]
+            sites = sum(site_bases[(name, bin_category)] for bin_category in bin_categories)
+            samples = sum(allele_bases[(name, bin_category)] for bin_category in bin_categories) / n_samples[name]
             site_values += [f"{sites:.6f}", f"{sites / CONTIG_LENGTH:.6f}"]
             sample_values += [f"{samples:.6f}", f"{samples / CONTIG_LENGTH:.6f}"]
         sites_out.write("\t".join([category] + site_values) + "\n")

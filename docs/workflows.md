@@ -691,7 +691,7 @@ Outputs:
 - `File coding_genes_tsv`: TSV with one row per gene hit by a coding TRV ALT allele, giving the number of such alleles and of samples carrying at least one of them.
 
 ### [SummarizeVariantBases](../wdl/annotation_utils/SummarizeVariantBases.wdl)
-This utility measures how many bases are altered by variation in each of several callsets for one contig, producing a site-level table of the reference bases altered across the callset and a sample-level table of the bases altered per genome, each with one row per variant class and size bin and, for each entry of `vcf_names`, a column of bases and a column of those bases as a proportion of the contig length, all rounded to six decimal places.
+This utility measures how many bases are altered by variation in each of several callsets for one contig, producing a site-level table of the reference bases altered across the callset and a sample-level table of the bases altered per genome, each with one row per variant class and size bin plus a Total row summing them, a `contig_bases` column holding the contig length so tables from several contigs can be summed, and, for each entry of `vcf_names`, a column of bases and a column of those bases as a proportion of the contig length, all rounded to six decimal places.
 
 Records are classed by `INFO/allele_type` as SNV, DEL or INS, with any type containing 'dup' counted as INS, and DEL and INS are split by the absolute `INFO/allele_length` into 1-49, 50-499 and 500+ bp bins. Other types, such as tandem repeats, and records with an AC of zero are not counted.
 
@@ -714,7 +714,7 @@ Inputs:
 - `RuntimeAttr? runtime_attr_*`: Optional per-task runtime overrides (3).
 
 Outputs:
-- `File site_bases_tsv`: TSV with one row per variant class and size bin and, for each entry of `vcf_names`, the number of distinct reference bases altered across the callset and its proportion of the contig length.
+- `File site_bases_tsv`: TSV with one row per variant class and size bin plus a Total row, the contig length in `contig_bases`, and, for each entry of `vcf_names`, the number of distinct reference bases altered across the callset and its proportion of the contig length.
 - `File sample_bases_tsv`: TSV laid out as `site_bases_tsv` holding the mean number of bases altered per sample, counting each altered allele, and its proportion of the contig length.
 
 ### [CreateCohortMethylationFile](../wdl/annotation_utils/CreateCohortMethylationFile.wdl)
