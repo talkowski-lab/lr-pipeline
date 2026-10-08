@@ -262,6 +262,16 @@ workflows:
         - /.*/
 
   - subclass: WDL
+    name: SummarizeTRVAllelesPerGenome
+    primaryDescriptorPath: /wdl/annotation_utils/SummarizeTRVAllelesPerGenome.wdl
+    filters:
+      branches:
+        - main
+        - kj-summarize-trv-alleles
+      tags:
+        - /.*/
+
+  - subclass: WDL
     name: CreateCohortMethylationFile
     primaryDescriptorPath: /wdl/annotation_utils/CreateCohortMethylationFile.wdl
     filters:
