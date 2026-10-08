@@ -549,6 +549,16 @@ workflows:
       tags:
         - /.*/
 
+  - subclass: WDL
+    name: MergeSummarizedCallsetCounts
+    primaryDescriptorPath: /wdl/annotation_utils/MergeSummarizedCallsetCounts.wdl
+    filters:
+      branches:
+        - main
+        - kj-merge-one-per-source
+      tags:
+        - /.*/
+
   # -----
   # Tools
   # -----

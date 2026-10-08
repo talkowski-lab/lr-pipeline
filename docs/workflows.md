@@ -1308,6 +1308,20 @@ Outputs:
 - `File site_counts_tsv`: Number of matched sites and of sites unique to each callset, per concordance group and region.
 - `File sample_counts_tsv`: Per-sample counts of matched and unique sites per concordance group and region.
 
+### [MergeSummarizedCallsetCounts](../wdl/annotation_utils/MergeSummarizedCallsetCounts.wdl)
+This utility sums the site and per-sample count tables that `SummarizeMergedCallsets` writes for separate contigs into one site table and one per-sample table. Rows are matched on their label columns and every count column is summed, so a row that appears for only some contigs keeps the counts of those contigs.
+
+Inputs:
+- `Array[File] site_counts_tsvs`: Site count tables from `SummarizeMergedCallsets`, such as one per contig.
+- `Array[File] sample_counts_tsvs`: Per-sample count tables from `SummarizeMergedCallsets`, from the same runs as `site_counts_tsvs`.
+- `String prefix`: Prefix for output file names.
+- `String utils_docker`: Container image.
+- `RuntimeAttr? runtime_attr_*`: Optional per-task runtime overrides.
+
+Outputs:
+- `File site_counts_tsv`: Number of matched sites and of sites unique to each callset, summed across the inputs.
+- `File sample_counts_tsv`: Per-sample counts of matched and unique sites, summed across the inputs.
+
 
 ## Tools
 
