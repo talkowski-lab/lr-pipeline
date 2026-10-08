@@ -32,31 +32,32 @@ Both callsets entered this pipeline as finished cohort-level VCFs - `snv_indel_v
 
 
 ## 2. Phasing
-The chain below was run twice, and the run that matters is the one that excludes TRGT homopolymers: its phased genotypes are what reaches the callset, through the transfer that [PostprocessCallset](../wdl/annotation_utils/PostprocessCallset.wdl) performs from `backbone_merged_vcf` in [Annotation](#3-annotation) step 12. The earlier run, before that exclusion, is still part of the record because the released sites came through it - tracing the released VCF back reaches the shards that step 6 produced on that earlier run, not the later one.
+The chain below was run twice, and the run that matters is the one that excludes TRGT homopolymers: its phased genotypes are what reaches the callset, through the transfer that [PostprocessCallset](../wdl/annotation_utils/PostprocessCallset.wdl) performs from `backbone_merged_vcf` in [Annotation](#3-annotation) step 12. The earlier run, before that exclusion, is still part of the record because the released sites came through it - tracing the released VCF back reaches the shards that step 7 produced on that earlier run, not the later one.
 1. **[ExtractSampleVcfs](../wdl/annotation_utils/ExtractSampleVcfs.wdl)** - `integrated_vcf` into `subset_snv_indel_vcf` and `subset_sv_vcf`.
 2. **[HiPhase](../wdl/tools/HiPhase.wdl)** - phased each sample's short variants, SVs and TR calls against its reads. Run with and without the TR VCF, giving `hiphase_vcf` and `hiphase_notrgt_vcf`.
 3. **[MergeHiPhaseCallsets](../wdl/tools/MergeHiPhaseCallsets.wdl)** - `bcftools merge` for short variants and SVs, `trgt merge` for TR calls, giving `hiphase_merged_integrated_vcf` and `hiphase_merged_trgt_vcf`.
-4. **[FillPhasedGenotypes](../wdl/annotation_utils/FillPhasedGenotypes.wdl)** - repopulated `0/0` genotypes from `integrated_vcf`, giving `hiphase_phased_integrated_vcf`.
-5. **[IntegrateTRs](../wdl/annotation_utils/IntegrateTRs.wdl)** - folded the TR calls back in, giving `tr_annotated_vcf`.
-6. **[SplitVcfPerContig](../wdl/annotation_utils/SplitVcfPerContig.wdl)** - sharded per contig into `full_vcf`; all downstream steps run per contig.
-7. **[BackbonePhase](../wdl/tools/BackbonePhase.wdl)** _(HPRC/HGSVC)_ - transferred phase from `truth_hgsvc_vcf` and `truth_hprc_vcf`, giving `backbone_phased_vcf` and `backbone_phased_notrgt_vcf`.
-8. **[FillBackbonePhasedGenotypes](../wdl/annotation_utils/FillBackbonePhasedGenotypes.wdl)** _(HPRC/HGSVC)_ - filled still-unphased genotypes from the no-TRGT shard, giving `backbone_merged_vcf`.
-9. **[TransferMethylationTags](../archive/wdl/tools/TransferMethylationTags.wdl)** - transferred the 5mC base modification tags from the unaligned reads onto the aligned BAMs, which had been produced without them. Since archived.
-10. **[Whatshap](../archive/wdl/tools/Whatshap.wdl)** - haplotagged those BAMs against the phased calls. Since archived.
-11. **[MethylationProfiling](../wdl/tools/MethylationProfiling.wdl)** - 5mC profiling with pb-CpG-tools from the haplotagged BAMs, giving the combined and per-haplotype CpG BEDs.
-12. **[CreateCohortMethylationFile](../wdl/annotation_utils/CreateCohortMethylationFile.wdl)** - per-contig cohort methylation matrices.
+4. **[TRGTLPS](../wdl/tools/TRGTLPS.wdl)** - per-locus, per-sample longest polymer sequence from the merged TR calls, giving `trgt_lps_tsv`. Run multiple times as the TR calls were regenerated, the last time in [Release](#4-release) step 12.
+5. **[FillPhasedGenotypes](../wdl/annotation_utils/FillPhasedGenotypes.wdl)** - repopulated `0/0` genotypes from `integrated_vcf`, giving `hiphase_phased_integrated_vcf`.
+6. **[IntegrateTRs](../wdl/annotation_utils/IntegrateTRs.wdl)** - folded the TR calls back in, giving `tr_annotated_vcf`.
+7. **[SplitVcfPerContig](../wdl/annotation_utils/SplitVcfPerContig.wdl)** - sharded per contig into `full_vcf`; all downstream steps run per contig.
+8. **[BackbonePhase](../wdl/tools/BackbonePhase.wdl)** _(HPRC/HGSVC)_ - transferred phase from `truth_hgsvc_vcf` and `truth_hprc_vcf`, giving `backbone_phased_vcf` and `backbone_phased_notrgt_vcf`.
+9. **[FillBackbonePhasedGenotypes](../wdl/annotation_utils/FillBackbonePhasedGenotypes.wdl)** _(HPRC/HGSVC)_ - filled still-unphased genotypes from the no-TRGT shard, giving `backbone_merged_vcf`.
+10. **[TransferMethylationTags](../archive/wdl/tools/TransferMethylationTags.wdl)** - transferred the 5mC base modification tags from the unaligned reads onto the aligned BAMs, which had been produced without them. Since archived.
+11. **[Whatshap](../archive/wdl/tools/Whatshap.wdl)** - haplotagged those BAMs against the phased calls. Since archived.
+12. **[MethylationProfiling](../wdl/tools/MethylationProfiling.wdl)** - 5mC profiling with pb-CpG-tools from the haplotagged BAMs, giving the combined and per-haplotype CpG BEDs.
+13. **[CreateCohortMethylationFile](../wdl/annotation_utils/CreateCohortMethylationFile.wdl)** - per-contig cohort methylation matrices.
 
 
 ## 3. Annotation
 Each characterization workflow writes an `annotations_tsv_*` column that [AnnotateVcf](../wdl/annotation_utils/AnnotateVcf.wdl) later folds into the VCF as INFO fields.
 1. **[RepeatMasker](../wdl/tools/RepeatMasker.wdl)** - repeat content of insertion sequences, giving `rm_out` and `rm_fa`.
-2. **Variant characterization**, run in parallel: [AnnotateL1MEAID](../wdl/annotation/AnnotateL1MEAID.wdl), [AnnotatePALMER](../wdl/annotation/AnnotatePALMER.wdl), [AnnotateSVAN](../wdl/annotation/AnnotateSVAN.wdl), [AnnotateMEDs](../wdl/annotation/AnnotateMEDs.wdl), [AnnotateIndelTRs](../wdl/annotation/AnnotateIndelTRs.wdl), [AnnotateRegion](../wdl/annotation/AnnotateRegion.wdl), [AnnotateInSilicoPredictors](../wdl/annotation/AnnotateInSilicoPredictors.wdl), [AnnotateGnomADSTR](../wdl/annotation/AnnotateGnomADSTR.wdl), [AnnotateDbSNP](../wdl/annotation/AnnotateDbSNP.wdl), [AnnotateVRS](../wdl/annotation/AnnotateVRS.wdl), [AnnotateTruvariRemap](../wdl/annotation/AnnotateTruvariRemap.wdl), and [AnnotateAgeMetrics](../wdl/annotation/AnnotateAgeMetrics.wdl) _(All of Us)_.
+2. **Variant characterization**, run in parallel: [AnnotateL1MEAID](../wdl/annotation/AnnotateL1MEAID.wdl), [AnnotatePALMER](../wdl/annotation/AnnotatePALMER.wdl), [AnnotateSVAN](../wdl/annotation/AnnotateSVAN.wdl), [AnnotateMEDs](../wdl/annotation/AnnotateMEDs.wdl), [AnnotateIndelTRs](../wdl/annotation/AnnotateIndelTRs.wdl), [AnnotateRegion](../wdl/annotation/AnnotateRegion.wdl), [AnnotateInSilicoPredictors](../wdl/annotation/AnnotateInSilicoPredictors.wdl), [AnnotateGnomADSTR](../wdl/annotation/AnnotateGnomADSTR.wdl), [AnnotateDbSNP](../wdl/annotation/AnnotateDbSNP.wdl), [AnnotateVRS](../wdl/annotation/AnnotateVRS.wdl), and [AnnotateAgeMetrics](../wdl/annotation/AnnotateAgeMetrics.wdl) _(All of Us)_.
 3. **[AnnotateMEIs](../wdl/annotation/AnnotateMEIs.wdl)** - reconciled the L1MEAID, PALMER and SVAN evidence into `annotations_tsv_meis`.
 4. **[SubsetTsvToColumns](../wdl/annotation_utils/SubsetTsvToColumns.wdl)** - duplications of interest into `annotations_tsv_svan_dups`.
 5. **[AnnotateAlleleType](../wdl/annotation_utils/AnnotateAlleleType.wdl)** - set `allele_type`, giving `allele_type_annotated_vcf`.
 6. **[Kanpig](../wdl/tools/Kanpig.wdl)** _(HPRC/HGSVC)_ - regenotyped every SV site against each sample's reads, giving `kanpig_vcf`. The supplied `sv_vcf` carried no `AD`, `DP` or `PL` on its reference and empty calls, so these calls had to be regenotyped locally to recover those FORMAT fields.
 7. **[AnnotateSvCallerSupport](../archive/wdl/annotation_utils/AnnotateSvCallerSupport.wdl)** _(HPRC/HGSVC)_ - merged the per-sample `kanpig_vcf` calls from step 6 back onto the cohort `sv_vcf`, then **[SplitVcfPerContig](../wdl/annotation_utils/SplitVcfPerContig.wdl)** re-sharded the result. This Kanpig-bearing `full_vcf` is the donor the next step copies from, and is how the missing `AD`, `DP` and `PL` reached the callset.
-8. **[FillFormatFields](../wdl/annotation_utils/FillFormatFields.wdl)** - copied the missing FORMAT fields onto the reference and empty calls, giving `allele_type_annotated_filled_vcf`. Ran for both cohorts; for HPRC/HGSVC the donor was the Kanpig-bearing `full_vcf` built in step 7. It was rerun again for HPRC/HGSVC in [Release](#4-release) step 9 once the SNV/indel joint callset had been regenerated.
+8. **[FillFormatFields](../wdl/annotation_utils/FillFormatFields.wdl)** - copied the missing FORMAT fields onto the reference and empty calls, giving `allele_type_annotated_filled_vcf`. Ran for both cohorts; for HPRC/HGSVC the donor was the Kanpig-bearing `full_vcf` built in step 7. It was rerun again for HPRC/HGSVC in [Release](#4-release) step 8 once the SNV/indel joint callset had been regenerated.
 9. **[NormalizeDuplicationOrigins](../archive/wdl/annotation_utils/NormalizeDuplicationOrigins.wdl)** - rewrote duplication origin coordinates, which required the functional and overlap annotations below to be regenerated.
 10. **Functional and overlap annotation**, run in parallel: [AnnotateVEPHail](../wdl/annotation/AnnotateVEPHail.wdl), [AnnotateSVAnnotate](../wdl/annotation/AnnotateSVAnnotate.wdl), [AnnotateCallsetOverlap](../wdl/annotation/AnnotateCallsetOverlap.wdl) and [AnnotateDbVaR](../wdl/annotation/AnnotateDbVaR.wdl).
 11. **[AnnotateVcf](../wdl/annotation_utils/AnnotateVcf.wdl)** - run twice, writing first the functional and then the remaining annotation TSVs into the VCF, giving `annotated_vcf`.
@@ -69,28 +70,26 @@ Each characterization workflow writes an `annotations_tsv_*` column that [Annota
 
 
 ## 4. Release
-This is where the two callsets diverge most, and where their version numbering stops lining up - HPRC/HGSVC ran eleven release steps, All of Us six. The table gives, for each step, the release column that step wrote for each cohort. `–` means the step was not run for that cohort at all. `run, no column` means the step produced supporting files rather than a release VCF.
+This is where the two callsets diverge most, and where their version numbering stops lining up - HPRC/HGSVC ran ten release steps, All of Us five. The table gives, for each step, the release column that step wrote for each cohort. `–` means the step was not run for that cohort at all. `run, no column` means the step produced supporting files rather than a release VCF.
 
 | # | Step | HPRC/HGSVC | All of Us |
 | --- | --- | --- | --- |
 | 1 | **[PostprocessCallset](../wdl/annotation_utils/PostprocessCallset.wdl)** - dropped the working FILTER values, from `transformed_vcf` | `hprc_hgsvc_vcf_V1` | `aou_vcf_V1` |
 | 2 | **[PostprocessCallset](../wdl/annotation_utils/PostprocessCallset.wdl)** - filtered assembly-only singletons | `hprc_hgsvc_vcf_V2` | – |
-| 3 | **[CreateCohortDepthFiles](../wdl/annotation_utils/CreateCohortDepthFiles.wdl)** - bincov matrix, median coverage and ploidy estimates | run, no column | run, no column |
-| 4 | **[IdentifyLowCoverageRegions](../wdl/annotation_utils/IdentifyLowCoverageRegions.wdl)** - 100bp bins at a 90% sample cutoff, giving `failed_bins_bed_90` and `sample_cutoffs_tsv` | run, no column | run, no column |
-| 5 | **[FilterLowCoverageRegions](../wdl/annotation_utils/FilterLowCoverageRegions.wdl)** - filtered variants in the recurrently low-coverage bins | `hprc_hgsvc_vcf_V3` | `aou_vcf_V2` |
-| 6 | **[AnnotateCallsetOverlap](../wdl/annotation/AnnotateCallsetOverlap.wdl)** then **[AnnotateVcf](../wdl/annotation_utils/AnnotateVcf.wdl)** - refreshed the gnomAD overlap annotations | `hprc_hgsvc_vcf_V4` | `aou_vcf_V3` |
-| 7 | TR loci post-processing - recovered disease-associated TR loci. HPRC/HGSVC ran **[PostProcessTRLociHPRCHGSVC](../archive/wdl/annotation_utils/PostProcessTRLociHPRCHGSVC.wdl)** against the TRExplorer catalog; All of Us ran **[PostProcessTRLociAoU](../archive/wdl/annotation_utils/PostProcessTRLociAoU.wdl)** | `hprc_hgsvc_vcf_V5` | `aou_vcf_V4` |
-| 8 | **[FilterDuplicateZeroDepthReferenceBlocks](../archive/wdl/annotation_utils/FilterDuplicateZeroDepthReferenceBlocks.wdl)**, then **[GLNexus](../wdl/tools/GLNexus.wdl)** and **[SplitVcfPerContig](../wdl/annotation_utils/SplitVcfPerContig.wdl)** - regenerated the SNV/indel joint callset into `glnexus_vcf`, solely to feed step 9 | run, no column | – |
-| 9 | **[FillFormatFields](../wdl/annotation_utils/FillFormatFields.wdl)** - second run of the [Annotation](#3-annotation) step 8 workflow, copying `AD`, `PL`, `GQ`, `DP` and `RNC` for the short variant records across from the regenerated `glnexus_vcf` | `hprc_hgsvc_vcf_V6` | – |
-| 10 | **[FilterLowCoverageGenotypes](../wdl/annotation_utils/FilterLowCoverageGenotypes.wdl)** - no-called genotypes below each sample's cutoff in `sample_cutoffs_tsv` | `hprc_hgsvc_vcf_V7` | – |
-| 11 | **[AnnotateSQMetrics](../wdl/annotation/AnnotateSQMetrics.wdl)** and **[AnnotateGQMetrics](../wdl/annotation/AnnotateGQMetrics.wdl)**, then **[AnnotateVcf](../wdl/annotation_utils/AnnotateVcf.wdl)** - recomputed site and genotype quality metrics after the genotype changes in steps 9 and 10 | `hprc_hgsvc_vcf_V8` | – |
-| 12 | **[AnnotateAF](https://github.com/broadinstitute/gatk-sv/blob/kj_project_gnomad_lr/wdl/AnnotateAF.wdl)** - recomputed allele frequencies | `hprc_hgsvc_vcf_V9` | – |
-| 13 | **[TRGTLPS](../wdl/tools/TRGTLPS.wdl)** then **[CreateTRGTHistograms](../wdl/annotation_utils/CreateTRGTHistograms.wdl)** - `trgt_lps_tsv` and the `trgt_histograms_tsv` browser histograms | run, no column | not recorded |
-| 14 | **[AnnotateSVAnnotate](../wdl/annotation/AnnotateSVAnnotate.wdl)** then **[AnnotateVcf](../wdl/annotation_utils/AnnotateVcf.wdl)** - refreshed SV functional consequences. Final release for both cohorts | `hprc_hgsvc_vcf_V10` | `aou_vcf_V5` |
-| 15 | **[FilterLowCallSites](../wdl/annotation_utils/FilterLowCallSites.wdl)** - removed sites whose samples carry no alternate allele and flagged the high no-call rate sites `HIGH_NCR` | `hprc_hgsvc_vcf_V11` | `aou_vcf_V6` |
-| 16 | **[DropGenotypes](../wdl/annotation_utils/DropGenotypes.wdl)** _(All of Us)_ - dropped genotypes to produce the sites-only release VCF | – | `aou_sites_vcf` |
+| 3 | **[IdentifyLowCoverageRegions](../wdl/annotation_utils/IdentifyLowCoverageRegions.wdl)** - 100bp bins at a 90% sample cutoff, giving `failed_bins_bed_90` and `sample_cutoffs_tsv` | run, no column | run, no column |
+| 4 | **[FilterLowCoverageRegions](../wdl/annotation_utils/FilterLowCoverageRegions.wdl)** - filtered variants in the recurrently low-coverage bins | `hprc_hgsvc_vcf_V3` | `aou_vcf_V2` |
+| 5 | **[AnnotateCallsetOverlap](../wdl/annotation/AnnotateCallsetOverlap.wdl)** then **[AnnotateVcf](../wdl/annotation_utils/AnnotateVcf.wdl)** - refreshed the gnomAD overlap annotations | `hprc_hgsvc_vcf_V4` | `aou_vcf_V3` |
+| 6 | TR loci post-processing - recovered disease-associated TR loci. HPRC/HGSVC ran **[PostProcessTRLociHPRCHGSVC](../archive/wdl/annotation_utils/PostProcessTRLociHPRCHGSVC.wdl)** against the TRExplorer catalog; All of Us ran **[PostProcessTRLociAoU](../archive/wdl/annotation_utils/PostProcessTRLociAoU.wdl)** | `hprc_hgsvc_vcf_V5` | `aou_vcf_V4` |
+| 7 | **[FilterDuplicateZeroDepthReferenceBlocks](../archive/wdl/annotation_utils/FilterDuplicateZeroDepthReferenceBlocks.wdl)**, then **[GLNexus](../wdl/tools/GLNexus.wdl)** and **[SplitVcfPerContig](../wdl/annotation_utils/SplitVcfPerContig.wdl)** - regenerated the SNV/indel joint callset into `glnexus_vcf`, solely to feed step 8 | run, no column | – |
+| 8 | **[FillFormatFields](../wdl/annotation_utils/FillFormatFields.wdl)** - second run of the [Annotation](#3-annotation) step 8 workflow, copying `AD`, `PL`, `GQ`, `DP` and `RNC` for the short variant records across from the regenerated `glnexus_vcf` | `hprc_hgsvc_vcf_V6` | – |
+| 9 | **[FilterLowCoverageGenotypes](../wdl/annotation_utils/FilterLowCoverageGenotypes.wdl)** - no-called genotypes below each sample's cutoff in `sample_cutoffs_tsv` | `hprc_hgsvc_vcf_V7` | – |
+| 10 | **[AnnotateSQMetrics](../wdl/annotation/AnnotateSQMetrics.wdl)** and **[AnnotateGQMetrics](../wdl/annotation/AnnotateGQMetrics.wdl)**, then **[AnnotateVcf](../wdl/annotation_utils/AnnotateVcf.wdl)** - recomputed site and genotype quality metrics after the genotype changes in steps 8 and 9 | `hprc_hgsvc_vcf_V8` | – |
+| 11 | **[AnnotateAF](https://github.com/broadinstitute/gatk-sv/blob/kj_project_gnomad_lr/wdl/AnnotateAF.wdl)** - recomputed allele frequencies | `hprc_hgsvc_vcf_V9` | – |
+| 12 | **[TRGTLPS](../wdl/tools/TRGTLPS.wdl)** then **[CreateTRGTHistograms](../wdl/annotation_utils/CreateTRGTHistograms.wdl)** - reran [Phasing](#2-phasing) step 4 for the final `trgt_lps_tsv`, then built the `trgt_histograms_tsv` browser histograms | run, no column | not recorded |
+| 13 | **[AnnotateSVAnnotate](../wdl/annotation/AnnotateSVAnnotate.wdl)** then **[AnnotateVcf](../wdl/annotation_utils/AnnotateVcf.wdl)** - refreshed SV functional consequences. Final release for both cohorts | `hprc_hgsvc_vcf_V10` | `aou_vcf_V5` |
+| 14 | **[StripGenotypes](../wdl/annotation_utils/StripGenotypes.wdl)** _(All of Us)_ - dropped genotypes from `aou_vcf_V5` to produce the sites-only release VCF | – | `aou_sites_vcf` |
 
-Steps 2 and 8 to 12 are HPRC/HGSVC only, which is why its chain reaches `V11` while All of Us stops at `V6`. Steps 1, 5, 6, 7, 14 and 15 advanced both.
+Steps 2 and 7 to 11 are HPRC/HGSVC only, which is why its chain reaches `V10` while All of Us stops at `V5`. Steps 1, 4, 5, 6 and 13 advanced both.
 
 
 ## Cohort Divergences
@@ -107,15 +106,15 @@ Steps 2 and 8 to 12 are HPRC/HGSVC only, which is why its chain reaches `V11` wh
 | `FillFormatFields` | Run in the annotation chain, then rerun in the release chain from the regenerated `glnexus_vcf` | Run in the annotation chain only |
 | `FilterLowCoverageGenotypes` | Run | Not run |
 | Assembly-only singleton filter | Run | Not run |
-| Sites-only VCF | Not produced | `aou_sites_vcf` via [DropGenotypes](../wdl/annotation_utils/DropGenotypes.wdl) |
-| Release versions | `hprc_hgsvc_vcf_V1` to `V11` | `aou_vcf_V1` to `V6`, plus `aou_sites_vcf` |
+| Sites-only VCF | Not produced | `aou_sites_vcf` via [StripGenotypes](../wdl/annotation_utils/StripGenotypes.wdl) |
+| Release versions | `hprc_hgsvc_vcf_V1` to `V10` | `aou_vcf_V1` to `V5`, plus `aou_sites_vcf` |
 
 
 ## Evidence and Gaps
 Reconstructed from the Terra job history export at `data/archive/migration/LR_GNOMAD-AoU_TALK_Annotation-Pipeline/job_history.tsv` (23800 rows; local-only and gitignored), the submission history and method configurations of the Terra workspace `LR_GNOMAD_1_CO-AoU_TALK/LR_GNOMAD-AoU_TALK_Annotation-Pipeline` (249 submissions), and the pipeline diagrams.
 
 - **All of Us lineage is evidence-light.** The Terra sources cover the HPRC/HGSVC callset only; despite its name, that workspace holds 292 samples and only `hprc_hgsvc_vcf_*` columns. Every All of Us column name and per-step divergence above comes from [`scratch.md`](scratch.md) rather than a verified data table. Sections 1 to 3 are assumed shared except where tagged, since those notes only begin at the release chain.
-- **All of Us supporting steps are inferred.** `CreateCohortDepthFiles` and `IdentifyLowCoverageRegions` are marked as run for All of Us because `FilterLowCoverageRegions`, which did run, cannot proceed without them; the notes do not name them. The GLNexus regeneration is marked as not run because its only consumer, the release-chain `FillFormatFields` rerun, is HPRC/HGSVC only.
+- **All of Us supporting steps are inferred.** `IdentifyLowCoverageRegions` is marked as run for All of Us because `FilterLowCoverageRegions`, which did run, consumes its low-coverage bins; the notes do not name it. The GLNexus regeneration is marked as not run because its only consumer, the release-chain `FillFormatFields` rerun, is HPRC/HGSVC only.
 - **SNV/indel and SV calling are not covered.** Both callsets were built in workspaces not inspected here and arrive as `snv_indel_vcf` and `sv_vcf`, so nothing upstream of [Preprocessing](#1-preprocessing) is recorded - including how the SV callset was filtered.
 - **The HPRC/HGSVC chain is verified by lineage trace.** Every step above was confirmed by taking a released `hprc_hgsvc_vcf_V10` shard - `chr20.chr20.annotated.vcf.gz` from the final `AnnotateVcf` submission - and walking its input VCF back 27 hops to the upstream cohort VCFs, using the Terra submission API for the later runs and the `inputs` column of the job history export for the earlier ones. Paths under the current bucket and the older `fc-fd42e80c` bucket both resolve, since the copy preserved the `submissions/<id>/` layout and therefore the submission IDs.
 - **Two Kanpig transfer attempts did not survive.** `ReplaceKanpigGT`, still in [`archive/`](../archive/wdl/annotation_utils/ReplaceKanpigGT.wdl), ran three times on chr22 alone and nothing ever consumed its output; a `FillSVFormatFields` configuration consumed Kanpig output once and likewise does not appear in the traced lineage. Neither is listed as a step.

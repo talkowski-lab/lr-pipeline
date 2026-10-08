@@ -61,6 +61,8 @@ The SV callset is the regenotyped cohort SV VCF from step 5 together with the lo
    - **[CreateCohortCoverageSummary](../wdl/annotation_utils/CreateCohortCoverageSummary.wdl)** - binned coverage across all samples, for the browser and QC.
    - **[IdentifyLowCoverageRegions](../wdl/annotation_utils/IdentifyLowCoverageRegions.wdl)** - flag recurrently low-coverage bins and derive per-sample coverage cutoffs; both feed the filtering steps in step 3.
 
+The cohort binned-coverage matrix and ploidy estimates from `CreateCohortDepthFiles` are only needed for depth-based CNV calling, which the [CNV pipeline](pipeline_cnvs.md) covers.
+
 ### Mobile Element Calls
 1. **[PALMERDiploid](../wdl/tools/PALMERDiploid.wdl)** and **[PALMERAssembly](../wdl/tools/PALMERAssembly.wdl)** - call mobile element insertions per sample from the reads and from the assembly BAMs respectively.
 2. **[MergePALMERCallsets](../wdl/tools/MergePALMERCallsets.wdl)** - merge the per-sample calls into the cohort PALMER VCF that `AnnotatePALMER` consumes in step 3.
@@ -137,7 +139,7 @@ Each step takes the previous step's VCF, starting from the allele-type-annotated
 3. **[ResolveHaplotypeOverlaps](../wdl/annotation_utils/ResolveHaplotypeOverlaps.wdl)** - resolve calls that overlap on the same haplotype. Runs per contig, so reassemble with `ConcatenateVcfsAcrossContigs`.
 4. **[FilterLowCoverageRegions](../wdl/annotation_utils/FilterLowCoverageRegions.wdl)** - filter variants falling in the recurrently low-coverage bins identified in step 1.
 5. **[FilterLowCoverageGenotypes](../wdl/annotation_utils/FilterLowCoverageGenotypes.wdl)** - no-call genotypes falling below each sample's coverage cutoff from step 1.
-6. **[AnnotateAF](https://github.com/broadinstitute/gatk-sv/blob/kj_project_gnomad_lr/wdl/AnnotateAF.wdl)** - annotate allele frequencies from the cohort ancestry and PED files and the TRGT LPS TSV. Runs last so that the frequencies reflect the filtered genotypes.
+6. **[AnnotateAF](https://github.com/broadinstitute/gatk-sv/blob/kj_project_gnomad_lr/wdl/AnnotateAF.wdl)** - annotate allele frequencies from the cohort ancestry and PED files, the PAR BED reference and the TRGT LPS TSV. Runs last so that the frequencies reflect the filtered genotypes.
 7. **[StripGenotypes](../wdl/annotation_utils/StripGenotypes.wdl)** _(optional)_ - drop genotypes to produce a sites-only VCF alongside the full release.
 
 Step 3 ends with the annotated, filtered, allele-frequency-annotated cohort VCF for release.

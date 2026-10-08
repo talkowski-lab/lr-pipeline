@@ -352,16 +352,6 @@ workflows:
       tags:
         - /.*/
 
-
-  - subclass: WDL
-    name: DropGenotypes
-    primaryDescriptorPath: /wdl/annotation_utils/DropGenotypes.wdl
-    filters:
-      branches:
-        - main
-      tags:
-        - /.*/
-
   - subclass: WDL
     name: ExtractSampleVcfs
     primaryDescriptorPath: /wdl/annotation_utils/ExtractSampleVcfs.wdl
