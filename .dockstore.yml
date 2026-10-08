@@ -163,7 +163,6 @@ workflows:
     filters:
       branches:
         - main
-        - kj-annotate-vep-trvs
       tags:
         - /.*/
 
