@@ -552,6 +552,20 @@ Outputs:
 - `File merged_vcf`: Site-merged VCF.
 - `File merged_vcf_idx`: Index for the merged VCF.
 
+### [MergeSummarizedCallsetCounts](../wdl/annotation_utils/MergeSummarizedCallsetCounts.wdl)
+This utility sums the site and per-sample count tables that `SummarizeMergedCallsets` writes for separate contigs into one site table and one per-sample table. Rows are matched on their label columns and every count column is summed, so a row that appears for only some contigs keeps the counts of those contigs.
+
+Inputs:
+- `Array[File] site_counts_tsvs`: Site count tables from `SummarizeMergedCallsets`, such as one per contig.
+- `Array[File] sample_counts_tsvs`: Per-sample count tables from `SummarizeMergedCallsets`, from the same runs as `site_counts_tsvs`.
+- `String prefix`: Prefix for output file names.
+- `String utils_docker`: Container image.
+- `RuntimeAttr? runtime_attr_*`: Optional per-task runtime overrides.
+
+Outputs:
+- `File site_counts_tsv`: Number of matched sites and of sites unique to each callset, summed across the inputs.
+- `File sample_counts_tsv`: Per-sample counts of matched and unique sites, summed across the inputs.
+
 ### [MergeTRs](../wdl/annotation_utils/MergeTRs.wdl)
 This utility merges a tandem-repeat callset into a base VCF one contig at a time and concatenates the contigs. It is an earlier form of `IntegrateTRs`.
 
@@ -924,6 +938,26 @@ Inputs:
 Outputs:
 - `File subset_samples_vcf`: VCF containing only the requested samples.
 - `File subset_samples_vcf_idx`: Index for `subset_samples_vcf`.
+
+### [SummarizeMergedCallsets](../wdl/annotation_utils/SummarizeMergedCallsets.wdl)
+This utility counts the sites of a merged VCF from `MergeVcfs` by whether each site is supported by more than one callset, at the site level and per sample. Each sample is assigned to a callset by `sample_sources_tsv`; a site is matched when at least two callsets have a carrier among their own samples and unique to a callset when only that callset does, so a merged record whose other callset carries only reference or missing genotypes counts as unique. Sites with no carrier are skipped.
+
+Counts are binned by allele class and size from INFO/allele_type and INFO/allele_length as in `SummarizeAnnotations`, split by INFO/REGION, and repeated for sites lacking dbSNP_ID and dbGaP_ID, lacking gnomAD_V4_match_ID, or lacking both. The site table reports how many sites are matched and how many are unique to each callset; the per-sample table reports how many matched and unique sites each sample carries. The task fails if a callset has a carrier at a site whose SOURCE_NAMES does not list it, which means the input was not produced by `MergeVcfs`.
+
+Inputs:
+- `File merged_vcf`: Merged VCF from `MergeVcfs`, such as one contig. Pass only the merged VCF, not the callset VCFs merged into it.
+- `File merged_vcf_idx`: Index for `merged_vcf`.
+- `File sample_sources_tsv`: Two-column TSV without a header giving each sample ID and the SOURCE_NAMES callset name it belongs to. Every sample in `merged_vcf` must be listed.
+- `String subset_vcf_string`: `bcftools view` arguments used to pre-subset `merged_vcf`. (default empty)
+- `Array[Int] length_bins`: Size-bin edges used for the DEL and INS columns. (default `[0, 1, 50, 500]`)
+- `Int? records_per_shard`: Number of variants to keep within a single shard.
+- `String prefix`: Prefix for output file names.
+- `String utils_docker`: Container image.
+- `RuntimeAttr? runtime_attr_*`: Optional per-task runtime overrides (4).
+
+Outputs:
+- `File site_counts_tsv`: Number of matched sites and of sites unique to each callset, per concordance group and region.
+- `File sample_counts_tsv`: Per-sample counts of matched and unique sites per concordance group and region.
 
 ### [UpdateGenotypes](../wdl/annotation_utils/UpdateGenotypes.wdl)
 This utility rewrites the genotypes of a base VCF. It can transfer genotypes from a phased VCF, unphase or drop selected samples, normalize ploidy so male chrX and chrY calls are hemizygous and female chrY calls are cleared, and optionally drop genotypes altogether.
