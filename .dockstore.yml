@@ -452,7 +452,6 @@ workflows:
     filters:
       branches:
         - main
-        - kj-merge-one-per-source
       tags:
         - /.*/
 
