@@ -717,6 +717,22 @@ Outputs:
 - `File site_bases_tsv`: TSV with one row per variant class and size bin plus a Total row, the contig length in `contig_bases`, and, for each entry of `vcf_names`, the number of distinct reference bases altered across the callset and its proportion of the contig length.
 - `File sample_bases_tsv`: TSV laid out as `site_bases_tsv` holding the mean number of bases altered per sample, counting each altered allele, and its proportion of the contig length.
 
+### [MergeVariantBaseTables](../wdl/annotation_utils/MergeVariantBaseTables.wdl)
+This utility merges the per-contig site-level and sample-level tables written by `SummarizeVariantBases` into one site-level and one sample-level table, typically covering the whole genome.
+
+Every row's `contig_bases` and every `<name>_bases` column are summed across the input tables, and each `<name>_proportion` column is recomputed from those sums, so the proportions are of the combined length of the contigs merged. Every input table must have the same columns in the same order. Summing per-sample means across contigs gives the mean per genome only when every contig was summarized over the same samples.
+
+Inputs:
+- `Array[File] site_bases_tsvs`: Per-contig `site_bases_tsv` outputs of `SummarizeVariantBases`.
+- `Array[File] sample_bases_tsvs`: Per-contig `sample_bases_tsv` outputs of `SummarizeVariantBases`.
+- `String prefix`: Prefix for output file names.
+- `String utils_docker`: Container image.
+- `RuntimeAttr? runtime_attr_*`: Optional per-task runtime overrides (2).
+
+Outputs:
+- `File site_bases_tsv`: Site-level table with the bases summed across `site_bases_tsvs`.
+- `File sample_bases_tsv`: Sample-level table with the bases summed across `sample_bases_tsvs`.
+
 ### [CreateCohortMethylationFile](../wdl/annotation_utils/CreateCohortMethylationFile.wdl)
 This utility builds cohort-level CpG methylation matrices from per-sample `MethylationProfiling` BED outputs. For each contig, it merges every sample's combined and per-haplotype modification-score BEDs into a wide site-by-sample(/haplotype) matrix, filling `.` for sites missing in a given sample or haplotype. Samples can optionally be processed in shards (merged independently, then joined column-wise) to bound how many sample files are localized onto a single task at once.
 
