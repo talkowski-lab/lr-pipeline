@@ -13,7 +13,7 @@ workflow MergeVcfs {
             "The contig is split into bins of `shard_bin_size` and every merging step runs per shard, so Truvari never pairs records more than one bin apart. Both merged and unmerged records reach the output.",
             "Every output record carries `MERGE_COUNT`, the number of input records merged into it, and `MERGE_TYPE`, one of EXACT, TRV_EXACT, TRUVARI or UNIQUE.",
             "Provenance is recorded in four parallel lists with one entry per merged input record: `SOURCE_NAMES`, the `vcf_names` entry of the callset that carried it, `SOURCE_IDS`, its ID there, and `SOURCE_REFS` and `SOURCE_ALTS`, its REF and ALT as that callset wrote them. The ALT alleles of a single record are separated by a pipe, so that a multiallelic record stays one entry. A merged record holds at most one record from each callset, so a name never repeats.",
-            "Where a merged record cannot hold both inputs' values, the ID and any INFO field other than `MERGE_COUNT` and the `SOURCE_` lists are taken from the first input VCF that carried the record, and AC, AN and AF are recomputed over the merged samples."
+            "Where a merged record cannot hold both inputs' values, the ID and any INFO field other than `MERGE_COUNT` and the `SOURCE_` lists are taken from the first input VCF that carried the record, or for a Truvari merge from the record Truvari keeps, and AC, AN and AF are recomputed over the merged samples."
         ]
     }
 

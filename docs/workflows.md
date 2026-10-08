@@ -1060,7 +1060,7 @@ Every output record carries `MERGE_COUNT`, the number of input records merged in
 
 Provenance is recorded in four parallel lists with one entry per merged input record: `SOURCE_NAMES`, the `vcf_names` entry of the callset that carried it, `SOURCE_IDS`, its ID there, and `SOURCE_REFS` and `SOURCE_ALTS`, its REF and ALT as that callset wrote them. The ALT alleles of a single record are separated by a pipe, so that a multiallelic record stays one entry. A merged record holds at most one record from each callset, so a name never repeats.
 
-Where a merged record cannot hold both inputs' values, the ID and any INFO field other than `MERGE_COUNT` and the `SOURCE_` lists are taken from the first input VCF that carried the record, and AC, AN and AF are recomputed over the merged samples.
+Where a merged record cannot hold both inputs' values, the ID and any INFO field other than `MERGE_COUNT` and the `SOURCE_` lists are taken from the first input VCF that carried the record, or for a Truvari merge from the record Truvari keeps, and AC, AN and AF are recomputed over the merged samples.
 
 Inputs:
 - `Array[File] vcfs`: Per-callset VCFs for the contig being merged, each called across a distinct set of samples.
