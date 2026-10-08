@@ -425,6 +425,33 @@ Inputs:
 Outputs:
 - `File annotations_tsv_vep`: TSV of VEP functional-effect annotations.
 
+### [AnnotateVEPTRVs](../wdl/annotation/AnnotateVEPTRVs.wdl)
+This workflow annotates the alleles of tandem repeat variants (INFO/allele_type='trv') in a single-contig VCF with the Ensembl Variant Effect Predictor (VEP) (https://useast.ensembl.org/info/docs/tools/vep/index.html), producing one row per ALT allele that links its original and normalized representation to its allele-specific AC, AF and VEP annotations.
+
+Genotypes are stripped and the TRV sites are sharded by record before any splitting, so each shard is split into biallelic records, left-aligned and trimmed with `bcftools norm`, uppercased (the soft-masked reference otherwise leaves lowercase bases that VEP cannot parse) and run through VEP independently. Each split record carries the original ID suffixed with its allele index, so annotations are joined back by allele rather than by normalized coordinates, which can collide across records.
+
+AC and AF are read per allele from the Number=A INFO fields, so they must be consistent with the genotypes. Shards are concatenated in input order, so the output stays sorted by the original CHROM and POS, then by allele index.
+
+Inputs:
+- `File vcf`: Single-contig VCF to annotate.
+- `File vcf_idx`: Index for VCF to annotate.
+- `Int records_per_shard`: Number of TRV records per shard, counted before splitting into biallelic records. (default `2000`)
+- `String vep_annotate_hail_python_script`: Path to the Hail script used to run VEP (defaults to this repository's copy on `main`). (default `https://raw.githubusercontent.com/talkowski-lab/lr-pipeline/main/scripts/helper/vep_annotate_hail.py`)
+- `String genome_build`: Genome build to annotate against. (default `GRCh38`)
+- `String vep_json_schema`: Hail type schema describing the structure of VEP's JSON output. (default `Struct{allele_string:String,colocated_variants:Array[Struct{allele_string:String,clin_sig:Array[String],clin_sig_allele:String,end:Int32,id:String,phenotype_or_disease:Int32,pubmed:Array[Int32],somatic:Int32,start:Int32,strand:Int32}],context:String,end:Int32,id:String,input:String,intergenic_consequences:Array[Struct{allele_num:Int32,consequence_terms:Array[String],impact:String,minimised:Int32,variant_allele:String}],most_severe_consequence:String,motif_feature_consequences:Array[Struct{allele_num:Int32,consequence_terms:Array[String],high_inf_pos:String,impact:String,minimised:Int32,motif_feature_id:String,motif_name:String,motif_pos:Int32,motif_score_change:Float64,transcription_factors:Array[String],strand:Int32,variant_allele:String}],regulatory_feature_consequences:Array[Struct{allele_num:Int32,biotype:String,consequence_terms:Array[String],impact:String,minimised:Int32,regulatory_feature_id:String,variant_allele:String}],seq_region_name:String,start:Int32,strand:Int32,transcript_consequences:Array[Struct{allele_num:Int32,amino_acids:String,appris:String,biotype:String,canonical:Int32,ccds:String,cdna_start:Int32,cdna_end:Int32,cds_end:Int32,cds_start:Int32,codons:String,consequence_terms:Array[String],distance:Int32,domains:Array[Struct{db:String,name:String}],exon:String,flags:String,gene_id:String,gene_pheno:Int32,gene_symbol:String,gene_symbol_source:String,hgnc_id:String,hgvsc:String,hgvsp:String,hgvs_offset:Int32,impact:String,intron:String,lof:String,lof_flags:String,lof_filter:String,lof_info:String,mane_select:String,mane_plus_clinical:String,minimised:Int32,pick:Int32,mirna:Array[String],polyphen_prediction:String,polyphen_score:Float64,protein_end:Int32,protein_start:Int32,protein_id:String,sift_prediction:String,sift_score:Float64,source:String,strand:Int32,swissprot:String,transcript_id:String,trembl:String,tsl:Int32,uniparc:String,uniprot_isoform:Array[String],variant_allele:String}],variant_class:String}`)
+- `String normalize_check_ref`: `bcftools norm` `--check-ref` mode used when normalizing. (default `w`)
+- `File ref_fa`: From references.
+- `File ref_fai`: From references.
+- `File ref_fa_gz`: bgzipped `ref_fa`, from references.
+- `File ref_fai_gz`: Index for `ref_fa_gz`, from references.
+- `File ref_vep_cache`: From references.
+- `String prefix`: Prefix for output file names.
+- `String utils_docker`, `String vep_hail_docker`: Container images.
+- `RuntimeAttr? runtime_attr_*`: Optional per-task runtime overrides (6).
+
+Outputs:
+- `File annotations_tsv_vep_trv`: TSV with a header and one row per TRV ALT allele, with columns CHROM, POS, REF, ALT, ID, NORM_POS, NORM_REF, NORM_ALT, AC, AF and VEP, where VEP holds the comma-separated VEP annotations for that allele.
+
 ### [AnnotateVRS](../wdl/annotation/AnnotateVRS.wdl)
 This workflow annotates each variant with its GA4GH Variant Representation Specification (VRS) attributes using a seqrepo sequence repository. It runs `vrs-annotate` per contig to add the VRS INFO fields, then extracts them into an annotation TSV of five locating columns (CHROM, POS, REF, ALT, ID) followed by a column for each VRS field.
 
