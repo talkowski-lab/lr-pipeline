@@ -547,6 +547,16 @@ workflows:
       tags:
         - /.*/
 
+  - subclass: WDL
+    name: MergeTRVLengthDeltas
+    primaryDescriptorPath: /wdl/annotation_utils/MergeTRVLengthDeltas.wdl
+    filters:
+      branches:
+        - main
+        - kj-trv-length-deltas
+      tags:
+        - /.*/
+
   # -----
   # Tools
   # -----
