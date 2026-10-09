@@ -267,7 +267,6 @@ workflows:
     filters:
       branches:
         - main
-        - kj-summarize-trv-alleles
       tags:
         - /.*/
 
