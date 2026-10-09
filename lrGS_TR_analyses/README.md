@@ -1,0 +1,45 @@
+# lrGS_TR_analyses
+
+Tandem-repeat variant (TRV) analyses of the gnomAD long-read cohort VCFs.
+
+## AnalyzeTRVariants.wdl
+Per contig (scattered over parallel `vcfs` / `vcf_idxs` / `contigs` arrays):
+1. `ExtractTRV` (bcftools): TRV records (`INFO/allele_type == "trv"`) → `<prefix>.<contig>.TRV.vcf.gz`, sample list, and a `bcftools query` table of site fields plus per-sample GT.
+2. `AnalyzeTRV` (`analyze_TRV_vcf.py analyze`, standard library only) writes three outputs:
+   - **Site BED.** Columns: repeat span (TRID), REF repeat sequence / length / motif count, and per-ALT length, size difference, size difference per motif and motif-count difference vs REF. It also has AC/AF/AN, genic context (coding > UTR > intronic > intergenic) with gene names, and for intergenic TRs the distance to, and gene of, the closest 5'UTR and 3'UTR.
+   - **Per-sample size-difference and motif-count-difference matrices.** Site × sample; each cell is `d1,d2` in GT order.
+   - **Per-sample summary by genic context.** PASS sites only unless `all_filters`.
+3. `ConcatSites` → genome-wide `<prefix>.TRV.sites.bed.gz` (+ .tbi); `MergeSummaries` → genome-wide `<prefix>.TRV.per_sample_summary.tsv`.
+
+Motif count is `INFO/MC_allele` where present (multi-allelic sites). Otherwise it is a greedy exact-match count of MOTIFS; the `mc_source` column records which. Full definitions are in the `analyze_TRV_vcf.py` docstring.
+
+Inputs on Terra (root entity `LR_contig_set`): `vcfs = this.LR_contigs.hprc_hgsvc_vcf_V10`, `vcf_idxs = this.LR_contigs.hprc_hgsvc_vcf_idx_V10`, `contigs = this.LR_contigs.contig`, `gtf` = gnomAD-SV r3 GENCODE v39 GTF, `analysis_script = analyze_TRV_vcf.py`.
+
+## run_analyze_TRV_vcf.sh
+Local driver running the same steps: `run_analyze_TRV_vcf.sh <vcf_list> <gencode.gtf.gz> <out_dir>` (gs:// inputs need `GCS_OAUTH_TOKEN`).
+
+## Bed-table analyses (from the VEP-parsed annotated bed files)
+These run on `gnomAD_LR.{cohort}.vep_parsed.annotated.bed.gz`. Outputs and findings are described in `final_vcfs/STR_catalog/SESSION_SUMMARY.md`.
+- `extract_TRV_sites.sh <input.bed.gz> <output.bed.gz>`: keeps rows whose ID contains `-TRV-`. Output is bgzipped and tabix-indexed, plus FILTER counts.
+- `annotate_TRV_genic_context.sh <TRV.bed.gz> <gencode.gtf.gz> <out.tsv.gz>`: genic context (coding > UTR > intronic > intergenic) via `bedtools map`, plus locus length, minimum motif length and per-ALT length change.
+- `plot_TRV_genic_context.py --inputs LABEL=tsv.gz ... --out-prefix P`: counts, locus-length ECDF, allele length-change bins and motif length by genic context.
+- `plot_TRV_motif_counts.py --inputs LABEL=GENIC_TSV,TRV_BED ... --out-prefix P`: non-ref site counts vs motif size, cohort × context panels.
+- `plot_TRV_motif_length_line.py --inputs LABEL=GENIC_TSV,TRV_BED ... --colors LABEL=HEX ... --context coding --out-prefix P`: motif-length distribution line plot with cohorts overlaid.
+- `classify_coding_TRV_alleles.py --genic-tsv G --trv-bed B --gtf GTF --label L --out-prefix P`: classifies coding TRV ALT alleles as frameshift / in-frame del / in-frame ins / no length change / partial CDS, with allele, site and gene counts by AC.
+- `summarize_coding_STR_per_gene.py --alleles <classify output alleles.tsv.gz> --out-prefix P [--max-motif 6] [--min-ac 1]`: coding STR sites per gene (motif ≤ 6 bp, locus inside one CDS block), split by site class LoF (any frameshift allele) / in-frame / no length change; writes per-site, per-gene and summary tables.
+- `plot_STR_variability.py --trv-bed TRV.bed.gz --label L --out-prefix P [--max-motif 6] [--min-copies 2] [--min-loci 100]`: STR locus variability (distinct ALT alleles with AC > 0; non-ref allele frequency ΣAC/AN) vs STR size, copy number and motif length, split by TR catalog (SOURCE). Writes line plots (vs size/copies, and vs motif at fixed copy number or size), heatmaps and a binned TSV.
+- `plot_STR_constraint_by_context.py --trv-bed B --genic-tsv G --motif M [--source TRExplorer] --label L --out-prefix P`: for one motif length, distinct ALT alleles and non-ref AF vs copy number, one line per genic context (coding / UTR / intronic / intergenic), plus loci per bin and a binned TSV.
+- `plot_STR_constraint_allele_class.py --trv-bed B --genic-tsv G --gtf GTF --motif M [--source TRExplorer] --label L --out-prefix P`: the same loci with variation split by ALT-allele class (in-frame / frameshift / no length change). Plots distinct alleles and summed AF per class vs copy number by genic context; coding loci must lie inside one CDS block.
+- `plot_STR_constraint_by_loeuf.py --trv-bed B --genic-tsv G --gtf GTF --constraint gnomad.v4.1.1.constraint_metrics.tsv.bgz --motif M --label L --out-prefix P`: coding STRs (inside CDS) split by gene LOEUF tertile (MANE genes, genome-wide cutoffs) with intergenic reference. Plots non-ref AF, distinct ALT alleles and median max |ALT−REF| vs copy number. Imports helpers from `plot_STR_constraint_allele_class.py` (same folder).
+
+## Slide deck (TRV / STR summary)
+- `count_variant_overview.sh <annotated.bed.gz> <label> <out.tsv>`: variant counts by class (SNV, del/ins split at 50 bp into indel/SV, TRV, others), all and PASS.
+- `build_trv_locus_table.py --trv-bed B --genic-tsv G --gtf GTF --out loci.tsv.gz`: one row per TRV with TRID span, catalog, motif, copies, GC and purity of the REF repeat, ALT alleles (AC > 0), non-ref AF, max |ALT−REF|, in-frame/frameshift allele counts, and genic context (coding = inside one CDS block; coding_partial otherwise).
+- `make_trv_deck_figures.py --overview L=tsv ... --loci L=tsv.gz ... --coding-alleles L=tsv.gz ... --constraint C --out-dir D`: all deck figures (PNG + PDF) and `summary.json`. Includes the coding constraint model: a Poisson GLM of ALT allele count on size, motif × catalog, GC and purity, with obs/exp aggregated per gene and per LOEUF decile.
+- `build_trv_deck_pptx.py --figures-dir deck/figures --out deck/TRV_STR_deck.pptx`: PowerPoint version of the deck (python-pptx; figures embedded as images, full slide text in speaker notes).
+- `plot_coding_TRV_motif_counts.py --loci L=loci.tsv.gz ... --colors L=HEX ... [--context coding|UTR|intronic|intergenic] [--png] --out-prefix P`: counts of non-ref PASS TRV sites in one genic context by motif length, cohorts overlaid (linear and log y) + TSV.
+- `plot_TRV_motif_counts_by_context.py --loci L.TRV_loci.tsv.gz --label L [--contexts coding intronic intergenic] --out-prefix P`: one cohort, non-ref PASS TRV counts per exact motif length in three panels (1–10, 11–100, 101–1000 bp; shared log10 y), one line per genic context; PDF + TSV.
+- `plot_TRV_size_distribution.py --loci L=loci.tsv.gz ... --colors L=HEX ... [--context coding] --out-prefix P`: repeat-size (TRID span) distribution of non-ref PASS TRVs in one genic context, cohorts overlaid: exact sizes 1–100 bp, 10-bp bins 101–1000 bp (log10 y) and an ECDF; PDF + TSV.
+- `plot_coding_oe_motif_subset.py --loci L.TRV_loci.tsv.gz --constraint C --motifs M ... [--compare-motifs M ...] --label L --out-prefix P`: obs/exp ALT alleles of coding TRVs by LOEUF decile for a chosen motif-length set (deck constraint model; imports `make_trv_deck_figures.py`, run with this folder on PYTHONPATH).
+- `count_variants_in_trv.sh` + `trv_novelty.py`: routine variants inside each TRV (TRID column) and how many lack both dbGaP and gnomAD v4 matches; per-TRV BED and proportion of novel TRVs by size, motif and genic context.
+- `extract_indels_in_trvs.sh <bed.gz> <trv_ids.txt> <out.tsv.gz>` + `summarize_coding_trv_indels.py --indels I --loci L --label X --out-prefix P`: PASS indels (del/ins, incl. SV-sized) inside coding TRVs and the share not captured by srGS (no dbGaP / gnomAD v4 match), binned by indel size and by TRV reference size.
