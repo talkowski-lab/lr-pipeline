@@ -666,6 +666,30 @@ Outputs:
 - `File? plotting_denovo_parquet`: Per-proband de novo transmission counts, as Parquet (when `create_plotting` and trios are found via `ped`).
 - `File? plotting_variant_list_parquet`: Raw per-variant genotype-count list, as Parquet (when `create_plotting`).
 
+### [SummarizeTRVAllelesPerGenome](../wdl/annotation_utils/SummarizeTRVAllelesPerGenome.wdl)
+This utility counts the tandem repeat variant (INFO/allele_type='trv') ALT alleles carried per genome across one or more VCFs, how many of them fall within coding sequences and how many distinct genes those coding alleles hit, producing the sentence 'An average of X alternative alleles were observed per individual genome, including Y that reside within coding sequences of Z genes'.
+
+Each sample counts every distinct ALT allele index in its genotype at a TRV record once, so 2/3 counts two alleles while 2/2 and 0/2 count one; missing alleles are ignored. This matches the per-ALT carrier counts in the `SummarizeAnnotations` plotting variant list, and no length filter is applied. Averages divide by the number of samples in the VCF header, which must be identical across all inputs.
+
+An ALT allele is coding when its changed span, found by trimming the bases REF and ALT share at the start and then at the end, overlaps a CDS line of `coding_gtf`; a pure insertion is coding only when both of its flanking bases lie within the same CDS line. Every CDS line counts regardless of gene type. A secondary metric instead calls every ALT allele coding when the whole REF span of its record overlaps a CDS line.
+
+Genes are the distinct `gene_name` values of the CDS lines hit by the coding ALT alleles a sample carries, unioned across all inputs before averaging.
+
+Inputs:
+- `Array[File] vcfs`: VCFs whose TRV alleles are counted.
+- `Array[File] vcf_idxs`: Indexes for `vcfs`.
+- `File coding_gtf`: From references.
+- `Int? records_per_shard`: Number of records to keep within a single shard.
+- `String prefix`: Prefix for output file names.
+- `String utils_docker`: Container image.
+- `RuntimeAttr? runtime_attr_*`: Optional per-task runtime overrides (3).
+
+Outputs:
+- `File summary_tsv`: TSV of metric and value rows, holding the record, allele and gene totals and their per-genome averages.
+- `String summary_sentence`: Per-genome averages formatted into the summary sentence, to one decimal place.
+- `File coding_alleles_tsv`: TSV with one row per coding TRV ALT allele, giving its record, allele index, carrier count and the genes whose CDS it overlaps.
+- `File coding_genes_tsv`: TSV with one row per gene hit by a coding TRV ALT allele, giving the number of such alleles and of samples carrying at least one of them.
+
 ### [CreateCohortMethylationFile](../wdl/annotation_utils/CreateCohortMethylationFile.wdl)
 This utility builds cohort-level CpG methylation matrices from per-sample `MethylationProfiling` BED outputs. For each contig, it merges every sample's combined and per-haplotype modification-score BEDs into a wide site-by-sample(/haplotype) matrix, filling `.` for sites missing in a given sample or haplotype. Samples can optionally be processed in shards (merged independently, then joined column-wise) to bound how many sample files are localized onto a single task at once.
 
