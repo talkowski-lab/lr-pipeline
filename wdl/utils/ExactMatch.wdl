@@ -6,8 +6,9 @@ import "../utils/Structs.wdl"
 workflow ExactMatch {
     meta {
         description: [
-            "This sub-workflow performs the first callset-comparison round, matching records to a truth callset on exact position and allele. The contig is cut into fixed-width regions and each is processed independently: both VCFs are streamed down to the region straight from the bucket, with genotypes dropped and any include expression applied on the way, then optionally renamed to a common ID scheme and matched. Each region's unmatched callset records and its truth records are then subset to the caller's minimum Truvari lengths, so no step ever passes over a whole contig. The per-region annotations and VCFs are concatenated into the form `TruvariMatch` expects.",
-            "The matching itself runs only when `run_exact_matching` is true; otherwise every callset record in the region is passed on as unmatched. The truth records are subset for Truvari only when `run_truvari_matching` is true, and the truth callset is never read when both are false, leaving only the callset preparation."
+            "This sub-workflow performs the first callset-comparison round, matching records to a truth callset on exact position and allele. The contig is cut into fixed-width regions and each is processed independently: both VCFs are streamed down to the region straight from the bucket, with genotypes dropped and any include expression applied on the way, then optionally renamed to a common ID scheme and matched. Each region's unmatched callset records and its truth records are then subset to the caller's minimum and optional maximum Truvari lengths, so no step ever passes over a whole contig. The per-region annotations and VCFs are concatenated into the form `TruvariMatch` expects.",
+            "The matching itself runs only when `run_exact_matching` is true; otherwise every callset record in the region is passed on as unmatched. The truth records are subset for Truvari only when `run_truvari_matching` is true, and the truth callset is never read when both are false, leaving only the callset preparation.",
+            "When `max_sv_length_truvari_vcf` is set and Truvari runs, callset records above it are held out of `truvari_eval_vcf` and returned as `truvari_oversized_vcf`, so the caller can still pass them to its next round. The callset cap is ignored when Truvari is off, because the unmatched records then feed that next round directly. Truth records above `max_sv_length_truvari_truth_snv_indel_vcf` are dropped."
         ]
     }
 
@@ -22,6 +23,8 @@ workflow ExactMatch {
         shard_bin_size_exact_match: "Width in base pairs of the contig regions the matching step is sharded into."
         min_sv_length_truvari_vcf: "Minimum length for an unmatched callset record to be emitted for the next matching round, measured by `length_field_vcf`."
         min_sv_length_truvari_truth_snv_indel_vcf: "Minimum length for a truth record to be emitted for Truvari, measured by `length_field_truth_snv_indel_vcf`."
+        max_sv_length_truvari_vcf: "Maximum length for an unmatched callset record to enter Truvari, measured by `length_field_vcf`. Longer records are emitted as `truvari_oversized_vcf` instead. Ignored when `run_truvari_matching` is false."
+        max_sv_length_truvari_truth_snv_indel_vcf: "Maximum length for a truth record to be emitted for Truvari, measured by `length_field_truth_snv_indel_vcf`."
         length_field_vcf: "INFO field in the callset holding allele length."
         length_field_truth_snv_indel_vcf: "Length used to filter the truth callset, either an INFO field or `ILEN`, the bcftools built-in indel length computed from REF and ALT."
         source_tag_truth_snv_indel_vcf: "Tag identifying the truth callset in the annotations."
@@ -32,10 +35,12 @@ workflow ExactMatch {
         rename_id_strip_chr_vcf: "Strip the `chr` prefix while renaming."
         rename_id_strip_chr_truth_snv_indel_vcf: "Strip the `chr` prefix while renaming."
         annotated_tsv: "Exact-match annotations, absent when `run_exact_matching` is false."
-        truvari_eval_vcf: "Unmatched callset records at or above `min_sv_length_truvari_vcf`, passed to the next matching round."
+        truvari_eval_vcf: "Unmatched callset records at or above `min_sv_length_truvari_vcf` and, when capped, at or below `max_sv_length_truvari_vcf`, passed to the next matching round."
         truvari_eval_vcf_idx: "Index for truvari_eval_vcf."
-        truvari_truth_vcf: "Renamed truth records at or above `min_sv_length_truvari_truth_snv_indel_vcf`, passed to `TruvariMatch`. Absent when `run_truvari_matching` is false."
+        truvari_truth_vcf: "Renamed truth records at or above `min_sv_length_truvari_truth_snv_indel_vcf` and, when capped, at or below `max_sv_length_truvari_truth_snv_indel_vcf`, passed to `TruvariMatch`. Absent when `run_truvari_matching` is false."
         truvari_truth_vcf_idx: "Index for truvari_truth_vcf."
+        truvari_oversized_vcf: "Unmatched callset records above `max_sv_length_truvari_vcf`, withheld from Truvari. Absent unless the cap is set and `run_truvari_matching` is true."
+        truvari_oversized_vcf_idx: "Index for truvari_oversized_vcf."
     }
 
     input {
@@ -53,6 +58,8 @@ workflow ExactMatch {
 
         Int min_sv_length_truvari_vcf
         Int min_sv_length_truvari_truth_snv_indel_vcf
+        Int? max_sv_length_truvari_vcf
+        Int? max_sv_length_truvari_truth_snv_indel_vcf
         String length_field_vcf
         String length_field_truth_snv_indel_vcf
         String source_tag_truth_snv_indel_vcf
@@ -75,12 +82,21 @@ workflow ExactMatch {
         RuntimeAttr? runtime_attr_append_exact_annotations
         RuntimeAttr? runtime_attr_truvari_subset_vcf
         RuntimeAttr? runtime_attr_truvari_subset_truth
+        RuntimeAttr? runtime_attr_truvari_subset_oversized
         RuntimeAttr? runtime_attr_concat_exact_annotations
         RuntimeAttr? runtime_attr_concat_exact_unmatched
         RuntimeAttr? runtime_attr_concat_exact_truth
+        RuntimeAttr? runtime_attr_concat_exact_oversized
     }
 
     Boolean stream_truth = run_exact_matching || run_truvari_matching
+
+    # Cap the callset only when Truvari consumes it, since without that round the leftovers feed the next one uncapped
+    Boolean cap_truvari_eval = run_truvari_matching && defined(max_sv_length_truvari_vcf)
+
+    if (cap_truvari_eval) {
+        Int max_sv_length_truvari_eval = select_first([max_sv_length_truvari_vcf])
+    }
 
     call Helpers.CreateContigShards as CreateExactShards {
         input:
@@ -189,9 +205,24 @@ workflow ExactMatch {
                 vcf_idx = shard_unmatched_vcf_idx,
                 length_field = length_field_vcf,
                 min_length = min_sv_length_truvari_vcf,
+                max_length = max_sv_length_truvari_eval,
                 prefix = "~{prefix}.truvari_eval_~{k}",
                 docker = utils_docker,
                 runtime_attr_override = runtime_attr_truvari_subset_vcf
+        }
+
+        # Hold back the records above the cap so the caller can still pass them to its next round
+        if (cap_truvari_eval) {
+            call Helpers.SubsetVcfByLength as SubsetTruvariOversized {
+                input:
+                    vcf = shard_unmatched_vcf,
+                    vcf_idx = shard_unmatched_vcf_idx,
+                    length_field = length_field_vcf,
+                    min_length = select_first([max_sv_length_truvari_eval]) + 1,
+                    prefix = "~{prefix}.truvari_oversized_~{k}",
+                    docker = utils_docker,
+                    runtime_attr_override = runtime_attr_truvari_subset_oversized
+            }
         }
 
         if (run_truvari_matching) {
@@ -201,6 +232,7 @@ workflow ExactMatch {
                     vcf_idx = select_first([shard_truth_vcf_idx]),
                     length_field = length_field_truth_snv_indel_vcf,
                     min_length = min_sv_length_truvari_truth_snv_indel_vcf,
+                    max_length = max_sv_length_truvari_truth_snv_indel_vcf,
                     prefix = "~{prefix}.truvari_truth_~{k}",
                     docker = utils_docker,
                     runtime_attr_override = runtime_attr_truvari_subset_truth
@@ -244,11 +276,26 @@ workflow ExactMatch {
         }
     }
 
+    if (cap_truvari_eval) {
+        call Helpers.ConcatVcfs as ConcatExactOversized {
+            input:
+                vcfs = select_all(SubsetTruvariOversized.subset_vcf),
+                vcf_idxs = select_all(SubsetTruvariOversized.subset_vcf_idx),
+                allow_overlaps = false,
+                naive = false,
+                prefix = "~{prefix}.truvari_oversized",
+                docker = utils_docker,
+                runtime_attr_override = runtime_attr_concat_exact_oversized
+        }
+    }
+
     output {
         File? annotated_tsv = ConcatExactAnnotations.concatenated_tsv
         File truvari_eval_vcf = ConcatExactUnmatched.concat_vcf
         File truvari_eval_vcf_idx = ConcatExactUnmatched.concat_vcf_idx
         File? truvari_truth_vcf = ConcatExactTruth.concat_vcf
         File? truvari_truth_vcf_idx = ConcatExactTruth.concat_vcf_idx
+        File? truvari_oversized_vcf = ConcatExactOversized.concat_vcf
+        File? truvari_oversized_vcf_idx = ConcatExactOversized.concat_vcf_idx
     }
 }
