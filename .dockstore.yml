@@ -144,6 +144,29 @@ workflows:
       tags:
         - /.*/
 
+  # --
+  # QC
+  # --
+  - subclass: WDL
+    name: MethylationQC
+    primaryDescriptorPath: /wdl/qc/MethylationQC.wdl
+    filters:
+      branches:
+        - main
+        - aou_scaling
+      tags:
+        - /.*/
+
+  - subclass: WDL
+    name: CompareMethylationQC
+    primaryDescriptorPath: /wdl/qc/CompareMethylationQC.wdl
+    filters:
+      branches:
+        - main
+        - aou_scaling
+      tags:
+        - /.*/
+
   # --------------------
   # Annotation Utilities
   # --------------------
