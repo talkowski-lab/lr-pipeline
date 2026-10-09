@@ -1297,6 +1297,36 @@ Outputs:
 - `File variant_vcf`: VCF containing just the selected variants.
 - `File variant_vcf_idx`: Index for `variant_vcf`.
 
+### [ExtractTRVLengthDeltas](../wdl/annotation_utils/ExtractTRVLengthDeltas.wdl)
+This utility extracts ALT allele length deltas (`len(ALT) - len(REF)`) across the tandem repeat records (`INFO/allele_type=trv`) of one single-contig VCF whose shortest `INFO/MOTIFS` entry is 3 bp long. It outputs a per-allele table and a per-length-delta count table, both additive across contigs, so per-contig outputs aggregate by concatenation and by summing within each length delta respectively.
+
+Each count table row counts distinct ALT alleles (`n_alleles`) and their summed `INFO/AC` (`allele_count`) at one length delta. Genotypes are never decoded, so the task scales with the number of records rather than samples.
+
+Inputs:
+- `File vcf`: Single-contig VCF whose tandem repeat records are tabulated.
+- `File vcf_idx`: Index for `vcf`.
+- `String prefix`: Prefix for output file names.
+- `String utils_docker`: Container image.
+- `RuntimeAttr? runtime_attr_*`: Optional per-task runtime overrides.
+
+Outputs:
+- `File allele_deltas_tsv`: Gzipped per-allele table with columns `contig`, `pos`, `trid`, `motifs`, `ref_length`, `alt_length`, `length_delta` and `allele_count`.
+- `File length_deltas_tsv`: Gzipped count table with columns `contig`, `length_delta`, `n_alleles` and `allele_count`.
+
+### [MergeTRVLengthDeltas](../wdl/annotation_utils/MergeTRVLengthDeltas.wdl)
+This utility merges the per-contig outputs of `ExtractTRVLengthDeltas` into callset-wide tables. It concatenates the per-allele tables and sums the per-length-delta count tables within each length delta.
+
+Inputs:
+- `Array[File] allele_deltas_tsvs`: Per-contig `ExtractTRVLengthDeltas.allele_deltas_tsv` outputs.
+- `Array[File] length_deltas_tsvs`: Per-contig `ExtractTRVLengthDeltas.length_deltas_tsv` outputs.
+- `String prefix`: Prefix for output file names.
+- `String utils_docker`: Container image.
+- `RuntimeAttr? runtime_attr_*`: Optional per-task runtime overrides (2).
+
+Outputs:
+- `File merged_allele_deltas_tsv`: Gzipped per-allele table concatenated across all inputs, with the same columns as the inputs.
+- `File merged_length_deltas_tsv`: Gzipped count table with columns `length_delta`, `n_alleles` and `allele_count`, summed across all inputs.
+
 
 ## Tools
 
