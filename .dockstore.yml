@@ -276,7 +276,6 @@ workflows:
     filters:
       branches:
         - main
-        - kj-summarize-variant-bases
       tags:
         - /.*/
 
@@ -286,7 +285,6 @@ workflows:
     filters:
       branches:
         - main
-        - kj-summarize-variant-bases
       tags:
         - /.*/
 
