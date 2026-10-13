@@ -17,23 +17,15 @@ version 1.0
 ##      from step 1, or from sample_count_table when provided (a precomputed
 ##      sample vs. count TSV, e.g. the sample_variant_count_table of an earlier
 ##      run; header with "sample" or "sample_id" and "n_total_nonref" or "count").
-##   3. cumulative union table: row i = the i-th ranked sample, i, and the number
-##      of distinct PASS variant SITES where at least one of the top i
-##      (smallest-burden) samples is non-ref, a set UNION across samples, split by
-##      type/size. Computed in ONE pass per chromosome (UnionMinRankHistogram,
-##      scattered over the VCFs): bcftools view -f PASS -S <ranked samples> -c 1
-##      subsets each VCF to the ranked samples, each site is assigned the rank of
-##      its best-ranked non-ref carrier, and sites are histogrammed by that rank.
-##      A site is in the top-i union exactly when that rank is <= i, so summing the
-##      per-chromosome histograms and taking the cumulative sum over rank gives
-##      the table (CumulativeUnionCounts). This replaces the earlier one
-##      bcftools pass per (chromosome x i), i.e. N x n_vcfs passes, and gives
-##      identical counts (checked on a chr22 slice at i = 1..292).
-##      Rows are reported at checkpoint sample sizes only: 1..10 by 1, 12..20 by
-##      2, 25..100 by 5, 110..1,000 by 10, 1,100..10,000 by 100, then by 1,000,
-##      plus the last rank N (e.g. ..., 1,200, 1,300, 1,319). Every rank is still
-##      accumulated, so each reported row is exact; cost does not depend on the
-##      number of checkpoints (one pass per chromosome either way).
+##   3. cumulative union table at checkpoint sample sizes (MakeCutoffs): 1..10 by
+##      1, 12..20 by 2, 25..100 by 5, 110..1,000 by 10, 1,100..10,000 by 100, then
+##      by 1,000, plus the last rank N (e.g. ..., 1,200, 1,300, 1,319). One task per
+##      cutoff i (CumulativeUnionCounts, scattered over the cutoffs) counts the
+##      distinct PASS variant SITES where at least one of the top i (smallest-
+##      burden) samples is non-ref, a set UNION across samples, split by type/size:
+##      bcftools view -f PASS -S <top-i samples> -c 1 on every chromosome VCF, with
+##      the VCFs processed in parallel across the task's CPUs (cumulative_cpu).
+##      ConcatCumulativeCounts stacks the rows in cutoff order.
 ##
 ## Only samples in sample_population_list are analyzed: PerSampleTypeCounts reads
 ## only them (bcftools view -S), so the per-sample count table covers only them;
@@ -62,13 +54,15 @@ workflow PerSampleVariantBurden {
         File?        build_sample_variant_count_table_script  # build_sample_variant_count_table.py;
                                                                # required unless sample_count_table is given
         File         rank_samples_script                      # rank_samples.py
-        File         union_min_rank_histogram_script          # union_min_rank_histogram.sh
-        File         cumulative_union_from_min_rank_script    # cumulative_union_from_min_rank.py
+        File         make_cutoffs_script                      # make_cutoffs.py
+        File         cumulative_union_counts_script           # cumulative_union_counts.sh
+        File         concat_cumulative_counts_script          # concat_cumulative_counts.py
         String       bcftools_docker = "quay.io/biocontainers/bcftools@sha256:badc3a0c7af72a83e5761ab0e881aa84204694bdead003b47552cb283958f78d"
         String       python_docker   = "python:3.11-slim"
         Int          mem_gb      = 8
         Int          disk_gb     = 50
         Int          preemptible = 1
+        Int          cumulative_cpu = 4     # per-cutoff task: chromosome VCFs counted in parallel
     }
 
     if (!defined(sample_count_table)) {
@@ -113,26 +107,34 @@ workflow PerSampleVariantBurden {
             preemptible            = preemptible
     }
 
-    # One task per chromosome VCF: a single bcftools pass covering every i.
-    scatter (vcf in vcfs) {
-        call UnionMinRankHistogram {
+    call MakeCutoffs {
+        input:
+            ordered_samples = RankSamples.ordered_samples,
+            script          = make_cutoffs_script,
+            docker          = python_docker,
+            preemptible     = preemptible
+    }
+
+    # One task per cutoff i: union of non-ref PASS sites over the top-i ranked samples.
+    scatter (i in MakeCutoffs.cutoffs) {
+        call CumulativeUnionCounts {
             input:
-                vcf             = vcf,
                 ordered_samples = RankSamples.ordered_samples,
-                script          = union_min_rank_histogram_script,
+                i               = i,
+                vcfs            = vcfs,
+                script          = cumulative_union_counts_script,
                 docker          = bcftools_docker,
+                cpu             = cumulative_cpu,
                 mem_gb          = mem_gb,
-                disk_gb         = disk_gb,
                 preemptible     = preemptible
         }
     }
 
-    call CumulativeUnionCounts {
+    call ConcatCumulativeCounts {
         input:
-            ordered_samples = RankSamples.ordered_samples,
-            histograms      = UnionMinRankHistogram.histogram,
+            cumulative_rows = CumulativeUnionCounts.row,
             output_basename = output_basename,
-            script          = cumulative_union_from_min_rank_script,
+            script          = concat_cumulative_counts_script,
             docker          = python_docker,
             mem_gb          = mem_gb,
             disk_gb         = disk_gb,
@@ -144,13 +146,13 @@ workflow PerSampleVariantBurden {
         Array[File]? per_sample_counts_per_vcf     = PerSampleTypeCounts.per_sample_counts
         File?        sample_variant_count_table    = BuildSampleVariantCountTable.count_table
         File         sample_rank_table             = RankSamples.sample_rank
-        Array[File]  min_rank_histogram_per_vcf    = UnionMinRankHistogram.histogram
-        File         ranked_sample_burden_table    = CumulativeUnionCounts.out_table
+        Array[Int]   cumulative_cutoffs            = MakeCutoffs.cutoffs
+        File         ranked_sample_burden_table    = ConcatCumulativeCounts.out_table
     }
 
     meta {
         author: "gnomAD LR analysis"
-        description: "Per-sample PASS-only non-ref variant burden across chromosome-shard VCFs: a ranked, cumulative-union-site (not summed) population-list-restricted burden table computed in one pass per chromosome, and (unless a precomputed sample vs. count table is supplied) a flat unranked genome-wide per-sample count table, all restricted to the samples in sample_population_list."
+        description: "Per-sample PASS-only non-ref variant burden across chromosome-shard VCFs: a ranked, cumulative-union-site (not summed) population-list-restricted burden table at checkpoint sample sizes (one task per cutoff), and (unless a precomputed sample vs. count table is supplied) a flat unranked genome-wide per-sample count table, all restricted to the samples in sample_population_list."
     }
 }
 
@@ -217,33 +219,28 @@ task RankSamples {
     }
 }
 
-task UnionMinRankHistogram {
+task MakeCutoffs {
     input {
-        File    vcf
         File    ordered_samples
         File    script
         String  docker
-        Int     mem_gb
-        Int     disk_gb
         Int     preemptible
     }
 
-    String out_prefix = basename(vcf, ".vcf.gz")
-
     command <<<
         set -euo pipefail
-        bash ~{script} ~{vcf} ~{ordered_samples} ~{out_prefix}
+        python3 ~{script} ~{ordered_samples} cutoffs.txt
     >>>
 
     output {
-        File histogram = out_prefix + ".min_rank_histogram.tsv"
+        Array[Int] cutoffs = read_lines("cutoffs.txt")
     }
 
     runtime {
         docker:      docker
-        memory:      mem_gb + " GB"
-        cpu:         2
-        disks:       "local-disk " + disk_gb + " HDD"
+        memory:      "2 GB"
+        cpu:         1
+        disks:       "local-disk 10 HDD"
         preemptible: preemptible
     }
 }
@@ -251,7 +248,39 @@ task UnionMinRankHistogram {
 task CumulativeUnionCounts {
     input {
         File        ordered_samples
-        Array[File] histograms
+        Int         i
+        Array[File] vcfs
+        File        script
+        String      docker
+        Int         cpu
+        Int         mem_gb
+        Int         preemptible
+    }
+
+    String out_prefix = "cumulative." + i
+    Int disk_gb = ceil(size(vcfs, "GB")) + 20
+
+    command <<<
+        set -euo pipefail
+        N_PARALLEL=~{cpu} bash ~{script} ~{ordered_samples} ~{i} ~{out_prefix} ~{sep=" " vcfs}
+    >>>
+
+    output {
+        File row = out_prefix + ".tsv"
+    }
+
+    runtime {
+        docker:      docker
+        memory:      mem_gb + " GB"
+        cpu:         cpu
+        disks:       "local-disk " + disk_gb + " HDD"
+        preemptible: preemptible
+    }
+}
+
+task ConcatCumulativeCounts {
+    input {
+        Array[File] cumulative_rows
         String      output_basename
         File        script
         String      docker
@@ -264,7 +293,7 @@ task CumulativeUnionCounts {
 
     command <<<
         set -euo pipefail
-        python3 ~{script} --ordered-samples ~{ordered_samples} --histograms ~{sep=" " histograms} --out ~{out_name}
+        python3 ~{script} ~{out_name} ~{sep=" " cumulative_rows}
     >>>
 
     output {
