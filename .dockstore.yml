@@ -663,7 +663,6 @@ workflows:
     filters:
       branches:
         - main
-        - kj-cnv-scatter-contigs
       tags:
         - /.*/
 
