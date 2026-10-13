@@ -1612,10 +1612,9 @@ Inputs:
 - `File ref_fai`: From references.
 - `File ref_dict`: From references.
 - `File pedigree`: Cohort pedigree used by depth genotyping.
-- `File primary_contigs_list`: Primary contigs, one per line in reference dictionary order, used for the ploidy table, VCF headers, clustering and genotyping.
+- `Array[String] contigs`: Primary contigs in reference dictionary order, used for the ploidy table and VCF headers. Clustering and genotyping run only on the contigs left in the filtered gCNV intervals.
 - `File training_intervals`: Intervals used to train the depth genotyping model.
 - `File median_coverage`: Per-sample median coverage table used by depth genotyping.
-- `File? contig_subset_list`: Optional subset of `primary_contigs_list` to restrict depth clustering and genotyping to.
 - `String variant_prefix`: Prefix used for generated variant IDs.
 - `Int num_training_samples`: Number of samples drawn at random to fit the contig-ploidy and gCNV models in cohort mode, with every remaining sample called against those models in case mode. Set to -1, or to at least the cohort size, every sample is called in cohort mode instead. Interval filtering percentages apply over the training samples alone, so a training set of fewer than a few dozen samples degrades the fitted models. (default `-1`)
 - `Int gcnv_qs_cutoff`: Minimum gCNV quality score for a segment to be kept. (default `30`)
@@ -1698,7 +1697,7 @@ Inputs:
 - `Boolean svtk_set_pass`: Set FILTER to PASS during conversion. (default `false`)
 - `String prefix`: Prefix for output file names.
 - `String gatk_docker`, `String sv_base_mini_docker`, `String sv_pipeline_docker`: Container images.
-- `RuntimeAttr? runtime_attr_*`: Optional per-task runtime overrides (26).
+- `RuntimeAttr? runtime_attr_*`: Optional per-task runtime overrides (27).
 
 Outputs:
 - `File merged_cnvs_vcf`: Cohort CNV VCF after depth preprocessing.
@@ -2286,7 +2285,7 @@ Inputs:
 - `Array[File]+ genotyped_segments_vcfs`: Per-sample gCNV genotyped-segment VCFs.
 - `Array[File]+ genotyped_segments_vcf_idxs`: Indexes for `genotyped_segments_vcfs`.
 - `File contig_ploidy_calls_tar`: Tarred gCNV contig-ploidy calls.
-- `File primary_contigs_list`: Primary contigs, one per line in reference dictionary order, used for the ploidy table and VCF headers.
+- `Array[String] contigs`: Contigs in reference dictionary order, used for the ploidy table and VCF headers.
 - `File ref_fai`: Reference FASTA index, used for contig ordering.
 - `File pedigree`: Pedigree supplying per-sample sex.
 - `String batch_id`: Identifier for the batch.
@@ -2315,8 +2314,8 @@ Inputs:
 - `File depth_vcf_idx`: Index for depth_vcf.
 - `File ploidy_table`: Ploidy table from `DepthPreprocessing`.
 - `String variant_prefix`: Prefix applied to generated variant IDs.
-- `File contig_list`: Primary contigs, one per line in reference dictionary order. These also become the `##contig` lines of the svtk-formatted output.
-- `File? contig_subset_list`: Optional subset of `contig_list` to cluster over.
+- `Array[String] contigs`: Contigs in reference dictionary order, which become the `##contig` lines of the svtk-formatted output.
+- `Array[String] called_contigs`: Contigs to cluster over, one shard each.
 - `File ref_fa`: Reference FASTA, index and sequence dictionary.
 - `File ref_fai`: Reference FASTA, index and sequence dictionary.
 - `File ref_dict`: Reference FASTA, index and sequence dictionary.
@@ -2356,8 +2355,7 @@ Inputs:
 - `File rd_file_idx`: Index for rd_file.
 - `File ref_dict`: Reference sequence dictionary.
 - `File ploidy_table`: Ploidy table from `DepthPreprocessing`.
-- `File contig_list`: Primary contigs, one per line in reference dictionary order, to genotype over.
-- `File? contig_subset_list`: Optional subset of `contig_list` to genotype over.
+- `Array[String] called_contigs`: Contigs to genotype over, one shard each.
 - `String chr_x`: Allosome contig names (defaults `chrX` and `chrY`). (default `chrX`)
 - `String chr_y`: Allosome contig names (defaults `chrX` and `chrY`). (default `chrY`)
 - `String prefix`: Prefix for output file names.
