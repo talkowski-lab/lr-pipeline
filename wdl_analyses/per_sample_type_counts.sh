@@ -17,7 +17,10 @@
 # itself: a het genotype with one ins allele and one del allele is counted
 # in both nInsHets and nDelHets (documented bcftools behavior).
 #
-# Usage: per_sample_type_counts.sh <in.vcf.gz> <out_prefix>
+# Usage: per_sample_type_counts.sh <in.vcf.gz> <out_prefix> [sample_list.txt]
+#   sample_list.txt (optional): one sample ID per line; counts only these samples
+#   (bcftools view -S). Listed samples absent from this VCF are skipped with a
+#   warning; the n_samples output still reports the VCF header's sample count.
 # Writes:
 #   <out_prefix>.n_samples.txt         -- single integer
 #   <out_prefix>.per_sample_counts.tsv -- sample_id, n_total_nonref, then the
@@ -32,6 +35,20 @@ set -euo pipefail
 
 VCF=$1
 OUT_PREFIX=$2
+SAMPLE_LIST=${3:-}
+VIEW_SAMPLES=()
+if [ -n "$SAMPLE_LIST" ]; then
+    n_listed=$(grep -cv '^[[:space:]]*$' "$SAMPLE_LIST" || true)
+    n_found=$(bcftools query -l "$VCF" | awk 'NR==FNR { s[$1] = 1; next } ($1 in s)' - "$SAMPLE_LIST" | wc -l | tr -d ' ')
+    if [ "$n_found" -eq 0 ]; then
+        echo "ERROR: none of the $n_listed samples in $SAMPLE_LIST are in $VCF" >&2
+        exit 1
+    fi
+    if [ "$n_found" -lt "$n_listed" ]; then
+        echo "WARNING: $((n_listed - n_found)) of $n_listed listed samples are not in $VCF; skipped" >&2
+    fi
+    VIEW_SAMPLES=(-S "$SAMPLE_LIST" --force-samples)
+fi
 
 REGIONS=(US RM SD SR)
 
@@ -39,7 +56,7 @@ bcftools query -l "$VCF" | wc -l | tr -d ' ' > "${OUT_PREFIX}.n_samples.txt"
 
 extract_counts() {
     # $1 = bcftools -i filter expression
-    bcftools view -i "$1" "$VCF" | bcftools stats -s - - | awk -F'\t' '
+    bcftools view -i "$1" ${VIEW_SAMPLES[@]+"${VIEW_SAMPLES[@]}"} "$VCF" | bcftools stats -s - - | awk -F'\t' '
         $1=="PSC" { nonref[$3] += $5 + $6 }
         $1=="PSI" { nonref[$3] += $8 + $9 + $10 + $11 }
         END { for (s in nonref) print s"\t"nonref[s] }
