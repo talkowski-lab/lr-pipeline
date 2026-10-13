@@ -19,8 +19,13 @@
      - {out_prefix}.sample_rank.tsv -- sample_id, rank, n_total_nonref
        (diagnostic/audit trail for the ranking itself)
 
+The count TSVs need a header with a sample column ("sample" or "sample_id") and a
+count column ("n_total_nonref" or "count"; if neither is present, the second column
+is used). They can be per-chromosome per_sample_type_counts.sh outputs (summed
+here), or a single precomputed genome-wide sample vs. count table.
+
 Usage:
-    rank_samples.py <sample_population_list.tsv[.gz]> <out_prefix> <shard1.tsv> [<shard2.tsv> ...]
+    rank_samples.py <sample_population_list.tsv[.gz]> <out_prefix> <counts1.tsv> [<counts2.tsv> ...]
 """
 import gzip
 import sys
@@ -85,10 +90,13 @@ def main():
         with open(shard_path) as f:
             header = f.readline().rstrip("\n").split("\t")
             idx = {c: i for i, c in enumerate(header)}
+            sample_i = idx.get("sample", idx.get("sample_id"))
+            count_i = idx.get("n_total_nonref", idx.get("count", 1))
+            if sample_i is None:
+                sys.exit(f"{shard_path}: no 'sample' or 'sample_id' column in header {header}")
             for line in f:
                 cols = line.rstrip("\n").split("\t")
-                sample = cols[idx["sample"]]
-                totals[sample] += int(cols[idx["n_total_nonref"]])
+                totals[cols[sample_i]] += int(cols[count_i])
     print(f"Summed {len(shard_paths)} chromosome shards; {len(totals)} distinct samples seen in VCFs",
           file=sys.stderr)
 
