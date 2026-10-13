@@ -29,6 +29,11 @@ version 1.0
 ##      the table (CumulativeUnionCounts). This replaces the earlier one
 ##      bcftools pass per (chromosome x i), i.e. N x n_vcfs passes, and gives
 ##      identical counts (checked on a chr22 slice at i = 1..292).
+##      Rows are reported at checkpoint sample sizes only: 1..10 by 1, 12..20 by
+##      2, 25..100 by 5, 110..1,000 by 10, 1,100..10,000 by 100, then by 1,000,
+##      plus the last rank N (e.g. ..., 1,200, 1,300, 1,319). Every rank is still
+##      accumulated, so each reported row is exact; cost does not depend on the
+##      number of checkpoints (one pass per chromosome either way).
 ##
 ## Only samples in sample_population_list are analyzed: PerSampleTypeCounts reads
 ## only them (bcftools view -S), so the per-sample count table covers only them;
