@@ -14,7 +14,9 @@ import "../utils/Structs.wdl"
 # Per-site variance across samples is reported raw, decomposed into expected binomial
 # (read-sampling) variance plus excess, and after hypergeometric downsampling of every
 # sample to matched_coverage reads, so platform comparisons are not confounded by depth.
-# Figures are drawn only from the emitted summary tables, so they can be replotted.
+# Outputs are two tarballs: <prefix>.stats_for_comparison.tar.gz holds every data table
+# (and is the only input CompareMethylationQC needs); <prefix>.figures.tar.gz holds the
+# figures, which are drawn only from those tables so they can be replotted.
 workflow MethylationQC {
     input {
         Array[File] methylation_beds
@@ -62,19 +64,19 @@ workflow MethylationQC {
         contigs: "Reference contigs to index. Cohort variance summaries use autosomes only; chrX/chrY feed per-sample sex-check metrics."
         min_coverage: "Minimum read depth for a sample's site to count in raw per-site stats and per-sample beta metrics."
         matched_coverage: "Depth every sample is downsampled to (sites with fewer reads are dropped) for the coverage-matched metrics. Use the same value for both platforms."
-        min_samples_per_site: "Minimum number of samples contributing to a site for it to enter the binned site summaries."
+        min_samples_per_site: "Minimum number of samples contributing to a site for it to enter the binned site summaries. Automatically capped at the cohort size (minimum 2) for small test runs; the value actually used is recorded in cohort_summary."
         max_neighbor_distance: "Maximum bp between adjacent CpGs for the within-sample neighbour-discordance metric."
         pca_site_stride: "Every Nth reference CpG is kept for the sample PCA matrix (100 gives ~290k sites on hg38)."
         samples_per_batch: "Samples per accumulation task. Larger batches mean fewer, longer tasks."
         min_ref_cpg_match_frac: "Fail a sample if fewer than this fraction of its records fall on reference CpGs, which catches a wrong reference build or non-CpG modkit output."
-        outlier_mad: "Samples more than this many robust SDs (MAD-scaled) from the cohort median on any key metric are flagged in sample_qc_tsv."
+        outlier_mad: "Samples more than this many robust SDs (MAD-scaled) from the cohort median on any key metric are flagged in the sample_qc table inside stats_tar."
         methylation_docker: "Image containing scripts/methylation/methylation_qc.py (dockerfiles/Dockerfile.Methylation)."
         runtime_attr_build_index: "Optional RuntimeAttr override. Defaults: 1 CPU, 8 GiB."
         runtime_attr_process_sample: "Optional RuntimeAttr override. Defaults: 2 CPU, 16 GiB, preemptible."
         runtime_attr_accumulate: "Optional RuntimeAttr override. Defaults: 2 CPU, 12 GiB."
         runtime_attr_finalize: "Optional RuntimeAttr override. Defaults: 4 CPU, 32 GiB. PCA memory grows with sample count; raise for >5000 samples."
         runtime_attr_concat: "Optional RuntimeAttr override for TSV concatenation."
-        runtime_attr_plot: "Optional RuntimeAttr override. Defaults: 1 CPU, 8 GiB."
+        runtime_attr_plot: "Optional RuntimeAttr override for plotting and packaging the output tarballs. Defaults: 1 CPU, 8 GiB."
     }
 
     call BuildCpgIndex {
@@ -161,37 +163,32 @@ workflow MethylationQC {
             runtime_attr_override = runtime_attr_finalize
     }
 
-    call PlotQC {
+    call PlotAndPackage {
         input:
-            sample_qc = FinalizeSiteStats.sample_qc_tsv,
-            sample_hists = ConcatSampleHists.concatenated_tsv,
-            site_sd_hist = FinalizeSiteStats.site_sd_hist,
-            site_sd_by_mean = FinalizeSiteStats.site_sd_by_mean,
-            site_mean_sd_grid = FinalizeSiteStats.site_mean_sd_grid,
-            site_excess_var_hist = FinalizeSiteStats.site_excess_var_hist,
-            pca_coords = FinalizeSiteStats.pca_coords,
-            pca_variance = FinalizeSiteStats.pca_variance,
+            stats_files = [
+                FinalizeSiteStats.sample_qc_tsv,
+                ConcatSampleHists.concatenated_tsv,
+                FinalizeSiteStats.cohort_summary,
+                FinalizeSiteStats.per_site_stats,
+                FinalizeSiteStats.per_site_stats_idx,
+                FinalizeSiteStats.site_sd_hist,
+                FinalizeSiteStats.site_sd_by_mean,
+                FinalizeSiteStats.site_mean_sd_grid,
+                FinalizeSiteStats.site_excess_var_hist,
+                FinalizeSiteStats.pca_matrix,
+                FinalizeSiteStats.pca_coords,
+                FinalizeSiteStats.pca_variance
+            ],
             prefix = prefix,
             docker = methylation_docker,
             runtime_attr_override = runtime_attr_plot
     }
 
     output {
-        File cpg_index = BuildCpgIndex.cpg_index
-        File sample_qc_tsv = FinalizeSiteStats.sample_qc_tsv
-        File sample_hists_tsv = ConcatSampleHists.concatenated_tsv
-        File cohort_summary = FinalizeSiteStats.cohort_summary
-        File per_site_stats = FinalizeSiteStats.per_site_stats
-        File per_site_stats_idx = FinalizeSiteStats.per_site_stats_idx
-        File site_sd_hist = FinalizeSiteStats.site_sd_hist
-        File site_sd_by_mean = FinalizeSiteStats.site_sd_by_mean
-        File site_mean_sd_grid = FinalizeSiteStats.site_mean_sd_grid
-        File site_excess_var_hist = FinalizeSiteStats.site_excess_var_hist
-        File pca_matrix = FinalizeSiteStats.pca_matrix
-        File pca_coords = FinalizeSiteStats.pca_coords
-        File pca_variance = FinalizeSiteStats.pca_variance
-        Array[File] figures = PlotQC.figures
-        File figures_tar = PlotQC.figures_tar
+        # All data tables: the input to CompareMethylationQC, and what the figures are
+        # drawn from (replot with: methylation_qc.py plot --stats <this file>).
+        File stats_tar = PlotAndPackage.stats_tar
+        File figures_tar = PlotAndPackage.figures_tar
     }
 }
 
@@ -404,46 +401,41 @@ task FinalizeSiteStats {
     }
 }
 
-task PlotQC {
+task PlotAndPackage {
     input {
-        File sample_qc
-        File sample_hists
-        File site_sd_hist
-        File site_sd_by_mean
-        File site_mean_sd_grid
-        File site_excess_var_hist
-        File pca_coords
-        File pca_variance
+        Array[File] stats_files
         String prefix
         String docker
         RuntimeAttr? runtime_attr_override
     }
 
+    String stats_dir = "~{prefix}.stats_for_comparison"
+
     command <<<
         set -euo pipefail
+        mkdir ~{stats_dir}
+        for f in ~{sep=' ' stats_files}; do
+            ln -s "$f" ~{stats_dir}/
+        done
+
         python3 /opt/gnomad-lr/scripts/methylation/methylation_qc.py plot \
-            --sample-qc ~{sample_qc} \
-            --sample-hists ~{sample_hists} \
-            --site-sd-hist ~{site_sd_hist} \
-            --site-sd-by-mean ~{site_sd_by_mean} \
-            --site-mean-sd-grid ~{site_mean_sd_grid} \
-            --site-excess-var-hist ~{site_excess_var_hist} \
-            --pca-coords ~{pca_coords} \
-            --pca-variance ~{pca_variance} \
+            --stats ~{stats_dir} \
             --prefix ~{prefix} \
-            --outdir figures
-        tar -czf ~{prefix}.figures.tar.gz figures
+            --outdir ~{prefix}.figures
+
+        tar -chzf ~{stats_dir}.tar.gz ~{stats_dir}
+        tar -czf ~{prefix}.figures.tar.gz ~{prefix}.figures
     >>>
 
     output {
-        Array[File] figures = glob("figures/*")
+        File stats_tar = "~{stats_dir}.tar.gz"
         File figures_tar = "~{prefix}.figures.tar.gz"
     }
 
     RuntimeAttr default_attr = object {
         cpu_cores: 1,
         mem_gb: 8,
-        disk_gb: 2 * ceil(size(sample_hists, "GB")) + 10,
+        disk_gb: 3 * ceil(size(stats_files, "GB")) + 10,
         boot_disk_gb: 10,
         preemptible_tries: 2,
         max_retries: 0

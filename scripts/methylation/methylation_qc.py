@@ -27,6 +27,8 @@ import os
 import re
 import subprocess
 import sys
+import tarfile
+import tempfile
 
 import numpy as np
 import pandas as pd
@@ -880,6 +882,17 @@ def flag_outliers(qc, threshold):
     return qc
 
 
+def effective_min_samples(requested, n_samples, label=""):
+    """Cap the per-site sample threshold at the cohort size (SD needs >= 2)."""
+    effective = max(2, min(requested, n_samples))
+    if effective != requested:
+        log(
+            f"WARNING{' ' + label if label else ''}: min_samples_per_site={requested} "
+            f"but the cohort has {n_samples} samples; using {effective} instead."
+        )
+    return effective
+
+
 def cmd_finalize(args):
     index = CpgIndex(args.cpg_index)
     sums = None
@@ -900,12 +913,13 @@ def cmd_finalize(args):
     if len(set(ids)) != n_samples:
         raise SystemExit("Duplicate sample IDs across inputs")
 
+    min_samples = effective_min_samples(args.min_samples_per_site, n_samples)
     stats = per_site_stats(sums)
     write_per_site(
         f"{args.prefix}.per_site_stats.tsv.gz", index, stats, n_samples, sums
     )
     sd_hist, by_mean, grid, excess = summarize_sites(
-        index, stats, args.min_samples_per_site, args.matched_coverage
+        index, stats, min_samples, args.matched_coverage
     )
     for df, name in (
         (sd_hist, "site_sd_hist"),
@@ -944,7 +958,8 @@ def cmd_finalize(args):
         "n_sites_any_coverage": int((sums["n_any"] > 0).sum()),
         "min_coverage": args.min_coverage,
         "matched_coverage": args.matched_coverage,
-        "min_samples_per_site": args.min_samples_per_site,
+        "min_samples_per_site_requested": args.min_samples_per_site,
+        "min_samples_per_site": min_samples,
         "n_outlier_samples": int(qc["is_outlier"].sum()),
     }
     raw_all = by_mean[
@@ -1162,6 +1177,29 @@ def plot_coverage(plt, hists, qc, out, written, group_col="platform"):
     plt.close(fig)
 
 
+NO_SITES_MSG = (
+    "No sites passed the filters\n"
+    "(see min_samples_per_site and min_coverage in cohort_summary.tsv)"
+)
+
+
+def no_data(ax, msg=NO_SITES_MSG):
+    """Say explicitly that a panel is empty instead of drawing flat lines."""
+    ax.text(
+        0.5,
+        0.5,
+        msg,
+        ha="center",
+        va="center",
+        transform=ax.transAxes,
+        color=TEXT_SECONDARY,
+        fontsize=9,
+    )
+    ax.set_xticks([])
+    ax.set_yticks([])
+    ax.grid(False)
+
+
 def sd_density(sd_hist, metric, context, mean_bin="all"):
     h = sd_hist[
         (sd_hist.metric == metric)
@@ -1181,10 +1219,16 @@ def plot_site_sd(plt, sd_hist, out, written):
     colors = context_colors(contexts)
     fig, axes = plt.subplots(1, 2, figsize=(11, 4), sharey=True)
     for ax, metric in zip(axes, ("raw", "matched")):
+        ax.set_title(f"{metric} beta")
+        drawn = 0
         for c in contexts:
             x, dens, _ = sd_density(sd_hist, metric, c)
-            ax.plot(x, dens, color=colors[c], label=c)
-        ax.set_title(f"{metric} beta")
+            if dens.sum() > 0:
+                ax.plot(x, dens, color=colors[c], label=c)
+                drawn += 1
+        if not drawn:
+            no_data(ax)
+            continue
         ax.set_xlabel("Per-site SD of beta across samples")
         ax.set_xlim(0, 0.35)
         ax.legend(title="CpG context")
@@ -1202,7 +1246,8 @@ def plot_mean_vs_sd(plt, grid, by_mean, out, written):
     for ax, metric in zip(axes, ("raw", "matched")):
         g = grid[grid.metric == metric]
         if g.empty:
-            ax.set_visible(False)
+            ax.set_title(f"{metric} beta")
+            no_data(ax)
             continue
         mat = np.zeros((GRID_BINS, GRID_BINS))
         i = np.clip(
@@ -1269,6 +1314,8 @@ def plot_excess(plt, excess, out, written):
     contexts = list(dict.fromkeys(excess.context))
     colors = context_colors(contexts)
     fig, ax = plt.subplots(figsize=(7, 4))
+    ax.set_title("Variance beyond read-sampling noise (clipped to plot range)")
+    drawn = 0
     for c in contexts:
         h = excess[excess.context == c]
         tot = h["count"].sum()
@@ -1276,11 +1323,14 @@ def plot_excess(plt, excess, out, written):
             ax.plot(
                 (h.bin_lo + h.bin_hi) / 2, h["count"] / tot, color=colors[c], label=c
             )
-    ax.axvline(0, color=TEXT_SECONDARY, linewidth=1)
-    ax.set_xlabel("Excess variance (observed - expected binomial)")
-    ax.set_ylabel("Fraction of sites")
-    ax.legend(title="CpG context")
-    ax.set_title("Variance beyond read-sampling noise (clipped to plot range)")
+            drawn += 1
+    if drawn:
+        ax.axvline(0, color=TEXT_SECONDARY, linewidth=1)
+        ax.set_xlabel("Excess variance (observed - expected binomial)")
+        ax.set_ylabel("Fraction of sites")
+        ax.legend(title="CpG context")
+    else:
+        no_data(ax)
     savefig(fig, out, written)
     plt.close(fig)
 
@@ -1401,16 +1451,60 @@ def read_tsv(path):
     return pd.read_csv(path, sep="\t", low_memory=False)
 
 
+# Everything one MethylationQC run hands to plotting and to CompareMethylationQC,
+# bundled as <prefix>.stats_for_comparison.tar.gz. Files are found by suffix.
+STATS_FILES = {
+    "sample_qc": ".sample_qc.tsv",
+    "sample_hists": ".sample_hists.tsv",
+    "cohort_summary": ".cohort_summary.tsv",
+    "per_site_stats": ".per_site_stats.tsv.gz",
+    "site_sd_hist": ".site_sd_hist.tsv",
+    "site_sd_by_mean": ".site_sd_by_mean.tsv",
+    "site_mean_sd_grid": ".site_mean_sd_grid.tsv",
+    "site_excess_var_hist": ".site_excess_var_hist.tsv",
+    "pca_matrix": ".pca_matrix.npz",
+    "pca_coords": ".pca_coords.tsv",
+    "pca_variance": ".pca_variance.tsv",
+}
+
+
+def locate_stats(path):
+    """Map STATS_FILES keys to files in a stats directory or .tar.gz bundle."""
+    if os.path.isfile(path):
+        root = tempfile.mkdtemp(prefix="methylation_stats_")
+        with tarfile.open(path) as tar:
+            if hasattr(tarfile, "data_filter"):
+                tar.extractall(root, filter="data")
+            else:
+                tar.extractall(root)
+    else:
+        root = path
+    found = {k: [] for k in STATS_FILES}
+    for dirpath, _, files in os.walk(root):
+        for f in files:
+            for key, suffix in STATS_FILES.items():
+                if f.endswith(suffix):
+                    found[key].append(os.path.join(dirpath, f))
+    bad = {k: v for k, v in found.items() if len(v) != 1}
+    if bad:
+        raise SystemExit(
+            f"{path} is not a MethylationQC stats bundle; expected exactly one file "
+            f"per suffix, got: { {STATS_FILES[k]: len(v) for k, v in bad.items()} }"
+        )
+    return {k: v[0] for k, v in found.items()}
+
+
 def cmd_plot(args):
     plt = setup_matplotlib()
-    qc = read_tsv(args.sample_qc)
-    hists = read_tsv(args.sample_hists)
-    sd_hist = read_tsv(args.site_sd_hist)
-    by_mean = read_tsv(args.site_sd_by_mean)
-    grid = read_tsv(args.site_mean_sd_grid)
-    excess = read_tsv(args.site_excess_var_hist)
-    coords = read_tsv(args.pca_coords)
-    var = read_tsv(args.pca_variance)
+    st = locate_stats(args.stats)
+    qc = read_tsv(st["sample_qc"])
+    hists = read_tsv(st["sample_hists"])
+    sd_hist = read_tsv(st["site_sd_hist"])
+    by_mean = read_tsv(st["site_sd_by_mean"])
+    grid = read_tsv(st["site_mean_sd_grid"])
+    excess = read_tsv(st["site_excess_var_hist"])
+    coords = read_tsv(st["pca_coords"])
+    var = read_tsv(st["pca_variance"])
     os.makedirs(args.outdir, exist_ok=True)
     p = os.path.join(args.outdir, args.prefix)
     written = []
@@ -1429,6 +1523,22 @@ def cmd_plot(args):
 # ---------------------------------------------------------------------------
 # Cross-platform comparison
 # ---------------------------------------------------------------------------
+
+
+def compare_labels(stats, requested):
+    """Default labels from each bundle's platform (plus beta source if they tie)."""
+    summaries = [read_tsv(st["cohort_summary"]).iloc[0] for st in stats]
+    labels = [str(s.platform) for s in summaries]
+    if labels[0] == labels[1]:
+        labels = [f"{s.platform}_{s.beta_source}" for s in summaries]
+    if labels[0] == labels[1]:
+        labels = [f"{lab}_A" if i == 0 else f"{lab}_B" for i, lab in enumerate(labels)]
+    labels = [r if r else d for r, d in zip(requested, labels)]
+    if labels[0] == labels[1]:
+        raise SystemExit(
+            f"Both inputs would be labelled {labels[0]}; set distinct labels"
+        )
+    return labels
 
 
 def concat_platforms(paths, labels):
@@ -1483,22 +1593,24 @@ def load_site_table(path, label, min_samples):
 
 def cmd_compare(args):
     plt = setup_matplotlib()
-    labels = [args.label_a, args.label_b]
+    stats = [locate_stats(path) for path in args.stats]
+    labels = compare_labels(stats, [args.label_a, args.label_b])
+    log(f"Comparing {labels[0]} (A) vs {labels[1]} (B)")
     p = os.path.join(args.outdir, args.prefix)
     os.makedirs(args.outdir, exist_ok=True)
     written = []
 
     merged = {}
-    for name, paths in (
-        ("sample_qc", args.sample_qc),
-        ("sample_hists", args.sample_hists),
-        ("site_sd_hist", args.site_sd_hist),
-        ("site_sd_by_mean", args.site_sd_by_mean),
-        ("site_mean_sd_grid", args.site_mean_sd_grid),
-        ("site_excess_var_hist", args.site_excess_var_hist),
-        ("cohort_summary", args.cohort_summary),
+    for name in (
+        "sample_qc",
+        "sample_hists",
+        "site_sd_hist",
+        "site_sd_by_mean",
+        "site_mean_sd_grid",
+        "site_excess_var_hist",
+        "cohort_summary",
     ):
-        merged[name] = concat_platforms(paths, labels)
+        merged[name] = concat_platforms([st[name] for st in stats], labels)
         merged[name].to_csv(
             f"{p}.merged_{name}.tsv", sep="\t", index=False, float_format="%.6g"
         )
@@ -1507,8 +1619,15 @@ def cmd_compare(args):
         raise SystemExit(f"Runs used different matched_coverage values: {mc}")
 
     # Joint per-site comparison on sites both platforms cover.
-    a = load_site_table(args.per_site_stats[0], labels[0], args.min_samples_per_site)
-    b = load_site_table(args.per_site_stats[1], labels[1], args.min_samples_per_site)
+    cohort_n = dict(
+        zip(merged["cohort_summary"].platform, merged["cohort_summary"].n_samples)
+    )
+    min_a, min_b = (
+        effective_min_samples(args.min_samples_per_site, int(cohort_n[lab]), lab)
+        for lab in labels
+    )
+    a = load_site_table(stats[0]["per_site_stats"], labels[0], min_a)
+    b = load_site_table(stats[1]["per_site_stats"], labels[1], min_b)
     chroms = sorted(set(a.chrom.cat.categories) | set(b.chrom.cat.categories))
     a["chrom"] = a["chrom"].cat.set_categories(chroms)
     b["chrom"] = b["chrom"].cat.set_categories(chroms)
@@ -1605,8 +1724,8 @@ def cmd_compare(args):
     del joint
 
     # Joint PCA on the shared PCA site subset.
-    pa = np.load(args.pca_matrix[0], allow_pickle=False)
-    pb = np.load(args.pca_matrix[1], allow_pickle=False)
+    pa = np.load(stats[0]["pca_matrix"], allow_pickle=False)
+    pb = np.load(stats[1]["pca_matrix"], allow_pickle=False)
     key_a = pd.Index(
         pd.Series(pa["chrom"]).astype(str) + ":" + pd.Series(pa["pos"]).astype(str)
     )
@@ -1670,16 +1789,32 @@ def plot_compare_sd(plt, sd_hist, labels, out, written):
     for col_i, ctx in enumerate(contexts):
         for row_i, metric in enumerate(("raw", "matched")):
             ax = axes[row_i, col_i]
+            ax.set_title(f"{ctx} - {metric}", fontsize=9)
+            missing = []
             for li, lab in enumerate(labels):
                 h = sd_hist[sd_hist.platform == lab]
                 x, _, cdf = sd_density(h, metric, ctx)
+                if not len(cdf) or cdf[-1] == 0:
+                    missing.append(lab)
+                    continue
                 color = PLATFORM_COLORS.get(lab, SERIES[li])
                 ax.plot(x, cdf, color=color, label=lab)
-                if len(cdf) and cdf[-1] > 0:
-                    med = x[np.searchsorted(cdf, 0.5)]
-                    ax.axvline(med, color=color, linewidth=1, linestyle=":")
+                med = x[np.searchsorted(cdf, 0.5)]
+                ax.axvline(med, color=color, linewidth=1, linestyle=":")
+            if len(missing) == len(labels):
+                no_data(ax)
+                continue
+            if missing:
+                ax.text(
+                    0.98,
+                    0.05,
+                    f"no {', '.join(missing)} sites",
+                    ha="right",
+                    transform=ax.transAxes,
+                    color=TEXT_SECONDARY,
+                    fontsize=8,
+                )
             ax.set_xlim(0, 0.35)
-            ax.set_title(f"{ctx} - {metric}", fontsize=9)
             if row_i == 1:
                 ax.set_xlabel("Per-site SD of beta across samples")
             if col_i == 0:
@@ -1696,6 +1831,8 @@ def plot_compare_sd(plt, sd_hist, labels, out, written):
 def plot_compare_sd_by_mean(plt, by_mean, labels, out, written):
     fig, axes = plt.subplots(1, 2, figsize=(11, 4), sharey=True)
     for ax, metric in zip(axes, ("raw", "matched")):
+        ax.set_title(f"{metric} beta")
+        drawn = 0
         for li, lab in enumerate(labels):
             bm = by_mean[
                 (by_mean.platform == lab)
@@ -1703,6 +1840,9 @@ def plot_compare_sd_by_mean(plt, by_mean, labels, out, written):
                 & (by_mean.context == "all")
                 & (by_mean.mean_bin != "all")
             ]
+            if bm.n_sites.sum() == 0:
+                continue
+            drawn += 1
             mid = (bm.mean_lo + bm.mean_hi) / 2
             color = PLATFORM_COLORS.get(lab, SERIES[li])
             ax.fill_between(
@@ -1725,7 +1865,9 @@ def plot_compare_sd_by_mean(plt, by_mean, labels, out, written):
                     linewidth=1.2,
                     label=f"{lab} expected binomial SD",
                 )
-        ax.set_title(f"{metric} beta")
+        if not drawn:
+            no_data(ax)
+            continue
         ax.set_xlabel("Per-site mean beta")
         ax.legend(fontsize=7)
     axes[0].set_ylabel("Per-site SD of beta")
@@ -1741,7 +1883,8 @@ def plot_joint_grid(plt, grid, labels, out, written):
     for ax, metric in zip(axes, ("raw", "matched")):
         g = grid[grid.metric == metric]
         if g.empty:
-            ax.set_visible(False)
+            ax.set_title(f"{metric} beta")
+            no_data(ax, "No CpG sites passed the filters in both cohorts")
             continue
         mat = np.zeros((GRID_BINS, GRID_BINS))
         i = np.clip(
@@ -1774,6 +1917,8 @@ def plot_joint_grid(plt, grid, labels, out, written):
 
 def plot_compare_excess(plt, excess, labels, out, written):
     fig, ax = plt.subplots(figsize=(7, 4))
+    ax.set_title("Variance beyond read-sampling noise")
+    drawn = 0
     for li, lab in enumerate(labels):
         h = excess[(excess.platform == lab) & (excess.context == "all")]
         tot = h["count"].sum()
@@ -1784,11 +1929,14 @@ def plot_compare_excess(plt, excess, labels, out, written):
                 color=PLATFORM_COLORS.get(lab, SERIES[li]),
                 label=lab,
             )
-    ax.axvline(0, color=TEXT_SECONDARY, linewidth=1)
-    ax.set_xlabel("Excess variance (observed - expected binomial)")
-    ax.set_ylabel("Fraction of autosomal sites")
-    ax.legend()
-    ax.set_title("Variance beyond read-sampling noise")
+            drawn += 1
+    if drawn:
+        ax.axvline(0, color=TEXT_SECONDARY, linewidth=1)
+        ax.set_xlabel("Excess variance (observed - expected binomial)")
+        ax.set_ylabel("Fraction of autosomal sites")
+        ax.legend()
+    else:
+        no_data(ax)
     savefig(fig, out, written)
     plt.close(fig)
 
@@ -1852,36 +2000,25 @@ def build_parser():
     p.set_defaults(func=cmd_finalize)
 
     p = sub.add_parser("plot")
-    for name in (
-        "sample-qc",
-        "sample-hists",
-        "site-sd-hist",
-        "site-sd-by-mean",
-        "site-mean-sd-grid",
-        "site-excess-var-hist",
-        "pca-coords",
-        "pca-variance",
-    ):
-        p.add_argument(f"--{name}", required=True)
+    p.add_argument(
+        "--stats",
+        required=True,
+        help="Stats bundle (.stats_for_comparison.tar.gz) or the directory inside it",
+    )
     p.add_argument("--prefix", required=True)
     p.add_argument("--outdir", default="figures")
     p.set_defaults(func=cmd_plot)
 
     p = sub.add_parser("compare")
-    for name in (
-        "sample-qc",
-        "sample-hists",
-        "site-sd-hist",
-        "site-sd-by-mean",
-        "site-mean-sd-grid",
-        "site-excess-var-hist",
-        "cohort-summary",
-        "per-site-stats",
-        "pca-matrix",
-    ):
-        p.add_argument(f"--{name}", nargs=2, required=True, metavar=("A", "B"))
-    p.add_argument("--label-a", default="PacBio")
-    p.add_argument("--label-b", default="ONT")
+    p.add_argument(
+        "--stats",
+        nargs=2,
+        required=True,
+        metavar=("A", "B"),
+        help="Two stats bundles (.stats_for_comparison.tar.gz) or directories",
+    )
+    p.add_argument("--label-a", help="Default: platform from bundle A")
+    p.add_argument("--label-b", help="Default: platform from bundle B")
     p.add_argument("--min-samples-per-site", type=int, default=10)
     p.add_argument("--prefix", required=True)
     p.add_argument("--outdir", default="figures")
