@@ -17,10 +17,12 @@
 # itself: a het genotype with one ins allele and one del allele is counted
 # in both nInsHets and nDelHets (documented bcftools behavior).
 #
-# Usage: per_sample_type_counts.sh <in.vcf.gz> <out_prefix> [sample_list.txt]
-#   sample_list.txt (optional): one sample ID per line; counts only these samples
-#   (bcftools view -S). Listed samples absent from this VCF are skipped with a
-#   warning; the n_samples output still reports the VCF header's sample count.
+# Usage: per_sample_type_counts.sh <in.vcf.gz> <out_prefix> [sample_population_list.tsv[.gz]]
+#   sample_population_list (optional): counts only the samples it lists (bcftools
+#   view -S), the same list RankSamples ranks. Either a file with a header that has a
+#   "sample" column (e.g. ancestry_label.HGSVC_HPRC.tsv.gz), or a plain list whose
+#   first column is the sample ID; plain or gzipped. Listed samples absent from this
+#   VCF are skipped with a warning. n_samples still reports the VCF header's count.
 # Writes:
 #   <out_prefix>.n_samples.txt         -- single integer
 #   <out_prefix>.per_sample_counts.tsv -- sample_id, n_total_nonref, then the
@@ -35,17 +37,28 @@ set -euo pipefail
 
 VCF=$1
 OUT_PREFIX=$2
-SAMPLE_LIST=${3:-}
+POP_LIST=${3:-}
 VIEW_SAMPLES=()
-if [ -n "$SAMPLE_LIST" ]; then
-    n_listed=$(grep -cv '^[[:space:]]*$' "$SAMPLE_LIST" || true)
+SAMPLE_LIST=""
+if [ -n "$POP_LIST" ]; then
+    SAMPLE_LIST=$(mktemp)
+    if gzip -t "$POP_LIST" 2>/dev/null; then gzip -dc "$POP_LIST"; else cat "$POP_LIST"; fi \
+        | awk -F'\t' '
+            NR == 1 {
+                for (k = 1; k <= NF; k++) if (tolower($k) == "sample") col = k
+                if (col) next
+                col = 1
+            }
+            $col != "" && $col != "sample" && $col != "sample_id" { print $col }
+        ' | sort -u > "$SAMPLE_LIST"
+    n_listed=$(wc -l < "$SAMPLE_LIST" | tr -d ' ')
     n_found=$(bcftools query -l "$VCF" | awk 'NR==FNR { s[$1] = 1; next } ($1 in s)' - "$SAMPLE_LIST" | wc -l | tr -d ' ')
     if [ "$n_found" -eq 0 ]; then
-        echo "ERROR: none of the $n_listed samples in $SAMPLE_LIST are in $VCF" >&2
+        echo "ERROR: none of the $n_listed samples in $POP_LIST are in $VCF" >&2
         exit 1
     fi
     if [ "$n_found" -lt "$n_listed" ]; then
-        echo "WARNING: $((n_listed - n_found)) of $n_listed listed samples are not in $VCF; skipped" >&2
+        echo "WARNING: $((n_listed - n_found)) of $n_listed samples in $POP_LIST are not in $VCF; skipped" >&2
     fi
     VIEW_SAMPLES=(-S "$SAMPLE_LIST" --force-samples)
 fi
@@ -64,7 +77,7 @@ extract_counts() {
 }
 
 WORKDIR=$(mktemp -d)
-trap 'rm -rf "$WORKDIR"' EXIT
+trap 'rm -rf "$WORKDIR" ${SAMPLE_LIST:+"$SAMPLE_LIST"}' EXIT
 
 # name<TAB>filter manifest, built up below, then run through extract_counts
 # once per line (one bcftools view+stats pass per category/region combo).

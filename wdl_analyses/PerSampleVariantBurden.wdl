@@ -30,11 +30,11 @@ version 1.0
 ##      bcftools pass per (chromosome x i), i.e. N x n_vcfs passes, and gives
 ##      identical counts (checked on a chr22 slice at i = 1..292).
 ##
-## Optional sample_list (one sample ID per line, a subset of the VCF samples):
-## when given, only those samples are used everywhere. PerSampleTypeCounts reads
-## only them (bcftools view -S), RankSamples ranks only them (also when a
-## sample_count_table is supplied), and so the cumulative union covers only them.
-## A listed sample with no count data stops RankSamples with an error.
+## Only samples in sample_population_list are analyzed: PerSampleTypeCounts reads
+## only them (bcftools view -S), so the per-sample count table covers only them;
+## RankSamples ranks only those also present in the VCFs / sample_count_table; and
+## the cumulative union is over that ranked set. To run on a subset of the VCF's
+## samples, pass a population list containing just that subset.
 ##
 ## Per-VCF sample counts (n_samples_per_vcf, the VCF header's sample count) are
 ## expected to match across shards from the same cohort; not enforced, just
@@ -46,12 +46,11 @@ workflow PerSampleVariantBurden {
         Array[File]  vcfs
         Array[File]? vcf_indices               # optional, one per vcf; accepted for the usual
                                                  # vcf+index convention (no region queries here)
-        File         sample_population_list     # sample -> population (SAS/EAS/EUR/AMR/AFR)
+        File         sample_population_list     # sample -> population (SAS/EAS/EUR/AMR/AFR); only
+                                                 # these samples are analyzed
         File?        sample_count_table         # optional sample vs. count TSV; if given, ranks
                                                  # samples from it and skips PerSampleTypeCounts
                                                  # and BuildSampleVariantCountTable
-        File?        sample_list                # optional subset of VCF samples (one ID per line);
-                                                 # if given, only these samples are analyzed
         String       output_basename
         File?        per_sample_type_counts_script            # per_sample_type_counts.sh; required
                                                                # unless sample_count_table is given
@@ -72,7 +71,7 @@ workflow PerSampleVariantBurden {
             call PerSampleTypeCounts {
                 input:
                     vcf         = vcf,
-                    sample_list = sample_list,
+                    sample_population_list = sample_population_list,
                     script      = select_first([per_sample_type_counts_script]),
                     docker      = bcftools_docker,
                     mem_gb      = mem_gb,
@@ -101,7 +100,6 @@ workflow PerSampleVariantBurden {
         input:
             per_sample_tsvs        = rank_inputs,
             sample_population_list = sample_population_list,
-            sample_list            = sample_list,
             output_basename        = output_basename,
             script                 = rank_samples_script,
             docker                 = python_docker,
@@ -147,14 +145,14 @@ workflow PerSampleVariantBurden {
 
     meta {
         author: "gnomAD LR analysis"
-        description: "Per-sample PASS-only non-ref variant burden across chromosome-shard VCFs: a ranked, cumulative-union-site (not summed) population-list-restricted burden table computed in one pass per chromosome, and (unless a precomputed sample vs. count table is supplied) a flat unranked genome-wide per-sample count table."
+        description: "Per-sample PASS-only non-ref variant burden across chromosome-shard VCFs: a ranked, cumulative-union-site (not summed) population-list-restricted burden table computed in one pass per chromosome, and (unless a precomputed sample vs. count table is supplied) a flat unranked genome-wide per-sample count table, all restricted to the samples in sample_population_list."
     }
 }
 
 task PerSampleTypeCounts {
     input {
         File    vcf
-        File?   sample_list
+        File    sample_population_list
         File    script
         String  docker
         Int     mem_gb
@@ -166,7 +164,7 @@ task PerSampleTypeCounts {
 
     command <<<
         set -euo pipefail
-        bash ~{script} ~{vcf} ~{out_prefix} ~{sample_list}
+        bash ~{script} ~{vcf} ~{out_prefix} ~{sample_population_list}
     >>>
 
     output {
@@ -187,7 +185,6 @@ task RankSamples {
     input {
         Array[File] per_sample_tsvs
         File        sample_population_list
-        File?       sample_list
         String      output_basename
         File        script
         String      docker
@@ -198,8 +195,7 @@ task RankSamples {
 
     command <<<
         set -euo pipefail
-        python3 ~{script} ~{sample_population_list} ~{output_basename} ~{sep=" " per_sample_tsvs} \
-            ~{"--samples " + sample_list}
+        python3 ~{script} ~{sample_population_list} ~{output_basename} ~{sep=" " per_sample_tsvs}
     >>>
 
     output {

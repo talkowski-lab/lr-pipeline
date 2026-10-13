@@ -24,16 +24,9 @@ count column ("n_total_nonref" or "count"; if neither is present, the second col
 is used). They can be per-chromosome per_sample_type_counts.sh outputs (summed
 here), or a single precomputed genome-wide sample vs. count table.
 
-Optionally, --samples <file> (one sample ID per line) restricts ranking to that
-subset; every listed sample must appear in the count TSVs (a missing one is an
-error, e.g. a typo), and listed samples absent from the population list are
-excluded with a warning as usual.
-
 Usage:
     rank_samples.py <sample_population_list.tsv[.gz]> <out_prefix> <counts1.tsv> [<counts2.tsv> ...]
-                    [--samples sample_list.txt]
 """
-import argparse
 import gzip
 import sys
 from collections import defaultdict
@@ -82,13 +75,8 @@ def load_sample_pop(pop_list_path):
 
 
 def main():
-    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("pop_list_path")
-    ap.add_argument("out_prefix")
-    ap.add_argument("shard_paths", nargs="+", help="per-sample count TSVs")
-    ap.add_argument("--samples", help="optional file of sample IDs to restrict ranking to")
-    args = ap.parse_args()
-    pop_list_path, out_prefix, shard_paths = args.pop_list_path, args.out_prefix, args.shard_paths
+    pop_list_path, out_prefix = sys.argv[1], sys.argv[2]
+    shard_paths = sys.argv[3:]
 
     sample_pop = load_sample_pop(pop_list_path)
     print(f"Population list: {len(sample_pop)} samples", file=sys.stderr)
@@ -113,20 +101,10 @@ def main():
           file=sys.stderr)
 
     vcf_samples = set(totals)
-    only_in_pop_list = set(sample_pop) - vcf_samples
-    if args.samples:
-        with open(args.samples) as f:
-            subset = {line.strip() for line in f if line.strip()}
-        missing = sorted(subset - vcf_samples)
-        if missing:
-            sys.exit(f"ERROR: {len(missing)} of {len(subset)} samples in {args.samples} have no count data "
-                     f"(not in the VCFs / sample count table), e.g. {missing[:5]}")
-        print(f"Restricting to {len(subset)} samples from {args.samples} "
-              f"(of {len(vcf_samples)} with count data)", file=sys.stderr)
-        vcf_samples &= subset
     pop_samples = set(sample_pop)
     in_both = vcf_samples & pop_samples
     only_in_vcf = vcf_samples - pop_samples
+    only_in_pop_list = pop_samples - vcf_samples
     print(f"Samples in both VCFs and population list (ranked below): {len(in_both)}", file=sys.stderr)
     if only_in_vcf:
         print(f"Samples in VCFs but NOT in population list (excluded): {len(only_in_vcf)}", file=sys.stderr)
