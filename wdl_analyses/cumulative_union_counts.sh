@@ -12,11 +12,16 @@
 # The VCFs (one per chromosome) are processed in parallel, N_PARALLEL at a
 # time (default: number of CPUs), and their counts summed.
 #
-# Usage: cumulative_union_counts.sh <ordered_samples.txt> <i> <out_prefix> <vcf1> [<vcf2> ...]
+# BY_ALLELE_TYPE (default true): split counts by type/size, which needs
+# INFO/allele_type and INFO/allele_length (checked in every VCF before counting;
+# fails with a clear message if missing). false: only the total union count.
+#
+# Usage: [N_PARALLEL=n] [BY_ALLELE_TYPE=true|false] cumulative_union_counts.sh <ordered_samples.txt> <i> <out_prefix> <vcf1> [<vcf2> ...]
 # Writes:
 #   <out_prefix>.tsv -- one row: sample_id(the i-th/newest-ranked sample),
-#                        i, n_total_nonref, n_snv, n_del_1_49, n_ins_1_49,
-#                        n_del_50_499, n_ins_50_499, n_del_gt499, n_ins_gt499
+#                        i, n_total_nonref, then (BY_ALLELE_TYPE=true only)
+#                        n_snv, n_del_1_49, n_ins_1_49, n_del_50_499,
+#                        n_ins_50_499, n_del_gt499, n_ins_gt499
 #                        (all counts = union over the top-i samples)
 set -euo pipefail
 
@@ -26,6 +31,24 @@ OUT_PREFIX=$3
 shift 3
 VCFS=("$@")
 N_PARALLEL=${N_PARALLEL:-$(nproc 2>/dev/null || echo 1)}
+BY_ALLELE_TYPE=${BY_ALLELE_TYPE:-true}
+if [ "$BY_ALLELE_TYPE" != "true" ] && [ "$BY_ALLELE_TYPE" != "false" ]; then
+    echo "ERROR: BY_ALLELE_TYPE must be true or false, got '$BY_ALLELE_TYPE'" >&2
+    exit 1
+fi
+if [ "$BY_ALLELE_TYPE" = "true" ]; then
+    for vcf in "${VCFS[@]}"; do
+        for tag in allele_type allele_length; do
+            if ! bcftools view -h "$vcf" | grep -q "^##INFO=<ID=${tag},"; then
+                echo "ERROR: INFO/$tag is not defined in $vcf, so sites cannot be split by type/size." >&2
+                echo "       Set split_by_allele_type = false (BY_ALLELE_TYPE=false) to count total sites only." >&2
+                exit 1
+            fi
+        done
+    done
+fi
+N_COLS=8
+[ "$BY_ALLELE_TYPE" = "true" ] || N_COLS=1
 
 WORKDIR=$(mktemp -d)
 trap 'rm -rf "$WORKDIR"' EXIT
@@ -37,10 +60,16 @@ if [ "$(wc -l < "$WORKDIR/sample_list.txt" | tr -d ' ')" -ne "$I" ]; then
     exit 1
 fi
 
-# Counts for one VCF -> $WORKDIR/counts.<k>.tsv (one line, 8 columns).
+# Counts for one VCF -> $WORKDIR/counts.<k>.tsv (one line: 8 columns, or 1 if
+# BY_ALLELE_TYPE=false).
 count_one() {
     set -euo pipefail
     local k=$1 vcf=$2
+    if [ "$BY_ALLELE_TYPE" = "false" ]; then
+        bcftools view -H -f PASS -S "$WORKDIR/sample_list.txt" -c 1 "$vcf" | wc -l | tr -d ' ' \
+            > "$WORKDIR/counts.$k.tsv"
+        return
+    fi
     bcftools view -f PASS -S "$WORKDIR/sample_list.txt" -c 1 "$vcf" \
         | bcftools query -f '%INFO/allele_type\t%INFO/allele_length\n' \
         | awk -F'\t' '
@@ -63,7 +92,7 @@ count_one() {
         ' > "$WORKDIR/counts.$k.tsv"
 }
 export -f count_one
-export WORKDIR
+export WORKDIR BY_ALLELE_TYPE
 
 # Pairs "k vcf" -> xargs runs count_one on N_PARALLEL of them at a time; a failure
 # in any VCF makes xargs (and so this script) exit non-zero.
@@ -76,9 +105,9 @@ if [ "$n_done" -ne "${#VCFS[@]}" ]; then
     exit 1
 fi
 
-COUNTS=$(cat "$WORKDIR"/counts.*.tsv | awk -F'\t' '
-    { for (k = 1; k <= 8; k++) sum[k] += $k }
-    END { for (k = 1; k <= 8; k++) printf "%s%s", sum[k]+0, (k < 8 ? "\t" : "\n") }
+COUNTS=$(cat "$WORKDIR"/counts.*.tsv | awk -F'\t' -v n="$N_COLS" '
+    { for (k = 1; k <= n; k++) sum[k] += $k }
+    END { for (k = 1; k <= n; k++) printf "%s%s", sum[k]+0, (k < n ? "\t" : "\n") }
 ')
 
 printf '%s\t%s\t%s\n' "$SAMPLE_ID" "$I" "$COUNTS" > "${OUT_PREFIX}.tsv"

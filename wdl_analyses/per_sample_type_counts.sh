@@ -17,7 +17,13 @@
 # itself: a het genotype with one ins allele and one del allele is counted
 # in both nInsHets and nDelHets (documented bcftools behavior).
 #
-# Usage: per_sample_type_counts.sh <in.vcf.gz> <out_prefix> [sample_population_list.tsv[.gz]]
+# Split by type/size is controlled by the environment variable BY_ALLELE_TYPE
+# (default true). true: requires INFO/allele_type and INFO/allele_length in the
+# header (checked up front; fails with a clear message if missing). false: only
+# n_total_nonref is counted (no type/size or REGION columns), for VCFs without
+# those annotations. The REGION split is added only if INFO/REGION is defined.
+#
+# Usage: [BY_ALLELE_TYPE=true|false] per_sample_type_counts.sh <in.vcf.gz> <out_prefix> [sample_population_list.tsv[.gz]]
 #   sample_population_list (optional): counts only the samples it lists (bcftools
 #   view -S), the same list RankSamples ranks. Either a file with a header that has a
 #   "sample" column (e.g. ancestry_label.HGSVC_HPRC.tsv.gz), or a plain list whose
@@ -64,6 +70,27 @@ if [ -n "$POP_LIST" ]; then
 fi
 
 REGIONS=(US RM SD SR)
+BY_ALLELE_TYPE=${BY_ALLELE_TYPE:-true}
+
+has_info() { bcftools view -h "$VCF" | grep -q "^##INFO=<ID=$1,"; }
+HAS_REGION=false
+if [ "$BY_ALLELE_TYPE" = "true" ]; then
+    for tag in allele_type allele_length; do
+        if ! has_info "$tag"; then
+            echo "ERROR: INFO/$tag is not defined in $VCF, so variants cannot be split by type/size." >&2
+            echo "       Set split_by_allele_type = false (BY_ALLELE_TYPE=false) to count total non-ref variants only." >&2
+            exit 1
+        fi
+    done
+    if has_info REGION; then
+        HAS_REGION=true
+    else
+        echo "WARNING: INFO/REGION is not defined in $VCF; skipping the REGION split" >&2
+    fi
+elif [ "$BY_ALLELE_TYPE" != "false" ]; then
+    echo "ERROR: BY_ALLELE_TYPE must be true or false, got '$BY_ALLELE_TYPE'" >&2
+    exit 1
+fi
 
 bcftools query -l "$VCF" | wc -l | tr -d ' ' > "${OUT_PREFIX}.n_samples.txt"
 
@@ -85,24 +112,28 @@ COL_NAMES=()
 COL_FILTERS=()
 
 COL_NAMES+=("n_total_nonref");  COL_FILTERS+=('FILTER="PASS"')
-COL_NAMES+=("n_snv");           COL_FILTERS+=('FILTER="PASS" && INFO/allele_type="snv"')
-COL_NAMES+=("n_del_1_49");      COL_FILTERS+=('FILTER="PASS" && INFO/allele_type="del" && abs(INFO/allele_length)>=1   && abs(INFO/allele_length)<=49')
-COL_NAMES+=("n_ins_1_49");      COL_FILTERS+=('FILTER="PASS" && INFO/allele_type="ins" && abs(INFO/allele_length)>=1   && abs(INFO/allele_length)<=49')
-COL_NAMES+=("n_del_50_499");    COL_FILTERS+=('FILTER="PASS" && INFO/allele_type="del" && abs(INFO/allele_length)>=50  && abs(INFO/allele_length)<=499')
-COL_NAMES+=("n_ins_50_499");    COL_FILTERS+=('FILTER="PASS" && INFO/allele_type="ins" && abs(INFO/allele_length)>=50  && abs(INFO/allele_length)<=499')
-COL_NAMES+=("n_del_gt499");     COL_FILTERS+=('FILTER="PASS" && INFO/allele_type="del" && abs(INFO/allele_length)>499')
-COL_NAMES+=("n_ins_gt499");     COL_FILTERS+=('FILTER="PASS" && INFO/allele_type="ins" && abs(INFO/allele_length)>499')
+if [ "$BY_ALLELE_TYPE" = "true" ]; then
+    COL_NAMES+=("n_snv");           COL_FILTERS+=('FILTER="PASS" && INFO/allele_type="snv"')
+    COL_NAMES+=("n_del_1_49");      COL_FILTERS+=('FILTER="PASS" && INFO/allele_type="del" && abs(INFO/allele_length)>=1   && abs(INFO/allele_length)<=49')
+    COL_NAMES+=("n_ins_1_49");      COL_FILTERS+=('FILTER="PASS" && INFO/allele_type="ins" && abs(INFO/allele_length)>=1   && abs(INFO/allele_length)<=49')
+    COL_NAMES+=("n_del_50_499");    COL_FILTERS+=('FILTER="PASS" && INFO/allele_type="del" && abs(INFO/allele_length)>=50  && abs(INFO/allele_length)<=499')
+    COL_NAMES+=("n_ins_50_499");    COL_FILTERS+=('FILTER="PASS" && INFO/allele_type="ins" && abs(INFO/allele_length)>=50  && abs(INFO/allele_length)<=499')
+    COL_NAMES+=("n_del_gt499");     COL_FILTERS+=('FILTER="PASS" && INFO/allele_type="del" && abs(INFO/allele_length)>499')
+    COL_NAMES+=("n_ins_gt499");     COL_FILTERS+=('FILTER="PASS" && INFO/allele_type="ins" && abs(INFO/allele_length)>499')
 
-# The 7 type/size categories above, each further split by REGION.
-n_base_cats=${#COL_NAMES[@]}
-for (( i=1; i<n_base_cats; i++ )); do
-    base_name="${COL_NAMES[$i]}"
-    base_filt="${COL_FILTERS[$i]}"
-    for region in "${REGIONS[@]}"; do
-        COL_NAMES+=("${base_name}_${region}")
-        COL_FILTERS+=("${base_filt} && INFO/REGION=\"${region}\"")
-    done
-done
+    # The 7 type/size categories above, each further split by REGION (if annotated).
+    if [ "$HAS_REGION" = "true" ]; then
+        n_base_cats=${#COL_NAMES[@]}
+        for (( i=1; i<n_base_cats; i++ )); do
+            base_name="${COL_NAMES[$i]}"
+            base_filt="${COL_FILTERS[$i]}"
+            for region in "${REGIONS[@]}"; do
+                COL_NAMES+=("${base_name}_${region}")
+                COL_FILTERS+=("${base_filt} && INFO/REGION=\"${region}\"")
+            done
+        done
+    fi
+fi
 
 for (( i=0; i<${#COL_NAMES[@]}; i++ )); do
     extract_counts "${COL_FILTERS[$i]}" > "$WORKDIR/${i}.tsv"

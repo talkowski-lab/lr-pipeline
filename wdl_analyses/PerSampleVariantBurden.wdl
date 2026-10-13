@@ -27,6 +27,12 @@ version 1.0
 ##      the VCFs processed in parallel across the task's CPUs (cumulative_cpu).
 ##      ConcatCumulativeCounts stacks the rows in cutoff order.
 ##
+## split_by_allele_type (default true) splits every count by type/size using
+## INFO/allele_type + INFO/allele_length (and by INFO/REGION when that is defined).
+## Both tasks check the VCF header first and fail with a clear message if those
+## tags are missing. Set it to false for VCFs without them: only total PASS non-ref
+## counts are produced (per sample, and for the cumulative union).
+##
 ## Only samples in sample_population_list are analyzed: PerSampleTypeCounts reads
 ## only them (bcftools view -S), so the per-sample count table covers only them;
 ## RankSamples ranks only those also present in the VCFs / sample_count_table; and
@@ -63,6 +69,7 @@ workflow PerSampleVariantBurden {
         Int          disk_gb     = 50
         Int          preemptible = 1
         Int          cumulative_cpu = 4     # per-cutoff task: chromosome VCFs counted in parallel
+        Boolean      split_by_allele_type = true   # false if the VCFs lack INFO/allele_type + allele_length
     }
 
     if (!defined(sample_count_table)) {
@@ -71,6 +78,7 @@ workflow PerSampleVariantBurden {
                 input:
                     vcf         = vcf,
                     sample_population_list = sample_population_list,
+                    split_by_allele_type = split_by_allele_type,
                     script      = select_first([per_sample_type_counts_script]),
                     docker      = bcftools_docker,
                     mem_gb      = mem_gb,
@@ -122,6 +130,7 @@ workflow PerSampleVariantBurden {
                 ordered_samples = RankSamples.ordered_samples,
                 i               = i,
                 vcfs            = vcfs,
+                split_by_allele_type = split_by_allele_type,
                 script          = cumulative_union_counts_script,
                 docker          = bcftools_docker,
                 cpu             = cumulative_cpu,
@@ -160,6 +169,7 @@ task PerSampleTypeCounts {
     input {
         File    vcf
         File    sample_population_list
+        Boolean split_by_allele_type
         File    script
         String  docker
         Int     mem_gb
@@ -171,7 +181,7 @@ task PerSampleTypeCounts {
 
     command <<<
         set -euo pipefail
-        bash ~{script} ~{vcf} ~{out_prefix} ~{sample_population_list}
+        BY_ALLELE_TYPE=~{split_by_allele_type} bash ~{script} ~{vcf} ~{out_prefix} ~{sample_population_list}
     >>>
 
     output {
@@ -250,6 +260,7 @@ task CumulativeUnionCounts {
         File        ordered_samples
         Int         i
         Array[File] vcfs
+        Boolean     split_by_allele_type
         File        script
         String      docker
         Int         cpu
@@ -262,7 +273,7 @@ task CumulativeUnionCounts {
 
     command <<<
         set -euo pipefail
-        N_PARALLEL=~{cpu} bash ~{script} ~{ordered_samples} ~{i} ~{out_prefix} ~{sep=" " vcfs}
+        N_PARALLEL=~{cpu} BY_ALLELE_TYPE=~{split_by_allele_type} bash ~{script} ~{ordered_samples} ~{i} ~{out_prefix} ~{sep=" " vcfs}
     >>>
 
     output {
