@@ -39,6 +39,9 @@ version 1.0
 ## allele_type_tag / allele_length_tag (defaults "allele_type" / "allele_length")
 ## name the INFO tags used for variant type and length, e.g. "SVTYPE" / "SVLEN" for
 ## GATK-SV VCFs. Type values are matched as snv/del/ins in either case.
+## variant_class (optional; default all variants) restricts every step (ranking,
+## per-sample counts, cumulative union) to SNV, Indel (del/ins 1-49bp) and/or SV
+## (>49bp, any type); combine with commas, e.g. "SNV,Indel".
 ##
 ## Only samples in sample_population_list are analyzed: PerSampleTypeCounts reads
 ## only them (bcftools view -S), so the per-sample count table covers only them;
@@ -83,6 +86,7 @@ workflow PerSampleVariantBurden {
         Boolean      split_by_allele_type = true   # false if the VCFs lack INFO/allele_type + allele_length
         String       allele_type_tag = "allele_type"     # INFO tag holding the type (snv/del/ins, any case)
         String       allele_length_tag = "allele_length" # INFO tag holding the length
+        String?      variant_class                       # SNV, Indel, SV, or a combination, e.g. "SNV,Indel"
     }
 
     # Resolve each script: explicit input if given, else <scripts_dir>/<standard name>.
@@ -126,6 +130,7 @@ workflow PerSampleVariantBurden {
                 split_by_allele_type   = false,
                 allele_type_tag        = allele_type_tag,
                 allele_length_tag      = allele_length_tag,
+                variant_class          = variant_class,
                 script                 = per_sample_type_counts_sh,
                 docker                 = bcftools_docker,
                 mem_gb                 = mem_gb,
@@ -166,6 +171,7 @@ workflow PerSampleVariantBurden {
                 split_by_allele_type = split_by_allele_type,
                 allele_type_tag = allele_type_tag,
                 allele_length_tag = allele_length_tag,
+                variant_class = variant_class,
                 script          = cumulative_union_counts_sh,
                 docker          = bcftools_docker,
                 cpu             = cumulative_cpu,
@@ -196,6 +202,7 @@ workflow PerSampleVariantBurden {
                 split_by_allele_type = split_by_allele_type,
                 allele_type_tag = allele_type_tag,
                 allele_length_tag = allele_length_tag,
+                variant_class = variant_class,
                 script      = per_sample_type_counts_sh,
                 docker      = bcftools_docker,
                 mem_gb      = mem_gb,
@@ -291,6 +298,7 @@ task PerSampleTypeCounts {
         Boolean split_by_allele_type
         String  allele_type_tag
         String  allele_length_tag
+        String? variant_class
         File    script
         String  docker
         Int     mem_gb
@@ -302,7 +310,7 @@ task PerSampleTypeCounts {
 
     command <<<
         set -euo pipefail
-        BY_ALLELE_TYPE=~{split_by_allele_type} ALLELE_TYPE_TAG=~{allele_type_tag} ALLELE_LENGTH_TAG=~{allele_length_tag} bash ~{script} ~{vcf} ~{out_prefix} ~{sample_population_list}
+        BY_ALLELE_TYPE=~{split_by_allele_type} ALLELE_TYPE_TAG=~{allele_type_tag} ALLELE_LENGTH_TAG=~{allele_length_tag} VARIANT_CLASS="~{default="" variant_class}" bash ~{script} ~{vcf} ~{out_prefix} ~{sample_population_list}
     >>>
 
     output {
@@ -384,6 +392,7 @@ task CumulativeUnionCounts {
         Boolean     split_by_allele_type
         String      allele_type_tag
         String      allele_length_tag
+        String?     variant_class
         File        script
         String      docker
         Int         cpu
@@ -396,7 +405,7 @@ task CumulativeUnionCounts {
 
     command <<<
         set -euo pipefail
-        N_PARALLEL=~{cpu} BY_ALLELE_TYPE=~{split_by_allele_type} ALLELE_TYPE_TAG=~{allele_type_tag} ALLELE_LENGTH_TAG=~{allele_length_tag} bash ~{script} ~{ordered_samples} ~{i} ~{out_prefix} ~{sep=" " vcfs}
+        N_PARALLEL=~{cpu} BY_ALLELE_TYPE=~{split_by_allele_type} ALLELE_TYPE_TAG=~{allele_type_tag} ALLELE_LENGTH_TAG=~{allele_length_tag} VARIANT_CLASS="~{default="" variant_class}" bash ~{script} ~{ordered_samples} ~{i} ~{out_prefix} ~{sep=" " vcfs}
     >>>
 
     output {

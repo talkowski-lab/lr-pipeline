@@ -25,8 +25,12 @@
 # ALLELE_TYPE_TAG (default allele_type) / ALLELE_LENGTH_TAG (default allele_length):
 # names of the INFO tags holding the variant type and length (e.g. SVTYPE / SVLEN).
 # Type values are matched as snv/del/ins in either case (snv or SNV, del or DEL, ...).
+# VARIANT_CLASS (optional, default all variants): restricts every count to a variant
+# class, a comma- or space-separated list of SNV, Indel, SV (any case; several are
+# combined, e.g. "SNV,Indel"). SNV: type snv. Indel: type del/ins, 1-49bp. SV: any
+# type, >49bp. Needs the type/length tags even when BY_ALLELE_TYPE=false.
 #
-# Usage: [BY_ALLELE_TYPE=true|false] [ALLELE_TYPE_TAG=allele_type] [ALLELE_LENGTH_TAG=allele_length] per_sample_type_counts.sh <in.vcf.gz> <out_prefix> [sample_population_list.tsv[.gz]]
+# Usage: [BY_ALLELE_TYPE=true|false] [ALLELE_TYPE_TAG=allele_type] [ALLELE_LENGTH_TAG=allele_length] [VARIANT_CLASS=SNV,Indel,SV] per_sample_type_counts.sh <in.vcf.gz> <out_prefix> [sample_population_list.tsv[.gz]]
 #   sample_population_list (optional): counts only the samples it lists (bcftools
 #   view -S), the same list RankSamples ranks. Either a file with a header that has a
 #   "sample" column (e.g. ancestry_label.HGSVC_HPRC.tsv.gz), or a plain list whose
@@ -81,17 +85,32 @@ AL="INFO/${ALLELE_LENGTH_TAG}"
 IS_SNV="($AT=\"snv\" || $AT=\"SNV\")"
 IS_DEL="($AT=\"del\" || $AT=\"DEL\")"
 IS_INS="($AT=\"ins\" || $AT=\"INS\")"
+VARIANT_CLASS=${VARIANT_CLASS:-}
+CLASS_EXPR=""
+for c in $(echo "$VARIANT_CLASS" | tr ',' ' ' | tr '[:upper:]' '[:lower:]'); do
+    case "$c" in
+        snv)   e="$IS_SNV" ;;
+        indel) e="($IS_DEL || $IS_INS) && abs($AL)>=1 && abs($AL)<=49" ;;
+        sv)    e="abs($AL)>49" ;;
+        *)     echo "ERROR: VARIANT_CLASS must list SNV, Indel and/or SV, got '$VARIANT_CLASS'" >&2; exit 1 ;;
+    esac
+    CLASS_EXPR="${CLASS_EXPR:+$CLASS_EXPR || }($e)"
+done
+PASS_EXPR='FILTER="PASS"'
+[ -z "$CLASS_EXPR" ] || PASS_EXPR="$PASS_EXPR && ($CLASS_EXPR)"
 
 has_info() { bcftools view -h "$VCF" | grep -q "^##INFO=<ID=$1,"; }
 HAS_REGION=false
-if [ "$BY_ALLELE_TYPE" = "true" ]; then
+if [ "$BY_ALLELE_TYPE" = "true" ] || [ -n "$CLASS_EXPR" ]; then
     for tag in "$ALLELE_TYPE_TAG" "$ALLELE_LENGTH_TAG"; do
         if ! has_info "$tag"; then
-            echo "ERROR: INFO/$tag is not defined in $VCF, so variants cannot be split by type/size." >&2
-            echo "       Set split_by_allele_type = false (BY_ALLELE_TYPE=false) to count total non-ref variants only." >&2
+            echo "ERROR: INFO/$tag is not defined in $VCF, so variants cannot be split by type/size or restricted by VARIANT_CLASS." >&2
+            echo "       Set allele_type_tag / allele_length_tag, or split_by_allele_type = false with no variant_class." >&2
             exit 1
         fi
     done
+fi
+if [ "$BY_ALLELE_TYPE" = "true" ]; then
     if has_info REGION; then
         HAS_REGION=true
     else
@@ -121,15 +140,15 @@ trap 'rm -rf "$WORKDIR" ${SAMPLE_LIST:+"$SAMPLE_LIST"}' EXIT
 COL_NAMES=()
 COL_FILTERS=()
 
-COL_NAMES+=("n_total_nonref");  COL_FILTERS+=('FILTER="PASS"')
+COL_NAMES+=("n_total_nonref");  COL_FILTERS+=("$PASS_EXPR")
 if [ "$BY_ALLELE_TYPE" = "true" ]; then
-    COL_NAMES+=("n_snv");           COL_FILTERS+=("FILTER=\"PASS\" && $IS_SNV")
-    COL_NAMES+=("n_del_1_49");      COL_FILTERS+=("FILTER=\"PASS\" && $IS_DEL && abs($AL)>=1   && abs($AL)<=49")
-    COL_NAMES+=("n_ins_1_49");      COL_FILTERS+=("FILTER=\"PASS\" && $IS_INS && abs($AL)>=1   && abs($AL)<=49")
-    COL_NAMES+=("n_del_50_499");    COL_FILTERS+=("FILTER=\"PASS\" && $IS_DEL && abs($AL)>=50  && abs($AL)<=499")
-    COL_NAMES+=("n_ins_50_499");    COL_FILTERS+=("FILTER=\"PASS\" && $IS_INS && abs($AL)>=50  && abs($AL)<=499")
-    COL_NAMES+=("n_del_gt499");     COL_FILTERS+=("FILTER=\"PASS\" && $IS_DEL && abs($AL)>499")
-    COL_NAMES+=("n_ins_gt499");     COL_FILTERS+=("FILTER=\"PASS\" && $IS_INS && abs($AL)>499")
+    COL_NAMES+=("n_snv");           COL_FILTERS+=("$PASS_EXPR && $IS_SNV")
+    COL_NAMES+=("n_del_1_49");      COL_FILTERS+=("$PASS_EXPR && $IS_DEL && abs($AL)>=1   && abs($AL)<=49")
+    COL_NAMES+=("n_ins_1_49");      COL_FILTERS+=("$PASS_EXPR && $IS_INS && abs($AL)>=1   && abs($AL)<=49")
+    COL_NAMES+=("n_del_50_499");    COL_FILTERS+=("$PASS_EXPR && $IS_DEL && abs($AL)>=50  && abs($AL)<=499")
+    COL_NAMES+=("n_ins_50_499");    COL_FILTERS+=("$PASS_EXPR && $IS_INS && abs($AL)>=50  && abs($AL)<=499")
+    COL_NAMES+=("n_del_gt499");     COL_FILTERS+=("$PASS_EXPR && $IS_DEL && abs($AL)>499")
+    COL_NAMES+=("n_ins_gt499");     COL_FILTERS+=("$PASS_EXPR && $IS_INS && abs($AL)>499")
 
     # The 7 type/size categories above, each further split by REGION (if annotated).
     if [ "$HAS_REGION" = "true" ]; then

@@ -18,8 +18,12 @@
 # ALLELE_TYPE_TAG (default allele_type) / ALLELE_LENGTH_TAG (default allele_length):
 # names of the INFO tags holding the variant type and length (e.g. SVTYPE / SVLEN).
 # Type values are matched as snv/del/ins in either case (snv or SNV, del or DEL, ...).
+# VARIANT_CLASS (optional, default all variants): restricts every count to a variant
+# class, a comma- or space-separated list of SNV, Indel, SV (any case; several are
+# combined, e.g. "SNV,Indel"). SNV: type snv. Indel: type del/ins, 1-49bp. SV: any
+# type, >49bp. Needs the type/length tags even when BY_ALLELE_TYPE=false.
 #
-# Usage: [N_PARALLEL=n] [BY_ALLELE_TYPE=true|false] [ALLELE_TYPE_TAG=allele_type] [ALLELE_LENGTH_TAG=allele_length] cumulative_union_counts.sh <ordered_samples.txt> <i> <out_prefix> <vcf1> [<vcf2> ...]
+# Usage: [N_PARALLEL=n] [BY_ALLELE_TYPE=true|false] [ALLELE_TYPE_TAG=allele_type] [ALLELE_LENGTH_TAG=allele_length] [VARIANT_CLASS=SNV,Indel,SV] cumulative_union_counts.sh <ordered_samples.txt> <i> <out_prefix> <vcf1> [<vcf2> ...]
 # Writes:
 #   <out_prefix>.tsv -- one row: sample_id(the i-th/newest-ranked sample),
 #                        i, n_total_nonref, then (BY_ALLELE_TYPE=true only)
@@ -37,16 +41,32 @@ N_PARALLEL=${N_PARALLEL:-$(nproc 2>/dev/null || echo 1)}
 BY_ALLELE_TYPE=${BY_ALLELE_TYPE:-true}
 ALLELE_TYPE_TAG=${ALLELE_TYPE_TAG:-allele_type}
 ALLELE_LENGTH_TAG=${ALLELE_LENGTH_TAG:-allele_length}
+AT="INFO/${ALLELE_TYPE_TAG}"
+AL="INFO/${ALLELE_LENGTH_TAG}"
+IS_SNV="($AT=\"snv\" || $AT=\"SNV\")"
+IS_DEL="($AT=\"del\" || $AT=\"DEL\")"
+IS_INS="($AT=\"ins\" || $AT=\"INS\")"
+VARIANT_CLASS=${VARIANT_CLASS:-}
+CLASS_EXPR=""
+for c in $(echo "$VARIANT_CLASS" | tr ',' ' ' | tr '[:upper:]' '[:lower:]'); do
+    case "$c" in
+        snv)   e="$IS_SNV" ;;
+        indel) e="($IS_DEL || $IS_INS) && abs($AL)>=1 && abs($AL)<=49" ;;
+        sv)    e="abs($AL)>49" ;;
+        *)     echo "ERROR: VARIANT_CLASS must list SNV, Indel and/or SV, got '$VARIANT_CLASS'" >&2; exit 1 ;;
+    esac
+    CLASS_EXPR="${CLASS_EXPR:+$CLASS_EXPR || }($e)"
+done
 if [ "$BY_ALLELE_TYPE" != "true" ] && [ "$BY_ALLELE_TYPE" != "false" ]; then
     echo "ERROR: BY_ALLELE_TYPE must be true or false, got '$BY_ALLELE_TYPE'" >&2
     exit 1
 fi
-if [ "$BY_ALLELE_TYPE" = "true" ]; then
+if [ "$BY_ALLELE_TYPE" = "true" ] || [ -n "$CLASS_EXPR" ]; then
     for vcf in "${VCFS[@]}"; do
         for tag in "$ALLELE_TYPE_TAG" "$ALLELE_LENGTH_TAG"; do
             if ! bcftools view -h "$vcf" | grep -q "^##INFO=<ID=${tag},"; then
-                echo "ERROR: INFO/$tag is not defined in $vcf, so sites cannot be split by type/size." >&2
-                echo "       Set split_by_allele_type = false (BY_ALLELE_TYPE=false) to count total sites only." >&2
+                echo "ERROR: INFO/$tag is not defined in $vcf, so sites cannot be split by type/size or restricted by VARIANT_CLASS." >&2
+                echo "       Set allele_type_tag / allele_length_tag, or split_by_allele_type = false with no variant_class." >&2
                 exit 1
             fi
         done
@@ -70,12 +90,14 @@ fi
 count_one() {
     set -euo pipefail
     local k=$1 vcf=$2
+    local class_args=()
+    [ -z "$CLASS_EXPR" ] || class_args=(-i "$CLASS_EXPR")
     if [ "$BY_ALLELE_TYPE" = "false" ]; then
-        bcftools view -H -f PASS -S "$WORKDIR/sample_list.txt" -c 1 "$vcf" | wc -l | tr -d ' ' \
+        bcftools view -H -f PASS ${class_args[@]+"${class_args[@]}"} -S "$WORKDIR/sample_list.txt" -c 1 "$vcf" | wc -l | tr -d ' ' \
             > "$WORKDIR/counts.$k.tsv"
         return
     fi
-    bcftools view -f PASS -S "$WORKDIR/sample_list.txt" -c 1 "$vcf" \
+    bcftools view -f PASS ${class_args[@]+"${class_args[@]}"} -S "$WORKDIR/sample_list.txt" -c 1 "$vcf" \
         | bcftools query -f "%INFO/${ALLELE_TYPE_TAG}\t%INFO/${ALLELE_LENGTH_TAG}\n" \
         | awk -F'\t' '
             {
@@ -98,7 +120,7 @@ count_one() {
         ' > "$WORKDIR/counts.$k.tsv"
 }
 export -f count_one
-export WORKDIR BY_ALLELE_TYPE ALLELE_TYPE_TAG ALLELE_LENGTH_TAG
+export WORKDIR BY_ALLELE_TYPE ALLELE_TYPE_TAG ALLELE_LENGTH_TAG CLASS_EXPR
 
 # Pairs "k vcf" -> xargs runs count_one on N_PARALLEL of them at a time; a failure
 # in any VCF makes xargs (and so this script) exit non-zero.
