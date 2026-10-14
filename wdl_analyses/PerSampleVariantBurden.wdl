@@ -4,7 +4,7 @@ version 1.0
 ##
 ## Given a set of per-chromosome VCFs from the same cohort (e.g.
 ## chr1.chr1.annotated.vcf.gz .. chr22.chr22.annotated.vcf.gz):
-##   1. (skipped if sample_count_table is provided) for each VCF, count samples in
+##   1. (skipped if sample_count_table is provided; runs in parallel with 2-3) for each VCF, count samples in
 ##      the header and count FILTER=PASS non-ref genotypes per sample, overall and
 ##      split into {snv, del_1_49, ins_1_49, del_50_499, ins_50_499, del_gt499,
 ##      ins_gt499}, each further split by INFO/REGION (US/RM/SD/SR), using the
@@ -12,11 +12,16 @@ version 1.0
 ##      (see per_sample_type_counts.sh for the exact bcftools-stats formula); then
 ##      sum each sample's counts genome-wide into a flat per-sample variant count
 ##      table (BuildSampleVariantCountTable).
-##   2. rank samples ascending by their genome-wide PASS non-ref total, restricted
-##      to samples in the sample/population list (RankSamples). The totals come
-##      from step 1, or from sample_count_table when provided (a precomputed
-##      sample vs. count TSV, e.g. the sample_variant_count_table of an earlier
-##      run; header with "sample" or "sample_id" and "n_total_nonref" or "count").
+##   2. rank samples ascending by their PASS non-ref total, restricted to samples
+##      in the sample/population list (RankSamples). Ranking is done ONCE, from a
+##      single small contig: chr22 if one of the VCFs is chr22 (by filename), else
+##      the shortest autosome provided (GRCh38 lengths), counted with a quick
+##      total-only pass (RankingContigCounts). The same ranking is used for all
+##      contigs. With sample_count_table (a precomputed sample vs. count TSV, e.g.
+##      the sample_variant_count_table of an earlier run; header with "sample" or
+##      "sample_id" and "n_total_nonref" or "count"), samples are ranked from it.
+##      The per-sample counts of step 1 do not feed the ranking, so they run in
+##      parallel with the ranking and the cumulative union.
 ##   3. cumulative union table at checkpoint sample sizes (MakeCutoffs): 1..10 by
 ##      1, 12..20 by 2, 25..100 by 5, 110..1,000 by 10, 1,100..10,000 by 100, then
 ##      by 1,000, plus the last rank N (e.g. ..., 1,200, 1,300, 1,319). One task per
@@ -72,6 +77,85 @@ workflow PerSampleVariantBurden {
         Boolean      split_by_allele_type = true   # false if the VCFs lack INFO/allele_type + allele_length
     }
 
+    # 1. Rank samples once, from total PASS non-ref counts on a single small contig
+    #    (chr22 if provided, else the shortest autosome provided), unless a
+    #    precomputed sample_count_table is given. The same ranking is used for every
+    #    contig in step 2a.
+    if (!defined(sample_count_table)) {
+        Array[String] vcf_paths = vcfs
+        call PickRankingVcf {
+            input:
+                vcf_paths   = vcf_paths,
+                docker      = python_docker,
+                preemptible = preemptible
+        }
+
+        call PerSampleTypeCounts as RankingContigCounts {
+            input:
+                vcf                    = vcfs[PickRankingVcf.index],
+                sample_population_list = sample_population_list,
+                split_by_allele_type   = false,
+                script                 = select_first([per_sample_type_counts_script]),
+                docker                 = bcftools_docker,
+                mem_gb                 = mem_gb,
+                disk_gb                = disk_gb,
+                preemptible            = preemptible
+        }
+    }
+
+    Array[File] rank_inputs = if defined(sample_count_table)
+                              then [select_first([sample_count_table])]
+                              else [select_first([RankingContigCounts.per_sample_counts])]
+
+    call RankSamples {
+        input:
+            per_sample_tsvs        = rank_inputs,
+            sample_population_list = sample_population_list,
+            output_basename        = output_basename,
+            script                 = rank_samples_script,
+            docker                 = python_docker,
+            mem_gb                 = mem_gb,
+            disk_gb                = disk_gb,
+            preemptible            = preemptible
+    }
+
+    call MakeCutoffs {
+        input:
+            ordered_samples = RankSamples.ordered_samples,
+            script          = make_cutoffs_script,
+            docker          = python_docker,
+            preemptible     = preemptible
+    }
+
+    # 2a. Cumulative union burden: one task per cutoff i, over all contigs.
+    scatter (i in MakeCutoffs.cutoffs) {
+        call CumulativeUnionCounts {
+            input:
+                ordered_samples = RankSamples.ordered_samples,
+                i               = i,
+                vcfs            = vcfs,
+                split_by_allele_type = split_by_allele_type,
+                script          = cumulative_union_counts_script,
+                docker          = bcftools_docker,
+                cpu             = cumulative_cpu,
+                mem_gb          = mem_gb,
+                preemptible     = preemptible
+        }
+    }
+
+    call ConcatCumulativeCounts {
+        input:
+            cumulative_rows = CumulativeUnionCounts.row,
+            output_basename = output_basename,
+            script          = concat_cumulative_counts_script,
+            docker          = python_docker,
+            mem_gb          = mem_gb,
+            disk_gb         = disk_gb,
+            preemptible     = preemptible
+    }
+
+    # 2b. Per-sample variant counts on every contig. Independent of the ranking, so
+    #     it runs in parallel with steps 1 and 2a.
     if (!defined(sample_count_table)) {
         scatter (vcf in vcfs) {
             call PerSampleTypeCounts {
@@ -99,61 +183,11 @@ workflow PerSampleVariantBurden {
         }
     }
 
-    Array[File] rank_inputs = if defined(sample_count_table)
-                              then [select_first([sample_count_table])]
-                              else select_first([PerSampleTypeCounts.per_sample_counts])
-
-    call RankSamples {
-        input:
-            per_sample_tsvs        = rank_inputs,
-            sample_population_list = sample_population_list,
-            output_basename        = output_basename,
-            script                 = rank_samples_script,
-            docker                 = python_docker,
-            mem_gb                 = mem_gb,
-            disk_gb                = disk_gb,
-            preemptible            = preemptible
-    }
-
-    call MakeCutoffs {
-        input:
-            ordered_samples = RankSamples.ordered_samples,
-            script          = make_cutoffs_script,
-            docker          = python_docker,
-            preemptible     = preemptible
-    }
-
-    # One task per cutoff i: union of non-ref PASS sites over the top-i ranked samples.
-    scatter (i in MakeCutoffs.cutoffs) {
-        call CumulativeUnionCounts {
-            input:
-                ordered_samples = RankSamples.ordered_samples,
-                i               = i,
-                vcfs            = vcfs,
-                split_by_allele_type = split_by_allele_type,
-                script          = cumulative_union_counts_script,
-                docker          = bcftools_docker,
-                cpu             = cumulative_cpu,
-                mem_gb          = mem_gb,
-                preemptible     = preemptible
-        }
-    }
-
-    call ConcatCumulativeCounts {
-        input:
-            cumulative_rows = CumulativeUnionCounts.row,
-            output_basename = output_basename,
-            script          = concat_cumulative_counts_script,
-            docker          = python_docker,
-            mem_gb          = mem_gb,
-            disk_gb         = disk_gb,
-            preemptible     = preemptible
-    }
-
     output {
         Array[Int]?  n_samples_per_vcf             = PerSampleTypeCounts.n_samples
         Array[File]? per_sample_counts_per_vcf     = PerSampleTypeCounts.per_sample_counts
         File?        sample_variant_count_table    = BuildSampleVariantCountTable.count_table
+        String?      ranking_contig                = PickRankingVcf.contig
         File         sample_rank_table             = RankSamples.sample_rank
         Array[Int]   cumulative_cutoffs            = MakeCutoffs.cutoffs
         File         ranked_sample_burden_table    = ConcatCumulativeCounts.out_table
@@ -162,6 +196,58 @@ workflow PerSampleVariantBurden {
     meta {
         author: "gnomAD LR analysis"
         description: "Per-sample PASS-only non-ref variant burden across chromosome-shard VCFs: a ranked, cumulative-union-site (not summed) population-list-restricted burden table at checkpoint sample sizes (one task per cutoff), and (unless a precomputed sample vs. count table is supplied) a flat unranked genome-wide per-sample count table, all restricted to the samples in sample_population_list."
+    }
+}
+
+# Picks the VCF used for ranking from the chrN token in each filename (no VCF is
+# localized): chr22 if present, else the shortest GRCh38 autosome among those found.
+task PickRankingVcf {
+    input {
+        Array[String] vcf_paths
+        String        docker
+        Int           preemptible
+    }
+
+    command <<<
+        set -euo pipefail
+        python3 <<'EOF'
+import os
+import re
+import sys
+
+LENGTHS = {1: 248956422, 2: 242193529, 3: 198295559, 4: 190214555, 5: 181538259,
+           6: 170805979, 7: 159345973, 8: 145138636, 9: 138394717, 10: 133797422,
+           11: 135086622, 12: 133275309, 13: 114364328, 14: 107043718, 15: 101991189,
+           16: 90338345, 17: 83257441, 18: 80373285, 19: 58617616, 20: 64444167,
+           21: 46709983, 22: 50818468}
+paths = [l.rstrip("\n") for l in open("~{write_lines(vcf_paths)}") if l.strip()]
+autosome = {}
+for i, p in enumerate(paths):
+    found = {int(n) for n in re.findall(r"chr([1-9]|1[0-9]|2[0-2])(?![0-9])", os.path.basename(p))}
+    if len(found) == 1:
+        autosome[i] = found.pop()
+if not autosome:
+    sys.exit("No VCF filename names a single autosome (chr1..chr22); cannot pick a ranking contig. "
+             "Provide sample_count_table, or name per-contig VCFs with their chrN.")
+chr22 = [i for i, c in autosome.items() if c == 22]
+index = chr22[0] if chr22 else min(autosome, key=lambda i: LENGTHS[autosome[i]])
+print(f"Ranking contig: chr{autosome[index]} ({paths[index]})")
+open("index.txt", "w").write(f"{index}\n")
+open("contig.txt", "w").write(f"chr{autosome[index]}\n")
+EOF
+    >>>
+
+    output {
+        Int    index  = read_int("index.txt")
+        String contig = read_string("contig.txt")
+    }
+
+    runtime {
+        docker:      docker
+        memory:      "1 GB"
+        cpu:         1
+        disks:       "local-disk 10 HDD"
+        preemptible: preemptible
     }
 }
 
