@@ -61,12 +61,16 @@ workflow PerSampleVariantBurden {
                                                  # first); if given, CumulativeUnionCounts uses this
                                                  # order and the chr22 ranking is skipped
         String       output_basename
+        # Scripts: give scripts_dir (a folder, e.g. gs://bucket/path, holding all six
+        # scripts under their standard names below), and/or individual script inputs,
+        # which override scripts_dir for that script.
+        String?      scripts_dir
         File?        per_sample_type_counts_script            # per_sample_type_counts.sh
         File?        build_sample_variant_count_table_script  # build_sample_variant_count_table.py
-        File         rank_samples_script                      # rank_samples.py
-        File         make_cutoffs_script                      # make_cutoffs.py
-        File         cumulative_union_counts_script           # cumulative_union_counts.sh
-        File         concat_cumulative_counts_script          # concat_cumulative_counts.py
+        File?        rank_samples_script                      # rank_samples.py
+        File?        make_cutoffs_script                      # make_cutoffs.py
+        File?        cumulative_union_counts_script           # cumulative_union_counts.sh
+        File?        concat_cumulative_counts_script          # concat_cumulative_counts.py
         String       bcftools_docker = "quay.io/biocontainers/bcftools@sha256:badc3a0c7af72a83e5761ab0e881aa84204694bdead003b47552cb283958f78d"
         String       python_docker   = "python:3.11-slim"
         Int          mem_gb      = 8
@@ -75,6 +79,27 @@ workflow PerSampleVariantBurden {
         Int          cumulative_cpu = 4     # per-cutoff task: chromosome VCFs counted in parallel
         Boolean      split_by_allele_type = true   # false if the VCFs lack INFO/allele_type + allele_length
     }
+
+    # Resolve each script: explicit input if given, else <scripts_dir>/<standard name>.
+    String scripts_base = sub(select_first([scripts_dir, ""]), "/+$", "")
+    File per_sample_type_counts_sh = if defined(per_sample_type_counts_script)
+        then select_first([per_sample_type_counts_script])
+        else scripts_base + "/per_sample_type_counts.sh"
+    File build_sample_variant_count_table_py = if defined(build_sample_variant_count_table_script)
+        then select_first([build_sample_variant_count_table_script])
+        else scripts_base + "/build_sample_variant_count_table.py"
+    File rank_samples_py = if defined(rank_samples_script)
+        then select_first([rank_samples_script])
+        else scripts_base + "/rank_samples.py"
+    File make_cutoffs_py = if defined(make_cutoffs_script)
+        then select_first([make_cutoffs_script])
+        else scripts_base + "/make_cutoffs.py"
+    File cumulative_union_counts_sh = if defined(cumulative_union_counts_script)
+        then select_first([cumulative_union_counts_script])
+        else scripts_base + "/cumulative_union_counts.sh"
+    File concat_cumulative_counts_py = if defined(concat_cumulative_counts_script)
+        then select_first([concat_cumulative_counts_script])
+        else scripts_base + "/concat_cumulative_counts.py"
 
     # 1. Sample order for the cumulative union. If ranked_samples is given, it is used
     #    as is. Otherwise samples are ranked once, from total PASS non-ref counts on a
@@ -94,7 +119,7 @@ workflow PerSampleVariantBurden {
                 vcf                    = vcfs[PickRankingVcf.index],
                 sample_population_list = sample_population_list,
                 split_by_allele_type   = false,
-                script                 = select_first([per_sample_type_counts_script]),
+                script                 = per_sample_type_counts_sh,
                 docker                 = bcftools_docker,
                 mem_gb                 = mem_gb,
                 disk_gb                = disk_gb,
@@ -106,7 +131,7 @@ workflow PerSampleVariantBurden {
                 per_sample_tsvs        = [RankingContigCounts.per_sample_counts],
                 sample_population_list = sample_population_list,
                 output_basename        = output_basename,
-                script                 = rank_samples_script,
+                script                 = rank_samples_py,
                 docker                 = python_docker,
                 mem_gb                 = mem_gb,
                 disk_gb                = disk_gb,
@@ -119,7 +144,7 @@ workflow PerSampleVariantBurden {
     call MakeCutoffs {
         input:
             ordered_samples = ordered_samples,
-            script          = make_cutoffs_script,
+            script          = make_cutoffs_py,
             docker          = python_docker,
             preemptible     = preemptible
     }
@@ -132,7 +157,7 @@ workflow PerSampleVariantBurden {
                 i               = i,
                 vcfs            = vcfs,
                 split_by_allele_type = split_by_allele_type,
-                script          = cumulative_union_counts_script,
+                script          = cumulative_union_counts_sh,
                 docker          = bcftools_docker,
                 cpu             = cumulative_cpu,
                 mem_gb          = mem_gb,
@@ -144,7 +169,7 @@ workflow PerSampleVariantBurden {
         input:
             cumulative_rows = CumulativeUnionCounts.row,
             output_basename = output_basename,
-            script          = concat_cumulative_counts_script,
+            script          = concat_cumulative_counts_py,
             docker          = python_docker,
             mem_gb          = mem_gb,
             disk_gb         = disk_gb,
@@ -160,7 +185,7 @@ workflow PerSampleVariantBurden {
                 vcf         = vcf,
                 sample_population_list = sample_population_list,
                 split_by_allele_type = split_by_allele_type,
-                script      = select_first([per_sample_type_counts_script]),
+                script      = per_sample_type_counts_sh,
                 docker      = bcftools_docker,
                 mem_gb      = mem_gb,
                 disk_gb     = disk_gb,
@@ -172,7 +197,7 @@ workflow PerSampleVariantBurden {
         input:
             per_sample_tsvs = PerSampleTypeCounts.per_sample_counts,
             output_basename = output_basename,
-            script          = select_first([build_sample_variant_count_table_script]),
+            script          = build_sample_variant_count_table_py,
             docker          = python_docker,
             mem_gb          = mem_gb,
             disk_gb         = disk_gb,
