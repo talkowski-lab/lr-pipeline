@@ -256,7 +256,7 @@ task VepAnnotate {
 
     RuntimeAttr default_attr = object {
         cpu_cores: 1,
-        mem_gb: 2,
+        mem_gb: 4,
         disk_gb: 2 * ceil(size(vcf, "GB") + size(ref_vep_cache, "GB")) + 25,
         boot_disk_gb: 10,
         preemptible_tries: 1,
@@ -265,7 +265,7 @@ task VepAnnotate {
     RuntimeAttr runtime_attr = select_first([runtime_attr_override, default_attr])
     runtime {
         cpu: select_first([runtime_attr.cpu_cores, default_attr.cpu_cores])
-        memory: select_first([runtime_attr.mem_gb, default_attr.mem_gb]) + " GiB"
+        memory: "1 GiB"
         disks: "local-disk " + select_first([runtime_attr.disk_gb, default_attr.disk_gb]) + " HDD"
         bootDiskSizeGb: select_first([runtime_attr.boot_disk_gb, default_attr.boot_disk_gb])
         docker: docker

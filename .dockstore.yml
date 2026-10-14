@@ -154,6 +154,7 @@ workflows:
     filters:
       branches:
         - main
+        - kj-vep-runtime-mem
       tags:
         - /.*/
 
@@ -163,6 +164,7 @@ workflows:
     filters:
       branches:
         - main
+        - kj-vep-runtime-mem
       tags:
         - /.*/
 

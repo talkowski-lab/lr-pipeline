@@ -4,6 +4,7 @@
 import hail as hl
 import numpy as np
 import argparse
+import os
 
 
 parser = argparse.ArgumentParser(description="Parse arguments")
@@ -17,7 +18,9 @@ args = parser.parse_args()
 vcf_file = args.vcf_file
 output_tsv = args.output_tsv
 cores = args.cores
-spark_mem_mb = int(np.floor(float(args.mem) * 1024 * 0.4))
+# Cap Spark memory at the VM's physical memory, since the task's runtime memory can be below --mem
+vm_mem_gb = os.sysconf("SC_PAGE_SIZE") * os.sysconf("SC_PHYS_PAGES") / 1024**3
+spark_mem_mb = int(np.floor(min(float(args.mem), vm_mem_gb) * 1024 * 0.4))
 build = args.build
 
 hl.init(
