@@ -4,7 +4,7 @@ version 1.0
 ##
 ## Given a set of per-chromosome VCFs from the same cohort (e.g.
 ## chr1.chr1.annotated.vcf.gz .. chr22.chr22.annotated.vcf.gz):
-##   1. (skipped if sample_count_table is provided; runs in parallel with 2-3) for each VCF, count samples in
+##   1. (always run, in parallel with 2-3) for each VCF, count samples in
 ##      the header and count FILTER=PASS non-ref genotypes per sample, overall and
 ##      split into {snv, del_1_49, ins_1_49, del_50_499, ins_50_499, del_gt499,
 ##      ins_gt499}, each further split by INFO/REGION (US/RM/SD/SR), using the
@@ -19,7 +19,8 @@ version 1.0
 ##      total-only pass (RankingContigCounts). The same ranking is used for all
 ##      contigs. With sample_count_table (a precomputed sample vs. count TSV, e.g.
 ##      the sample_variant_count_table of an earlier run; header with "sample" or
-##      "sample_id" and "n_total_nonref" or "count"), samples are ranked from it.
+##      "sample_id" and "n_total_nonref" or "count"), samples are ranked from it
+##      instead; the per-sample counts of step 1 are still computed.
 ##      The per-sample counts of step 1 do not feed the ranking, so they run in
 ##      parallel with the ranking and the cumulative union.
 ##   3. cumulative union table at checkpoint sample sizes (MakeCutoffs): 1..10 by
@@ -57,13 +58,11 @@ workflow PerSampleVariantBurden {
         File         sample_population_list     # sample -> population (SAS/EAS/EUR/AMR/AFR); only
                                                  # these samples are analyzed
         File?        sample_count_table         # optional sample vs. count TSV; if given, ranks
-                                                 # samples from it and skips PerSampleTypeCounts
-                                                 # and BuildSampleVariantCountTable
+                                                 # samples from it instead of from chr22 (per-sample
+                                                 # counts are still computed)
         String       output_basename
-        File?        per_sample_type_counts_script            # per_sample_type_counts.sh; required
-                                                               # unless sample_count_table is given
-        File?        build_sample_variant_count_table_script  # build_sample_variant_count_table.py;
-                                                               # required unless sample_count_table is given
+        File         per_sample_type_counts_script            # per_sample_type_counts.sh
+        File         build_sample_variant_count_table_script  # build_sample_variant_count_table.py
         File         rank_samples_script                      # rank_samples.py
         File         make_cutoffs_script                      # make_cutoffs.py
         File         cumulative_union_counts_script           # cumulative_union_counts.sh
@@ -95,7 +94,7 @@ workflow PerSampleVariantBurden {
                 vcf                    = vcfs[PickRankingVcf.index],
                 sample_population_list = sample_population_list,
                 split_by_allele_type   = false,
-                script                 = select_first([per_sample_type_counts_script]),
+                script                 = per_sample_type_counts_script,
                 docker                 = bcftools_docker,
                 mem_gb                 = mem_gb,
                 disk_gb                = disk_gb,
@@ -154,39 +153,38 @@ workflow PerSampleVariantBurden {
             preemptible     = preemptible
     }
 
-    # 2b. Per-sample variant counts on every contig. Independent of the ranking, so
-    #     it runs in parallel with steps 1 and 2a.
-    if (!defined(sample_count_table)) {
-        scatter (vcf in vcfs) {
-            call PerSampleTypeCounts {
-                input:
-                    vcf         = vcf,
-                    sample_population_list = sample_population_list,
-                    split_by_allele_type = split_by_allele_type,
-                    script      = select_first([per_sample_type_counts_script]),
-                    docker      = bcftools_docker,
-                    mem_gb      = mem_gb,
-                    disk_gb     = disk_gb,
-                    preemptible = preemptible
-            }
-        }
-
-        call BuildSampleVariantCountTable {
+    # 2b. Per-sample variant counts on every contig (always run, also when
+    #     sample_count_table is given). Independent of the ranking, so it runs in
+    #     parallel with steps 1 and 2a.
+    scatter (vcf in vcfs) {
+        call PerSampleTypeCounts {
             input:
-                per_sample_tsvs = PerSampleTypeCounts.per_sample_counts,
-                output_basename = output_basename,
-                script          = select_first([build_sample_variant_count_table_script]),
-                docker          = python_docker,
-                mem_gb          = mem_gb,
-                disk_gb         = disk_gb,
-                preemptible     = preemptible
+                vcf         = vcf,
+                sample_population_list = sample_population_list,
+                split_by_allele_type = split_by_allele_type,
+                script      = per_sample_type_counts_script,
+                docker      = bcftools_docker,
+                mem_gb      = mem_gb,
+                disk_gb     = disk_gb,
+                preemptible = preemptible
         }
     }
 
+    call BuildSampleVariantCountTable {
+        input:
+            per_sample_tsvs = PerSampleTypeCounts.per_sample_counts,
+            output_basename = output_basename,
+            script          = build_sample_variant_count_table_script,
+            docker          = python_docker,
+            mem_gb          = mem_gb,
+            disk_gb         = disk_gb,
+            preemptible     = preemptible
+    }
+
     output {
-        Array[Int]?  n_samples_per_vcf             = PerSampleTypeCounts.n_samples
-        Array[File]? per_sample_counts_per_vcf     = PerSampleTypeCounts.per_sample_counts
-        File?        sample_variant_count_table    = BuildSampleVariantCountTable.count_table
+        Array[Int]   n_samples_per_vcf             = PerSampleTypeCounts.n_samples
+        Array[File]  per_sample_counts_per_vcf     = PerSampleTypeCounts.per_sample_counts
+        File         sample_variant_count_table    = BuildSampleVariantCountTable.count_table
         String?      ranking_contig                = PickRankingVcf.contig
         File         sample_rank_table             = RankSamples.sample_rank
         Array[Int]   cumulative_cutoffs            = MakeCutoffs.cutoffs
@@ -195,7 +193,7 @@ workflow PerSampleVariantBurden {
 
     meta {
         author: "gnomAD LR analysis"
-        description: "Per-sample PASS-only non-ref variant burden across chromosome-shard VCFs: a ranked, cumulative-union-site (not summed) population-list-restricted burden table at checkpoint sample sizes (one task per cutoff), and (unless a precomputed sample vs. count table is supplied) a flat unranked genome-wide per-sample count table, all restricted to the samples in sample_population_list."
+        description: "Per-sample PASS-only non-ref variant burden across chromosome-shard VCFs: a ranked, cumulative-union-site (not summed) population-list-restricted burden table at checkpoint sample sizes (one task per cutoff), and a flat unranked genome-wide per-sample count table, all restricted to the samples in sample_population_list."
     }
 }
 
