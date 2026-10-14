@@ -15,8 +15,10 @@
 # BY_ALLELE_TYPE (default true): split counts by type/size, which needs
 # INFO/allele_type and INFO/allele_length (checked in every VCF before counting;
 # fails with a clear message if missing). false: only the total union count.
+# ALLELE_TYPE_TAG (default allele_type): name of the INFO tag holding the variant
+# type; its values must still be snv/del/ins (lowercase).
 #
-# Usage: [N_PARALLEL=n] [BY_ALLELE_TYPE=true|false] cumulative_union_counts.sh <ordered_samples.txt> <i> <out_prefix> <vcf1> [<vcf2> ...]
+# Usage: [N_PARALLEL=n] [BY_ALLELE_TYPE=true|false] [ALLELE_TYPE_TAG=allele_type] cumulative_union_counts.sh <ordered_samples.txt> <i> <out_prefix> <vcf1> [<vcf2> ...]
 # Writes:
 #   <out_prefix>.tsv -- one row: sample_id(the i-th/newest-ranked sample),
 #                        i, n_total_nonref, then (BY_ALLELE_TYPE=true only)
@@ -32,13 +34,14 @@ shift 3
 VCFS=("$@")
 N_PARALLEL=${N_PARALLEL:-$(nproc 2>/dev/null || echo 1)}
 BY_ALLELE_TYPE=${BY_ALLELE_TYPE:-true}
+ALLELE_TYPE_TAG=${ALLELE_TYPE_TAG:-allele_type}
 if [ "$BY_ALLELE_TYPE" != "true" ] && [ "$BY_ALLELE_TYPE" != "false" ]; then
     echo "ERROR: BY_ALLELE_TYPE must be true or false, got '$BY_ALLELE_TYPE'" >&2
     exit 1
 fi
 if [ "$BY_ALLELE_TYPE" = "true" ]; then
     for vcf in "${VCFS[@]}"; do
-        for tag in allele_type allele_length; do
+        for tag in "$ALLELE_TYPE_TAG" allele_length; do
             if ! bcftools view -h "$vcf" | grep -q "^##INFO=<ID=${tag},"; then
                 echo "ERROR: INFO/$tag is not defined in $vcf, so sites cannot be split by type/size." >&2
                 echo "       Set split_by_allele_type = false (BY_ALLELE_TYPE=false) to count total sites only." >&2
@@ -71,7 +74,7 @@ count_one() {
         return
     fi
     bcftools view -f PASS -S "$WORKDIR/sample_list.txt" -c 1 "$vcf" \
-        | bcftools query -f '%INFO/allele_type\t%INFO/allele_length\n' \
+        | bcftools query -f "%INFO/${ALLELE_TYPE_TAG}\t%INFO/allele_length\n" \
         | awk -F'\t' '
             {
                 total++
@@ -92,7 +95,7 @@ count_one() {
         ' > "$WORKDIR/counts.$k.tsv"
 }
 export -f count_one
-export WORKDIR BY_ALLELE_TYPE
+export WORKDIR BY_ALLELE_TYPE ALLELE_TYPE_TAG
 
 # Pairs "k vcf" -> xargs runs count_one on N_PARALLEL of them at a time; a failure
 # in any VCF makes xargs (and so this script) exit non-zero.

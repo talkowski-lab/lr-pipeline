@@ -22,8 +22,10 @@
 # header (checked up front; fails with a clear message if missing). false: only
 # n_total_nonref is counted (no type/size or REGION columns), for VCFs without
 # those annotations. The REGION split is added only if INFO/REGION is defined.
+# ALLELE_TYPE_TAG (default allele_type): name of the INFO tag holding the variant
+# type; its values must still be snv/del/ins (lowercase).
 #
-# Usage: [BY_ALLELE_TYPE=true|false] per_sample_type_counts.sh <in.vcf.gz> <out_prefix> [sample_population_list.tsv[.gz]]
+# Usage: [BY_ALLELE_TYPE=true|false] [ALLELE_TYPE_TAG=allele_type] per_sample_type_counts.sh <in.vcf.gz> <out_prefix> [sample_population_list.tsv[.gz]]
 #   sample_population_list (optional): counts only the samples it lists (bcftools
 #   view -S), the same list RankSamples ranks. Either a file with a header that has a
 #   "sample" column (e.g. ancestry_label.HGSVC_HPRC.tsv.gz), or a plain list whose
@@ -71,11 +73,13 @@ fi
 
 REGIONS=(US RM SD SR)
 BY_ALLELE_TYPE=${BY_ALLELE_TYPE:-true}
+ALLELE_TYPE_TAG=${ALLELE_TYPE_TAG:-allele_type}
+AT="INFO/${ALLELE_TYPE_TAG}"
 
 has_info() { bcftools view -h "$VCF" | grep -q "^##INFO=<ID=$1,"; }
 HAS_REGION=false
 if [ "$BY_ALLELE_TYPE" = "true" ]; then
-    for tag in allele_type allele_length; do
+    for tag in "$ALLELE_TYPE_TAG" allele_length; do
         if ! has_info "$tag"; then
             echo "ERROR: INFO/$tag is not defined in $VCF, so variants cannot be split by type/size." >&2
             echo "       Set split_by_allele_type = false (BY_ALLELE_TYPE=false) to count total non-ref variants only." >&2
@@ -113,13 +117,13 @@ COL_FILTERS=()
 
 COL_NAMES+=("n_total_nonref");  COL_FILTERS+=('FILTER="PASS"')
 if [ "$BY_ALLELE_TYPE" = "true" ]; then
-    COL_NAMES+=("n_snv");           COL_FILTERS+=('FILTER="PASS" && INFO/allele_type="snv"')
-    COL_NAMES+=("n_del_1_49");      COL_FILTERS+=('FILTER="PASS" && INFO/allele_type="del" && abs(INFO/allele_length)>=1   && abs(INFO/allele_length)<=49')
-    COL_NAMES+=("n_ins_1_49");      COL_FILTERS+=('FILTER="PASS" && INFO/allele_type="ins" && abs(INFO/allele_length)>=1   && abs(INFO/allele_length)<=49')
-    COL_NAMES+=("n_del_50_499");    COL_FILTERS+=('FILTER="PASS" && INFO/allele_type="del" && abs(INFO/allele_length)>=50  && abs(INFO/allele_length)<=499')
-    COL_NAMES+=("n_ins_50_499");    COL_FILTERS+=('FILTER="PASS" && INFO/allele_type="ins" && abs(INFO/allele_length)>=50  && abs(INFO/allele_length)<=499')
-    COL_NAMES+=("n_del_gt499");     COL_FILTERS+=('FILTER="PASS" && INFO/allele_type="del" && abs(INFO/allele_length)>499')
-    COL_NAMES+=("n_ins_gt499");     COL_FILTERS+=('FILTER="PASS" && INFO/allele_type="ins" && abs(INFO/allele_length)>499')
+    COL_NAMES+=("n_snv");           COL_FILTERS+=("FILTER=\"PASS\" && $AT=\"snv\"")
+    COL_NAMES+=("n_del_1_49");      COL_FILTERS+=("FILTER=\"PASS\" && $AT=\"del\" && abs(INFO/allele_length)>=1   && abs(INFO/allele_length)<=49")
+    COL_NAMES+=("n_ins_1_49");      COL_FILTERS+=("FILTER=\"PASS\" && $AT=\"ins\" && abs(INFO/allele_length)>=1   && abs(INFO/allele_length)<=49")
+    COL_NAMES+=("n_del_50_499");    COL_FILTERS+=("FILTER=\"PASS\" && $AT=\"del\" && abs(INFO/allele_length)>=50  && abs(INFO/allele_length)<=499")
+    COL_NAMES+=("n_ins_50_499");    COL_FILTERS+=("FILTER=\"PASS\" && $AT=\"ins\" && abs(INFO/allele_length)>=50  && abs(INFO/allele_length)<=499")
+    COL_NAMES+=("n_del_gt499");     COL_FILTERS+=("FILTER=\"PASS\" && $AT=\"del\" && abs(INFO/allele_length)>499")
+    COL_NAMES+=("n_ins_gt499");     COL_FILTERS+=("FILTER=\"PASS\" && $AT=\"ins\" && abs(INFO/allele_length)>499")
 
     # The 7 type/size categories above, each further split by REGION (if annotated).
     if [ "$HAS_REGION" = "true" ]; then
