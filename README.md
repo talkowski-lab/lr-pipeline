@@ -9,14 +9,6 @@ The pipeline covers three broad stages.
 **Stack:** All workflows are written in WDL and executed via Cromwell on Terra, which is built on top of GCP. The code logic is a mixture of Python, R, Bash and Hail.
 
 
-## Running and Contributing
-- Workflows are imported into Terra from Dockstore, which syncs from the `main` branch via [`.dockstore.yml`](.dockstore.yml). Every directly-run workflow needs an entry there.
-- Work on a branch rather than on `main`, registering the branch in `.dockstore.yml` to test a workflow from it - see [Branches](docs/conventions.md#branches).
-- Docker images and reference files are supplied per workspace rather than hardcoded - see [Docker images](docs/dockers.md) and [References](docs/references.md).
-- Before pushing, run the checks that match what you changed; the commands are listed in [CI/CD](docs/ci-cd.md).
-- Style rules for WDL, Python and Markdown are in [Conventions](docs/conventions.md), and the checklist for adding a workflow or tool is in [AGENTS.md](AGENTS.md).
-
-
 ## Documentation
 - [Annotations](docs/annotations.md) - VCF INFO fields, FORMAT fields and filter definitions.
 - [CI/CD](docs/ci-cd.md) - GitHub Actions checks, the matching local pre-flight commands, and Dockstore registration.
@@ -29,3 +21,11 @@ The pipeline covers three broad stages.
 - [Repository Structure](docs/repository-structure.md) - directory layout, the scripts inventory, and where each kind of code lives.
 - [Trace](docs/trace.md) - the steps actually run to produce the HPRC/HGSVC and All of Us callsets, with data table columns and cohort divergences.
 - [Workflows](docs/workflows.md) - annotation workflows, annotation utilities, tool wrappers and shared sub-workflows, with inputs and outputs.
+
+
+## Contributing
+- Work on a branch rather than on `main` - see [Branches](docs/conventions.md#branches).
+- Style rules for WDL, Python and Markdown are in [Conventions](docs/conventions.md), and the checklist for adding a workflow or tool is in [AGENTS.md](AGENTS.md).
+- Before pushing, run the checks that match what you changed; the commands are listed in [CI/CD](docs/ci-cd.md).
+- Workflows are imported into Terra from Dockstore via [`.dockstore.yml`](.dockstore.yml); every directly-run workflow needs an entry there, and listing a branch in an entry is how a workflow is tested from that branch - see [Dockstore Registration](docs/ci-cd.md#dockstore-registration).
+- Docker images and reference files are supplied per workspace rather than hardcoded - see [Docker images](docs/dockers.md) and [References](docs/references.md).

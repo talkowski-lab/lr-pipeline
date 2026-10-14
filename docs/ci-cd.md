@@ -23,7 +23,7 @@ Seven workflows run on push and pull request to `main`, each gated on the paths 
 ## Local Checks
 Run the checks that match what you changed before pushing. These mirror the instructions in [`AGENTS.md`](../AGENTS.md).
 - Changed anything under `wdl/`: validate syntax with `find wdl -type f -name "*.wdl" -exec java -jar womtool.jar validate {} \;` and style with `python .github/scripts/check_wdl_style.py`.
-- Changed any `.md` file: run `python .github/scripts/check_markdown_style.py`. `docs/workflows.md` is generated, so edit the `meta` and `parameter_meta` blocks of the workflow instead; `python .github/scripts/generate_workflows_doc.py` previews the result locally, and CI regenerates and commits it on push to `main`. `archive/docs/workflows.md` is generated the same way from the retired workflows, with `--site archive`.
+- Changed any `.md` file: run `python .github/scripts/check_markdown_style.py`. `docs/workflows.md` and `archive/docs/workflows.md` are generated rather than edited - see [Workflow documentation](conventions.md#workflow-documentation); `python .github/scripts/generate_workflows_doc.py` (with `--site archive` for the archive) previews the result locally.
 - Changed anything under `scripts/` or `.github/scripts/`: run `flake8 scripts/ .github/scripts/`. Configuration lives in `.flake8` - maximum line length 130, `E203` and `W503` ignored. `pyproject.toml` pins Black to `line-length = 88` for optional local formatting, but Black is not enforced in CI.
 - Added, renamed or deleted a workflow under `wdl/annotation`, `wdl/annotation_utils` or `wdl/tools`, or edited `.dockstore.yml`: run `python .github/scripts/check_dockstore_sync.py`, which needs `pip install pyyaml`. Before merging a feature branch into `main`, run it again with `--main-only` to confirm no branch filter was left behind.
 - Changed `AGENTS.md`: run `python .github/scripts/check_agents_sync.py`. `.claude/CLAUDE.md` and `.github/copilot-instructions.md` are symlinks to `../AGENTS.md`, so only the canonical file should ever be edited.
@@ -39,7 +39,7 @@ Terra imports workflows from Dockstore, which syncs on push from every branch li
 
 
 ### Feature branch test versions
-Development happens on a `kj-<kebab-topic>` branch rather than on `main`, in its own worktree created by [`new_worktree.sh`](../.github/scripts/new_worktree.sh) - see [Branches](conventions.md#branches). To test a changed workflow from that branch, add the branch name under `filters.branches` in that workflow's entry and push; Dockstore reads the `.dockstore.yml` on the pushed branch, so the version appears under the branch name and can be imported into Terra. Only the workflows being tested should list the branch.
+Development happens on a `kj-<kebab-topic>` branch rather than on `main`, in its own worktree created by [`new_worktree.sh`](../.github/scripts/new_worktree.sh) - see [Branches](conventions.md#branches). To test a workflow the branch changes - directly, or through a task library or `wdl/utils/` sub-workflow it imports - add the branch name under `filters.branches` in that workflow's entry, after `main`, and push; Dockstore reads the `.dockstore.yml` on the pushed branch, so the version appears under the branch name and can be imported into Terra. Only the workflows being tested should list the branch.
 
 Once the changes are validated and a merge has been explicitly approved, merge locally - no pull request - with [`merge_branch.sh`](../.github/scripts/merge_branch.sh), run from the main checkout, which must be on `main`, and with the branch's worktree clean.
 ```bash
@@ -57,6 +57,6 @@ The repository also has `delete_branch_on_merge` enabled, which covers the occas
 
 
 ## Docker Images
-Images are not built by CI, and are tagged by the branch they are built on - `kj_V<N>` and `:latest` from `main`, `:<branch>` from a feature branch, per [Building and Pushing](dockers.md#building-and-pushing). They are built and pushed locally - see [Building and pushing](dockers.md#building-and-pushing) in the Docker images document for the `build_docker.sh` flow.
+Images are not built by CI. They are built and pushed locally with `build_docker.sh`, which tags them by the branch they are built on - see [Building and Pushing](dockers.md#building-and-pushing).
 
 A [`docker-build-push.yml`](../archive/.github/workflows/docker-build-push.yml) workflow and its [`build_changed_dockers.sh`](../archive/.github/scripts/build_changed_dockers.sh) helper were designed to build changed images on push, but are kept in `archive/` and are intentionally inactive: they require a `GCP_SA_KEY` service-account secret that has not been configured for the repository.

@@ -43,15 +43,13 @@ Workflows are split by role:
 - **`wdl/tools/`** - thin wrappers around individual bioinformatics tools (PALMER, TRGT, HiPhase, mosdepth, etc.) that aren't annotation-specific.
 - **`wdl/utils/`** - not directly run. `Structs.wdl` defines the shared `RuntimeAttr` struct; `Helpers.wdl` is a task library holding reusable tasks (subsetting, concatenation, sharding, etc.) imported by the other three directories, with its tasks declared alphabetically. `AoUPhase2Helpers.wdl` is a second task library, holding tasks that are specific to the All of Us Phase 2 callset rather than reusable across cohorts. It also holds importable sub-workflows, which are never Dockstore-registered: `BedtoolsClosestSV.wdl`, `ExactMatch.wdl`, `ScatterVcf.wdl` and `TruvariMatch.wdl` are callset-matching and sharding building blocks, while `LRCNVs.wdl`, `DepthPreprocessing.wdl`, `DepthClustering.wdl` and `GenotypeDepth.wdl` form the depth-based CNV pipeline driven by `tools/LongReadCNVs.wdl`. All eight are described in [Sub-workflows](workflows.md#sub-workflows).
 
-Every workflow directly run in the pipeline (i.e. everything in `annotation/`, `annotation_utils/` and `tools/`) must have a matching entry in [`.dockstore.yml`](../.dockstore.yml), under its corresponding `# Annotation Workflows` / `# Annotation Utilities` / `# Tools` section. This is enforced by CI (see [CI/CD](ci-cd.md)), and that file's ordering is also the section order of [Workflows](workflows.md). For the full WDL/task/input style convention, see [Conventions](conventions.md).
+Every workflow directly run in the pipeline (i.e. everything in `annotation/`, `annotation_utils/` and `tools/`) has an entry in [`.dockstore.yml`](../.dockstore.yml) - see [Dockstore Registration](ci-cd.md#dockstore-registration) - and that file's ordering is also the section order of [Workflows](workflows.md). For the full WDL/task/input style convention, see [Conventions](conventions.md).
 
 Every workflow also documents itself: a `meta` block holds its description and a `parameter_meta` block describes every input and output, and [Workflows](workflows.md) is generated from those blocks rather than written by hand. See [Workflow documentation](conventions.md#workflow-documentation).
 
 
 ## Dockerfiles
-Every container image is built from a `dockerfiles/Dockerfile.<image-name>` file, where `<image-name>` is **all-lowercase** and is, with one documented exception, exactly the name the image is pushed under - e.g. `Dockerfile.utils` builds `utils`. Pinned tool and library versions live in [`dockerfiles/versions.env`](../dockerfiles/versions.env).
-
-The full image inventory, the registry path, and the build, tag and push process via `build_docker.sh` are documented in [Docker images](dockers.md).
+Every container image is built from a `dockerfiles/Dockerfile.<image-name>` file, with pinned tool and library versions in [`dockerfiles/versions.env`](../dockerfiles/versions.env). The image naming rule, the image inventory, the registry path and the `build_docker.sh` build, tag and push flow are documented in [Docker images](dockers.md#building-and-pushing).
 
 
 ## Scripts
