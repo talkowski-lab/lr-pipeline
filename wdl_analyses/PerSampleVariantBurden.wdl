@@ -16,8 +16,9 @@ version 1.0
 ##      sample ID per line, rank 1 first), that order is used as is and no ranking
 ##      is computed. Otherwise samples are ranked ascending by their PASS non-ref
 ##      total, restricted to samples in the sample/population list (RankSamples),
-##      ONCE, from a single small contig: chr22 if one of the VCFs is chr22 (by
-##      filename), else the shortest autosome provided (GRCh38 lengths), counted
+##      ONCE, from a single contig: if only one VCF is given, that VCF; otherwise
+##      chr22 if one of the VCFs is chr22 (by filename), else the shortest autosome
+##      provided (GRCh38 lengths), else chrX (e.g. a chrX + chrY run), counted
 ##      with a quick total-only pass (RankingContigCounts). The same order is used
 ##      for all contigs. The per-sample counts of step 1 do not feed the ranking,
 ##      so they run in parallel with the ranking and the cumulative union.
@@ -112,7 +113,7 @@ workflow PerSampleVariantBurden {
 
     # 1. Sample order for the cumulative union. If ranked_samples is given, it is used
     #    as is. Otherwise samples are ranked once, from total PASS non-ref counts on a
-    #    single small contig (chr22 if provided, else the shortest autosome provided);
+    #    single contig (the only VCF; else chr22, the shortest autosome, or chrX);
     #    the same ranking is used for every contig in step 2a.
     if (!defined(ranked_samples)) {
         Array[String] vcf_paths = vcfs
@@ -240,7 +241,8 @@ workflow PerSampleVariantBurden {
 }
 
 # Picks the VCF used for ranking from the chrN token in each filename (no VCF is
-# localized): chr22 if present, else the shortest GRCh38 autosome among those found.
+# localized): the only VCF if just one is given; else chr22 if present, else the
+# shortest GRCh38 autosome among those found, else chrX.
 task PickRankingVcf {
     input {
         Array[String] vcf_paths
@@ -261,19 +263,30 @@ LENGTHS = {1: 248956422, 2: 242193529, 3: 198295559, 4: 190214555, 5: 181538259,
            16: 90338345, 17: 83257441, 18: 80373285, 19: 58617616, 20: 64444167,
            21: 46709983, 22: 50818468}
 paths = [l.rstrip("\n") for l in open("~{write_lines(vcf_paths)}") if l.strip()]
-autosome = {}
-for i, p in enumerate(paths):
-    found = {int(n) for n in re.findall(r"chr([1-9]|1[0-9]|2[0-2])(?![0-9])", os.path.basename(p))}
-    if len(found) == 1:
-        autosome[i] = found.pop()
-if not autosome:
-    sys.exit("No VCF filename names a single autosome (chr1..chr22); cannot pick a ranking contig. "
-             "Provide ranked_samples, or name per-contig VCFs with their chrN.")
-chr22 = [i for i, c in autosome.items() if c == 22]
-index = chr22[0] if chr22 else min(autosome, key=lambda i: LENGTHS[autosome[i]])
-print(f"Ranking contig: chr{autosome[index]} ({paths[index]})")
+
+
+def contig_name(p):
+    found = set(re.findall(r"chr(1[0-9]|2[0-2]|[1-9]|X|Y)(?![0-9A-Za-z])", os.path.basename(p)))
+    return f"chr{found.pop()}" if len(found) == 1 else None
+
+
+names = [contig_name(p) for p in paths]
+autosome = {i: int(n[3:]) for i, n in enumerate(names) if n and n[3:].isdigit()}
+chrx = [i for i, n in enumerate(names) if n == "chrX"]
+if len(paths) == 1:
+    index = 0
+elif autosome:
+    chr22 = [i for i, c in autosome.items() if c == 22]
+    index = chr22[0] if chr22 else min(autosome, key=lambda i: LENGTHS[autosome[i]])
+elif chrx:
+    index = chrx[0]
+else:
+    sys.exit("Several VCFs given, but no filename names a single autosome (chr1..chr22) or chrX; "
+             "cannot pick a ranking contig. Provide ranked_samples, or name per-contig VCFs with their chrN.")
+contig = names[index] or os.path.basename(paths[index])
+print(f"Ranking contig: {contig} ({paths[index]})")
 open("index.txt", "w").write(f"{index}\n")
-open("contig.txt", "w").write(f"chr{autosome[index]}\n")
+open("contig.txt", "w").write(f"{contig}\n")
 EOF
     >>>
 
