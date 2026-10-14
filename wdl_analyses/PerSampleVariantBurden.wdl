@@ -36,8 +36,9 @@ version 1.0
 ## Both tasks check the VCF header first and fail with a clear message if those
 ## tags are missing. Set it to false for VCFs without them: only total PASS non-ref
 ## counts are produced (per sample, and for the cumulative union).
-## allele_type_tag (default "allele_type") names the INFO tag used as the variant
-## type in place of INFO/allele_type; its values must still be snv/del/ins.
+## allele_type_tag / allele_length_tag (defaults "allele_type" / "allele_length")
+## name the INFO tags used for variant type and length, e.g. "SVTYPE" / "SVLEN" for
+## GATK-SV VCFs. Type values are matched as snv/del/ins in either case.
 ##
 ## Only samples in sample_population_list are analyzed: PerSampleTypeCounts reads
 ## only them (bcftools view -S), so the per-sample count table covers only them;
@@ -80,7 +81,8 @@ workflow PerSampleVariantBurden {
         Int          preemptible = 1
         Int          cumulative_cpu = 4     # per-cutoff task: chromosome VCFs counted in parallel
         Boolean      split_by_allele_type = true   # false if the VCFs lack INFO/allele_type + allele_length
-        String       allele_type_tag = "allele_type"   # INFO tag holding the type (values snv/del/ins)
+        String       allele_type_tag = "allele_type"     # INFO tag holding the type (snv/del/ins, any case)
+        String       allele_length_tag = "allele_length" # INFO tag holding the length
     }
 
     # Resolve each script: explicit input if given, else <scripts_dir>/<standard name>.
@@ -123,6 +125,7 @@ workflow PerSampleVariantBurden {
                 sample_population_list = sample_population_list,
                 split_by_allele_type   = false,
                 allele_type_tag        = allele_type_tag,
+                allele_length_tag      = allele_length_tag,
                 script                 = per_sample_type_counts_sh,
                 docker                 = bcftools_docker,
                 mem_gb                 = mem_gb,
@@ -162,6 +165,7 @@ workflow PerSampleVariantBurden {
                 vcfs            = vcfs,
                 split_by_allele_type = split_by_allele_type,
                 allele_type_tag = allele_type_tag,
+                allele_length_tag = allele_length_tag,
                 script          = cumulative_union_counts_sh,
                 docker          = bcftools_docker,
                 cpu             = cumulative_cpu,
@@ -191,6 +195,7 @@ workflow PerSampleVariantBurden {
                 sample_population_list = sample_population_list,
                 split_by_allele_type = split_by_allele_type,
                 allele_type_tag = allele_type_tag,
+                allele_length_tag = allele_length_tag,
                 script      = per_sample_type_counts_sh,
                 docker      = bcftools_docker,
                 mem_gb      = mem_gb,
@@ -285,6 +290,7 @@ task PerSampleTypeCounts {
         File    sample_population_list
         Boolean split_by_allele_type
         String  allele_type_tag
+        String  allele_length_tag
         File    script
         String  docker
         Int     mem_gb
@@ -296,7 +302,7 @@ task PerSampleTypeCounts {
 
     command <<<
         set -euo pipefail
-        BY_ALLELE_TYPE=~{split_by_allele_type} ALLELE_TYPE_TAG=~{allele_type_tag} bash ~{script} ~{vcf} ~{out_prefix} ~{sample_population_list}
+        BY_ALLELE_TYPE=~{split_by_allele_type} ALLELE_TYPE_TAG=~{allele_type_tag} ALLELE_LENGTH_TAG=~{allele_length_tag} bash ~{script} ~{vcf} ~{out_prefix} ~{sample_population_list}
     >>>
 
     output {
@@ -377,6 +383,7 @@ task CumulativeUnionCounts {
         Array[File] vcfs
         Boolean     split_by_allele_type
         String      allele_type_tag
+        String      allele_length_tag
         File        script
         String      docker
         Int         cpu
@@ -389,7 +396,7 @@ task CumulativeUnionCounts {
 
     command <<<
         set -euo pipefail
-        N_PARALLEL=~{cpu} BY_ALLELE_TYPE=~{split_by_allele_type} ALLELE_TYPE_TAG=~{allele_type_tag} bash ~{script} ~{ordered_samples} ~{i} ~{out_prefix} ~{sep=" " vcfs}
+        N_PARALLEL=~{cpu} BY_ALLELE_TYPE=~{split_by_allele_type} ALLELE_TYPE_TAG=~{allele_type_tag} ALLELE_LENGTH_TAG=~{allele_length_tag} bash ~{script} ~{ordered_samples} ~{i} ~{out_prefix} ~{sep=" " vcfs}
     >>>
 
     output {
