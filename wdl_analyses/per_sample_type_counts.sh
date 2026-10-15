@@ -99,7 +99,7 @@ done
 PASS_EXPR='FILTER="PASS"'
 [ -z "$CLASS_EXPR" ] || PASS_EXPR="$PASS_EXPR && ($CLASS_EXPR)"
 
-has_info() { bcftools view -h "$VCF" | grep -q "^##INFO=<ID=$1,"; }
+has_info() { bcftools view -h "$VCF" | grep "^##INFO=<ID=$1," > /dev/null; }  # not -q: an early grep exit SIGPIPEs bcftools on a large header
 HAS_REGION=false
 if [ "$BY_ALLELE_TYPE" = "true" ] || [ -n "$CLASS_EXPR" ]; then
     for tag in "$ALLELE_TYPE_TAG" "$ALLELE_LENGTH_TAG"; do

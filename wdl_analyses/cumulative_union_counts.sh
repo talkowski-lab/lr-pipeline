@@ -64,7 +64,7 @@ fi
 if [ "$BY_ALLELE_TYPE" = "true" ] || [ -n "$CLASS_EXPR" ]; then
     for vcf in "${VCFS[@]}"; do
         for tag in "$ALLELE_TYPE_TAG" "$ALLELE_LENGTH_TAG"; do
-            if ! bcftools view -h "$vcf" | grep -q "^##INFO=<ID=${tag},"; then
+            if ! bcftools view -h "$vcf" | grep "^##INFO=<ID=${tag}," > /dev/null; then
                 echo "ERROR: INFO/$tag is not defined in $vcf, so sites cannot be split by type/size or restricted by VARIANT_CLASS." >&2
                 echo "       Set allele_type_tag / allele_length_tag, or split_by_allele_type = false with no variant_class." >&2
                 exit 1
