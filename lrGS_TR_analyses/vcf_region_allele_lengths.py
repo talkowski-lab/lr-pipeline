@@ -13,7 +13,8 @@
      hapN_n_missing    records with a missing call on that haplotype
    plus phased (yes: all records with a call are phased; no: at least one unphased GT, so the haplotype split is GT order
    only) and n_records_in_region.
-Requires bcftools. Uses -r (indexed VCF) when an index exists, otherwise -t (streams the file).
+Requires bcftools. Uses -r (indexed VCF) when an index exists, otherwise -t (streams the file). INFO/allele_type is read
+only when the header defines it; "chr6" vs "6" contig naming is resolved from the header; bcftools errors are reported.
 
 Usage:
   vcf_region_allele_lengths.py --vcf input.vcf.gz --region chr6:30949310-30951945 --motif-len 57 --out alleles.tsv
@@ -27,7 +28,18 @@ import pandas as pd
 
 
 def bcftools(args):
-    return subprocess.run(["bcftools"] + args, check=True, capture_output=True, text=True).stdout
+    r = subprocess.run(["bcftools"] + args, capture_output=True, text=True)
+    if r.returncode != 0:
+        raise SystemExit(f"bcftools {' '.join(args[:3])} ... failed (exit {r.returncode}):\n{r.stderr.strip()}")
+    return r.stdout
+
+
+def header_info(vcf):
+    """INFO IDs and contig names declared in the VCF header."""
+    header = bcftools(["view", "-h", vcf])
+    info = set(re.findall(r"^##INFO=<ID=([^,>]+)", header, flags=re.M))
+    contigs = set(re.findall(r"^##contig=<ID=([^,>]+)", header, flags=re.M))
+    return info, contigs
 
 
 def main():
@@ -44,9 +56,18 @@ def main():
     start, end = (int(x.replace(",", "")) for x in rng.split("-"))
     ref_len = end - start + 1
     indexed = any(os.path.exists(args.vcf + ext) for ext in (".tbi", ".csi"))
+    info, contigs = header_info(args.vcf)
+    if contigs and chrom not in contigs:  # chr6 vs 6 naming
+        alt_name = chrom[3:] if chrom.startswith("chr") else f"chr{chrom}"
+        if alt_name in contigs:
+            print(f"note: VCF names the contig {alt_name}, not {chrom}; using {alt_name}")
+            chrom = alt_name
+        else:
+            raise SystemExit(f"contig {chrom} not in VCF header (e.g. {sorted(contigs)[:5]})")
     q_region = f"{chrom}:{max(start - 1, 1)}-{end}"
     samples = bcftools(["query", "-l", args.vcf]).split()
-    fmt = "%CHROM\t%POS\t%ID\t%REF\t%ALT\t%FILTER\t%INFO/allele_type[\t%GT]\n"
+    atype_field = "%INFO/allele_type" if "allele_type" in info else "."
+    fmt = f"%CHROM\t%POS\t%ID\t%REF\t%ALT\t%FILTER\t{atype_field}[\t%GT]\n"
     raw = bcftools(["query", "-r" if indexed else "-t", q_region, "-f", fmt, args.vcf])
 
     records = []
