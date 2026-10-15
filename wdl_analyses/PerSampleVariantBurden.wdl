@@ -52,6 +52,13 @@ version 1.0
 ## A ranked_samples list is used as given (not filtered by the population list);
 ## every sample in it must be present in each VCF.
 ##
+## Output names: with a single VCF, every workflow-level output is prefixed with
+## that VCF's name minus ".vcf.gz" (e.g. chr22.merged.vcf.gz ->
+## chr22.merged.ranked_sample_burden.tsv, chr22.merged.sample_variant_count_table.tsv,
+## chr22.merged.sample_rank.tsv, chr22.merged.ordered_samples.txt), and
+## output_basename is not used. With several VCFs, output_basename is required and
+## is the prefix instead.
+##
 ## Per-VCF sample counts (n_samples_per_vcf, the VCF header's sample count) are
 ## expected to match across shards from the same cohort; not enforced, just
 ## surfaced for the caller to check.
@@ -67,7 +74,8 @@ workflow PerSampleVariantBurden {
         File?        ranked_samples             # optional ranked sample list (one ID per line, rank 1
                                                  # first); if given, CumulativeUnionCounts uses this
                                                  # order and the chr22 ranking is skipped
-        String       output_basename
+        String?      output_basename            # prefix for multi-VCF runs (required then); a
+                                                 # single-VCF run is named after its VCF
         # Scripts: give scripts_dir (a folder, e.g. gs://bucket/path, holding all six
         # scripts under their standard names below), and/or individual script inputs,
         # which override scripts_dir for that script.
@@ -89,6 +97,9 @@ workflow PerSampleVariantBurden {
         String       allele_length_tag = "allele_length" # INFO tag holding the length
         String?      variant_class                       # SNV, Indel, SV, or a combination, e.g. "SNV,Indel"
     }
+
+    # Single VCF: name outputs after it (chr22.merged.vcf.gz -> chr22.merged).
+    String out_prefix = if length(vcfs) == 1 then basename(vcfs[0], ".vcf.gz") else select_first([output_basename])
 
     # Resolve each script: explicit input if given, else <scripts_dir>/<standard name>.
     String scripts_base = sub(select_first([scripts_dir, ""]), "/+$", "")
@@ -143,7 +154,7 @@ workflow PerSampleVariantBurden {
             input:
                 per_sample_tsvs        = [RankingContigCounts.per_sample_counts],
                 sample_population_list = sample_population_list,
-                output_basename        = output_basename,
+                output_basename        = out_prefix,
                 script                 = rank_samples_py,
                 docker                 = python_docker,
                 mem_gb                 = mem_gb,
@@ -184,7 +195,7 @@ workflow PerSampleVariantBurden {
     call ConcatCumulativeCounts {
         input:
             cumulative_rows = CumulativeUnionCounts.row,
-            output_basename = output_basename,
+            output_basename = out_prefix,
             script          = concat_cumulative_counts_py,
             docker          = python_docker,
             mem_gb          = mem_gb,
@@ -215,7 +226,7 @@ workflow PerSampleVariantBurden {
     call BuildSampleVariantCountTable {
         input:
             per_sample_tsvs = PerSampleTypeCounts.per_sample_counts,
-            output_basename = output_basename,
+            output_basename = out_prefix,
             script          = build_sample_variant_count_table_py,
             docker          = python_docker,
             mem_gb          = mem_gb,
