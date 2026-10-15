@@ -1805,106 +1805,6 @@ CODE
     }
 }
 
-task CreateGapAwareShards {
-    input {
-        Array[File] vcfs
-        Array[File] vcf_idxs
-        String contig
-        Int shard_bin_size
-        Int min_gap = 10000
-        String prefix
-        String docker
-        RuntimeAttr? runtime_attr_override
-    }
-
-    command <<<
-        set -euo pipefail
-
-        vcfs_file="~{write_lines(vcfs)}"
-        vcf_idxs_file="~{write_lines(vcf_idxs)}"
-        paste "$vcfs_file" "$vcf_idxs_file" > vcf_pairs.tsv
-        : > record_spans.txt
-        while IFS=$'\t' read -r vcf vcf_idx; do
-            if [[ "$vcf_idx" != "$vcf.tbi" ]]; then
-                ln -sf "$vcf_idx" "$vcf.tbi"
-            fi
-            bcftools query -r ~{contig} -f '%POS\t%REF\n' "$vcf" \
-                | awk 'BEGIN{OFS="\t"} {print $1, $1 + length($2) - 1}' \
-                >> record_spans.txt
-        done < vcf_pairs.tsv
-
-        LC_ALL=C sort -k1,1n record_spans.txt > record_spans.sorted.txt
-
-        python3 - <<CODE
-contig = "~{contig}"
-shard_bin_size = ~{shard_bin_size}
-min_gap = ~{min_gap}
-
-spans = []
-with open("record_spans.sorted.txt") as f:
-    for line in f:
-        start, end = line.split()
-        spans.append((int(start), int(end)))
-
-# Record every gap wider than min_gap, the only positions a boundary may fall on because truvari chunks on such gaps
-cut_points = []
-max_end = spans[0][1] if spans else 0
-for index in range(1, len(spans)):
-    if spans[index][0] - max_end > min_gap:
-        cut_points.append((max_end, spans[index][0]))
-    max_end = max(max_end, spans[index][1])
-
-# Grow each shard to at least shard_bin_size before snapping its end forward to the next safe gap
-regions = []
-start = 1
-cut_index = 0
-while spans and start <= max_end:
-    target = start + shard_bin_size - 1
-    if target >= max_end:
-        regions.append((start, max_end))
-        break
-    while cut_index < len(cut_points) and cut_points[cut_index][0] < target:
-        cut_index += 1
-    if cut_index >= len(cut_points):
-        regions.append((start, max_end))
-        break
-    regions.append((start, cut_points[cut_index][0]))
-    start = cut_points[cut_index][1]
-    cut_index += 1
-
-with open("~{prefix}.txt", "w") as out:
-    if not regions:
-        out.write(f"{contig}\n")
-    else:
-        for region_start, region_end in regions:
-            out.write(f"{contig}:{region_start}-{region_end}\n")
-CODE
-    >>>
-
-    output {
-        Array[String] shard_regions = read_lines("~{prefix}.txt")
-    }
-
-    RuntimeAttr default_attr = object {
-        cpu_cores: 1,
-        mem_gb: 8,
-        disk_gb: ceil(2 * size(vcfs, "GB")) + 10,
-        boot_disk_gb: 10,
-        preemptible_tries: 1,
-        max_retries: 0
-    }
-    RuntimeAttr runtime_attr = select_first([runtime_attr_override, default_attr])
-    runtime {
-        cpu: select_first([runtime_attr.cpu_cores, default_attr.cpu_cores])
-        memory: select_first([runtime_attr.mem_gb, default_attr.mem_gb]) + " GiB"
-        disks: "local-disk " + select_first([runtime_attr.disk_gb, default_attr.disk_gb]) + " HDD"
-        bootDiskSizeGb: select_first([runtime_attr.boot_disk_gb, default_attr.boot_disk_gb])
-        docker: docker
-        preemptible: select_first([runtime_attr.preemptible_tries, default_attr.preemptible_tries])
-        maxRetries: select_first([runtime_attr.max_retries, default_attr.max_retries])
-    }
-}
-
 task DropVcfFields {
     input {
         File vcf
@@ -4355,6 +4255,67 @@ task SubsetVcfToContig {
         cpu_cores: 1,
         mem_gb: 4,
         disk_gb: 2 * ceil(size(vcf, "GB")) + 5,
+        boot_disk_gb: 10,
+        preemptible_tries: 1,
+        max_retries: 0
+    }
+    RuntimeAttr runtime_attr = select_first([runtime_attr_override, default_attr])
+    runtime {
+        cpu: select_first([runtime_attr.cpu_cores, default_attr.cpu_cores])
+        memory: select_first([runtime_attr.mem_gb, default_attr.mem_gb]) + " GiB"
+        disks: "local-disk " + select_first([runtime_attr.disk_gb, default_attr.disk_gb]) + " HDD"
+        bootDiskSizeGb: select_first([runtime_attr.boot_disk_gb, default_attr.boot_disk_gb])
+        docker: docker
+        preemptible: select_first([runtime_attr.preemptible_tries, default_attr.preemptible_tries])
+        maxRetries: select_first([runtime_attr.max_retries, default_attr.max_retries])
+    }
+}
+
+task SubsetVcfToRecordSpan {
+    input {
+        File vcf
+        File vcf_idx
+        File span_vcf
+        Int flank
+        String prefix
+        String docker
+        RuntimeAttr? runtime_attr_override
+    }
+
+    parameter_meta {
+        vcf: { localization_optional: true }
+        vcf_idx: { localization_optional: true }
+    }
+
+    command <<<
+        set -euo pipefail
+
+        export GCS_OAUTH_TOKEN=$(gcloud auth application-default print-access-token)
+
+        # Span from the first start to the furthest end of span_vcf, since a long record reaches past the last POS
+        region=$(bcftools query -f '%CHROM\t%POS\t%END\n' ~{span_vcf} \
+            | awk -v flank=~{flank} 'NR == 1 {chrom = $1; start = $2; end = $3} {if ($2 < start) start = $2; if ($3 > end) end = $3} END {start -= flank; if (start < 1) start = 1; print chrom ":" start "-" end + flank}')
+
+        # Pair -r with -t so records are selected by POS alone, because -r alone also returns REF spans reaching in
+        bcftools view \
+            -r "$region" \
+            -t "$region" \
+            --threads $(nproc) \
+            ~{vcf} \
+            -Oz -o ~{prefix}.vcf.gz
+
+        tabix -p vcf -f ~{prefix}.vcf.gz
+    >>>
+
+    output {
+        File subset_vcf = "~{prefix}.vcf.gz"
+        File subset_vcf_idx = "~{prefix}.vcf.gz.tbi"
+    }
+
+    RuntimeAttr default_attr = object {
+        cpu_cores: 2,
+        mem_gb: 4,
+        disk_gb: ceil(size(vcf, "GB") + size(span_vcf, "GB")) + 20,
         boot_disk_gb: 10,
         preemptible_tries: 1,
         max_retries: 0

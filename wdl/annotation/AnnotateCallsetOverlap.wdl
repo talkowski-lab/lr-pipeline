@@ -18,7 +18,7 @@ workflow AnnotateCallsetOverlap {
             "Every minimum-length filter measures its VCF by the `length_field_*` input named here. The two Truvari filters run region by region inside `ExactMatch`, where the callset is filtered by `min_sv_length_bedtools_closest_vcf` instead when the Truvari round is off; the two `bedtools closest` filters run here, and the SV truth VCF is filtered before renaming and conversion. With `convert_symbolic_truth_sv_vcf` a canonical DUP is therefore measured by `length_field_truth_sv_vcf` rather than by the `ORIGIN` span that conversion writes into `SVLEN`.",
             "The optional `max_sv_length_truvari_vcf` and `max_sv_length_truvari_truth_snv_indel_vcf` cap what enters the Truvari round, applied in the same region-by-region pass as the Truvari minimums, since very long records can drive Truvari shards out of memory. Truth records above the cap are dropped; callset records above it skip Truvari and rejoin its unmatched records ahead of the `bedtools closest` round. Both caps are ignored when the Truvari round is off.",
             "The workflow runs on one contig. The callset and SNV & indel truth VCFs are never passed over whole: `ExactMatch` reads them region by region straight from the bucket, dropping genotypes and applying their `args_string_*` expression on the way, so they may hold any set of contigs. The SV truth VCF, which the `bedtools closest` round consumes unsharded, is prepared in a single pass that applies its `args_string_truth_sv_vcf` expression and `min_sv_length_bedtools_closest_truth_vcf`, drops genotypes and, when `subset_contig_truth_sv_vcf` is true, reads only the contig from the bucket.",
-            "Both the exact-match and Truvari rounds can be sharded within a contig. Truvari shard boundaries are snapped forward to the next gap wider than the `min_shard_gap_truvari_match` input of `TruvariMatch`, which keeps results identical to an unsharded run because Truvari only groups records into a new comparison chunk once the next record clears the running end by more than its chunk size. Fixed-width bins alone would split colocated record pairs and silently lose matches."
+            "Both the exact-match and Truvari rounds can be sharded within a contig. The exact-match round uses fixed-width regions. The Truvari round, when `shard_records_truvari_match` is set, is cut into consecutive runs of that many callset records with `bcftools +scatter`, so every shard carries the same number of callset records however unevenly they are spread along the contig. Each shard is compared against the truth records whose POS falls within the span of its callset records widened by `shard_flank_truvari_match` on each side. Flanks of neighbouring shards overlap, so a truth record near a boundary can be matched by a callset record in each of two shards."
         ]
     }
 
@@ -50,7 +50,8 @@ workflow AnnotateCallsetOverlap {
         source_tag_truth_snv_indel_vcf: "Label used to tag matches against the SNV & indel truth VCF."
         source_tag_truth_sv_vcf: "Label used to tag matches against the SV truth VCF."
         shard_bin_size_exact_match: "Width in base pairs of the contig regions the exact-match round is sharded into, run in parallel."
-        shard_bin_size_truvari_match: "If set, shards the Truvari round into contig regions of at least this many base pairs, run in parallel. Each region is extended to the next safe gap, so a value of 1000000 or more is recommended."
+        shard_records_truvari_match: "If set, shards the Truvari round into runs of this many callset records each, run in parallel."
+        shard_flank_truvari_match: "Base pairs added to each side of a Truvari shard's callset span when selecting its truth records. A flank of at least Truvari's 500 bp matching distance keeps matches at shard edges."
         args_string_vcf: "`bcftools view` include expression applied to the callset VCF as each exact-match region is read."
         args_string_truth_snv_indel_vcf: "`bcftools view` include expression applied to the SNV & indel truth VCF as each exact-match region is read."
         args_string_truth_sv_vcf: "`bcftools view` include expression applied to the SV truth VCF alongside its length filter."
@@ -100,7 +101,8 @@ workflow AnnotateCallsetOverlap {
         String source_tag_truth_sv_vcf = "SV"
 
         Int shard_bin_size_exact_match = 5000000
-        Int? shard_bin_size_truvari_match
+        Int? shard_records_truvari_match
+        Int shard_flank_truvari_match = 1000
 
         String? args_string_vcf
         String? args_string_truth_snv_indel_vcf
@@ -136,7 +138,6 @@ workflow AnnotateCallsetOverlap {
         RuntimeAttr? runtime_attr_truvari_subset_oversized
         RuntimeAttr? runtime_attr_concat_exact_oversized
         RuntimeAttr? runtime_attr_truvari_create_shards
-        RuntimeAttr? runtime_attr_truvari_subset_region_vcf
         RuntimeAttr? runtime_attr_truvari_subset_region_truth
         RuntimeAttr? runtime_attr_truvari_run_truvari_09
         RuntimeAttr? runtime_attr_truvari_run_truvari_07
@@ -211,15 +212,14 @@ workflow AnnotateCallsetOverlap {
                 vcf_idx = ExactMatch.truvari_eval_vcf_idx,
                 truth_snv_indel_vcf = select_first([ExactMatch.truvari_truth_vcf]),
                 truth_snv_indel_vcf_idx = select_first([ExactMatch.truvari_truth_vcf_idx]),
-                contig = contig,
                 prefix = "~{prefix}.~{contig}.truvari",
                 source_tag = source_tag_truth_snv_indel_vcf,
-                shard_bin_size_truvari_match = shard_bin_size_truvari_match,
+                shard_records_truvari_match = shard_records_truvari_match,
+                shard_flank_truvari_match = shard_flank_truvari_match,
                 ref_fa = ref_fa,
                 ref_fai = ref_fai,
                 utils_docker = utils_docker,
                 runtime_attr_create_truvari_shards = runtime_attr_truvari_create_shards,
-                runtime_attr_subset_truvari_vcf = runtime_attr_truvari_subset_region_vcf,
                 runtime_attr_subset_truvari_truth = runtime_attr_truvari_subset_region_truth,
                 runtime_attr_run_truvari_09 = runtime_attr_truvari_run_truvari_09,
                 runtime_attr_run_truvari_07 = runtime_attr_truvari_run_truvari_07,

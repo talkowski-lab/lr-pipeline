@@ -15,10 +15,9 @@ workflow TruvariMatch {
         vcf_idx: "Index for vcf."
         truth_snv_indel_vcf: "Unmatched truth records."
         truth_snv_indel_vcf_idx: "Index for truth_snv_indel_vcf."
-        contig: "Contig being processed."
         source_tag: "Tag identifying the truth callset in the annotations."
-        shard_bin_size_truvari_match: "Shard size for the matching step."
-        min_shard_gap_truvari_match: "Minimum gap between records at which a shard boundary may fall."
+        shard_records_truvari_match: "If set, shards the matching step into consecutive runs of this many callset records each. Each shard is compared against the truth records whose POS falls within its span widened by `shard_flank_truvari_match`."
+        shard_flank_truvari_match: "Base pairs added to each side of a shard's span when selecting its truth records. Truvari only pairs records within 500 bp of each other by default, so the default flank keeps matches at shard edges."
         ref_fa: "Reference FASTA and index, when Truvari is run with reference context."
         ref_fai: "Index for ref_fa."
         annotation_tsv: "Truvari match annotations across all three thresholds."
@@ -33,13 +32,12 @@ workflow TruvariMatch {
         File vcf_idx
         File truth_snv_indel_vcf
         File truth_snv_indel_vcf_idx
-        String contig
         String prefix
 
         String source_tag = "SNV_indel"
 
-        Int? shard_bin_size_truvari_match
-        Int min_shard_gap_truvari_match = 10000
+        Int? shard_records_truvari_match
+        Int shard_flank_truvari_match = 1000
 
         File? ref_fa
         File? ref_fai
@@ -47,7 +45,6 @@ workflow TruvariMatch {
         String utils_docker
 
         RuntimeAttr? runtime_attr_create_truvari_shards
-        RuntimeAttr? runtime_attr_subset_truvari_vcf
         RuntimeAttr? runtime_attr_subset_truvari_truth
         RuntimeAttr? runtime_attr_run_truvari_09
         RuntimeAttr? runtime_attr_run_truvari_07
@@ -57,51 +54,44 @@ workflow TruvariMatch {
         RuntimeAttr? runtime_attr_concat_unmatched
     }
 
-    Boolean shard_truvari = defined(shard_bin_size_truvari_match)
+    Boolean shard_truvari = defined(shard_records_truvari_match)
 
     if (shard_truvari) {
-        call Helpers.CreateGapAwareShards as CreateTruvariShards {
+        call Helpers.ShardVcfByRecords as ShardTruvariEval {
             input:
-                vcfs = [vcf, truth_snv_indel_vcf],
-                vcf_idxs = [vcf_idx, truth_snv_indel_vcf_idx],
-                contig = contig,
-                shard_bin_size = select_first([shard_bin_size_truvari_match]),
-                min_gap = min_shard_gap_truvari_match,
-                prefix = "~{prefix}.truvari_shards",
+                vcf = vcf,
+                vcf_idx = vcf_idx,
+                records_per_shard = select_first([shard_records_truvari_match]),
+                prefix = "~{prefix}.truvari_eval",
                 docker = utils_docker,
                 runtime_attr_override = runtime_attr_create_truvari_shards
         }
     }
 
-    Array[String] truvari_regions = select_first([CreateTruvariShards.shard_regions, [contig]])
+    # A callset with no records yields no shards, so it runs whole as a single shard instead
+    Array[File] sharded_vcfs = select_first([ShardTruvariEval.shards, []])
+    Boolean use_shards = length(sharded_vcfs) > 0
+    Array[File] eval_vcfs = if use_shards then sharded_vcfs else [vcf]
+    Array[File] eval_vcf_idxs = if use_shards then select_first([ShardTruvariEval.shard_idxs]) else [vcf_idx]
 
-    scatter (k in range(length(truvari_regions))) {
-        if (shard_truvari) {
-            call Helpers.SubsetVcfToRegionStreaming as SubsetTruvariEvalRegion {
-                input:
-                    vcf = vcf,
-                    vcf_idx = vcf_idx,
-                    region = truvari_regions[k],
-                    prefix = "~{prefix}.truvari_eval_~{k}",
-                    docker = utils_docker,
-                    runtime_attr_override = runtime_attr_subset_truvari_vcf
-            }
-
-            call Helpers.SubsetVcfToRegionStreaming as SubsetTruvariTruthRegion {
+    scatter (k in range(length(eval_vcfs))) {
+        if (use_shards) {
+            call Helpers.SubsetVcfToRecordSpan as SubsetTruvariTruthSpan {
                 input:
                     vcf = truth_snv_indel_vcf,
                     vcf_idx = truth_snv_indel_vcf_idx,
-                    region = truvari_regions[k],
+                    span_vcf = eval_vcfs[k],
+                    flank = shard_flank_truvari_match,
                     prefix = "~{prefix}.truvari_truth_~{k}",
                     docker = utils_docker,
                     runtime_attr_override = runtime_attr_subset_truvari_truth
             }
         }
 
-        File region_vcf = select_first([SubsetTruvariEvalRegion.subset_vcf, vcf])
-        File region_vcf_idx = select_first([SubsetTruvariEvalRegion.subset_vcf_idx, vcf_idx])
-        File region_truth_vcf = select_first([SubsetTruvariTruthRegion.subset_vcf, truth_snv_indel_vcf])
-        File region_truth_vcf_idx = select_first([SubsetTruvariTruthRegion.subset_vcf_idx, truth_snv_indel_vcf_idx])
+        File region_vcf = eval_vcfs[k]
+        File region_vcf_idx = eval_vcf_idxs[k]
+        File region_truth_vcf = select_first([SubsetTruvariTruthSpan.subset_vcf, truth_snv_indel_vcf])
+        File region_truth_vcf_idx = select_first([SubsetTruvariTruthSpan.subset_vcf_idx, truth_snv_indel_vcf_idx])
 
         call RunTruvari as RunTruvari09 {
             input:
@@ -289,7 +279,7 @@ task RunTruvari {
     RuntimeAttr runtime_attr = select_first([runtime_attr_override, default_attr])
     runtime {
         cpu: select_first([runtime_attr.cpu_cores, default_attr.cpu_cores])
-        memory: if tag_value == "TRUVARI_0.9" then "10 GiB" else if tag_value == "TRUVARI_0.7" then "10 GiB" else "10 GiB"
+        memory: if tag_value == "TRUVARI_0.9" then "4 GiB" else if tag_value == "TRUVARI_0.7" then "4 GiB" else "4 GiB"
         disks: "local-disk " + select_first([runtime_attr.disk_gb, default_attr.disk_gb]) + " HDD"
         bootDiskSizeGb: select_first([runtime_attr.boot_disk_gb, default_attr.boot_disk_gb])
         docker: docker
