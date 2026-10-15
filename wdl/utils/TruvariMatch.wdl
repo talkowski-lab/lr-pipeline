@@ -224,6 +224,14 @@ task RunTruvari {
             rm -r "~{prefix}_truvari"
         fi
 
+        # Truvari looks for each index beside its VCF, but Cromwell localizes separately globbed shard indexes elsewhere
+        if [[ "~{vcf_idx}" != "~{vcf}.tbi" ]]; then
+            ln -sf "~{vcf_idx}" "~{vcf}.tbi"
+        fi
+        if [[ "~{truth_snv_indel_vcf_idx}" != "~{truth_snv_indel_vcf}.tbi" ]]; then
+            ln -sf "~{truth_snv_indel_vcf_idx}" "~{truth_snv_indel_vcf}.tbi"
+        fi
+
         # Pass --reference only when supplied, because truvari needs it solely to resolve symbolic ALTs
         truvari bench \
             -b ~{truth_snv_indel_vcf} \
