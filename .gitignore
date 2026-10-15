@@ -2,6 +2,7 @@
 **__pycache__/
 
 /data
+/docs/scratch.md
 /.claude/worktrees/
 
 .DS_Store

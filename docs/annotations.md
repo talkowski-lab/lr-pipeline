@@ -124,6 +124,31 @@ This document describes the INFO and FORMAT fields and FILTER values present in 
   - `VRS_States`: Literal sequence states used for the GA4GH VRS Alleles corresponding to the GT indexes of the REF and ALT alleles.
 
 
+## FORMAT Fields
+Which fields a call carries depends on its `INFO/SOURCE`.
+- `AD`: Allelic depths for the REF and ALT alleles, in the order listed. Set on `DeepVariant` and `HPRC_SV_Integration` calls; for SVs, the depths come from Kanpig regenotyping.
+- `AL`: Allele length. On `HPRC_SV_Integration` calls, the unsigned length of the sample's SV allele; on tandem repeat calls, the length of each allele from TRGT.
+- `DP`: Approximate read depth. Set on `DeepVariant` calls only.
+- `GQ`: Genotype quality. Set on `DeepVariant` and `HPRC_SV_Integration` calls.
+- `GT`: Genotype, written with `|` where phasing placed the call on a haplotype.
+- Phasing: Haplotype phasing from HiPhase and backbone phasing, set on `DeepVariant` and `HPRC_SV_Integration` calls.
+  - `PF`: Phasing flag set by HiPhase on a call it deliberately excluded from phasing. The only value is `TR_OVERLAP`, for a call fully contained within a TRGT tandem repeat call.
+  - `PS`: Phase set identifier, the `POS` of the first variant in the phase block. Backbone phasing fills it for some `PF = TR_OVERLAP` calls from its run without TRGT calls.
+- `PL`: Phred-scaled genotype likelihoods. Set on `DeepVariant` and `HPRC_SV_Integration` calls.
+- `RNC`: Reason for a no-call in `GT`, as one code per allele from GLnexus - e.g. `M` for missing data, `D` for insufficient depth or `.` when not applicable. The VCF header lists every code. Set on `DeepVariant` calls only.
+- SV Calls: Per-sample allele position and caller evidence for `HPRC_SV_Integration` calls.
+  - `APOS`: Breakpoint position of the sample's SV allele, which can differ from the site `POS`.
+  - `BEV`: Representative caller for the sample call - `kanpig` if it appears in `EV`, otherwise the caller in `EV` whose `AD` gives the highest `GQ`. Added by `AnnotateSvCallerSupport`, for HPRC/HGSVC only.
+  - `EV`: Callers supporting the sample call, added by `AnnotateSvCallerSupport` for HPRC/HGSVC only, as a comma-separated list of `caller_(refAD_altAD)` - e.g. `pbsv_(18_13)`. The assembly-based callers `dipcall` and `hapdiff` carry no depths.
+- Tandem Repeats: Per-allele TRGT measurements for tandem repeat calls (`TRExplorer` and `Vamos`).
+  - `ALLR`: Length range of each allele.
+  - `AM`: Mean methylation level of each allele.
+  - `AP`: Purity of each allele.
+  - `MC`: Motif counts of each allele.
+  - `MS`: Motif spans of each allele.
+  - `SD`: Number of spanning reads supporting each allele.
+
+
 ## FILTER Values
 - `ASSEMBLY_ONLY_SINGLETON`: Variant with `AC = 1` whose sole carrier has support exclusively from assembly-based callers (`dipcall` and/or `hapdiff`).
 - `HIGH_NCR`: Variant whose `INFO/NCR` is at or above the no-call rate cutoff applied to the callset.
