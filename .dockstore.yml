@@ -514,7 +514,6 @@ workflows:
     filters:
       branches:
         - main
-        - kj-ncr-cutoff-eval
       tags:
         - /.*/
 
