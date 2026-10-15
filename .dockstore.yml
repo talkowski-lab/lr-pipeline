@@ -154,7 +154,6 @@ workflows:
     filters:
       branches:
         - main
-        - kj-vep-2gib-mem
       tags:
         - /.*/
 
@@ -164,7 +163,6 @@ workflows:
     filters:
       branches:
         - main
-        - kj-vep-2gib-mem
       tags:
         - /.*/
 
