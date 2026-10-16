@@ -37,4 +37,4 @@ Step 2 ends with the merged cohort CNV VCF, the per-sample ploidy table, and the
 
 
 ## 3. Reviewing Calls
-**[CreateCNVDepthPlots](../wdl/annotation_utils/CreateCNVDepthPlots.wdl)** - draw read-depth plots for the CNVs of the genotyped depth VCF that fall within a BED of regions, one plot per non-reference sample per CNV, with a padded window around each call. Pass the same `merged_bincov` and `median_coverage` given to `LongReadCNVs`. The plots come back as one tarball with a folder per variant ID and one PNG per non-reference sample, alongside a table of the selected CNVs.
+**[CreateCNVDepthPlots](../wdl/annotation_utils/CreateCNVDepthPlots.wdl)** - draw read-depth plots for the CNVs of the genotyped depth VCF that fall within a BED of regions, one plot per non-reference sample per CNV, with a padded window around each call. Pass the same `merged_bincov` and `median_coverage` given to `LongReadCNVs`, and the genomic-context BEDs given to `AnnotateRegion`. The plots come back as one tarball with a folder per variant ID and one PNG per non-reference sample, named `<sample>.<context>.png` by the CNV's genomic context, alongside a table of the selected CNVs.
