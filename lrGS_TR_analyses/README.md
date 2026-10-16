@@ -110,6 +110,9 @@ Motif count is `INFO/MC_allele` where present (multi-allelic sites), otherwise a
   matches each locus to the overlapping long-read TRV (largest overlap), converts long-read alleles to repeat units
   (rounded reference units + size difference / unit length; AC-weighted, REF by AN − ΣAC), and compares distributions
   (per-locus panels, summary scatter of median / p99 / max, KS distance, match_flag for wider / partial TRVs).
+- `str_locus_allele_distribution.py --trv LABEL=path ... --trv-id ID --motif M --sr-sizes P.allele_sizes.tsv --sr-id G
+  --out-prefix Q`: one locus in detail: gnomAD SR repeat-unit counts vs long-read alleles measured three ways (allele
+  length / motif length, longest pure motif run, motif copies with interruptions allowed); per-allele table, summary, PDF.
 
 ## Single-locus tools
 - `plot_trv_locus.py --trv <merged TRV.bed.gz> --gtf GTF --catalog TRExplorer=... Vamos=... (--gene G | --region R |
