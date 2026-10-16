@@ -68,6 +68,8 @@ Motif count is `INFO/MC_allele` where present (multi-allelic sites), otherwise a
   cohorts overlaid.
 - `plot_TRV_motif_counts_by_context.py`: one cohort, counts per exact motif length in 1–10 / 11–100 / 101–1000 bp panels,
   one line per context.
+- `plot_str_ref_length_by_context.py --trv <merged TRV.bed.gz> [--size ref_allele|trid_span] --out-prefix P`: STR size
+  (REF allele length) across coding, intronic, intergenic non-desert and desert: exact sizes to 150 bp (log y) and an ECDF.
 - `plot_TRV_size_distribution.py [--context coding]`: repeat-size distribution (exact 1–100 bp, 10-bp bins to 1 kb, ECDF).
 
 ## Mutability and constraint
