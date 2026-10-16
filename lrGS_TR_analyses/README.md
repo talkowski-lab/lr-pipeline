@@ -103,6 +103,14 @@ Motif count is `INFO/MC_allele` where present (multi-allelic sites), otherwise a
 - `extract_indels_in_trvs.sh` + `summarize_coding_trv_indels.py`: indels inside coding TRVs not captured by srGS, binned by
   indel size and by TRV reference size.
 
+## Comparison with gnomAD short-read STRs
+- `fetch_gnomad_str.py --dataset gnomad_r4 --out-prefix P`: downloads the gnomAD browser STR loci (GraphQL API; throttled,
+  retries on HTTP 429) with allele-size distributions summed over ancestry / sex / quality cohorts.
+- `compare_gnomad_str_to_lr.py --loci P.loci.tsv --allele-sizes P.allele_sizes.tsv --trv <merged TRV.bed.gz> --out-prefix Q`:
+  matches each locus to the overlapping long-read TRV (largest overlap), converts long-read alleles to repeat units
+  (rounded reference units + size difference / unit length; AC-weighted, REF by AN − ΣAC), and compares distributions
+  (per-locus panels, summary scatter of median / p99 / max, KS distance, match_flag for wider / partial TRVs).
+
 ## Single-locus tools
 - `plot_trv_locus.py --trv <merged TRV.bed.gz> --gtf GTF --catalog TRExplorer=... Vamos=... (--gene G | --region R |
   --gene-table T --count-column n_coding --min-count 10) [--max-motif 6] --out P.pdf [--out-dir D]`: locus plot with one
