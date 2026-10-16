@@ -14,7 +14,8 @@ Outputs (prefix --out-prefix):
   .pdf          AF distribution: SR repunit count (grey) vs each long-read measure (one panel per measure)
 
 Usage:
-  str_locus_allele_distribution.py --trv hprc_hgsvc=gnomAD_LR.hprc_hgsvc.TRV.bed.gz AoU_I=gnomAD_LR.AoU_I.vep_parsed.annotated.TRV.bed.gz \
+  str_locus_allele_distribution.py --trv hprc_hgsvc=gnomAD_LR.hprc_hgsvc.TRV.bed.gz \
+      AoU_I=gnomAD_LR.AoU_I.vep_parsed.annotated.TRV.bed.gz \
       --trv-id chr16-17470907-TRV-15 --motif GCC --sr-sizes gnomad_r4_STR.allele_sizes.tsv --sr-id XYLT1 --out-prefix XYLT1/XYLT1
 """
 import argparse
@@ -130,7 +131,8 @@ def main():
                label=f"gnomAD SR repunit count (n = {int(sr.sum()):,})")
         for (k, d), col in zip(datasets.items(), args.colors):
             g = d.groupby(np.round(d[m]).astype(int))["AC"].sum()
-            ax.plot(g.index, g / g.sum(), color=col, marker="o", markersize=3.5, linewidth=0, label=f"{k} LR (n = {int(g.sum()):,})")
+            ax.plot(g.index, g / g.sum(), color=col, marker="o", markersize=3.5, linewidth=0,
+                    label=f"{k} LR (n = {int(g.sum()):,})")
             ax.vlines(g.index, 0, g / g.sum(), color=col, linewidth=1.2)
         ax.set_yscale("log")
         ax.set_ylabel("Allele frequency (log)", fontsize=9, color=INK)
