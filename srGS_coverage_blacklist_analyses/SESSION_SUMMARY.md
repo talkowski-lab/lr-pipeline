@@ -110,7 +110,7 @@ form directly comparable to the lrGS (HPRC+HGSVC mosdepth) bins in
     with the worst bin (133,071,300-400) at 4.1x (0.13x), 66% of samples < 5x. Milder srGS dips at the
     exon 8 AAG STR (0.56x, 4.5% < 5x) and intronic GTG/GGA STRs (0.68-0.84x).
 
-- Coding TRs (outputs moved 2026-10-14 to `/Users/xzhao/Downloads/analyses/gnomAD_LR_vcf/final_vcfs/STR_catalog/coding_TR_coverage/`; TRExplorer + Vamos, GENCODE v39 CDS, srGS < 0.5x and lrGS >= 0.7x):
+- Coding TRs (`coding_TR_coverage/`; TRExplorer + Vamos, GENCODE v39 CDS, srGS < 0.5x and lrGS >= 0.7x):
   - 48,679 coding catalog loci -> 40,948 merged coding TR regions in 14,707 genes
     (STR 37,285 regions / 14,073 genes; VNTR 3,663 / 2,976).
   - Flagged (srGS-poor, lrGS-ok): 576 regions in 341 genes (STR 410, VNTR 166). 453 of the 576 are
