@@ -151,7 +151,7 @@ Which fields a call carries depends on its `INFO/SOURCE`.
 
 ## FILTER Values
 - `ASSEMBLY_ONLY_SINGLETON`: Variant with `AC = 1` whose sole carrier has support exclusively from assembly-based callers (`dipcall` and/or `hapdiff`).
-- `HIGH_NCR`: Variant whose `INFO/NCR` is above the no-call rate cutoff for its allele type, length and `REGION` in the cutoff table passed to `NCRFiltering`.
+- `HIGH_NCR`: Variant whose `INFO/NCR` is above the no-call rate cutoff for its allele type, length and `REGION` in the cutoff table passed to `FilterNCRCutoffs`.
 - `LARGE_SNV_INDEL`: Variant with `SOURCE = "DeepVariant"` that has `INFO/allele_length ≥ 50`.
 - `LOW_COVERAGE_REGION`: Variant region determined to have low coverage relative to entire genome.
 - `MONOALLELIC`: Variant in a region with multiple variants that could not be unified into non-overlapping multi-allelic sites.

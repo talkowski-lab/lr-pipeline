@@ -416,8 +416,8 @@ workflows:
         - /.*/
 
   - subclass: WDL
-    name: NCRFiltering
-    primaryDescriptorPath: /wdl/annotation_utils/NCRFiltering.wdl
+    name: FilterNCRCutoffs
+    primaryDescriptorPath: /wdl/annotation_utils/FilterNCRCutoffs.wdl
     filters:
       branches:
         - main

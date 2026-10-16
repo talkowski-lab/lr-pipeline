@@ -3,7 +3,7 @@ version 1.0
 import "../utils/Helpers.wdl"
 import "../utils/Structs.wdl"
 
-workflow NCRFiltering {
+workflow FilterNCRCutoffs {
     meta {
         description: [
             "This utility removes sites that carry no informative genotypes and flags the sites that are largely uncalled. When `remove_no_calls` is set, every variant whose samples carry no alternate allele - an allele count of zero - is removed. When `ncr_cutoffs_tsv` is given, every surviving variant is matched to a row by its lowercased `INFO/allele_type`, its absolute `INFO/allele_length` within the row's inclusive length bounds and its `INFO/REGION`, where a row's `ALL` region matches any region. A matched variant whose no-call rate is above the row's cutoff is given the `HIGH_NCR` FILTER value, whose header line the workflow adds; those variants are flagged rather than removed. A cutoff keeps the sites at or below it, as an `EvaluateNCRCutoffs` cutoff does, so a cutoff read off its curves keeps the same sites here. Variants matching no row are left untouched, so the table need not cover every stratum. When `ncr_filter_pass_only` is set, only variants whose FILTER is PASS are matched, and `ncr_cutoffs_tsv` must be given; otherwise variants of every FILTER are matched.",
@@ -58,7 +58,7 @@ workflow NCRFiltering {
     Array[File] vcf_idxs_to_process = select_first([ShardVcfByRecords.shard_idxs, [vcf_idx]])
 
     scatter (i in range(length(vcfs_to_process))) {
-        call NCRFilteringShard {
+        call FilterNCRCutoffsShard {
             input:
                 vcf = vcfs_to_process[i],
                 vcf_idx = vcf_idxs_to_process[i],
@@ -74,8 +74,8 @@ workflow NCRFiltering {
     if (defined(records_per_shard)) {
         call Helpers.ConcatVcfs {
             input:
-                vcfs = NCRFilteringShard.filtered_vcf,
-                vcf_idxs = NCRFilteringShard.filtered_vcf_idx,
+                vcfs = FilterNCRCutoffsShard.filtered_vcf,
+                vcf_idxs = FilterNCRCutoffsShard.filtered_vcf_idx,
                 allow_overlaps = false,
                 naive = true,
                 prefix = "~{prefix}.ncr_filtered",
@@ -85,12 +85,12 @@ workflow NCRFiltering {
     }
 
     output {
-        File filtered_vcf = select_first([ConcatVcfs.concat_vcf, NCRFilteringShard.filtered_vcf[0]])
-        File filtered_vcf_idx = select_first([ConcatVcfs.concat_vcf_idx, NCRFilteringShard.filtered_vcf_idx[0]])
+        File filtered_vcf = select_first([ConcatVcfs.concat_vcf, FilterNCRCutoffsShard.filtered_vcf[0]])
+        File filtered_vcf_idx = select_first([ConcatVcfs.concat_vcf_idx, FilterNCRCutoffsShard.filtered_vcf_idx[0]])
     }
 }
 
-task NCRFilteringShard {
+task FilterNCRCutoffsShard {
     input {
         File vcf
         File vcf_idx
