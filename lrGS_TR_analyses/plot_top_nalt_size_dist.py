@@ -4,8 +4,12 @@
 Input: merged TRV table (merge_trv_tables.sh output; columns used: #chrom start end ID FILTER motifs ref_len AC AN
 alt_size_diff genic_context genes SOURCE intergenic_category). Loci: FILTER PASS, ranked by distinct ALT alleles with
 AC > 0 (ties broken by REF length); top --top loci, optionally restricted with --max-motif / --contexts.
-Per locus: histogram of the size difference across haplotypes (each ALT allele weighted by its AC; REF haplotypes,
-AN - sum(AC), at 0), with the median and range. Panels are titled with ID, gene / intergenic category and motifs.
+Per locus, a histogram across haplotypes with each ALT allele weighted by its AC and the REF allele by AN - sum(AC):
+  --mode size_diff (default)  x = ALT size - REF size (REF at 0), y = haplotype count
+  --mode length               x = allele length in bp = len(VCF allele) - 1 (padding base) for REF and each ALT (for ~8.5% of
+                              TRVs the VCF record spans slightly more than the catalog repeat); REF marked by a line even when
+                              no haplotype carries it; y = allele frequency (fraction of AN)
+with the median and range. Panels are titled with ID, gene / intergenic category and motifs.
 Outputs: <out-prefix>.pdf (grid) and <out-prefix>.tsv (one row per ALT allele: locus, size difference, AC).
 
 Usage:
@@ -30,7 +34,7 @@ GRID = "#e6e4df"
 BAR = "#2a78d6"
 REFC = "#eb6834"
 COLS = ["#chrom", "start", "end", "ID", "FILTER", "motifs", "ref_len", "AC", "AN", "alt_size_diff", "genic_context", "genes",
-        "SOURCE", "intergenic_category"]
+        "SOURCE", "intergenic_category", "REF", "ALT"]
 
 
 def main():
@@ -40,6 +44,7 @@ def main():
     p.add_argument("--max-motif", type=int, help="Only loci whose shortest motif is <= this")
     p.add_argument("--contexts", nargs="*", help="Only these genic_context values")
     p.add_argument("--label", default="")
+    p.add_argument("--mode", choices=["size_diff", "length"], default="size_diff")
     p.add_argument("--out-prefix", required=True)
     args = p.parse_args()
 
@@ -66,30 +71,43 @@ def main():
         diff = np.array([int(x) for x in r["alt_size_diff"].split(",")])
         an = int(r["AN"])
         n_ref = an - ac.sum()
-        for dlt, c in zip(diff, ac):
-            rows.append({"ID": r["ID"], "size_diff": int(dlt), "AC": int(c)})
-        vals = np.concatenate([diff, [0]])
+        ref_len = len(r["REF"]) - 1
+        alt_lens = np.array([len(a) - 1 for a in r["ALT"].split(",")])
+        for dlt, L, c in zip(diff, alt_lens, ac):
+            rows.append({"ID": r["ID"], "size_diff": int(dlt), "allele_len": int(L), "AC": int(c), "AF": c / an})
+        if args.mode == "length":
+            diff = alt_lens
+        ref_x = ref_len if args.mode == "length" else 0
+        scale = 1 / an if args.mode == "length" else 1
+        vals = np.concatenate([diff, [ref_x]])
         wts = np.concatenate([ac, [n_ref]]).astype(float)
         lo, hi = int(vals[wts > 0].min()), int(vals[wts > 0].max())
         span = max(hi - lo, 1)
         width = max(1, int(np.ceil(span / 40)))
         bins = np.arange(lo - 0.5, hi + width + 0.5, width)
-        ax.hist(diff, bins=bins, weights=ac, color=BAR, alpha=0.85, label="ALT haplotypes")
+        if args.mode == "length":
+            lo, hi = min(lo, ref_x), max(hi, ref_x)
+            bins = np.arange(lo - 0.5, hi + width + 0.5, width)
+        ax.hist(diff, bins=bins, weights=ac * scale, color=BAR, alpha=0.85, label="ALT alleles")
         if n_ref > 0:
-            ax.bar(0, n_ref, width=width, color=REFC, label=f"REF haplotypes ({n_ref})")
-        ax.axvline(0, color=INK2, linewidth=0.8, linestyle=":")
-        hap = np.repeat(np.concatenate([diff, [0]]), np.concatenate([ac, [max(n_ref, 0)]]).astype(int))
+            ax.bar(ref_x, n_ref * scale, width=width, color=REFC, label="REF allele")
+        ax.axvline(ref_x, color=REFC, linewidth=1, linestyle=":")
+        if args.mode == "length":
+            ax.text(ref_x, ax.get_ylim()[1] * 0.98, f" REF {ref_len} bp\n AF {n_ref / an:.3f}", color=REFC, fontsize=6.5,
+                    ha="left", va="top")
+        hap = np.repeat(np.concatenate([diff, [ref_x]]), np.concatenate([ac, [max(n_ref, 0)]]).astype(int))
         med = float(np.median(hap)) if len(hap) else np.nan
         where = r["genes"] if r["genic_context"] in ("coding", "UTR", "intronic") else r["intergenic_category"]
         mot = r["motifs"].split(",")
         mot_show = ",".join(m if len(m) <= 8 else m[:8] + "…" for m in mot[:2]) + (f" +{len(mot) - 2}" if len(mot) > 2 else "")
-        ax.set_title(f"{r['ID']}\n{r['genic_context']}: {where}; {r['SOURCE']}\nmotif {mot_show}; REF {r['ref_len']} bp",
+        ax.set_title(f"{r['ID']}\n{r['genic_context']}: {where}; {r['SOURCE']}\nmotif {mot_show}; REF {ref_len} bp",
                      fontsize=7.5, color=INK)
-        ax.text(0.98, 0.97, f"{int(r['n_alt'])} ALT alleles / AN {an}\nmedian {med:+g} bp\nrange {lo:+d} to {hi:+d} bp",
-                transform=ax.transAxes, ha="right", va="top", fontsize=7, color=INK)
-        ax.set_xlabel("ALT size − REF size (bp)", fontsize=8, color=INK)
+        sign = "" if args.mode == "length" else "+"
+        ax.text(0.98, 0.97, f"{int(r['n_alt'])} ALT alleles / AN {an}\nmedian {med:{sign}g} bp\n"
+                f"range {lo:{sign}d} to {hi:{sign}d} bp", transform=ax.transAxes, ha="right", va="top", fontsize=7, color=INK)
+        ax.set_xlabel("Allele length (bp)" if args.mode == "length" else "ALT size − REF size (bp)", fontsize=8, color=INK)
         if k % ncol == 0:
-            ax.set_ylabel("Haplotypes", fontsize=8, color=INK)
+            ax.set_ylabel("Allele frequency (fraction of AN)" if args.mode == "length" else "Haplotypes", fontsize=8, color=INK)
         for sp in ["top", "right"]:
             ax.spines[sp].set_visible(False)
         ax.tick_params(colors=INK2, labelsize=7)
@@ -98,8 +116,9 @@ def main():
     for k in range(len(top), nrow * ncol):
         axes[k // ncol][k % ncol].axis("off")
     lab = f"{args.label}: " if args.label else ""
-    fig.suptitle(f"{lab}allele size distribution at the {len(top)} PASS TRV loci with the most distinct ALT alleles "
-                 f"(ALT alleles weighted by AC; REF haplotypes at 0)", fontsize=10, color=INK)
+    what = "allele length (REF included, dotted line)" if args.mode == "length" else "ALT − REF size (REF haplotypes at 0)"
+    fig.suptitle(f"{lab}{what} at the {len(top)} PASS TRV loci with the most distinct ALT alleles; "
+                 f"alleles weighted by AC (REF by AN − ΣAC)", fontsize=10, color=INK)
     fig.tight_layout()
     fig.savefig(f"{args.out_prefix}.pdf")
     plt.close(fig)

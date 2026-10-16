@@ -79,7 +79,8 @@ Motif count is `INFO/MC_allele` where present (multi-allelic sites), otherwise a
   alleles per site vs repeat length, one PDF each for coding, intronic, intergenic non-desert (Tiny / Small / Medium) and
   intergenic desert; site density plus median / IQR per length bin by motif class.
 - `plot_top_nalt_size_dist.py --trv <merged TRV.bed.gz> --top 10 [--max-motif M] [--contexts ...] --out-prefix P`: for the
-  loci with the most distinct ALT alleles, the haplotype distribution of ALT size − REF size (ALT weighted by AC, REF at 0).
+  loci with the most distinct ALT alleles, the haplotype distribution of ALT size − REF size (`--mode size_diff`) or of
+  allele length with REF included (`--mode length`, y = allele frequency); ALT weighted by AC, REF by AN − ΣAC.
 - `str_density_by_context.py --trv <merged TRV.bed.gz> --gtf GTF --intergenic intergenic_regions_annotated.bed.gz --out-prefix P`:
   STRs per Mb (autosomes) in coding (CDS bp), intronic (transcript minus exons), intergenic non-desert and desert
   (regions minus MANE transcripts), overall and by motif size.
