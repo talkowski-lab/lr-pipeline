@@ -28,15 +28,15 @@ def trv_records(path, ids):
     header = subprocess.run(f"gzip -cd {path} | sed -n 1p", shell=True, capture_output=True, text=True).stdout
     cols = header.lstrip("#").rstrip("\n").split("\t")
     rows = []
-    for trv_id, gid, flag in ids:
-        chrom, pos = trv_id.split("-")[:2]
-        out = subprocess.run(["tabix", path, f"{chrom}:{int(pos)}-{int(pos) + 1}"], capture_output=True, text=True,
-                             check=True).stdout
+    for trv_id, gid, flag, region in ids:
+        out = subprocess.run(["tabix", path, region], capture_output=True, text=True, check=True).stdout
         for line in out.splitlines():
             f = line.split("\t")
             if f[cols.index("ID")] == trv_id:
                 rows.append(f + [gid, flag])
                 break
+        else:
+            raise SystemExit(f"{trv_id} ({gid}) not found in {path} at {region}")
     t = pd.DataFrame(rows, columns=cols + ["gnomAD_id", "match_flag"])
     t["_s"] = t[cols[1]].astype(int)
     t = t.sort_values([cols[0], "_s"]).drop(columns="_s")
@@ -76,9 +76,9 @@ def main():
         d.insert(1, "gene", d["id"].map(gene))
         d.to_csv(f"{out}.{name}.allele_dist.tsv", sep="\t", index=False)
         m = t[t["TRV"].notna() & (t["match_flag"] != "no_TRV")]
-        bed = trv_records(path, list(zip(m["TRV"], m["id"], m["match_flag"])))
+        bed = trv_records(path, list(zip(m["TRV"], m["id"], m["match_flag"], m["region"])))
         bed.to_csv(f"{out}.{name}.TRV.bed", sep="\t", index=False)
-        print(f"{name}: {len(m)} matched loci ({(m['match_flag'] == 'ok').sum()} ok), {bed['ID'].nunique()} TRV records, "
+        print(f"{name}: {len(m)} matched loci ({(m['match_flag'] == 'ok').sum()} ok), {bed['ID'].nunique()} distinct TRVs, "
               f"{int(d['allele_count'].sum()):,} alleles")
 
 
