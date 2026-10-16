@@ -47,6 +47,10 @@ Motif count is `INFO/MC_allele` where present (multi-allelic sites), otherwise a
 - `build_trv_locus_table.py --trv-bed B --genic-tsv G --gtf GTF --out loci.tsv.gz`: one row per TRV with TRID span, catalog,
   motif, copies, GC and purity of the REF repeat, ALT alleles (AC > 0), non-ref AF, max |ALT − REF|, in-frame / frameshift
   allele counts, genic context (coding = inside one CDS block; coding_partial otherwise). Input to most plots below.
+- `annotate_trv_sites.py --sites <prefix>.TRV.sites.bed.gz --intergenic intergenic_regions_annotated.bed.gz --gene-info
+  gene_information_loeufv4_pHaplo_pTriplo...txt.gz --out P.bed.gz`: appends to the AnalyzeTRVariants site BED, for intergenic
+  TRVs, the overlapping intergenic region and its category (Tiny / Small / Medium / Desert, or between_regions /
+  chrom_not_in_region_file); for coding and intronic TRVs, LOEUF_v4 with its percentile and decile per gene.
 - `count_variant_overview.sh <annotated.bed.gz> <label> <out.tsv>`: variant counts by class (SNV, del/ins split at 50 bp, TRV,
   others), all and PASS.
 
