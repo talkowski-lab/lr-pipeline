@@ -1,0 +1,205 @@
+#!/bin/bash
+# Per-sample non-ref genotype counts from one chromosome VCF, restricted to
+# FILTER=PASS sites, overall, by variant type/size (using the existing
+# INFO/allele_type + $AL annotations -- no need to re-derive
+# type/size from REF/ALT), and by each type/size category further split by
+# INFO/REGION (genomic context: US, RM, SD, SR -- see INFO/REGION header
+# description; single-valued per site, so the split is mutually exclusive).
+#
+# For a filtered (or unfiltered) subset of sites, per-sample non-ref count is
+# extracted from `bcftools stats -s -`'s PSC (SNV het/hom) + PSI (indel
+# het/hom) sections combined:
+#   count = PSC.nNonRefHom + PSC.nHets + PSI.nInsHets + PSI.nDelHets
+#           + PSI.nInsAltHoms + PSI.nDelAltHoms
+# (safe to always sum all six: after filtering to a single type, the
+# irrelevant terms are 0 anyway; for the unfiltered "total" pass this
+# correctly combines SNV + indel genotypes). Caveat inherited from bcftools
+# itself: a het genotype with one ins allele and one del allele is counted
+# in both nInsHets and nDelHets (documented bcftools behavior).
+#
+# Split by type/size is controlled by the environment variable BY_ALLELE_TYPE
+# (default true). true: requires INFO/allele_type and $AL in the
+# header (checked up front; fails with a clear message if missing). false: only
+# n_total_nonref is counted (no type/size or REGION columns), for VCFs without
+# those annotations. The REGION split is added only if INFO/REGION is defined.
+# ALLELE_TYPE_TAG (default allele_type) / ALLELE_LENGTH_TAG (default allele_length):
+# names of the INFO tags holding the variant type and length (e.g. SVTYPE / SVLEN).
+# Type values are matched as snv/del/ins in either case (snv or SNV, del or DEL, ...).
+# VARIANT_CLASS (optional, default all variants): restricts every count to a variant
+# class, a comma- or space-separated list of SNV, Indel, SV (any case; several are
+# combined, e.g. "SNV,Indel"). SNV: type snv. Indel: type del/ins, 1-49bp. SV: any
+# type, >49bp. Needs the type/length tags even when BY_ALLELE_TYPE=false.
+#
+# Usage: [BY_ALLELE_TYPE=true|false] [ALLELE_TYPE_TAG=allele_type] [ALLELE_LENGTH_TAG=allele_length] [VARIANT_CLASS=SNV,Indel,SV] per_sample_type_counts.sh <in.vcf.gz> <out_prefix> [sample_population_list.tsv[.gz]]
+#   sample_population_list (optional): counts only the samples it lists (bcftools
+#   view -S), the same list RankSamples ranks. Either a file with a header that has a
+#   "sample" column (e.g. ancestry_label.HGSVC_HPRC.tsv.gz), or a plain list whose
+#   first column is the sample ID; plain or gzipped. Listed samples absent from this
+#   VCF are skipped with a warning. n_samples still reports the VCF header's count.
+# Writes:
+#   <out_prefix>.n_samples.txt         -- single integer
+#   <out_prefix>.per_sample_counts.tsv -- sample_id, n_total_nonref, then the
+#                                          7 type/size categories (n_snv,
+#                                          n_del_1_49, n_ins_1_49,
+#                                          n_del_50_499, n_ins_50_499,
+#                                          n_del_gt499, n_ins_gt499), then
+#                                          each of those 7 further split by
+#                                          REGION, e.g. n_snv_US, n_snv_RM,
+#                                          n_snv_SD, n_snv_SR, ...
+set -euo pipefail
+
+VCF=$1
+OUT_PREFIX=$2
+POP_LIST=${3:-}
+VIEW_SAMPLES=()
+SAMPLE_LIST=""
+if [ -n "$POP_LIST" ]; then
+    SAMPLE_LIST=$(mktemp)
+    if gzip -t "$POP_LIST" 2>/dev/null; then gzip -dc "$POP_LIST"; else cat "$POP_LIST"; fi \
+        | awk -F'\t' '
+            NR == 1 {
+                for (k = 1; k <= NF; k++) if (tolower($k) == "sample") col = k
+                if (col) next
+                col = 1
+            }
+            $col != "" && $col != "sample" && $col != "sample_id" { print $col }
+        ' | sort -u > "$SAMPLE_LIST"
+    n_listed=$(wc -l < "$SAMPLE_LIST" | tr -d ' ')
+    n_found=$(bcftools query -l "$VCF" | awk 'NR==FNR { s[$1] = 1; next } ($1 in s)' - "$SAMPLE_LIST" | wc -l | tr -d ' ')
+    if [ "$n_found" -eq 0 ]; then
+        echo "ERROR: none of the $n_listed samples in $POP_LIST are in $VCF" >&2
+        exit 1
+    fi
+    if [ "$n_found" -lt "$n_listed" ]; then
+        echo "WARNING: $((n_listed - n_found)) of $n_listed samples in $POP_LIST are not in $VCF; skipped" >&2
+    fi
+    VIEW_SAMPLES=(-S "$SAMPLE_LIST" --force-samples)
+fi
+
+REGIONS=(US RM SD SR)
+BY_ALLELE_TYPE=${BY_ALLELE_TYPE:-true}
+ALLELE_TYPE_TAG=${ALLELE_TYPE_TAG:-allele_type}
+ALLELE_LENGTH_TAG=${ALLELE_LENGTH_TAG:-allele_length}
+AT="INFO/${ALLELE_TYPE_TAG}"
+AL="INFO/${ALLELE_LENGTH_TAG}"
+IS_SNV="($AT=\"snv\" || $AT=\"SNV\")"
+IS_DEL="($AT=\"del\" || $AT=\"DEL\")"
+IS_INS="($AT=\"ins\" || $AT=\"INS\")"
+VARIANT_CLASS=${VARIANT_CLASS:-}
+CLASS_EXPR=""
+for c in $(echo "$VARIANT_CLASS" | tr ',' ' ' | tr '[:upper:]' '[:lower:]'); do
+    case "$c" in
+        snv)   e="$IS_SNV" ;;
+        indel) e="($IS_DEL || $IS_INS) && abs($AL)>=1 && abs($AL)<=49" ;;
+        sv)    e="abs($AL)>49" ;;
+        *)     echo "ERROR: VARIANT_CLASS must list SNV, Indel and/or SV, got '$VARIANT_CLASS'" >&2; exit 1 ;;
+    esac
+    CLASS_EXPR="${CLASS_EXPR:+$CLASS_EXPR || }($e)"
+done
+PASS_EXPR='FILTER="PASS"'
+[ -z "$CLASS_EXPR" ] || PASS_EXPR="$PASS_EXPR && ($CLASS_EXPR)"
+
+has_info() { bcftools view -h "$VCF" | grep "^##INFO=<ID=$1," > /dev/null; }  # not -q: an early grep exit SIGPIPEs bcftools on a large header
+HAS_REGION=false
+if [ "$BY_ALLELE_TYPE" = "true" ] || [ -n "$CLASS_EXPR" ]; then
+    for tag in "$ALLELE_TYPE_TAG" "$ALLELE_LENGTH_TAG"; do
+        if ! has_info "$tag"; then
+            echo "ERROR: INFO/$tag is not defined in $VCF, so variants cannot be split by type/size or restricted by VARIANT_CLASS." >&2
+            echo "       Set allele_type_tag / allele_length_tag, or split_by_allele_type = false with no variant_class." >&2
+            exit 1
+        fi
+    done
+fi
+if [ "$BY_ALLELE_TYPE" = "true" ]; then
+    if has_info REGION; then
+        HAS_REGION=true
+    else
+        echo "WARNING: INFO/REGION is not defined in $VCF; skipping the REGION split" >&2
+    fi
+elif [ "$BY_ALLELE_TYPE" != "false" ]; then
+    echo "ERROR: BY_ALLELE_TYPE must be true or false, got '$BY_ALLELE_TYPE'" >&2
+    exit 1
+fi
+
+bcftools query -l "$VCF" | wc -l | tr -d ' ' > "${OUT_PREFIX}.n_samples.txt"
+
+extract_counts() {
+    # $1 = bcftools -i filter expression
+    bcftools view -i "$1" ${VIEW_SAMPLES[@]+"${VIEW_SAMPLES[@]}"} "$VCF" | bcftools stats -s - - | awk -F'\t' '
+        $1=="PSC" { nonref[$3] += $5 + $6 }
+        $1=="PSI" { nonref[$3] += $8 + $9 + $10 + $11 }
+        END { for (s in nonref) print s"\t"nonref[s] }
+    '
+}
+
+WORKDIR=$(mktemp -d)
+trap 'rm -rf "$WORKDIR" ${SAMPLE_LIST:+"$SAMPLE_LIST"}' EXIT
+
+# name<TAB>filter manifest, built up below, then run through extract_counts
+# once per line (one bcftools view+stats pass per category/region combo).
+COL_NAMES=()
+COL_FILTERS=()
+
+COL_NAMES+=("n_total_nonref");  COL_FILTERS+=("$PASS_EXPR")
+if [ "$BY_ALLELE_TYPE" = "true" ]; then
+    COL_NAMES+=("n_snv");           COL_FILTERS+=("$PASS_EXPR && $IS_SNV")
+    COL_NAMES+=("n_del_1_49");      COL_FILTERS+=("$PASS_EXPR && $IS_DEL && abs($AL)>=1   && abs($AL)<=49")
+    COL_NAMES+=("n_ins_1_49");      COL_FILTERS+=("$PASS_EXPR && $IS_INS && abs($AL)>=1   && abs($AL)<=49")
+    COL_NAMES+=("n_del_50_499");    COL_FILTERS+=("$PASS_EXPR && $IS_DEL && abs($AL)>=50  && abs($AL)<=499")
+    COL_NAMES+=("n_ins_50_499");    COL_FILTERS+=("$PASS_EXPR && $IS_INS && abs($AL)>=50  && abs($AL)<=499")
+    COL_NAMES+=("n_del_gt499");     COL_FILTERS+=("$PASS_EXPR && $IS_DEL && abs($AL)>499")
+    COL_NAMES+=("n_ins_gt499");     COL_FILTERS+=("$PASS_EXPR && $IS_INS && abs($AL)>499")
+
+    # The 7 type/size categories above, each further split by REGION (if annotated).
+    if [ "$HAS_REGION" = "true" ]; then
+        n_base_cats=${#COL_NAMES[@]}
+        for (( i=1; i<n_base_cats; i++ )); do
+            base_name="${COL_NAMES[$i]}"
+            base_filt="${COL_FILTERS[$i]}"
+            for region in "${REGIONS[@]}"; do
+                COL_NAMES+=("${base_name}_${region}")
+                COL_FILTERS+=("${base_filt} && INFO/REGION=\"${region}\"")
+            done
+        done
+    fi
+fi
+
+for (( i=0; i<${#COL_NAMES[@]}; i++ )); do
+    extract_counts "${COL_FILTERS[$i]}" > "$WORKDIR/${i}.tsv"
+done
+
+# Join all per-category (sample -> count) files into one wide table. They
+# all share the same sample set (bcftools stats -s - always emits every
+# sample from the VCF header, count 0 if none matched the filter), so a
+# single-pass awk merge keyed by sample is safe and avoids needing python3
+# in this bcftools-only container. Row order doesn't matter here -- any
+# downstream aggregation re-sorts/re-sums across chromosome shards.
+{
+    printf 'sample'
+    for name in "${COL_NAMES[@]}"; do printf '\t%s' "$name"; done
+    printf '\n'
+} > "${OUT_PREFIX}.per_sample_counts.tsv"
+
+awk -F'\t' -v workdir="$WORKDIR" -v n_cols="${#COL_NAMES[@]}" '
+    BEGIN {
+        for (k = 0; k < n_cols; k++) {
+            f = workdir "/" k ".tsv"
+            while ((getline line < f) > 0) {
+                split(line, a, "\t")
+                cnt[a[1], k] = a[2]
+                samples[a[1]] = 1
+            }
+            close(f)
+        }
+        for (s in samples) {
+            out = s
+            for (k = 0; k < n_cols; k++) {
+                key = s SUBSEP k
+                out = out "\t" ((key in cnt) ? cnt[key] : 0)
+            }
+            print out
+        }
+    }
+' >> "${OUT_PREFIX}.per_sample_counts.tsv"
+
+echo "Wrote ${OUT_PREFIX}.per_sample_counts.tsv and ${OUT_PREFIX}.n_samples.txt"

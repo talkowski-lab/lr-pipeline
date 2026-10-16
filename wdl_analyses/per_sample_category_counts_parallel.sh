@@ -1,0 +1,82 @@
+#!/bin/bash
+# Splits one chromosome-shard VCF into N disjoint genomic-position chunks
+# (using bcftools view -r, which is tabix-index-based -- a true seek, not a
+# linear scan -- so this is genuine data-parallelism: N workers each handle
+# 1/N of the data, rather than N workers each rescanning 100% of it).
+# Each chunk is processed independently and concurrently by the existing
+# per_sample_category_counts.py, then the chunk results are
+# summed/unioned back together with concat_sample_category_counts.py --
+# correct because disjoint position ranges can never double-count a variant
+# or a sample's genotype at it.
+#
+# (An earlier version of this ran the 9 count categories + 3 gene-list
+# categories as 9-12 concurrent `bcftools view -i <category filter>` passes
+# instead. That measured SLOWER in practice (~167s vs ~66s single-pass on a
+# real chr22 test) because each category's `-i` filter still requires a full
+# linear scan/decompression of the entire file -- there's no index to skip
+# non-matching INFO-field values, so parallelizing across categories just
+# multiplies total I/O instead of dividing it. Position-range splitting
+# avoids this because -r IS index-seekable.)
+#
+# Usage: per_sample_category_counts_parallel.sh <in.vcf.gz> <out_prefix> <n_chunks> <per_sample_category_counts.py> <concat_sample_category_counts.py> [category] [af_field max_af]
+# category (default: all) and af_field/max_af (default: none none, i.e. no AF
+# restriction) are passed through to per_sample_category_counts.py.
+set -euo pipefail
+
+if [ $# -lt 5 ] || [ $# -gt 8 ] || [ $# -eq 7 ]; then
+    echo "ERROR: expected 5, 6 or 8 args, got $#" >&2
+    exit 1
+fi
+
+VCF=$1
+OUT_PREFIX=$2
+N_CHUNKS=$3
+PER_SAMPLE_SCRIPT=$4
+CONCAT_SCRIPT=$5
+CATEGORY=${6:-all}
+AF_FIELD=${7:-none}
+MAX_AF=${8:-none}
+
+WORKDIR=$(mktemp -d)
+trap 'rm -rf "$WORKDIR"' EXIT
+
+# tabix -l lists only the contig(s) actually present in the index -- an
+# index lookup, not a data scan -- unlike `bcftools view -H | head -1`,
+# which is both wasteful (reads/decompresses from the start of the file)
+# and unsafe under `set -o pipefail` (head's early exit sends SIGPIPE
+# upstream, which pipefail then reports as the pipeline's exit status).
+CONTIG=$(tabix -l "$VCF" | awk 'NR==1')
+# awk reads the whole header (no early exit like grep -m1), so bcftools is
+# never SIGPIPEd mid-write -- which pipefail would turn into exit 141.
+LENGTH=$(bcftools view -h "$VCF" | awk -v c="$CONTIG" 'index($0, "##contig=<ID=" c ",length=") == 1 && len == "" { len = $0; sub(/.*length=/, "", len); sub(/[^0-9].*/, "", len) } END { print len }')
+
+if [ -z "$CONTIG" ] || [ -z "$LENGTH" ]; then
+    echo "ERROR: could not determine contig/length from $VCF" >&2
+    exit 1
+fi
+
+CHUNK_SIZE=$(( (LENGTH + N_CHUNKS - 1) / N_CHUNKS ))
+
+# --- slice into N disjoint position-range chunks, in parallel (index-seekable) ---
+for (( i=0; i<N_CHUNKS; i++ )); do
+    start=$(( i * CHUNK_SIZE + 1 ))
+    end=$(( (i + 1) * CHUNK_SIZE ))
+    if [ "$end" -gt "$LENGTH" ]; then end=$LENGTH; fi
+    (
+        bcftools view -r "${CONTIG}:${start}-${end}" --regions-overlap pos "$VCF" -Ob -o "$WORKDIR/chunk_${i}.bcf"
+    ) &
+done
+wait
+
+# --- process each chunk concurrently with the existing per-sample script ---
+for (( i=0; i<N_CHUNKS; i++ )); do
+    (
+        python3 "$PER_SAMPLE_SCRIPT" "$WORKDIR/chunk_${i}.bcf" "$WORKDIR/chunk_${i}" "$CATEGORY" "$AF_FIELD" "$MAX_AF"
+    ) &
+done
+wait
+
+# --- sum counts / union gene sets across chunks (disjoint, so this is exact) ---
+python3 "$CONCAT_SCRIPT" "${OUT_PREFIX}.category_counts.tsv" "$WORKDIR"/chunk_*.category_counts.tsv
+
+echo "Wrote ${OUT_PREFIX}.category_counts.tsv"
