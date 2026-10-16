@@ -83,6 +83,8 @@ Motif count is `INFO/MC_allele` where present (multi-allelic sites), otherwise a
 - `str_density_by_context.py --trv <merged TRV.bed.gz> --gtf GTF --intergenic intergenic_regions_annotated.bed.gz --out-prefix P`:
   STRs per Mb (autosomes) in coding (CDS bp), intronic (transcript minus exons), intergenic non-desert and desert
   (regions minus MANE transcripts), overall and by motif size.
+- `plot_alt_size_range_by_context.py --trv <merged TRV.bed.gz> --motif 3 --out-prefix P`: per-site ALT allele size range
+  (max − min carried ALT length) for one motif size across coding, intronic, intergenic non-desert and desert.
 - `classify_coding_TRV_alleles.py`: coding TRV ALT alleles as frameshift / in-frame del / in-frame ins / no length change /
   partial CDS, with allele, site and gene counts by AC.
 - `summarize_coding_STR_per_gene.py [--max-motif 6] [--min-ac 1]`: coding STR sites per gene, split into LoF / in-frame /
