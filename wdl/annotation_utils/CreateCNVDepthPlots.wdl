@@ -5,8 +5,9 @@ import "../utils/Structs.wdl"
 workflow CreateCNVDepthPlots {
     meta {
         description: [
-            "This utility draws read-depth plots for the CNVs of a `LongReadCNVs` `genotyped_depth_vcf` that fall within a set of regions, so calls can be reviewed by eye. It writes one plot per non-reference sample per selected CNV, and packs them into one tarball with a folder per variant ID holding one PNG per non-reference sample, named by sample ID. A table lists every selected CNV with its plot window and non-reference samples.",
-            "A record is selected when it overlaps any region in `regions_bed`, or lies wholly within one when `require_full_containment` is set, and passes the SV type and length filters. A sample is non-reference when its `FORMAT/RD_CN` is below its `FORMAT/ECN` for a DEL, above it for a DUP, or differs from it for a multiallelic CNV; genotypes are not consulted, since CNV records carry none. Each plot covers the call plus a window of `padding_fraction` of its length on either side. It shows every cohort sample's copy number estimate, 2 x depth / sample median coverage, from `merged_bincov` averaged to about 120 points whatever the window's length:the plotted sample in bold orange, the variant's other non-reference samples in light orange, and all remaining samples in grey with their median in black. Dashed lines mark the call. A sample in the VCF but missing from `merged_bincov` or `median_coverage` fails the workflow.",
+            "This utility draws read-depth plots for the CNVs of a `LongReadCNVs` `genotyped_depth_vcf` that fall within a set of regions, so calls can be reviewed by eye. It writes one plot per non-reference sample per selected CNV, and packs them into one tarball with a folder per variant ID holding one PNG per non-reference sample, named `<sample>.<context>.png`. A table lists every selected CNV with its genomic context, plot window and non-reference samples.",
+            "A record is selected when it overlaps any region in `regions_bed`, or lies wholly within one when `require_full_containment` is set, and passes the SV type and length filters. A sample is non-reference when its `FORMAT/RD_CN` is below its `FORMAT/ECN` for a DEL, above it for a DUP, or differs from it for a multiallelic CNV; genotypes are not consulted, since CNV records carry none. Each CNV's genomic context follows `AnnotateRegion`: SR (simple repeat), SD (segmental duplication) or RM (RepeatMasker) when either breakpoint falls in one, taking the first in that order, else US (unique sequence); a DEL or DUP over 5 kb is instead labelled by the first of these covering more than half its span.",
+            "Each plot covers the call plus a window of `padding_fraction` of its length on either side. It shows every cohort sample's copy number estimate, 2 x depth / sample median coverage, from `merged_bincov` averaged to about 120 points whatever the window's length: the plotted sample in bold orange outlined in white, the variant's other non-reference samples in light orange, and all remaining samples in grey with their median in black. Dashed lines mark the call and grey lines mark integer copy numbers. The title gives the variant ID and SV type, the sample's `RD_CN` and `ECN` with the variant's carrier count, and the call's location, length and genomic context. A sample in the VCF but missing from `merged_bincov` or `median_coverage` fails the workflow.",
             "Every non-reference sample is plotted by default, which can mean thousands of plots for a large region or a common CNV. Set `max_carriers_per_variant` to skip variants with more non-reference samples than that; skipped variants are still listed in the table, with `plotted` set to 0."
         ]
     }
@@ -24,9 +25,12 @@ workflow CreateCNVDepthPlots {
         require_full_containment: "Whether a CNV must lie wholly within a region, rather than overlap it, to be selected."
         padding_fraction: "Window added on each side of a CNV, as a share of its length."
         max_carriers_per_variant: "Maximum non-reference samples for a variant to be plotted; unset plots every variant."
+        simple_repeats_bed: "From references."
+        seg_dup_bed: "From references."
+        repeat_masked_bed: "From references."
         records_per_shard: "Number of variants plotted within a single shard."
-        cnv_variants_tsv: "One row per selected CNV, with its `variant_id`, `contig`, `pos`, `end`, `svtype`, `svlen`, plot window `window_start` and `window_end`, `n_carriers` non-reference samples, `plotted` (1, or 0 when skipped by `max_carriers_per_variant`) and `carriers` as comma-separated `sample:RD_CN:ECN`."
-        cnv_depth_plots_tar: "Tarball of `cnv_depth_plots/<variant_id>/<sample>.png`, one plot per non-reference sample of each plotted CNV."
+        cnv_variants_tsv: "One row per selected CNV, with its `variant_id`, `contig`, `pos`, `end`, `svtype`, `svlen`, genomic `context` (US, RM, SD or SR), plot window `window_start` and `window_end`, `n_carriers` non-reference samples, `plotted` (1, or 0 when skipped by `max_carriers_per_variant`) and `carriers` as comma-separated `sample:RD_CN:ECN`."
+        cnv_depth_plots_tar: "Tarball of `cnv_depth_plots/<variant_id>/<sample>.<context>.png`, one plot per non-reference sample of each plotted CNV."
     }
 
     input {
@@ -44,6 +48,10 @@ workflow CreateCNVDepthPlots {
         Boolean require_full_containment = false
         Float padding_fraction = 0.25
         Int? max_carriers_per_variant
+
+        File simple_repeats_bed
+        File seg_dup_bed
+        File repeat_masked_bed
 
         String utils_docker
         Int records_per_shard = 100
@@ -65,6 +73,9 @@ workflow CreateCNVDepthPlots {
             require_full_containment = require_full_containment,
             padding_fraction = padding_fraction,
             max_carriers_per_variant = max_carriers_per_variant,
+            simple_repeats_bed = simple_repeats_bed,
+            seg_dup_bed = seg_dup_bed,
+            repeat_masked_bed = repeat_masked_bed,
             records_per_shard = records_per_shard,
             prefix = prefix,
             docker = utils_docker,
@@ -119,6 +130,9 @@ task SelectCNVsInRegions {
         Boolean require_full_containment
         Float padding_fraction
         Int? max_carriers_per_variant
+        File simple_repeats_bed
+        File seg_dup_bed
+        File repeat_masked_bed
         Int records_per_shard
         String prefix
         String docker
@@ -136,6 +150,8 @@ task SelectCNVsInRegions {
 
         python3 <<'CODE'
 import csv
+import subprocess
+
 import pysam
 
 SVTYPES = set("~{sep=',' svtypes}".split(','))
@@ -145,9 +161,23 @@ FULL_CONTAINMENT = ~{if require_full_containment then "True" else "False"}
 PADDING_FRACTION = ~{padding_fraction}
 MAX_CARRIERS = ~{default="None" max_carriers_per_variant}
 PER_SHARD = ~{records_per_shard}
-COLUMNS = ['variant_id', 'contig', 'pos', 'end', 'svtype', 'svlen', 'window_start', 'window_end', 'n_carriers', 'plotted',
-           'carriers']
+COLUMNS = ['variant_id', 'contig', 'pos', 'end', 'svtype', 'svlen', 'context', 'window_start', 'window_end', 'n_carriers',
+           'plotted', 'carriers']
 NONREF = {'DEL': lambda cn, ecn: cn < ecn, 'DUP': lambda cn, ecn: cn > ecn, 'CNV': lambda cn, ecn: cn != ecn}
+# Later regions win, so the priority is SR > SD > RM > US, as in AnnotateRegion
+REGIONS = {'RM': "~{repeat_masked_bed}", 'SD': "~{seg_dup_bed}", 'SR': "~{simple_repeats_bed}"}
+
+
+def write_bed(path, intervals):
+    with open(path, 'w') as handle:
+        for contig, start, end, variant_id in intervals:
+            handle.write(f'{contig}\t{start}\t{end}\t{variant_id}\n')
+
+
+def covered_fractions(path, bed):
+    out = subprocess.run(['bedtools', 'coverage', '-a', path, '-b', bed], capture_output=True, text=True, check=True).stdout
+    return [(fields[3], float(fields[-1])) for fields in (line.split('\t') for line in out.splitlines())]
+
 
 vcf = pysam.VariantFile("~{vcf}")
 indexed = set(vcf.index)
@@ -183,22 +213,39 @@ with open("~{regions_bed}") as handle:
                                 rec.stop + padding, len(carriers), plotted, ','.join(carriers)]
 
 rows = sorted(selected.values(), key=lambda row: (row[1], row[2], row[0]))
+
+# Genomic context from either breakpoint, then from the body for DEL and DUP over 5 kb
+context = {row[0]: 'US' for row in rows}
+write_bed('left_breakpoints.bed', [(row[1], row[2] - 1, row[2] - 1, row[0]) for row in rows])
+write_bed('right_breakpoints.bed', [(row[1], row[3], row[3], row[0]) for row in rows])
+large = [row for row in rows if row[4] in ('DEL', 'DUP') and row[5] > 5000]
+write_bed('large_cnvs.bed', [(row[1], row[2] - 1, row[3], row[0]) for row in large])
+for region, bed in REGIONS.items():
+    for breakpoints in ('left_breakpoints.bed', 'right_breakpoints.bed'):
+        context.update((variant_id, region) for variant_id, fraction in covered_fractions(breakpoints, bed) if fraction > 0)
+body = {row[0]: 'US' for row in large}
+for region, bed in REGIONS.items():
+    body.update((variant_id, region) for variant_id, fraction in covered_fractions('large_cnvs.bed', bed) if fraction > 0.5)
+context.update(body)
+for row in rows:
+    row.insert(6, context[row[0]])
+
 with open("~{prefix}.cnv_variants.tsv", 'w', newline='') as handle:
     writer = csv.writer(handle, delimiter='\t')
     writer.writerow(COLUMNS)
     writer.writerows(rows)
 
-plotted_rows = [row for row in rows if row[9]]
+plotted_rows = [row for row in rows if row[10]]
 with open('windows.bed', 'w') as handle:
     for row in plotted_rows:
-        handle.write(f'{row[1]}\t{row[6]}\t{row[7]}\n')
+        handle.write(f'{row[1]}\t{row[7]}\t{row[8]}\n')
 for shard_i in range(0, len(plotted_rows), PER_SHARD):
     with open(f'shards/shard_{shard_i // PER_SHARD:06d}.tsv', 'w', newline='') as handle:
         writer = csv.writer(handle, delimiter='\t')
         writer.writerow(COLUMNS)
         writer.writerows(plotted_rows[shard_i:shard_i + PER_SHARD])
 
-print(f'Selected {len(rows)} CNVs; plotting {len(plotted_rows)} with {sum(row[8] for row in plotted_rows)} plots')
+print(f'Selected {len(rows)} CNVs; plotting {len(plotted_rows)} with {sum(row[9] for row in plotted_rows)} plots')
 CODE
 
         # Merge windows within 1 kb so no depth bin is fetched twice from neighbouring windows
@@ -214,7 +261,7 @@ CODE
     RuntimeAttr default_attr = object {
         cpu_cores: 1,
         mem_gb: 4,
-        disk_gb: ceil(size(vcf, "GB")) + 10,
+        disk_gb: ceil(size(vcf, "GB") + size(simple_repeats_bed, "GB") + size(seg_dup_bed, "GB") + size(repeat_masked_bed, "GB")) + 10,
         boot_disk_gb: 10,
         preemptible_tries: 1,
         max_retries: 0
@@ -305,6 +352,7 @@ import sys
 
 import matplotlib
 matplotlib.use('Agg')
+import matplotlib.patheffects as patheffects
 import matplotlib.pyplot as plt
 import numpy as np
 import pysam
@@ -313,8 +361,12 @@ import pysam
 POINTS = 120
 OUT_DIR = 'cnv_depth_plots'
 ORANGE = '#eb6834'
+LIGHT_ORANGE = '#f5a37f'
 GREY = '#52514e'
+GRID = '#d4d4d4'
 BLACK = '#0b0b0b'
+# White outline that lifts the plotted sample's line off the other carriers
+HALO = patheffects.withStroke(linewidth=3.2, foreground='white')
 
 tabix = pysam.TabixFile("~{rd_slice}")
 samples = tabix.header[-1].lstrip('#').rstrip('\n').split('\t')[3:]
@@ -330,7 +382,7 @@ medians = np.array([median_by_sample[sample] for sample in samples], dtype=np.fl
 n_plots = 0
 with open("~{variant_shard}", newline='') as handle:
     for row in csv.DictReader(handle, delimiter='\t'):
-        variant_id, contig, svtype = row['variant_id'], row['contig'], row['svtype']
+        variant_id, contig, svtype, context = row['variant_id'], row['contig'], row['svtype'], row['context']
         pos, end, window_start, window_end = (int(row[key]) for key in ('pos', 'end', 'window_start', 'window_end'))
         carriers = [token.split(':') for token in row['carriers'].split(',')]
         missing = [sample for sample, _, _ in carriers if sample not in column]
@@ -355,22 +407,29 @@ with open("~{variant_shard}", newline='') as handle:
             others = carrier_mask.copy()
             others[column[sample]] = False
             fig, ax = plt.subplots(figsize=(6.4, 3.2))
-            ax.plot(x, cn[:, ~carrier_mask], color=GREY, lw=0.3, alpha=0.12)
-            ax.plot(x, cn[:, others], color=ORANGE, lw=0.5, alpha=0.3)
+            ax.plot(x, cn[:, ~carrier_mask], color=GREY, lw=0.5, alpha=0.3)
+            ax.plot(x, cn[:, others], color=LIGHT_ORANGE, lw=1, alpha=0.8)
             ax.plot(x, reference_median, color=BLACK, lw=1.6)
-            ax.plot(x, cn[:, column[sample]], color=ORANGE, lw=1.6)
+            ax.plot(x, cn[:, column[sample]], color=ORANGE, lw=1.8, path_effects=[HALO])
             for edge in (pos - 1, end):
                 ax.axvline(edge / 1e6, color=BLACK, ls='--', lw=0.8)
             top = max(4, int(rd_cn) + 1)
             ax.set_ylim(0, top)
             ax.set_yticks(range(top + 1))
+            ax.set_axisbelow(True)
+            ax.yaxis.grid(color=GRID, lw=0.6)
             ax.set_xlim(window_start / 1e6, window_end / 1e6)
             ax.ticklabel_format(axis='x', useOffset=False)
             ax.set_xlabel(f'{contig} (Mb)')
             ax.set_ylabel('Copy number')
-            ax.set_title(f'{variant_id} {svtype} {contig}:{pos:,}-{end:,} ({(end - pos + 1) / 1000:,.1f} kb)\n'
-                         f'{sample}: RD_CN {rd_cn}, ECN {ecn}; {len(carriers)} non-reference samples', fontsize=8)
-            fig.savefig(f'{OUT_DIR}/{variant_id}/{sample}.png', dpi=150, bbox_inches='tight')
+            # Three title lines, each in its own style, stacked upwards from the top of the axes
+            title = [(f'{contig}:{pos:,}-{end:,} ({(end - pos + 1) / 1000:,.1f} kb) - {context}', {'fontstyle': 'italic'}),
+                     (f'{sample} - RD_CN {rd_cn}, ECN {ecn} ({len(carriers)} carriers)', {}),
+                     (f'{variant_id} ({svtype})', {'fontweight': 'bold'})]
+            for line_i, (text, style) in enumerate(title):
+                ax.annotate(text, (0.5, 1), xycoords='axes fraction', xytext=(0, 4 + 11 * line_i),
+                            textcoords='offset points', ha='center', va='bottom', fontsize=8, **style)
+            fig.savefig(f'{OUT_DIR}/{variant_id}/{sample}.{context}.png', dpi=150, bbox_inches='tight')
             plt.close(fig)
             n_plots += 1
 
