@@ -6,7 +6,9 @@ Panels (shared x axis, genomic coordinates):
      the window are drawn as rectangles: filled with the catalog colour when the locus has a non-ref PASS TRV in --trv whose
      SOURCE equals LABEL (matched on the TRID span), light grey otherwise. Right of each track: total ALT alleles (distinct
      ALT alleles with AC > 0, summed over that catalog's observed TRVs in the window) and observed / catalog loci.
-  2. Observed TRVs: lollipops at the TR span midpoint, height = distinct ALT alleles (AC > 0), coloured by catalog.
+  2. Observed TRVs (one point per non-ref PASS TRV at the TR span midpoint, coloured by catalog), four tracks:
+     distinct ALT alleles (AC > 0); total ALT AC (sum of AC over ALT alleles); allele ("contig") length range, a bar from
+     the shortest to the longest carried ALT allele with a tick at the REF length (log y); TR locus size = REF span (log y).
   3. Gene structure from --gtf: exons as rectangles (CDS tall, UTR / non-coding exon short), introns as lines with strand
      arrows, gene names; overlapping genes are stacked.
 --trv is the merged TRV table (merge_trv_tables.sh output; tabix-indexed; columns #chrom start end ID FILTER TRID motifs AC
@@ -99,7 +101,15 @@ def read_trv(path, chrom, start, end):
         return d
     d["start"] = d["start"].astype(int)
     d["end"] = d["end"].astype(int)
-    d["n_alt"] = d["AC"].map(lambda s: sum(int(x) > 0 for x in s.split(",") if x not in (".", "")))
+    acs = d["AC"].map(lambda s: [int(x) if x not in (".", "") else 0 for x in s.split(",")])
+    lens = d["alt_len"].map(lambda s: [int(x) for x in s.split(",")])
+    d["n_alt"] = acs.map(lambda a: sum(x > 0 for x in a))
+    d["ac_total"] = acs.map(sum)
+    carried = [[ln for ln, ac in zip(L, A) if ac > 0] for L, A in zip(lens, acs)]
+    d["alt_len_min"] = [min(c) if c else float("nan") for c in carried]
+    d["alt_len_max"] = [max(c) if c else float("nan") for c in carried]
+    d["ref_len"] = d["ref_len"].astype(int)
+    d["locus_size"] = d["end"] - d["start"]
     d = d[(d["FILTER"] == "PASS") & (d["n_alt"] > 0)]
     return d
 
@@ -173,7 +183,7 @@ def plot_locus(args, chrom, start, end, title):
             gene_rows.append(tx.end)
     n_gene_rows = max(len(gene_rows), 1)
 
-    heights = [0.55] * len(cats) + [1.6, 0.6 * n_gene_rows + 0.3]
+    heights = [0.55] * len(cats) + [1.3, 1.3, 1.4, 1.1, 0.6 * n_gene_rows + 0.3]
     fig, axes = plt.subplots(len(heights), 1, figsize=(12, sum(heights) + 1.2), sharex=True,
                              gridspec_kw={"height_ratios": heights, "hspace": 0.15})
     summary = []
@@ -202,22 +212,36 @@ def plot_locus(args, chrom, start, end, title):
         for sp in ["top", "right", "left"]:
             ax.spines[sp].set_visible(False)
         ax.spines["bottom"].set_color(GRID)
-    # observed TRVs (lollipops)
-    ax = axes[len(cats)]
-    for i, (label, _) in enumerate(cats):
-        obs = trv[trv["SOURCE"] == label] if not trv.empty else trv
-        if obs.empty:
-            continue
-        mid = (obs["start"] + obs["end"]) / 2
-        ax.vlines(mid, 0, obs["n_alt"], color=CAT_COLORS[i % len(CAT_COLORS)], linewidth=1)
-        ax.scatter(mid, obs["n_alt"], s=14, color=CAT_COLORS[i % len(CAT_COLORS)], zorder=3, label=label)
-    ax.set_ylabel("ALT alleles\nper TRV", fontsize=9, color=INK)
-    ax.set_ylim(bottom=0)
-    ax.grid(axis="y", color=GRID, linewidth=0.6)
-    for sp in ["top", "right"]:
-        ax.spines[sp].set_visible(False)
-    if not trv.empty:
-        ax.legend(frameon=False, fontsize=8, labelcolor=INK, loc="upper right")
+    # observed TRVs: four per-site tracks
+    base = len(cats)
+    tracks = [("n_alt", "ALT alleles\nper TRV", False), ("ac_total", "Total ALT AC\nper TRV", False),
+              (None, "Allele length\n(bp, log)", True), ("locus_size", "TR locus size\n(bp, log)", True)]
+    for k, (col, ylabel, logy) in enumerate(tracks):
+        ax = axes[base + k]
+        for i, (label, _) in enumerate(cats):
+            obs = trv[trv["SOURCE"] == label] if not trv.empty else trv
+            if obs.empty:
+                continue
+            color = CAT_COLORS[i % len(CAT_COLORS)]
+            mid = (obs["start"] + obs["end"]) / 2
+            if col is None:
+                ax.vlines(mid, obs[["alt_len_min", "ref_len"]].min(axis=1), obs[["alt_len_max", "ref_len"]].max(axis=1),
+                          color=color, linewidth=1.4, alpha=0.8)
+                ax.scatter(mid, obs["ref_len"], marker="_", s=30, color=INK, linewidths=1, zorder=3,
+                           label="REF length" if i == 0 else None)
+            else:
+                ax.vlines(mid, 1 if logy else 0, obs[col], color=color, linewidth=1)
+                ax.scatter(mid, obs[col], s=12, color=color, zorder=3, label=label if k == 0 else None)
+        if logy:
+            ax.set_yscale("log")
+        else:
+            ax.set_ylim(bottom=0)
+        ax.set_ylabel(ylabel, fontsize=8.5, color=INK)
+        ax.grid(axis="y", color=GRID, linewidth=0.6)
+        for sp in ["top", "right"]:
+            ax.spines[sp].set_visible(False)
+        if not trv.empty and k in (0, 2):
+            ax.legend(frameon=False, fontsize=7.5, labelcolor=INK, loc="upper right")
     # gene structure
     ax = axes[-1]
     row_of, rows_end = {}, []
@@ -261,8 +285,9 @@ def plot_locus(args, chrom, start, end, title):
         a.tick_params(colors=INK2, labelsize=8)
     motif_note = f"; loci with motif ≤ {args.max_motif} bp" if args.max_motif else ""
     fig.suptitle(f"{args.label + ': ' if args.label else ''}TR loci across {title}{motif_note}\n"
-                 f"coloured = non-ref PASS TRV observed; grey = catalog locus not observed", fontsize=10, color=INK)
-    fig.subplots_adjust(left=0.1, right=0.84, top=0.9)
+                 f"coloured = non-ref PASS TRV observed; grey = catalog locus not observed", fontsize=10, color=INK,
+                 y=1 - 0.1 / fig.get_figheight(), va="top")
+    fig.subplots_adjust(left=0.1, right=0.84, top=1 - 0.55 / fig.get_figheight())
     for label, n_cat, n_obs, n_alt in summary:
         print(f"{label}: {n_cat} catalog loci in window, {n_obs} observed non-ref, {n_alt} ALT alleles")
     print(f"genes in window: {', '.join(gene_names) if gene_names else 'none'}; TRVs plotted: {len(trv)}")

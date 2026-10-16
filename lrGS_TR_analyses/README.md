@@ -94,7 +94,8 @@ Motif count is `INFO/MC_allele` where present (multi-allelic sites), otherwise a
 - `plot_trv_locus.py --trv <merged TRV.bed.gz> --gtf GTF --catalog TRExplorer=... Vamos=... (--gene G | --region R |
   --gene-table T --count-column n_coding --min-count 10) [--max-motif 6] --out P.pdf [--out-dir D]`: locus plot with one
   track per TR catalog (observed non-ref loci coloured, unobserved grey; total ALT alleles and observed / catalog loci on the
-  right), ALT alleles per observed TRV, and gene structure (exons as boxes, CDS taller, introns as lines with strand arrows).
+  right); per observed TRV: distinct ALT alleles, total ALT AC, allele length range (shortest to longest carried ALT, REF
+  tick) and TR locus size; and gene structure (exons as boxes, CDS taller, introns as lines with strand arrows).
 - `vcf_region_allele_lengths.py --vcf V --region chr:start-end --motif-len N --out P.tsv`: per-sample allele lengths of a
   repeat region rebuilt from the variants called inside it (per haplotype: length, estimated unit count, SV size vs REF,
   variant IDs with inferred type and size). Variant types come from REF/ALT (SVLEN for symbolic alleles); no INFO field needed.
