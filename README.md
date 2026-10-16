@@ -28,6 +28,7 @@ data/
   metadata/          # Sample metadata, pedigrees, ancestry
   qc_annotations/    # QC annotation outputs
 docs/                # Extended documentation
+lrGS_TR_analyses/    # Tandem-repeat variant (TRV) analyses and workflows (see its README)
 archive/             # Deprecated workflows, scripts, and dockerfiles
 ```
 
