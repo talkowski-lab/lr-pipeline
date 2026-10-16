@@ -326,6 +326,16 @@ workflows:
         - /.*/
 
   - subclass: WDL
+    name: CreateCNVDepthPlots
+    primaryDescriptorPath: /wdl/annotation_utils/CreateCNVDepthPlots.wdl
+    filters:
+      branches:
+        - main
+        - kj-plot-cnv-depth
+      tags:
+        - /.*/
+
+  - subclass: WDL
     name: CreateCohortMetadata
     primaryDescriptorPath: /wdl/annotation_utils/CreateCohortMetadata.wdl
     filters:

@@ -1,5 +1,5 @@
 # CNV Pipeline
-This document describes how to call depth-based CNVs on a new cohort, starting from aligned lrGS reads and finishing with a genotyped cohort CNV VCF. It is organized into two steps: computing each sample's depth, then calling CNVs across the cohort with GATK gCNV. `MosDepth` and `ConcatenateMosDepth` are shared with the [Depth Summary](pipeline.md#depth-summary) of the main pipeline, so their outputs can be reused if they already exist.
+This document describes how to call depth-based CNVs on a new cohort, starting from aligned lrGS reads and finishing with a genotyped cohort CNV VCF. It is organized into two steps: computing each sample's depth, then calling CNVs across the cohort with GATK gCNV. An optional third step plots read depth around calls for review by eye. `MosDepth` and `ConcatenateMosDepth` are shared with the [Depth Summary](pipeline.md#depth-summary) of the main pipeline, so their outputs can be reused if they already exist.
 
 Numbered lists are sequential; bulleted lists run in parallel.
 
@@ -34,3 +34,7 @@ The cohort files are built once, then `LongReadCNVs` calls, clusters and genotyp
    GermlineCNVCaller memory grows with samples times intervals per shard, so raising `num_intervals_per_scatter` above its default also needs more memory in `runtime_attr_germline_cnv_caller`.
 
 Step 2 ends with the merged cohort CNV VCF, the per-sample ploidy table, and the genotyped depth VCF with its read-depth table.
+
+
+## 3. Reviewing Calls
+**[CreateCNVDepthPlots](../wdl/annotation_utils/CreateCNVDepthPlots.wdl)** - draw read-depth plots for the CNVs of the genotyped depth VCF that fall within a BED of regions, one plot per non-reference sample per CNV, with a padded window around each call. Pass the same `merged_bincov` and `median_coverage` given to `LongReadCNVs`. The plots come back as one tarball with a folder per variant ID and one PNG per non-reference sample, alongside a table of the selected CNVs.
