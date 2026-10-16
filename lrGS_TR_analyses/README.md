@@ -54,6 +54,9 @@ Motif count is `INFO/MC_allele` where present (multi-allelic sites), otherwise a
 - `merge_trv_tables.sh <sites.annotated.bed.gz> <vep_parsed.annotated.TRV.bed.gz> <out.bed.gz>`: one merged TRV table: the
   annotated site BED plus the columns only in the VEP-parsed TRV bed (full REF / ALT, SOURCE, REGION, nhomref / nhet / nhomalt,
   telomere / centromere / N-masked / low-coverage flags). Checks that both inputs list the same IDs in the same order.
+- `trv_gene_table.py --trv <merged TRV.bed.gz> [--gene-info G] [--min-motif 1 --max-motif 6] --out genes.tsv`: per-gene STR
+  counts (non-ref PASS): coding, UTR, intronic, and intergenic STRs assigned to the gene with the nearest 5'UTR / 3'UTR
+  (split by side, with median distance), plus LOEUF_v4.
 - `count_variant_overview.sh <annotated.bed.gz> <label> <out.tsv>`: variant counts by class (SNV, del/ins split at 50 bp, TRV,
   others), all and PASS.
 
