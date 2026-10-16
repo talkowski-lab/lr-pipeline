@@ -416,11 +416,12 @@ workflows:
         - /.*/
 
   - subclass: WDL
-    name: FilterLowCallSites
-    primaryDescriptorPath: /wdl/annotation_utils/FilterLowCallSites.wdl
+    name: NCRFiltering
+    primaryDescriptorPath: /wdl/annotation_utils/NCRFiltering.wdl
     filters:
       branches:
         - main
+        - kj-ncr-cutoff-tsv
       tags:
         - /.*/
 

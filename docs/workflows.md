@@ -993,18 +993,21 @@ Outputs:
 - `File filtered_vcf_idx`: Index for `filtered_vcf`.
 - `File filtered_genotypes_tsv`: TSV with one row per affected variant: `CHROM`, `POS`, `REF`, `ALT`, `ID`, pre- and post-filter allele counts, number of filtered samples, and comma-separated filtered sample IDs.
 
-### [FilterLowCallSites](../wdl/annotation_utils/FilterLowCallSites.wdl)
-This utility removes sites that carry no informative genotypes and flags the sites that are largely uncalled. When `remove_no_calls` is set, every variant whose samples carry no alternate allele - an allele count of zero - is removed. When `min_ncr_filter` is set to a non-negative value, every surviving variant whose no-call rate reaches that value is given the `HIGH_NCR` FILTER value, whose header line the workflow adds; those variants are flagged rather than removed.
+### [NCRFiltering](../wdl/annotation_utils/NCRFiltering.wdl)
+This utility removes sites that carry no informative genotypes and flags the sites that are largely uncalled. When `remove_no_calls` is set, every variant whose samples carry no alternate allele - an allele count of zero - is removed. When `ncr_cutoffs_tsv` is given, every surviving variant is matched to a row by its lowercased `INFO/allele_type`, its absolute `INFO/allele_length` within the row's inclusive length bounds and its `INFO/REGION`, where a row's `ALL` region matches any region. A matched variant whose no-call rate is above the row's cutoff is given the `HIGH_NCR` FILTER value, whose header line the workflow adds; those variants are flagged rather than removed. A cutoff keeps the sites at or below it, as an `EvaluateNCRCutoffs` cutoff does, so a cutoff read off its curves keeps the same sites here. Variants matching no row are left untouched, so the table need not cover every stratum. When `ncr_filter_pass_only` is set, only variants whose FILTER is PASS are matched, and `ncr_cutoffs_tsv` must be given; otherwise variants of every FILTER are matched.
 
 A genotype counts as a carrier when any of its alleles is alternate, so a partially called genotype such as './1' keeps the site from being an allele count of zero. Carriers are counted from the genotypes rather than read from `INFO/AC`, so an allele count left stale by an upstream step does not affect which sites are removed.
 
-The no-call rate comes from `INFO/NCR`, which is a single value at biallelic and multiallelic sites alike and is used as it stands. A variant that carries no `INFO/NCR` falls back to counting the proportion of alleles without a call, which is what that field holds, and every such variant ID is printed to the task log. It optionally shards by record count and outputs the filtered VCF.
+Variants are classified the way `EvaluateNCRCutoffs` strata are, so cutoffs chosen from its output apply to the same variants. Rows whose strata overlap are rejected when the table is read, and a variant checked against the table without `INFO/REGION` stops the task.
+
+The no-call rate comes from `INFO/NCR`, which is a single value at biallelic and multiallelic sites alike and is used as it stands. A matched variant that carries no `INFO/NCR` falls back to counting the proportion of alleles without a call, which is what that field holds, and every such variant ID is printed to the task log. It optionally shards by record count and outputs the filtered VCF.
 
 Inputs:
 - `File vcf`: Cohort VCF to filter.
 - `File vcf_idx`: Index for the cohort VCF.
 - `Boolean remove_no_calls`: Whether to remove sites whose samples carry no alternate allele.
-- `Float min_ncr_filter`: No-call rate at or above which a site is given the `HIGH_NCR` FILTER value. A negative value leaves sites unflagged. (default `-1`)
+- `File? ncr_cutoffs_tsv`: Headed TSV of no-call rate cutoffs with columns `allele_type`, `min_length`, `max_length`, `region` and `cutoff`. Lengths are inclusive bounds on the absolute `INFO/allele_length`, `region` is `US`, `RM`, `SD`, `SR` or `ALL` for any region, and a matched site is given the `HIGH_NCR` FILTER value when its no-call rate is above `cutoff`. Rows may cover only some strata but may not overlap. When absent, no site is flagged.
+- `Boolean ncr_filter_pass_only`: Whether to check only sites whose FILTER is PASS against `ncr_cutoffs_tsv`, which must then be given. When false, sites of every FILTER are checked.
 - `Int? records_per_shard`: Number of variants per shard. When set, variants are processed in parallel shards and concatenated.
 - `String prefix`: Prefix for output file names.
 - `String utils_docker`: Container image.
