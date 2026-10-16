@@ -75,6 +75,9 @@ Motif count is `INFO/MC_allele` where present (multi-allelic sites), otherwise a
 - `plot_STR_constraint_by_context.py --motif M`: variability vs copy number by genic context for one motif length.
 - `plot_STR_constraint_allele_class.py --motif M`: the same, split into in-frame / frameshift / no-length-change alleles.
 - `plot_STR_constraint_by_loeuf.py --motif M`: coding STRs by gene LOEUF tertile with an intergenic reference.
+- `plot_nalt_vs_length_by_context.py --trv <merged TRV.bed.gz> --label L --out-prefix P [--min-copies 2]`: distinct ALT
+  alleles per site vs repeat length, one PDF each for coding, intronic, intergenic non-desert (Tiny / Small / Medium) and
+  intergenic desert; site density plus median / IQR per length bin by motif class.
 - `classify_coding_TRV_alleles.py`: coding TRV ALT alleles as frameshift / in-frame del / in-frame ins / no length change /
   partial CDS, with allele, site and gene counts by AC.
 - `summarize_coding_STR_per_gene.py [--max-motif 6] [--min-ac 1]`: coding STR sites per gene, split into LoF / in-frame /
