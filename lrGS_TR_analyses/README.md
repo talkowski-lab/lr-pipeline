@@ -117,9 +117,11 @@ Motif count is `INFO/MC_allele` where present (multi-allelic sites), otherwise a
 - `extract_trv_genotypes.py --trv-bed X.NAME.TRV.bed --vcf-map contigs.tsv [--loci X.sr.loci.tsv] --out-prefix P`: pulls
   the per-sample genotypes of a TRV set from per-contig VCFs (local or gs://, GCS_OAUTH_TOKEN); writes P.vcf.gz and
   P.genotypes.tsv (GT, per-haplotype allele length and gnomAD SR-scale units, TRGT AL / ALLR / SD / MC / AP / PS).
-- `flag_str_outliers.py --genotypes P.genotypes.tsv [--loci X.NAME.loci.tsv] [--sr-allele-dist X.sr.allele_dist.tsv] --k 10
-  --out-prefix O`: per TRV, flags haplotype alleles outside median ± K × IQR (IQR floored at --min-iqr, default 1 unit);
-  writes per-site summary, per-outlier table (sample, GT, value, SD, AP, above SR max) and per-site strip plots.
+- `flag_str_outliers.py --input LABEL=genotypes=P.genotypes.tsv LABEL2=allele_dist=X.NAME.allele_dist.tsv ... [--loci
+  LABEL=X.NAME.loci.tsv ...] [--sr-allele-dist X.sr.allele_dist.tsv] --k 10 --out-prefix O`: per site and cohort, flags
+  alleles outside median ± K × IQR (IQR floored at --min-iqr, default 1 unit). Genotype inputs give per-sample outliers
+  (with TRGT SD / AP); allele-count inputs (aggregate only, e.g. AoU) give outlier allele sizes with counts. Writes a
+  combined per-site table, per-cohort outlier tables and side-by-side per-site strip plots.
 - `str_locus_allele_distribution.py --trv LABEL=path ... --trv-id ID --motif M --sr-sizes P.allele_sizes.tsv --sr-id G
   --out-prefix Q`: one locus in detail: gnomAD SR repeat-unit counts vs long-read alleles measured three ways (allele
   length / motif length, longest pure motif run, motif copies with interruptions allowed); per-allele table, summary, PDF.
