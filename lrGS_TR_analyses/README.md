@@ -106,7 +106,8 @@ Motif count is `INFO/MC_allele` where present (multi-allelic sites), otherwise a
 ## Comparison with gnomAD short-read STRs
 - `fetch_gnomad_str.py --dataset gnomad_r4 --out-prefix P`: downloads the gnomAD browser STR loci (GraphQL API; throttled,
   retries on HTTP 429) with allele-size distributions summed over ancestry / sex / quality cohorts.
-- `compare_gnomad_str_to_lr.py --loci P.loci.tsv --allele-sizes P.allele_sizes.tsv --trv <merged TRV.bed.gz> --out-prefix Q`:
+- `compare_gnomad_str_to_lr.py --loci P.loci.tsv --allele-sizes P.allele_sizes.tsv --trv LABEL=<TRV table> ... --colors C ...
+  --out-prefix Q`: one or more long-read datasets (merged TRV table or AnalyzeTRVariants sites bed, tabix-indexed);
   matches each locus to the overlapping long-read TRV (largest overlap), converts long-read alleles to repeat units
   (rounded reference units + size difference / unit length; AC-weighted, REF by AN − ΣAC), and compares distributions
   (per-locus panels, summary scatter of median / p99 / max, KS distance, match_flag for wider / partial TRVs).
