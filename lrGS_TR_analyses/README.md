@@ -51,6 +51,9 @@ Motif count is `INFO/MC_allele` where present (multi-allelic sites), otherwise a
   gene_information_loeufv4_pHaplo_pTriplo...txt.gz --out P.bed.gz`: appends to the AnalyzeTRVariants site BED, for intergenic
   TRVs, the overlapping intergenic region and its category (Tiny / Small / Medium / Desert, or between_regions /
   chrom_not_in_region_file); for coding and intronic TRVs, LOEUF_v4 with its percentile and decile per gene.
+- `merge_trv_tables.sh <sites.annotated.bed.gz> <vep_parsed.annotated.TRV.bed.gz> <out.bed.gz>`: one merged TRV table: the
+  annotated site BED plus the columns only in the VEP-parsed TRV bed (full REF / ALT, SOURCE, REGION, nhomref / nhet / nhomalt,
+  telomere / centromere / N-masked / low-coverage flags). Checks that both inputs list the same IDs in the same order.
 - `count_variant_overview.sh <annotated.bed.gz> <label> <out.tsv>`: variant counts by class (SNV, del/ins split at 50 bp, TRV,
   others), all and PASS.
 
