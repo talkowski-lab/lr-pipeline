@@ -12,11 +12,14 @@ Allele decomposition (left to right): at each position the kept motif (any rotat
 Outputs (prefix --out-prefix):
   .pdf          one row per allele (REF first, then ALT alleles grouped by dominant motif and sorted by length), x = bp,
                 coloured by motif; right: allele name, length and AC
-  .alleles.tsv  per allele: name, AC, length, bp per motif, dominant motif, sequence
+  .alleles.tsv  per allele: name, AC, length, bp per motif, dominant motif, sequence (+ carrier haplotypes per ancestry)
+With --genotypes and --ancestry, each row's background is split by the genetic ancestry of the haplotypes carrying the allele
+(gnomAD ancestry colours).
   .motifs.tsv   per motif: rotations seen, tandem bp in alleles, AC-weighted bp, n alleles containing it
 
 Usage:
   plot_allele_motif_structure.py --trv gnomAD_LR.hprc_hgsvc.TRV.bed.gz --trv-id chr4-39348424-TRV-55 --label RFC1 \\
+      --genotypes STR_SRmatch.hgsvc_hprc.genotypes.tsv --ancestry ancestry_label.HGSVC_HPRC.tsv.gz \\
       --out-prefix RFC1/RFC1.hprc_hgsvc
 """
 import argparse
@@ -37,6 +40,10 @@ INK = "#1d1f24"
 INK2 = "#5b5e66"
 PALETTE = ["#2a78d6", "#eb6834", "#1baf7a", "#d03b3b", "#8e5bd0", "#eda100", "#17a2b8", "#e377c2", "#8c564b", "#00a6a6",
            "#bcbd22", "#1f3b73"]
+# gnomAD genetic ancestry colours (gnomad_methods GEN_ANC_COLORS); ASK (Ashkenazi, HG002) shown as ASJ
+ANC_COLORS = {"AFR": "#941494", "AMR": "#ED1E24", "ASJ": "#FF7F50", "EAS": "#108C44", "EUR": "#6AA5CD", "SAS": "#FF9912",
+              "OTH": "#ABB9B9"}
+ANC_ALIAS = {"ASK": "ASJ"}
 OTHER_REP = "#c9c6bf"
 NON_REP = "#f1efea"
 
@@ -127,6 +134,10 @@ def main():
     p.add_argument("--min-frac", type=float, default=0.001)
     p.add_argument("--max-motifs", type=int, default=12)
     p.add_argument("--min-copies", type=int, default=2)
+    p.add_argument("--genotypes", help="extract_trv_genotypes.py .genotypes.tsv (ID, sample, hap1_allele, hap2_allele)")
+    p.add_argument("--ancestry", help="Sample ancestry table (TSV, optionally gzipped)")
+    p.add_argument("--sample-col", default="sample")
+    p.add_argument("--ancestry-col", default="ethnicity")
     p.add_argument("--label", default="")
     p.add_argument("--out-prefix", required=True)
     args = p.parse_args()
@@ -158,6 +169,24 @@ def main():
     ref, alt = d.iloc[:1], d.iloc[1:].copy()
     alt["_o"] = alt["_dom"].map(order)
     d = pd.concat([ref, alt.sort_values(["_o", "length_bp"]).drop(columns="_o")], ignore_index=True)
+    anc_order = []
+    if args.genotypes and args.ancestry:
+        anc = pd.read_csv(args.ancestry, sep="\t", dtype=str)
+        anc = dict(zip(anc[args.sample_col], anc[args.ancestry_col].str.upper().replace(ANC_ALIAS)))
+        g = pd.read_csv(args.genotypes, sep="\t", dtype=str)
+        g = g[g["ID"] == args.trv_id]
+        carriers = collections.defaultdict(collections.Counter)
+        for smp, h1, h2 in zip(g["sample"], g["hap1_allele"], g["hap2_allele"]):
+            for a in (h1, h2):
+                if isinstance(a, str) and a != ".":
+                    carriers["REF" if a == "0" else f"ALT{a}"][anc.get(smp, "OTH")] += 1
+        anc_order = [a for a in ANC_COLORS if any(carriers[x][a] for x in carriers)]
+        anc_order += sorted({a for c in carriers.values() for a in c} - set(anc_order))
+        for a in anc_order:
+            d[f"hap_{a}"] = d["allele"].map(lambda x: carriers[x][a])
+        mism = d[d[[f"hap_{a}" for a in anc_order]].sum(axis=1) != d["AC"]]
+        if len(mism):
+            print(f"warning: carrier haplotype count != AC for {len(mism)} alleles: {list(mism['allele'][:5])}")
     d.drop(columns=["_segs", "_dom"]).to_csv(f"{args.out_prefix}.alleles.tsv", sep="\t", index=False)
     mt = pd.DataFrame([{"motif": names[c], "rotations_seen": ",".join(r for r, _ in rot_seen[c].most_common()),
                         "tandem_kmers": tandem[c], "bp_in_alleles": int(d[f"bp_{names[c]}"].sum()),
@@ -172,10 +201,20 @@ def main():
     n = len(d)
     h = max(4, 0.075 * n + 1.8)
     fig, ax = plt.subplots(figsize=(13, h))
+    maxlen = d["length_bp"].max()
+    if anc_order:
+        # row background split by the genetic ancestry of the carrier haplotypes
+        for y, r in enumerate(d.itertuples(index=False)):
+            tot = sum(getattr(r, f"hap_{a}") for a in anc_order)
+            x0 = 0.0
+            for a in anc_order:
+                w = maxlen * getattr(r, f"hap_{a}") / tot if tot else 0
+                if w:
+                    ax.barh(y, w, left=x0, height=1.0, color=ANC_COLORS.get(a, "#ABB9B9"), alpha=0.28, linewidth=0)
+                x0 += w
     for y, segs in enumerate(d["_segs"]):
         for a, b, lab in segs:
-            ax.barh(y, b - a, left=a, height=0.85, color=color[lab], linewidth=0)
-    maxlen = d["length_bp"].max()
+            ax.barh(y, b - a, left=a, height=0.55 if anc_order else 0.85, color=color[lab], linewidth=0)
     for y, (al, ln, ac) in enumerate(zip(d["allele"], d["length_bp"], d["AC"])):
         ax.text(maxlen * 1.01, y, f"{al}  {ln:,} bp  AC {ac}", va="center", fontsize=5 if n > 60 else 7,
                 color=INK)
@@ -188,8 +227,14 @@ def main():
     ax.tick_params(colors=INK2, labelsize=8)
     handles = [Patch(color=color[c], label=f"{names[c]} ({int(d[f'bp_{names[c]}'].gt(0).sum())} alleles)") for c in motifs]
     handles += [Patch(color=OTHER_REP, label="other repeat"), Patch(color=NON_REP, label="non-repeat")]
-    ax.legend(handles=handles, frameon=False, fontsize=7.5, labelcolor=INK, loc="upper center",
-              bbox_to_anchor=(0.45, -0.04 * 12 / h), ncol=min(5, len(handles)))
+    leg = ax.legend(handles=handles, frameon=False, fontsize=7.5, labelcolor=INK, loc="upper center",
+                    bbox_to_anchor=(0.4, -0.04 * 12 / h), ncol=min(5, len(handles)), title="Repeat unit", title_fontsize=8)
+    if anc_order:
+        ax.add_artist(leg)
+        ah = [Patch(color=ANC_COLORS.get(a, "#ABB9B9"), alpha=0.28,
+                    label=f"{a} ({int(d[f'hap_{a}'].sum())} haplotypes)") for a in anc_order]
+        ax.legend(handles=ah, frameon=False, fontsize=7.5, labelcolor=INK, loc="upper center",
+                  bbox_to_anchor=(0.9, -0.04 * 12 / h), ncol=1, title="Carrier ancestry (background)", title_fontsize=8)
     ax.set_title(f"{args.label + ' ' if args.label else ''}{args.trv_id}: repeat-unit structure of {n} alleles (REF first; ALT "
                  f"grouped by dominant motif, sorted by length; AN {rec['AN']})", fontsize=10, color=INK)
     fig.tight_layout()
