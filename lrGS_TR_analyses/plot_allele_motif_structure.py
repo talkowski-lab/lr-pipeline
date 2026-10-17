@@ -18,8 +18,8 @@ genetic ancestry of the haplotypes carrying each allele (bar length = AC, split 
 GEN_ANC_COLORS) and the right 80% the
 repeat-unit structure. With --sr-allele-sizes and --sr-id, a grey histogram of the gnomAD short-read allele lengths (repeat-unit
 count x unit length, bp; summed over cohorts and repeat-unit variants) sits above the structure panel on the same x axis;
---top-trv LABEL=path=TRV_ID adds the AC-weighted allele-length histogram of another long-read cohort (e.g. AoU, light
-orange) below it.
+--top-trv LABEL=path=TRV_ID overlays the AC-weighted allele-length histogram of another long-read cohort (e.g. AoU, light
+orange) in the same panel; both half-transparent, y = allele frequency within each dataset (log).
   .motifs.tsv   per motif: rotations seen, tandem bp in alleles, AC-weighted bp, n alleles containing it
 
 Usage:
@@ -149,7 +149,7 @@ def main():
     p.add_argument("--sr-id", help="gnomAD STR locus id for the SR histogram (e.g. RFC1)")
     p.add_argument("--top-trv", nargs="*", default=[],
                    help="LABEL=path=TRV_ID: other long-read cohorts shown as allele-length histograms on top (e.g. AoU)")
-    p.add_argument("--top-colors", nargs="*", default=["#f5b88a", "#9ec5ef", "#9fd8c0"])
+    p.add_argument("--top-colors", nargs="*", default=["#f0a868", "#7fb2e8", "#7fcfaf"])
     p.add_argument("--label", default="")
     p.add_argument("--out-prefix", required=True)
     args = p.parse_args()
@@ -224,8 +224,8 @@ def main():
         # repeat-unit count x unit length = allele length in bp (summed over cohorts and repeat-unit variants)
         sr["bp"] = sr["repunit_count"] * sr["repunit"].str.len()
         sr = sr.groupby("bp")["allele_count"].sum()
-        tops.append((f"gnomAD short-read allele length ({args.sr_id}; n = {int(sr.sum()):,}; repeat units x {unit} bp)",
-                     "SR alleles", sr, "#8a8984"))
+        tops.append((f"gnomAD short reads ({args.sr_id}; n = {int(sr.sum()):,}; repeat units x {unit} bp)", "SR alleles", sr,
+                     "#8a8984"))
     for spec, col in zip(args.top_trv, args.top_colors):
         lab, path, tid = spec.split("=", 2)
         r2 = read_record(path, tid)
@@ -236,28 +236,31 @@ def main():
         # binned to the repeat unit (bp, centre of each unit bin)
         t = pd.Series(cnts, index=[round(L / unit) * unit for L in lens])
         t = t[t > 0].groupby(level=0).sum()
-        tops.append((f"{lab} long-read allele length ({tid}; n = {int(t.sum()):,}; bins of {unit} bp)", f"{lab} alleles", t,
-                     col))
-    top_h = 1.4 * len(tops)
+        tops.append((f"{lab} long reads ({tid}; n = {int(t.sum()):,})", f"{lab} alleles", t, col))
+    top_h = 1.8 if tops else 0
     ncol = 2 if anc_order else 1
     fig = plt.figure(figsize=(16 if anc_order else 14, h + top_h))
-    gs = fig.add_gridspec(len(tops) + 1, ncol, width_ratios=[20, 80] if anc_order else [1],
-                          height_ratios=[1.4] * len(tops) + [h])
-    row = len(tops)
+    gs = fig.add_gridspec(2 if tops else 1, ncol, width_ratios=[20, 80] if anc_order else [1],
+                          height_ratios=[top_h, h] if tops else [1])
+    row = 1 if tops else 0
     ax = fig.add_subplot(gs[row, ncol - 1])
     axa = fig.add_subplot(gs[row, 0], sharey=ax) if anc_order else None
     axl = axa if anc_order else ax
-    for ti, (title, ylab, dist, col) in enumerate(tops):
-        axh = fig.add_subplot(gs[ti, ncol - 1], sharex=ax)
-        axh.bar(dist.index, dist.to_numpy(), width=unit, color=col, linewidth=0, align="center")
+    if tops:
+        # one panel, half-transparent overlays; y = fraction of each dataset's alleles (datasets differ in size)
+        axh = fig.add_subplot(gs[0, ncol - 1], sharex=ax)
+        for title, ylab, dist, col in tops:
+            axh.bar(dist.index, dist.to_numpy() / dist.sum(), width=unit, color=col, alpha=0.5, linewidth=0, align="center",
+                    label=title)
+            maxlen = max(maxlen, dist.index.max())
         axh.set_yscale("log")
-        axh.set_ylabel(f"{ylab} (log)", fontsize=8, color=INK)
-        axh.set_title(title, fontsize=9, color=INK, loc="left")
+        axh.set_ylabel("Allele frequency (log)", fontsize=8, color=INK)
+        axh.set_title(f"Allele length distributions (bins of {unit} bp)", fontsize=9, color=INK, loc="left")
+        axh.legend(frameon=False, fontsize=7, labelcolor=INK, loc="upper right")
         axh.tick_params(axis="x", labelbottom=False)
         axh.tick_params(colors=INK2, labelsize=7)
         for sp in ["top", "right"]:
             axh.spines[sp].set_visible(False)
-        maxlen = max(maxlen, dist.index.max())
     for y, segs in enumerate(d["_segs"]):
         for a, b, lab in segs:
             ax.barh(y, b - a, left=a, height=0.85, color=color[lab], linewidth=0)
