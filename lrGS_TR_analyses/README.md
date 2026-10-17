@@ -122,6 +122,11 @@ Motif count is `INFO/MC_allele` where present (multi-allelic sites), otherwise a
   alleles outside median ± K × IQR (IQR floored at --min-iqr, default 1 unit). Genotype inputs give per-sample outliers
   (with TRGT SD / AP); allele-count inputs (aggregate only, e.g. AoU) give outlier allele sizes with counts. Writes a
   combined per-site table, per-cohort outlier tables and side-by-side per-site strip plots.
+- `sr_envelope_outliers.py --trv <merged TRV.bed.gz> --sr-loci X.NAME.loci.tsv --sr-allele-dist X.sr.allele_dist.tsv
+  --out-prefix O`: trains a 95% quantile regression of the gnomAD SR reach (SR max − SR median, bp) on motif length at the
+  SR-matched loci (LOO-calibrated; LR spread features compared in .model_selection.tsv), then flags rare long-read alleles
+  (AC ≤ 5) beyond LR median + predicted reach at every single-motif 2-6 bp STR, classifying each allele by sequence as
+  motif_expansion, other_repeat, homopolymer_run or non_repeat_insertion.
 - `str_locus_allele_distribution.py --trv LABEL=path ... --trv-id ID --motif M --sr-sizes P.allele_sizes.tsv --sr-id G
   --out-prefix Q`: one locus in detail: gnomAD SR repeat-unit counts vs long-read alleles measured three ways (allele
   length / motif length, longest pure motif run, motif copies with interruptions allowed); per-allele table, summary, PDF.
