@@ -421,7 +421,6 @@ workflows:
     filters:
       branches:
         - main
-        - kj-ncr-cutoff-tsv
       tags:
         - /.*/
 
