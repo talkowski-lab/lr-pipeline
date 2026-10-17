@@ -10,21 +10,25 @@ log(1 + (SR_max - SR_median) x motif length) (SR repeat-unit counts from --sr-al
 --quantile (default 0.95) on --features (default motif_len). Candidate feature sets are compared by leave-one-locus-out (LOO)
 coverage and pinball loss (.model_selection.tsv); LR spread features (IQR, p90 excess, median, n distinct alleles) do not
 improve on motif length alone in hprc_hgsvc.
-Application: per site T = LR median + predicted reach (bp). Extreme outlier allele: length > T and AC <= --max-ac (rare).
+Application: per site T = LR median + predicted reach (bp). Extreme outlier allele: length > T and rare as a length class:
+summed AC of the site's alleles within +/- --length-tol (10%) of its length <= --max-ac (long impure repeats give every
+haplotype a slightly different length, so per-allele AC alone would call a common long form rare). Alleles beyond T in a
+common length class are counted per site as common_long (not outliers).
 Score = (length - median) / predicted reach. Each outlier allele's sequence (VCF allele without the padding base) is checked
-for repeat content: motif_fraction = fraction of the allele in tandem runs (>= 3 copies, >= 12 bp) of the site motif (best
-rotation / strand); best_repeat_motif / fraction = the most covering 1-6 bp repeat in the allele. allele_class:
-motif_expansion (motif_fraction >= --min-motif-fraction), other_repeat (a different short repeat covers >= that fraction, e.g.
-RFC1 AAGGG at an AAAAG site), homopolymer_run (the covering repeat is a single base; often an assembly / sequencing
-artifact), non_repeat_insertion (none; e.g. an SV, MEI or long-period VNTR recorded on the STR). Sites whose motif length
-is outside the training motif lengths are flagged (extrapolated).
+for repeat content: motif_fraction = fraction of the allele in repeat blocks of the site motif (>= 3 copies, >= 12 bp, copies
+separated by <= one motif length, i.e. interruptions allowed; exact runs for 1-bp motifs; best strand); best_repeat_motif /
+fraction = the most covering 1-6 bp repeat in the allele. allele_class: motif_expansion (motif_fraction >=
+--min-motif-fraction), other_repeat (a different short repeat covers >= that fraction, e.g. RFC1 AAGGG at an AAAAG site),
+homopolymer_run (the covering repeat is a single base; often an assembly / sequencing artifact), non_repeat_or_long_unit
+(none; e.g. an SV, MEI or a repeat with a unit > 6 bp recorded on the STR). Sites whose motif length is outside the training
+motif lengths are flagged (extrapolated).
 Outputs (prefix --out-prefix):
   .model_selection.tsv  LOO coverage / pinball loss per candidate feature set
   .model.tsv            coefficients of the chosen model
   .training.tsv         training loci: SR max / median, LOO predicted reach and threshold, LR alleles beyond it
   .sites.tsv.gz         per STR site: motif, median, threshold, n outlier alleles, outlier AC, max length, max score,
-                        n outlier alleles per allele_class
-  .outliers.tsv.gz      per outlier allele: site, motif, genic_context, gene, length (bp), units, AC, score,
+                        n outlier alleles per allele_class, n / AC of common long alleles beyond T
+  .outliers.tsv.gz      per outlier allele: site, motif, genic_context, gene, length (bp), units, AC, length_class_AC, score,
                         motif_fraction, best_repeat_motif / fraction, allele_class
   .pdf                  calibration (LOO predicted vs observed SR reach), training loci LR max vs threshold, genome-wide rate
 
@@ -53,7 +57,7 @@ GRID = "#e6e4df"
 BLUE = "#2a78d6"
 RED = "#d03b3b"
 GREY = "#8a8984"
-CLASSES = ["motif_expansion", "other_repeat", "homopolymer_run", "non_repeat_insertion"]
+CLASSES = ["motif_expansion", "other_repeat", "homopolymer_run", "non_repeat_or_long_unit"]
 CANDIDATES = [[], ["motif_len"], ["log_iqr"], ["log_p90_excess"], ["motif_len", "log_iqr"], ["motif_len", "log_p90_excess"],
               ["motif_len", "log_median", "log_iqr", "log_p90_excess", "log_n_distinct"]]
 
@@ -65,19 +69,30 @@ def wq(v, w, qs):
 
 
 def motif_fraction(seq, motif, min_run_bp=12):
-    """Fraction of the sequence in tandem runs of the motif (any rotation, either strand; a run = >= 3 copies and
-    >= min_run_bp, so scattered copies do not count)."""
+    """Fraction of the sequence covered by repeat blocks of the motif (any rotation, either strand). A block = >= 3 motif copies,
+    consecutive copies separated by <= one motif length of other sequence (interruptions allowed), block >= min_run_bp. For
+    a single-base motif only exact runs count (no interruptions), so base-rich sequence is not called a homopolymer."""
     if not seq:
         return np.nan
+    seq = seq.upper()
     comp = str.maketrans("ACGT", "TGCA")
     k = len(motif)
-    n = max(3, -(-min_run_bp // k))
-    cover = 0
+    gap = 0 if k == 1 else k
+    best = 0
     for strand in {motif, motif.translate(comp)[::-1]}:
-        for i in range(k):
-            r = strand[i:] + strand[:i]
-            cover = max(cover, sum(len(m) for m in re.findall(f"(?:{r}){{{n},}}", seq.upper())))
-    return cover / len(seq)
+        pat = "|".join(sorted({strand[i:] + strand[:i] for i in range(k)}))
+        cover, bstart, bend, ncopy = 0, None, None, 0
+        for m in re.finditer(f"(?:{pat})", seq):
+            if bend is not None and m.start() - bend <= gap:
+                bend, ncopy = m.end(), ncopy + 1
+                continue
+            if bend is not None and ncopy >= 3 and bend - bstart >= min_run_bp:
+                cover += bend - bstart
+            bstart, bend, ncopy = m.start(), m.end(), 1
+        if bend is not None and ncopy >= 3 and bend - bstart >= min_run_bp:
+            cover += bend - bstart
+        best = max(best, cover)
+    return best / len(seq)
 
 
 def best_repeat(seq, max_k=6):
@@ -130,6 +145,11 @@ def features(lens, counts, k):
             "log_p90_excess": np.log1p(max(p90 - med, 0)), "log_n_distinct": np.log(len(u))}
 
 
+def cluster_ac(lens, counts, tol):
+    """Per allele: summed AC of the site's alleles whose length is within +/- tol (fraction) of it (a length class)."""
+    return np.array([counts[np.abs(lens - L) <= tol * L].sum() for L in lens])
+
+
 def design(df, cols):
     return sm.add_constant(df[cols], has_constant="add") if cols else pd.DataFrame({"const": np.ones(len(df))}, index=df.index)
 
@@ -153,7 +173,9 @@ def main():
     p.add_argument("--quantile", type=float, default=0.95)
     p.add_argument("--min-motif", type=int, default=2)
     p.add_argument("--max-motif", type=int, default=6)
-    p.add_argument("--max-ac", type=int, default=5, help="Outlier alleles must have AC <= this (rare)")
+    p.add_argument("--max-ac", type=int, default=5,
+                   help="Outlier alleles must be rare: summed AC of alleles within --length-tol of their length <= this")
+    p.add_argument("--length-tol", type=float, default=0.1)
     p.add_argument("--min-motif-fraction", type=float, default=0.5,
                    help="Repeat coverage needed for motif_expansion / other_repeat")
     p.add_argument("--label", default="")
@@ -206,7 +228,7 @@ def main():
     n_b, ac_b = [], []
     for i, t in zip(tr["ID"], tr["threshold_bp_loo"]):
         lens, c = train_alleles[i]
-        m = (lens > t) & (c <= args.max_ac)
+        m = (lens > t) & (cluster_ac(lens, c, args.length_tol) <= args.max_ac)
         n_b.append(int(m.sum()))
         ac_b.append(int(c[m].sum()))
     tr["n_rare_LR_alleles_beyond"], tr["AC_beyond"] = n_b, ac_b
@@ -237,8 +259,11 @@ def main():
             xf = pd.DataFrame([f])[args.features].clip(lo, hi, axis=1) if args.features else pd.DataFrame(index=[0])
             rch = float(np.expm1(np.asarray(fit.predict(design(xf, args.features)))[0]))
         t = f["median_bp"] + rch
-        m = (lens > t) & (c <= args.max_ac)
-        for L, cc, sq in zip(lens[m], c[m], seqs[m]):
+        cac = cluster_ac(lens, c, args.length_tol)
+        beyond = lens > t
+        m = beyond & (cac <= args.max_ac)
+        common_long = beyond & ~m
+        for L, cc, ca, sq in zip(lens[m], c[m], cac[m], seqs[m]):
             mf = motif_fraction(sq, r.motifs)
             bm, bf = best_repeat(sq)
             if mf >= args.min_motif_fraction:
@@ -246,10 +271,11 @@ def main():
             elif bf >= args.min_motif_fraction:
                 cls = "homopolymer_run" if len(bm) == 1 else "other_repeat"
             else:
-                cls = "non_repeat_insertion"
+                cls = "non_repeat_or_long_unit"
             outs.append({"ID": r.ID, "chrom": r[0], "start": int(r.start), "motif": r.motifs, "motif_len": k,
                          "genic_context": r.genic_context, "genes": r.genes, "median_bp": f["median_bp"],
                          "threshold_bp": round(t, 1), "length_bp": L, "units": round(L / k, 2), "AC": int(cc),
+                         "length_class_AC": int(ca),
                          "score": round((L - f["median_bp"]) / rch, 2), "allele_seq_len": len(sq),
                          "motif_fraction": round(mf, 3), "best_repeat_motif": bm, "best_repeat_fraction": round(bf, 3),
                          "allele_class": cls})
@@ -257,6 +283,7 @@ def main():
                           "motif_len": k, "genic_context": r.genic_context, "genes": r.genes, "n_alleles": f["n_alleles"],
                           "median_bp": f["median_bp"], "IQR_units": f["IQR_units"], "max_bp": f["max_bp"],
                           "threshold_bp": round(t, 1), "n_outlier_alleles": int(m.sum()), "outlier_AC": int(c[m].sum()),
+                          "n_common_long_alleles": int(common_long.sum()), "common_long_AC": int(c[common_long].sum()),
                           "extrapolated": k not in train_k})
     sites = pd.DataFrame(site_rows)
     outs = pd.DataFrame(outs).sort_values("score", ascending=False)
@@ -269,7 +296,7 @@ def main():
     outs.to_csv(f"{args.out_prefix}.outliers.tsv.gz", sep="\t", index=False)
     hit = sites["n_outlier_alleles"] > 0
     print(f"genome-wide: {hit.sum():,} of {len(sites):,} single-motif STR sites (motif {args.min_motif}-{args.max_motif} bp) "
-          f"with a rare allele (AC <= {args.max_ac}) beyond the SR reach ({hit.mean():.2%}); {len(outs):,} alleles")
+          f"with a rare allele (length-class AC <= {args.max_ac}) beyond the SR reach ({hit.mean():.2%}); {len(outs):,} alleles")
     summ = sites.groupby("motif_len").agg(n_sites=("ID", "size"), n_hit=("n_outlier_alleles", lambda x: int((x > 0).sum())))
     summ["pct"] = (100 * summ["n_hit"] / summ["n_sites"]).round(3)
     print(summ.to_string())
@@ -306,7 +333,8 @@ def main():
     a.set_yscale("log")
     a.set_xlabel("Threshold = LR median + predicted SR reach (bp; leave-one-out)", fontsize=9, color=INK)
     a.set_ylabel("Largest LR allele (bp)", fontsize=9, color=INK)
-    a.set_title(f"Training loci: red = rare LR alleles (AC ≤ {args.max_ac}) beyond SR reach (n)", fontsize=9, color=INK)
+    a.set_title(f"Training loci: red = rare LR alleles (length-class AC ≤ {args.max_ac}) beyond SR reach (n)", fontsize=9,
+                color=INK)
     a = axes[2]
     cls_col = dict(zip(CLASSES, [BLUE, "#eb6834", "#eda100", GREY]))
     bottom = np.zeros(len(summ))
