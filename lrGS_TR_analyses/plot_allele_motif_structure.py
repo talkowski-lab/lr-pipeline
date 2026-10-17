@@ -230,7 +230,11 @@ def main():
                      "#8a8984"))
     for spec, col in zip(args.top_trv, args.top_colors):
         lab, path, tid = spec.split("=", 2)
-        r2 = read_record(path, tid)
+        try:
+            r2 = read_record(path, tid)
+        except SystemExit as e:
+            print(f"{lab}: {e}; top histogram skipped")
+            continue
         a2 = r2["ALT"].split(",")
         c2 = [int(x) if x not in (".", "") else 0 for x in r2["AC"].split(",")]
         lens = [len(r2["REF"]) - 1] + [len(x) - 1 for x in a2]

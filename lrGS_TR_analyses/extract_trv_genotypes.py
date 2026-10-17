@@ -19,14 +19,22 @@ import argparse
 import os
 import subprocess
 import tempfile
+import time
 
 import pandas as pd
 
 FMT = ["GT", "AL", "ALLR", "SD", "MC", "AP", "PS"]
 
 
-def run(cmd, **kw):
-    return subprocess.run(cmd, check=True, capture_output=True, text=True, **kw).stdout
+def run(cmd, retries=1, **kw):
+    for attempt in range(retries):
+        r = subprocess.run(cmd, capture_output=True, text=True, **kw)
+        if r.returncode == 0:
+            return r.stdout
+        if attempt < retries - 1:
+            print(f"retrying ({attempt + 1}) after: {r.stderr.strip().splitlines()[0] if r.stderr.strip() else r.returncode}")
+            time.sleep(5 * (attempt + 1))
+    raise SystemExit(f"{' '.join(cmd[:3])} ... failed ({r.returncode}): {r.stderr.strip()}")
 
 
 def main():
@@ -42,16 +50,13 @@ def main():
     vcfs = dict(line.split()[:2] for line in open(args.vcf_map) if line.strip())
     tmp = tempfile.mkdtemp()
     parts = []
-    for chrom, g in bed.groupby("#chrom", sort=False):
-        ids = os.path.join(tmp, f"{chrom}.ids")
-        reg = os.path.join(tmp, f"{chrom}.regions")
-        with open(ids, "w") as f:
-            f.write("\n".join(g["ID"]) + "\n")
-        with open(reg, "w") as f:
-            for r in g.itertuples():
-                f.write(f"{chrom}\t{min(r.pos, int(r.start) + 1)}\t{int(r.end)}\n")
-        out = os.path.join(tmp, f"{chrom}.vcf.gz")
-        run(["bcftools", "view", "-R", reg, "-i", f"ID=@{ids}", "-Oz", "-o", out, vcfs[chrom]])
+    bed["start"] = bed["start"].astype(int)
+    # one small region query per TRV: batched -R reads of remote (gs://) VCFs can fail with HTTP/2 framing errors
+    for n, r in enumerate(bed.sort_values(["#chrom", "start"]).itertuples()):
+        chrom = getattr(r, "_1")
+        out = os.path.join(tmp, f"{n}.vcf.gz")
+        run(["bcftools", "view", "-r", f"{chrom}:{min(r.pos, r.start + 1)}-{int(r.end)}", "-i", f'ID=="{r.ID}"', "-Oz",
+             "-o", out, vcfs[chrom]], retries=4)
         parts.append(out)
     vcf = f"{args.out_prefix}.vcf.gz"
     cat = os.path.join(tmp, "concat.vcf.gz")

@@ -133,6 +133,11 @@ Motif count is `INFO/MC_allele` where present (multi-allelic sites), otherwise a
 - `run_allele_motif_structure_sr_loci.sh <main loci.tsv> <main TRV> <genotypes> <ancestry> <SR allele_sizes> <second loci.tsv>
   <second label> <second TRV> <out_dir> <tag>`: runs plot_allele_motif_structure.py for every SR locus with a matched TRV
   (second cohort in the top panel when matched) and merges the pages into all_SR_loci.<tag>.pdf.
+- `run_allele_motif_structure_trv_list.sh <list.tsv: TRV_ID label> <main TRV> <genotypes> <ancestry> <second label> <second TRV>
+  <out_dir> <tag>`: plot_allele_motif_structure.py for a TRV list (second cohort's same TRV ID on top when present); merges pages.
+- `plot_outlier_motif_by_context.py --sites O.sites.tsv.gz --trv <merged TRV> --gtf GTF [--set outlier|repeat] --out-prefix P`:
+  motif-length histogram of STR sites with outliers (sr_envelope_outliers.py), stacked by context (coding, coding-intron
+  junction, UTR, intronic, intergenic non-desert / desert), with all sites and % with outliers.
 - `str_locus_allele_distribution.py --trv LABEL=path ... --trv-id ID --motif M --sr-sizes P.allele_sizes.tsv --sr-id G
   --out-prefix Q`: one locus in detail: gnomAD SR repeat-unit counts vs long-read alleles measured three ways (allele
   length / motif length, longest pure motif run, motif copies with interruptions allowed); per-allele table, summary, PDF.
