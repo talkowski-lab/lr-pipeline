@@ -16,14 +16,21 @@ Outputs (prefix --out-prefix):
   .sites.tsv               per site: for each cohort n alleles, median, IQR used, bounds, n outlier alleles (expansion /
                            contraction), n above SR max, max
   .LABEL.outliers.tsv      per cohort outlier list (genotypes: per sample haplotype; allele_dist: per allele size with count)
-  .pdf                     per site strip plots, one column per cohort (colors --colors), outliers red, bounds dashed;
+  .pdf                     per site strip plots, one column per cohort (colors --colors); alleles within bounds
+                           half-transparent, outliers solid; bounds dashed;
                            sites ordered by total outlier alleles
 
+The gnomAD SR distribution can be added as a cohort (e.g. SR=allele_dist=X.sr.allele_dist.tsv, grey) to plot it alongside;
+--rank-by then keeps the site order based on the long-read cohorts only.
+
 Usage:
-  flag_str_outliers.py --input hprc_hgsvc=genotypes=STR_SRmatch.hgsvc_hprc.genotypes.tsv \\
+  flag_str_outliers.py --input SR=allele_dist=STR_SRmatch.sr.allele_dist.tsv \\
+      hprc_hgsvc=genotypes=STR_SRmatch.hgsvc_hprc.genotypes.tsv \\
       AoU_I=allele_dist=STR_SRmatch.aou_i.allele_dist.tsv \\
       --loci hprc_hgsvc=STR_SRmatch.hgsvc_hprc.loci.tsv AoU_I=STR_SRmatch.aou_i.loci.tsv \\
-      --sr-allele-dist STR_SRmatch.sr.allele_dist.tsv --k 10 --out-prefix STR_SRmatch.outliers_10xIQR
+      --sr-allele-dist STR_SRmatch.sr.allele_dist.tsv --colors '#8a8984' '#2a78d6' '#eb6834' \\
+      --rank-by hprc_hgsvc AoU_I --k 10 \\
+      --out-prefix STR_SRmatch.outliers_10xIQR
 """
 import argparse
 
@@ -41,7 +48,6 @@ plt.rcParams["pdf.fonttype"] = 42
 INK = "#1d1f24"
 INK2 = "#5b5e66"
 GRID = "#e6e4df"
-RED = "#d03b3b"
 
 
 def genotype_alleles(path, measure):
@@ -90,6 +96,7 @@ def main():
     p.add_argument("--measure", choices=["SR_units", "len_bp"], default="SR_units")
     p.add_argument("--k", type=float, default=10)
     p.add_argument("--min-iqr", type=float, default=1)
+    p.add_argument("--rank-by", nargs="*", help="Cohort labels whose outlier counts order the sites (default: all)")
     p.add_argument("--colors", nargs="+", default=["#2a78d6", "#eb6834", "#1baf7a"])
     p.add_argument("--out-prefix", required=True)
     args = p.parse_args()
@@ -144,7 +151,8 @@ def main():
         sites.append(s)
     sites = pd.DataFrame(sites)
     ncols = [f"{lab}_n_outlier" for lab, _, _ in cohorts]
-    sites["_tot"] = sites[ncols].fillna(0).sum(axis=1)
+    rank = [f"{lab}_n_outlier" for lab in (args.rank_by or [c[0] for c in cohorts])]
+    sites["_tot"] = sites[rank].fillna(0).sum(axis=1)
     sites = sites.sort_values(["_tot", "gnomAD_id"], ascending=[False, True]).drop(columns="_tot")
     sites.to_csv(f"{args.out_prefix}.sites.tsv", sep="\t", index=False, float_format="%.4g")
     for lab, kind, _ in cohorts:
@@ -167,7 +175,7 @@ def main():
     order = list(sites["gnomAD_id"])
     with PdfPages(f"{args.out_prefix}.pdf") as pdf:
         for start in range(0, len(order), 20):
-            fig, axes = plt.subplots(4, 5, figsize=(18, 13))
+            fig, axes = plt.subplots(4, 5, figsize=(20, 14))
             for ax, gid in zip(axes.flat, order[start:start + 20]):
                 title = []
                 for j, lab in enumerate(labs):
@@ -180,20 +188,20 @@ def main():
                     # allele_dist rows carry counts: point size scales with log count
                     size = 6 + 6 * np.log10(c)
                     x = j + rng.uniform(-0.3, 0.3, len(v))
-                    ax.scatter(x[~out], v[~out], s=size[~out], color=colors[lab], alpha=0.5, linewidths=0)
-                    ax.scatter(x[out], v[out], s=size[out] + 8, color=RED, linewidths=0)
+                    ax.scatter(x[~out], v[~out], s=size[~out], color=colors[lab], alpha=0.35, linewidths=0)
+                    ax.scatter(x[out], v[out], s=size[out] + 8, color=colors[lab], alpha=1, edgecolors=INK, linewidths=0.3)
                     ax.hlines(med, j - 0.4, j + 0.4, color=INK2, linewidth=0.9)
                     for b in (lo, hi):
                         if b > 0:
                             ax.hlines(b, j - 0.4, j + 0.4, color=INK2, linewidth=0.8, linestyle="--")
-                    title.append(f"{lab}: {n:,} outlier{'s' if n != 1 else ''}")
+                    title.append(f"{lab} {n:,}")
                 if gid in sr_max_of:
                     ax.axhline(sr_max_of[gid], color="#8a8984", linewidth=0.8, linestyle=":")
                 ax.set_yscale("log")
                 ax.set_xlim(-0.6, len(labs) - 0.4)
                 ax.set_xticks(range(len(labs)))
                 ax.set_xticklabels(labs, fontsize=7.5, color=INK)
-                ax.set_title(f"{gid}\n" + "; ".join(title), fontsize=8, color=INK)
+                ax.set_title(f"{gid}\noutlier alleles: " + "; ".join(title), fontsize=8, color=INK)
                 ax.tick_params(colors=INK2, labelsize=7)
                 ax.grid(axis="y", color=GRID, linewidth=0.6)
                 for sp in ["top", "right"]:
@@ -203,7 +211,8 @@ def main():
             for ax in axes[:, 0]:
                 ax.set_ylabel(unit, fontsize=8, color=INK)
             fig.suptitle(f"Per-site STR outliers: alleles outside median ± {args.k:g} × IQR (IQR floor {args.min_iqr:g}); "
-                         "red = outlier, solid = median, dashed = bounds, grey dotted = gnomAD SR max", fontsize=11, color=INK)
+                         "faded = within bounds, solid = outlier; line = median, dashed = bounds, dotted = gnomAD SR max",
+                         fontsize=11, color=INK)
             fig.tight_layout(rect=(0, 0, 1, 0.97))
             pdf.savefig(fig)
             plt.close(fig)
