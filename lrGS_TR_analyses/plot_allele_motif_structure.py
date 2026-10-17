@@ -16,12 +16,14 @@ Outputs (prefix --out-prefix):
 Layout: allele name, length and AC as row labels on the left; with --genotypes and --ancestry, the left 20% panel shows the
 genetic ancestry of the haplotypes carrying each allele (bar length = AC, split into the alleles from each ancestry; gnomAD
 GEN_ANC_COLORS) and the right 80% the
-repeat-unit structure.
+repeat-unit structure. With --sr-allele-sizes and --sr-id, a grey histogram of the gnomAD short-read allele lengths (repeat-unit
+count x unit length, bp; summed over cohorts and repeat-unit variants) sits above the structure panel on the same x axis.
   .motifs.tsv   per motif: rotations seen, tandem bp in alleles, AC-weighted bp, n alleles containing it
 
 Usage:
   plot_allele_motif_structure.py --trv gnomAD_LR.hprc_hgsvc.TRV.bed.gz --trv-id chr4-39348424-TRV-55 --label RFC1 \\
       --genotypes STR_SRmatch.hgsvc_hprc.genotypes.tsv --ancestry ancestry_label.HGSVC_HPRC.tsv.gz \\
+      --sr-allele-sizes gnomad_r4_STR.allele_sizes.tsv --sr-id RFC1 \\
       --out-prefix RFC1/RFC1.hprc_hgsvc
 """
 import argparse
@@ -140,6 +142,8 @@ def main():
     p.add_argument("--ancestry", help="Sample ancestry table (TSV, optionally gzipped)")
     p.add_argument("--sample-col", default="sample")
     p.add_argument("--ancestry-col", default="ethnicity")
+    p.add_argument("--sr-allele-sizes", help="fetch_gnomad_str.py .allele_sizes.tsv (id repunit repunit_count allele_count)")
+    p.add_argument("--sr-id", help="gnomAD STR locus id for the SR histogram (e.g. RFC1)")
     p.add_argument("--label", default="")
     p.add_argument("--out-prefix", required=True)
     args = p.parse_args()
@@ -202,14 +206,37 @@ def main():
 
     n = len(d)
     h = max(4, 0.075 * n + 2.2)
-    fs = 5 if n > 60 else 7
+    fs = 5 if n > 30 else 7
     maxlen = d["length_bp"].max()
-    if anc_order:
-        fig, (axa, ax) = plt.subplots(1, 2, figsize=(16, h), sharey=True, gridspec_kw={"width_ratios": [20, 80]})
-        axl = axa
-    else:
-        fig, ax = plt.subplots(figsize=(14, h))
-        axl = ax
+    sr = None
+    if args.sr_allele_sizes and args.sr_id:
+        sr = pd.read_csv(args.sr_allele_sizes, sep="\t")
+        sr = sr[(sr["id"] == args.sr_id) & (sr["allele_count"] > 0)].copy()
+        # repeat-unit count x unit length = allele length in bp (summed over cohorts and repeat-unit variants)
+        sr["bp"] = sr["repunit_count"] * sr["repunit"].str.len()
+        sr = sr.groupby("bp")["allele_count"].sum()
+        unit = int(pd.read_csv(args.sr_allele_sizes, sep="\t").query("id == @args.sr_id")["repunit"].str.len().min())
+    top_h = 1.6 if sr is not None else 0
+    ncol = 2 if anc_order else 1
+    fig = plt.figure(figsize=(16 if anc_order else 14, h + top_h))
+    gs = fig.add_gridspec(2 if sr is not None else 1, ncol, width_ratios=[20, 80] if anc_order else [1],
+                          height_ratios=[top_h, h] if sr is not None else [1])
+    row = 1 if sr is not None else 0
+    ax = fig.add_subplot(gs[row, ncol - 1])
+    axa = fig.add_subplot(gs[row, 0], sharey=ax) if anc_order else None
+    axl = axa if anc_order else ax
+    if sr is not None:
+        axh = fig.add_subplot(gs[0, ncol - 1], sharex=ax)
+        axh.bar(sr.index, sr.to_numpy(), width=unit, color="#8a8984", linewidth=0, align="center")
+        axh.set_yscale("log")
+        axh.set_ylabel("SR alleles (log)", fontsize=8, color=INK)
+        axh.set_title(f"gnomAD short-read allele length ({args.sr_id}; n = {int(sr.sum()):,}; repeat units x {unit} bp)",
+                      fontsize=9, color=INK, loc="left")
+        axh.tick_params(axis="x", labelbottom=False)
+        axh.tick_params(colors=INK2, labelsize=7)
+        for sp in ["top", "right"]:
+            axh.spines[sp].set_visible(False)
+        maxlen = max(maxlen, sr.index.max())
     for y, segs in enumerate(d["_segs"]):
         for a, b, lab in segs:
             ax.barh(y, b - a, left=a, height=0.85, color=color[lab], linewidth=0)
@@ -267,8 +294,9 @@ def main():
         where = f"; STR in {where}"
     fig.suptitle(f"{args.label + ' ' if args.label else ''}{args.trv_id}{where}: {n} alleles (REF first; ALT grouped by "
                  f"dominant motif, sorted by length; AN {rec['AN']})", fontsize=10.5, color=INK)
-    fig.tight_layout(rect=(0, 0, 1, 1 - 0.3 / h))
-    fig.subplots_adjust(wspace=0.02)
+    fig.tight_layout(rect=(0, 0, 1, 1 - 0.3 / (h + top_h)))
+    # about 0.5 inch between the SR histogram and the allele panels
+    fig.subplots_adjust(wspace=0.02, hspace=0.5 / ((h + top_h) / 2))
     fig.savefig(f"{args.out_prefix}.pdf")
     plt.close(fig)
 
