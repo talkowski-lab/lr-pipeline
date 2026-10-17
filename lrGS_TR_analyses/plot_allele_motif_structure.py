@@ -13,8 +13,9 @@ Outputs (prefix --out-prefix):
   .pdf          one row per allele (REF first, then ALT alleles grouped by dominant motif and sorted by length), x = bp,
                 coloured by motif; right: allele name, length and AC
   .alleles.tsv  per allele: name, AC, length, bp per motif, dominant motif, sequence (+ carrier haplotypes per ancestry)
-Layout: left 60% repeat-unit structure; with --genotypes and --ancestry, right 30% the genetic ancestry of the haplotypes
-carrying each allele (fraction per ancestry, gnomAD GEN_ANC_COLORS); last 10% allele name, length and AC.
+Layout: allele name, length and AC as row labels on the left; with --genotypes and --ancestry, the left 20% panel shows the
+genetic ancestry of the haplotypes carrying each allele (fraction per ancestry, gnomAD GEN_ANC_COLORS) and the right 80% the
+repeat-unit structure.
   .motifs.tsv   per motif: rotations seen, tandem bp in alleles, AC-weighted bp, n alleles containing it
 
 Usage:
@@ -203,22 +204,23 @@ def main():
     fs = 5 if n > 60 else 7
     maxlen = d["length_bp"].max()
     if anc_order:
-        fig, (ax, axa, axt) = plt.subplots(1, 3, figsize=(16, h), sharey=True, gridspec_kw={"width_ratios": [60, 30, 10]})
+        fig, (axa, ax) = plt.subplots(1, 2, figsize=(16, h), sharey=True, gridspec_kw={"width_ratios": [20, 80]})
+        axl = axa
     else:
-        fig, (ax, axt) = plt.subplots(1, 2, figsize=(13, h), sharey=True, gridspec_kw={"width_ratios": [85, 15]})
+        fig, ax = plt.subplots(figsize=(14, h))
+        axl = ax
     for y, segs in enumerate(d["_segs"]):
         for a, b, lab in segs:
             ax.barh(y, b - a, left=a, height=0.85, color=color[lab], linewidth=0)
     ax.set_ylim(n - 0.5, -0.5)
     ax.set_xlim(0, maxlen * 1.02)
-    ax.set_yticks([])
     ax.set_xlabel("Position in allele (bp, reference + strand)", fontsize=9, color=INK)
     ax.set_title("Repeat-unit structure", fontsize=9.5, color=INK, loc="left")
     handles = [Patch(color=color[c], label=f"{names[c]} ({int(d[f'bp_{names[c]}'].gt(0).sum())} alleles)") for c in motifs]
     handles += [Patch(color=OTHER_REP, label="other repeat"), Patch(color=NON_REP, label="non-repeat")]
     ax.legend(handles=handles, frameon=False, fontsize=7.5, labelcolor=INK, loc="upper center",
               bbox_to_anchor=(0.5, -0.045 * 12 / h), ncol=min(4, len(handles)), title="Repeat unit", title_fontsize=8)
-    axes = [ax, axt]
+    axes = [ax]
     if anc_order:
         # carrier haplotypes of each allele by genetic ancestry (fraction of the allele's carriers)
         for y, r in enumerate(d.itertuples(index=False)):
@@ -239,18 +241,21 @@ def main():
                    bbox_to_anchor=(0.5, -0.045 * 12 / h), ncol=2, title="Genetic ancestry (gnomAD colours)",
                    title_fontsize=8)
         axes.append(axa)
-    for y, (al, ln, ac) in enumerate(zip(d["allele"], d["length_bp"], d["AC"])):
-        axt.text(0.02, y, f"{al}  {ln:,} bp  AC {ac}", va="center", fontsize=fs, color=INK)
-    axt.set_xlim(0, 1)
-    axt.axis("off")
+    # allele name, length and AC as row labels on the far left
+    axl.set_yticks(range(n))
+    axl.set_yticklabels([f"{al}  {ln:,} bp  AC {ac}" for al, ln, ac in zip(d["allele"], d["length_bp"], d["AC"])],
+                        fontsize=fs, color=INK)
+    if axl is not ax:
+        ax.tick_params(labelleft=False)
     for a in axes:
         for sp in ["top", "right", "left"]:
             a.spines[sp].set_visible(False)
-        a.tick_params(colors=INK2, labelsize=8, left=False)
+        a.tick_params(axis="x", colors=INK2, labelsize=8)
+        a.tick_params(axis="y", left=False)
     fig.suptitle(f"{args.label + ' ' if args.label else ''}{args.trv_id}: {n} alleles (REF first; ALT grouped by dominant "
                  f"motif, sorted by length; AN {rec['AN']})", fontsize=10.5, color=INK)
     fig.tight_layout(rect=(0, 0, 1, 1 - 0.3 / h))
-    fig.subplots_adjust(wspace=0.03)
+    fig.subplots_adjust(wspace=0.02)
     fig.savefig(f"{args.out_prefix}.pdf")
     plt.close(fig)
 
