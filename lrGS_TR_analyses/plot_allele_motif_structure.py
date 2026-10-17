@@ -14,7 +14,8 @@ Outputs (prefix --out-prefix):
                 coloured by motif; right: allele name, length and AC
   .alleles.tsv  per allele: name, AC, length, bp per motif, dominant motif, sequence (+ carrier haplotypes per ancestry)
 Layout: allele name, length and AC as row labels on the left; with --genotypes and --ancestry, the left 20% panel shows the
-genetic ancestry of the haplotypes carrying each allele (fraction per ancestry, gnomAD GEN_ANC_COLORS) and the right 80% the
+genetic ancestry of the haplotypes carrying each allele (bar length = AC, split into the alleles from each ancestry; gnomAD
+GEN_ANC_COLORS) and the right 80% the
 repeat-unit structure.
   .motifs.tsv   per motif: rotations seen, tandem bp in alleles, AC-weighted bp, n alleles containing it
 
@@ -222,18 +223,18 @@ def main():
               bbox_to_anchor=(0.5, -0.045 * 12 / h), ncol=min(4, len(handles)), title="Repeat unit", title_fontsize=8)
     axes = [ax]
     if anc_order:
-        # carrier haplotypes of each allele by genetic ancestry (fraction of the allele's carriers)
+        # carrier haplotypes of each allele by genetic ancestry: bar length = AC, each colour = alleles from that ancestry
+        maxac = 0
         for y, r in enumerate(d.itertuples(index=False)):
-            tot = sum(getattr(r, f"hap_{a}") for a in anc_order)
-            x0 = 0.0
+            x0 = 0
             for a in anc_order:
-                w = getattr(r, f"hap_{a}") / tot if tot else 0
+                w = getattr(r, f"hap_{a}")
                 if w:
                     axa.barh(y, w, left=x0, height=0.85, color=ANC_COLORS.get(a, "#ABB9B9"), linewidth=0)
                 x0 += w
-        axa.set_xlim(0, 1)
-        axa.set_xticks([0, 0.5, 1])
-        axa.set_xlabel("Fraction of carrier haplotypes", fontsize=9, color=INK)
+            maxac = max(maxac, x0)
+        axa.set_xlim(0, maxac * 1.02)
+        axa.set_xlabel("Allele count (carrier haplotypes)", fontsize=9, color=INK)
         axa.set_title("Carrier genetic ancestry", fontsize=9.5, color=INK, loc="left")
         ah = [Patch(color=ANC_COLORS.get(a, "#ABB9B9"), label=f"{a} ({int(d[f'hap_{a}'].sum())} haplotypes)")
               for a in anc_order]
