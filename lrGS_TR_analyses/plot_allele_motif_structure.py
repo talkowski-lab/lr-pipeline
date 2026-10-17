@@ -58,8 +58,10 @@ NON_REP = "#f1efea"
 def read_record(path, trv_id):
     header = subprocess.run(f"gzip -cd {path} | sed -n 1p", shell=True, capture_output=True, text=True).stdout
     cols = header.lstrip("#").rstrip("\n").split("\t")
-    chrom, pos = trv_id.split("-")[:2]
-    out = subprocess.run(["tabix", path, f"{chrom}:{max(1, int(pos) - 10)}-{int(pos) + 10}"], capture_output=True, text=True,
+    # search the whole TRV span (ID = chrom-pos-TRV-length); the bed start can differ from the ID position
+    f = trv_id.split("-")
+    chrom, pos, span = f[0], int(f[1]), int(f[-1]) if f[-1].isdigit() else 0
+    out = subprocess.run(["tabix", path, f"{chrom}:{max(1, pos - 10)}-{pos + span + 10}"], capture_output=True, text=True,
                          check=True).stdout
     for line in out.splitlines():
         rec = dict(zip(cols, line.split("\t")))

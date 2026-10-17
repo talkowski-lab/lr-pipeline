@@ -130,6 +130,9 @@ Motif count is `INFO/MC_allele` where present (multi-allelic sites), otherwise a
 - `plot_allele_motif_structure.py --trv <TRV table> --trv-id ID [--k 4 5 6] --out-prefix O`: discovers the repeat units of
   all alleles at one TRV (tandem primitive k-mers, rotations merged) and plots each allele (REF, then ALTs by dominant motif
   and length) painted by motif, with AC on the right; writes per-allele composition and per-motif tables.
+- `run_allele_motif_structure_sr_loci.sh <main loci.tsv> <main TRV> <genotypes> <ancestry> <SR allele_sizes> <second loci.tsv>
+  <second label> <second TRV> <out_dir> <tag>`: runs plot_allele_motif_structure.py for every SR locus with a matched TRV
+  (second cohort in the top panel when matched) and merges the pages into all_SR_loci.<tag>.pdf.
 - `str_locus_allele_distribution.py --trv LABEL=path ... --trv-id ID --motif M --sr-sizes P.allele_sizes.tsv --sr-id G
   --out-prefix Q`: one locus in detail: gnomAD SR repeat-unit counts vs long-read alleles measured three ways (allele
   length / motif length, longest pure motif run, motif copies with interruptions allowed); per-allele table, summary, PDF.
