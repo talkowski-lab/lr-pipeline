@@ -252,8 +252,20 @@ def main():
             a.spines[sp].set_visible(False)
         a.tick_params(axis="x", colors=INK2, labelsize=8)
         a.tick_params(axis="y", left=False)
-    fig.suptitle(f"{args.label + ' ' if args.label else ''}{args.trv_id}: {n} alleles (REF first; ALT grouped by dominant "
-                 f"motif, sorted by length; AN {rec['AN']})", fontsize=10.5, color=INK)
+    # genic context of the STR (merged TRV table columns genic_context / genes; omitted when absent)
+    ctx = rec.get("genic_context", "")
+    where = ""
+    if ctx and ctx != ".":
+        genes = rec.get("genes", ".")
+        if ctx == "intergenic":
+            cat = rec.get("intergenic_category", ".")
+            where = "intergenic" + (f", {cat} region" if cat not in ("", ".") else "")
+        else:
+            where = {"coding": "coding exon", "UTR": "UTR", "intronic": "intron"}.get(ctx, ctx)
+            where += f" of {genes}" if genes not in ("", ".") else ""
+        where = f"; STR in {where}"
+    fig.suptitle(f"{args.label + ' ' if args.label else ''}{args.trv_id}{where}: {n} alleles (REF first; ALT grouped by "
+                 f"dominant motif, sorted by length; AN {rec['AN']})", fontsize=10.5, color=INK)
     fig.tight_layout(rect=(0, 0, 1, 1 - 0.3 / h))
     fig.subplots_adjust(wspace=0.02)
     fig.savefig(f"{args.out_prefix}.pdf")
