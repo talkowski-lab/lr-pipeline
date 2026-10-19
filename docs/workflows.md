@@ -814,6 +814,40 @@ Outputs:
 - `File estimated_cn`: Per-sample, per-chromosome estimated copy number.
 - `File ploidy_plots`: Tarball containing only ploidy PNG and PDF figures.
 
+### [CreateCNVDepthPlots](../wdl/annotation_utils/CreateCNVDepthPlots.wdl)
+This utility draws read-depth plots for the CNVs of a `LongReadCNVs` `genotyped_depth_vcf` that fall within a set of regions, so calls can be reviewed by eye. It writes one plot per non-reference sample per selected CNV, and packs them into one tarball with a folder per variant ID holding one PNG per non-reference sample, named `<sample>.<context>.png`. A table lists every selected CNV with its genomic context, plot window and non-reference samples.
+
+A record is selected when it overlaps any region in `regions_bed`, or lies wholly within one when `require_full_containment` is set, and passes the SV type and length filters. A sample is non-reference when its `FORMAT/RD_CN` is below its `FORMAT/ECN` for a DEL, above it for a DUP, or differs from it for a multiallelic CNV; genotypes are not consulted, since CNV records carry none. Each CNV's genomic context follows `AnnotateRegion`: SR (simple repeat), SD (segmental duplication) or RM (RepeatMasker) when either breakpoint falls in one, taking the first in that order, else US (unique sequence); a DEL or DUP over 5 kb is instead labelled by the first of these covering more than half its span.
+
+Each plot covers the call plus a window of `padding_fraction` of its length on either side. It shows every cohort sample's copy number estimate, 2 x depth / sample median coverage, from `merged_bincov` averaged to about 120 points whatever the window's length: the plotted sample in bold orange outlined in white, the variant's other non-reference samples in light orange, and all remaining samples in grey with their median in black. Dashed lines mark the call and grey lines mark integer copy numbers. The title gives the variant ID and SV type, the sample's `RD_CN` and `ECN` with the variant's carrier count, and the call's location, length and genomic context. A sample in the VCF but missing from `merged_bincov` or `median_coverage` fails the workflow.
+
+Every non-reference sample is plotted by default, which can mean thousands of plots for a large region or a common CNV. Set `max_carriers_per_variant` to skip variants with more non-reference samples than that; skipped variants are still listed in the table, with `plotted` set to 0.
+
+Inputs:
+- `File genotyped_depth_vcf`: Genotyped CNV VCF from `LongReadCNVs`, carrying `FORMAT/RD_CN` and `FORMAT/ECN`.
+- `File genotyped_depth_vcf_idx`: Index for `genotyped_depth_vcf`.
+- `File regions_bed`: BED of regions whose CNVs are plotted; overlapping regions select a CNV once.
+- `File merged_bincov`: Cohort binned read-depth matrix, the `merged_bincov` input to `LongReadCNVs`.
+- `File merged_bincov_idx`: Index for `merged_bincov`.
+- `File median_coverage`: Per-sample median coverage table, the `median_coverage` input to `LongReadCNVs`.
+- `Array[String] svtypes`: SV types to plot, from `DEL`, `DUP` and `CNV`. (default `["DEL", "DUP", "CNV"]`)
+- `Int min_svlen`: Minimum CNV length, in bp. (default `0`)
+- `Int? max_svlen`: Maximum CNV length, in bp; unset keeps every length.
+- `Boolean require_full_containment`: Whether a CNV must lie wholly within a region, rather than overlap it, to be selected. (default `false`)
+- `Float padding_fraction`: Window added on each side of a CNV, as a share of its length. (default `0.25`)
+- `Int? max_carriers_per_variant`: Maximum non-reference samples for a variant to be plotted; unset plots every variant.
+- `File simple_repeats_bed`: From references.
+- `File seg_dup_bed`: From references.
+- `File repeat_masked_bed`: From references.
+- `Int records_per_shard`: Number of variants plotted within a single shard. (default `100`)
+- `String prefix`: Prefix for output file names.
+- `String utils_docker`: Container image.
+- `RuntimeAttr? runtime_attr_*`: Optional per-task runtime overrides (4).
+
+Outputs:
+- `File cnv_variants_tsv`: One row per selected CNV, with its `variant_id`, `contig`, `pos`, `end`, `svtype`, `svlen`, genomic `context` (US, RM, SD or SR), plot window `window_start` and `window_end`, `n_carriers` non-reference samples, `plotted` (1, or 0 when skipped by `max_carriers_per_variant`) and `carriers` as comma-separated `sample:RD_CN:ECN`.
+- `File cnv_depth_plots_tar`: Tarball of `cnv_depth_plots/<variant_id>/<sample>.<context>.png`, one plot per non-reference sample of each plotted CNV.
+
 ### [CreateCohortMetadata](../wdl/annotation_utils/CreateCohortMetadata.wdl)
 This utility builds a cohort metadata file by combining a pedigree file with an ancestry-assignment file. It outputs the merged metadata file.
 
