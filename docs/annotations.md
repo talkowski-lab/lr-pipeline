@@ -1,5 +1,15 @@
 # Annotations
-This document describes the INFO and FORMAT fields and FILTER values present in the annotated callset VCFs.
+This document describes the FILTER values and INFO and FORMAT fields present in the annotated callset VCFs.
+
+
+## FILTER Values
+- `ASSEMBLY_ONLY_SINGLETON`: Variant with `AC = 1` whose sole carrier has support exclusively from assembly-based callers (`dipcall` and/or `hapdiff`).
+- `HIGH_NCR`: Variant whose `INFO/NCR` is above the no-call rate cutoff for its allele type, length and `REGION` in the cutoff table passed to `FilterNCRCutoffs`.
+- `LARGE_SNV_INDEL`: Variant with `SOURCE = "DeepVariant"` that has `INFO/allele_length ≥ 50`.
+- `LOW_COVERAGE_REGION`: Variant region determined to have low coverage relative to entire genome.
+- `MONOALLELIC`: Variant in a region with multiple variants that could not be unified into non-overlapping multi-allelic sites.
+- `SINGLE_READ_SUPPORT`: Variant with `AC = 1` whose sole carrier has support from just a single read.
+- `SMALL_SV`: Variant with `SOURCE = "HPRC_SV_Integration"` that has `INFO/allele_length < 50`.
 
 
 ## INFO Fields
@@ -149,13 +159,3 @@ Which fields a call carries depends on its `INFO/SOURCE`.
   - `MC`: Motif counts of each allele.
   - `MS`: Motif spans of each allele.
   - `SD`: Number of spanning reads supporting each allele.
-
-
-## FILTER Values
-- `ASSEMBLY_ONLY_SINGLETON`: Variant with `AC = 1` whose sole carrier has support exclusively from assembly-based callers (`dipcall` and/or `hapdiff`).
-- `HIGH_NCR`: Variant whose `INFO/NCR` is above the no-call rate cutoff for its allele type, length and `REGION` in the cutoff table passed to `FilterNCRCutoffs`.
-- `LARGE_SNV_INDEL`: Variant with `SOURCE = "DeepVariant"` that has `INFO/allele_length ≥ 50`.
-- `LOW_COVERAGE_REGION`: Variant region determined to have low coverage relative to entire genome.
-- `MONOALLELIC`: Variant in a region with multiple variants that could not be unified into non-overlapping multi-allelic sites.
-- `SINGLE_READ_SUPPORT`: Variant with `AC = 1` whose sole carrier has support from just a single read.
-- `SMALL_SV`: Variant with `SOURCE = "HPRC_SV_Integration"` that has `INFO/allele_length < 50`.
