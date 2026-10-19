@@ -331,7 +331,6 @@ workflows:
     filters:
       branches:
         - main
-        - kj-plot-cnv-depth
       tags:
         - /.*/
 
