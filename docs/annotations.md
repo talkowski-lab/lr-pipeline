@@ -80,11 +80,13 @@ This document describes the INFO and FORMAT fields and FILTER values present in 
   - `PREDICTED_PARTIAL_EXON_DUP`: Gene(s) with at least one breakpoint within an exon, resulting in a partial exon duplication.
   - `PREDICTED_TSS_DUP`: Gene(s) whose transcription start site is duplicated (one breakpoint upstream, one downstream of the TSS).
   - `PREDICTED_DUP_PARTIAL`: Gene(s) partially overlapped by a duplication with one breakpoint falling inside the gene's coding sequence.
+  - `PREDICTED_PARTIAL_DISPERSED_DUP`: Gene(s) partially overlapped by the dispersed (non-tandem) duplicated segment of a complex SV; a segment spanning the whole transcript is `PREDICTED_COPY_GAIN` instead.
   - `PREDICTED_INV_SPAN`: Gene(s) completely spanned by an inversion (both breakpoints outside the gene).
-  - `PREDICTED_MSV_EXON_OVR`: Gene(s) with exons overlapping a multi-allelic SV.
+  - `PREDICTED_MSV_EXON_OVERLAP`: Gene(s) with exons overlapping a multi-allelic SV.
   - `PREDICTED_PROMOTER`: Gene(s) with a breakpoint in their promoter region.
   - `PREDICTED_UTR`: Gene(s) with a breakpoint in their untranslated region.
   - `PREDICTED_INTRONIC`: Gene(s) with a breakpoint in an intron.
+  - `PREDICTED_BREAKEND_EXONIC`: Gene(s) with a breakend (BND) breakpoint in coding sequence; used instead of `PREDICTED_LOF` for BND calls.
   - `PREDICTED_NONCODING_SPAN`: Noncoding regulatory element(s) completely spanned by the variant.
   - `PREDICTED_NONCODING_BREAKPOINT`: Noncoding regulatory element(s) disrupted by a variant breakpoint.
   - `PREDICTED_NEAREST_TSS`: Nearest transcription start site(s) for intergenic variants.
