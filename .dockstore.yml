@@ -681,6 +681,7 @@ workflows:
     filters:
       branches:
         - main
+        - kj-gcnv-hardcode-mem
       tags:
         - /.*/
 
