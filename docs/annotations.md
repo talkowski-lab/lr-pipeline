@@ -4,12 +4,9 @@ This document describes the FILTER values and INFO and FORMAT fields present in 
 
 ## FILTER Values
 - `ASSEMBLY_ONLY_SINGLETON`: Variant with `AC = 1` whose sole carrier has support exclusively from assembly-based callers (`dipcall` and/or `hapdiff`).
-- `HIGH_NCR`: Variant whose `INFO/NCR` is above the no-call rate cutoff for its allele type, length and `REGION` in the cutoff table passed to `FilterNCRCutoffs`.
-- `LARGE_SNV_INDEL`: Variant with `SOURCE = "DeepVariant"` that has `INFO/allele_length ≥ 50`.
 - `LOW_COVERAGE_REGION`: Variant region determined to have low coverage relative to entire genome.
 - `MONOALLELIC`: Variant in a region with multiple variants that could not be unified into non-overlapping multi-allelic sites.
 - `SINGLE_READ_SUPPORT`: Variant with `AC = 1` whose sole carrier has support from just a single read.
-- `SMALL_SV`: Variant with `SOURCE = "HPRC_SV_Integration"` that has `INFO/allele_length < 50`.
 
 
 ## INFO Fields
@@ -45,7 +42,6 @@ This document describes the FILTER values and INFO and FORMAT fields present in 
   - `nhomalt`: Number of samples with homozygous alternate genotypes (biallelic sites only).
   - `nhomref`: Number of samples with homozygous reference genotypes (biallelic sites only).
 - `dbSNP_ID`: Variant ID from dbSNP for matched variants.
-- `dbVaR_ID`: Variant ID from dbVaR for matched variants.
 - Genotype Quality Metrics: Binned distributions of per-variant genotype quality and allele balance across carriers.
   - `ab_hist_alt_bin_freq`: Histogram for AB in heterozygous individuals; bin edges are: 0.00|0.05|0.10|0.15|0.20|0.25|0.30|0.35|0.40|0.45|0.50|0.55|0.60|0.65|0.70|0.75|0.80|0.85|0.90|0.95|1.00.
   - `age_hist_het_bin_freq`: Histogram for age of heterozygous individuals; bin edges are: 30.0|35.0|40.0|45.0|50.0|55.0|60.0|65.0|70.0|75.0|80.0.
@@ -137,6 +133,7 @@ This document describes the FILTER values and INFO and FORMAT fields present in 
 
 
 ## FORMAT Fields
+FORMAT fields apply only to the HPRC/HGSVC callset; the released All of Us callset contains site-level information only.
 Which fields a call carries depends on its `INFO/SOURCE`.
 - `AD`: Allelic depths for the REF and ALT alleles, in the order listed. Set on `DeepVariant` and `HPRC_SV_Integration` calls; for SVs, the depths come from Kanpig regenotyping.
 - `AL`: Allele length. On `HPRC_SV_Integration` calls, the unsigned length of the sample's SV allele; on tandem repeat calls, the length of each allele from TRGT.
