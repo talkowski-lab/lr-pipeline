@@ -29,9 +29,9 @@ The cohort files are built once, then `LongReadCNVs` calls, clusters and genotyp
    - **[CreateCohortDepthFiles](../wdl/annotation_utils/CreateCohortDepthFiles.wdl)** - build the cohort binned-coverage matrix, per-sample median coverage and ploidy estimates from the combined per-base BEDs.
 2. **[LongReadCNVs](../wdl/tools/LongReadCNVs.wdl)** - call CNVs with GATK gCNV over the intervals from the read-count files, then merge, cluster and genotype them against the binned-coverage matrix and median coverage. Set `sort_depth_profiles = true`, pass the PED as `pedigree`, and pass the contigs as `contigs`. Clustering and genotyping run only on the contigs left in the filtered gCNV intervals, so a partial interval list, e.g. chr15 alone, runs no empty shards. Run in one of two modes:
    - **Cohort mode** - leave `num_training_samples` at `-1`, so every sample is used to fit the contig-ploidy and gCNV models.
-   - **Case-cohort mode** - set `num_training_samples` below the cohort size, e.g. 100, so the models are fitted on that many randomly drawn samples and every remaining sample is called against them. Fewer than a few dozen training samples degrades the fitted models.
+   - **Case-cohort mode** - set `num_training_samples` below the cohort size, e.g. 100, so the models are fitted on that many randomly drawn samples and every sample, the training samples included, is then called against them in case mode, as in GATK-SV. The case-mode calls take their own `ploidy_case_*` and `gcnv_case_*` settings, each falling back to the matching cohort-mode input when unset. Fewer than a few dozen training samples degrades the fitted models.
 
-   GermlineCNVCaller memory grows with samples times intervals per shard, so raising `num_intervals_per_scatter` above its default also needs more memory in `runtime_attr_germline_cnv_caller`.
+   GermlineCNVCaller memory grows with samples times intervals per shard, so raising `num_intervals_per_scatter` above its default also needs more memory in `runtime_attr_germline_cnv_caller`, and in `runtime_attr_germline_cnv_caller_case` for case-cohort mode, which calls the whole cohort per shard.
 
 Step 2 ends with the merged cohort CNV VCF, the per-sample ploidy table, and the genotyped depth VCF with its read-depth table.
 

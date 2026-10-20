@@ -3845,37 +3845,20 @@ task SubsampleIndices {
     command <<<
         set -euo pipefail
 
-        # Draw the subsampled indices, then record where each original index lands once subsampled and remaining are concatenated
         python3 <<'PYCODE'
 import random
 
 random.seed(~{seed})
 subsampled = sorted(random.sample(range(~{num_items}), ~{num_subsampled}))
-subsampled_set = set(subsampled)
-remaining = [index for index in range(~{num_items}) if index not in subsampled_set]
-
-positions = [0] * ~{num_items}
-for position, index in enumerate(subsampled + remaining):
-    positions[index] = position
 
 with open("~{prefix}.subsampled_indices.txt", "w") as out:
     for index in subsampled:
         out.write(f"{index}\n")
-
-with open("~{prefix}.remaining_indices.txt", "w") as out:
-    for index in remaining:
-        out.write(f"{index}\n")
-
-with open("~{prefix}.concatenated_positions.txt", "w") as out:
-    for position in positions:
-        out.write(f"{position}\n")
 PYCODE
     >>>
 
     output {
         Array[Int] subsampled_indices = read_lines("~{prefix}.subsampled_indices.txt")
-        Array[Int] remaining_indices = read_lines("~{prefix}.remaining_indices.txt")
-        Array[Int] concatenated_positions = read_lines("~{prefix}.concatenated_positions.txt")
     }
 
     RuntimeAttr default_attr = object {
