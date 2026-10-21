@@ -296,7 +296,6 @@ workflow LongReadCNVs {
         RuntimeAttr? runtime_attr_germline_cnv_caller_case
         RuntimeAttr? runtime_attr_postprocess_germline_cnv_calls
         RuntimeAttr? runtime_attr_collect_sample_quality_metrics
-        RuntimeAttr? runtime_attr_collect_model_quality_metrics
         RuntimeAttr? runtime_attr_get_contigs_from_interval_list
         RuntimeAttr? runtime_attr_gcnv_vcf_to_bed
         RuntimeAttr? runtime_attr_merge_sample
@@ -438,8 +437,7 @@ workflow LongReadCNVs {
             runtime_attr_germline_cnv_caller = runtime_attr_germline_cnv_caller,
             runtime_attr_germline_cnv_caller_case = runtime_attr_germline_cnv_caller_case,
             runtime_attr_postprocess_germline_cnv_calls = runtime_attr_postprocess_germline_cnv_calls,
-            runtime_attr_collect_sample_quality_metrics = runtime_attr_collect_sample_quality_metrics,
-            runtime_attr_collect_model_quality_metrics = runtime_attr_collect_model_quality_metrics
+            runtime_attr_collect_sample_quality_metrics = runtime_attr_collect_sample_quality_metrics
     }
 
     call Helpers.GetContigsFromIntervalList {

@@ -152,8 +152,6 @@ workflow LRCNVs {
         genotyped_segments_vcf_idxs: "Indexes for `genotyped_segments_vcfs`."
         sample_qc_status_files: "Per-sample QC status files."
         sample_qc_status_strings: "Per-sample QC status strings."
-        model_qc_status_file: "Model-level QC status file for the models fitted on the training samples."
-        model_qc_string: "Model-level QC status string for the models fitted on the training samples."
         denoised_copy_ratios: "Per-sample denoised copy ratios."
     }
 
@@ -292,7 +290,6 @@ workflow LRCNVs {
         RuntimeAttr? runtime_attr_germline_cnv_caller_case
         RuntimeAttr? runtime_attr_postprocess_germline_cnv_calls
         RuntimeAttr? runtime_attr_collect_sample_quality_metrics
-        RuntimeAttr? runtime_attr_collect_model_quality_metrics
     }
 
     Boolean run_case_mode = num_training_samples > 0 && num_training_samples < length(sample_ids)
@@ -460,14 +457,6 @@ workflow LRCNVs {
         }
     }
 
-    call CollectModelQualityMetrics {
-        input:
-            gcnv_model_tars = GermlineCNVCallerCohortMode.gcnv_model_tar,
-            prefix = prefix,
-            docker = gatk_docker,
-            runtime_attr_override = runtime_attr_collect_model_quality_metrics
-    }
-
     if (run_case_mode) {
         call DetermineGermlineContigPloidyCaseMode {
             input:
@@ -570,8 +559,6 @@ workflow LRCNVs {
         Array[File] genotyped_segments_vcf_idxs = select_first([PostprocessGermlineCNVCallsCase.genotyped_segments_vcf_idx, PostprocessGermlineCNVCalls.genotyped_segments_vcf_idx])
         Array[File] sample_qc_status_files = select_first([CollectSampleQualityMetricsCase.qc_status_file, CollectSampleQualityMetrics.qc_status_file])
         Array[String] sample_qc_status_strings = select_first([CollectSampleQualityMetricsCase.qc_status_string, CollectSampleQualityMetrics.qc_status_string])
-        File model_qc_status_file = CollectModelQualityMetrics.qc_status_file
-        String model_qc_string = CollectModelQualityMetrics.qc_status_string
         Array[File] denoised_copy_ratios = select_first([PostprocessGermlineCNVCallsCase.denoised_copy_ratios, PostprocessGermlineCNVCalls.denoised_copy_ratios])
     }
 }
@@ -904,61 +891,6 @@ task CollectSampleQualityMetrics {
         cpu_cores: 1,
         mem_gb: 1,
         disk_gb: ceil(size(genotyped_segments_vcf, "GB")) + 20,
-        boot_disk_gb: 10,
-        preemptible_tries: 1,
-        max_retries: 0
-    }
-    RuntimeAttr runtime_attr = select_first([runtime_attr_override, default_attr])
-    runtime {
-        cpu: select_first([runtime_attr.cpu_cores, default_attr.cpu_cores])
-        memory: select_first([runtime_attr.mem_gb, default_attr.mem_gb]) + " GiB"
-        disks: "local-disk " + select_first([runtime_attr.disk_gb, default_attr.disk_gb]) + " HDD"
-        bootDiskSizeGb: select_first([runtime_attr.boot_disk_gb, default_attr.boot_disk_gb])
-        docker: docker
-        preemptible: select_first([runtime_attr.preemptible_tries, default_attr.preemptible_tries])
-        maxRetries: select_first([runtime_attr.max_retries, default_attr.max_retries])
-    }
-}
-
-task CollectModelQualityMetrics {
-    input {
-        Array[File] gcnv_model_tars
-        String prefix
-        String docker
-        RuntimeAttr? runtime_attr_override
-    }
-
-    command <<<
-        set -euo pipefail
-
-        qc_status="PASS"
-
-        gcnv_model_tar_array=(~{sep=" " gcnv_model_tars})
-        for index in ${!gcnv_model_tar_array[@]}; do
-            gcnv_model_tar=${gcnv_model_tar_array[$index]}
-            mkdir MODEL_$index
-            tar xzf $gcnv_model_tar -C MODEL_$index
-            ard_file="MODEL_$index/mu_ard_u_interval__.tsv"
-
-            # Check whether all ARD values are less than or equal to one
-            NUM_ARD_VALUES_ABOVE_ONE=$(awk '!/^@/ && $1 != "VALUE_0" { ard = 1e10 / (1 + exp(-$1)); if (ard > 1.0) count++ } END { print count + 0 }' "$ard_file")
-            if [ $NUM_ARD_VALUES_ABOVE_ONE -eq 0 ]; then
-                qc_status="ALL_PRINCIPAL_COMPONENTS_USED"
-                break
-            fi
-        done
-        echo $qc_status >> ~{prefix}.model_qc_status.txt
-    >>>
-
-    output {
-        File qc_status_file = "~{prefix}.model_qc_status.txt"
-        String qc_status_string = read_string("~{prefix}.model_qc_status.txt")
-    }
-
-    RuntimeAttr default_attr = object {
-        cpu_cores: 1,
-        mem_gb: 1,
-        disk_gb: ceil(size(gcnv_model_tars, "GB") * 2) + 40,
         boot_disk_gb: 10,
         preemptible_tries: 1,
         max_retries: 0
