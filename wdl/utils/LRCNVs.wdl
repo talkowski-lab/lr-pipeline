@@ -1328,8 +1328,6 @@ task GermlineCNVCallerCaseMode {
         RuntimeAttr? runtime_attr_override
     }
 
-    Int command_mem_mb = ceil(select_first([runtime_attr.mem_gb, default_attr.mem_gb]) * 0.8 * 1024)
-
     # Default the output directory to "out"
     String output_dir_ = select_first([output_dir, "out"])
     Int num_samples = length(read_count_files)
@@ -1341,6 +1339,18 @@ task GermlineCNVCallerCaseMode {
         export MKL_NUM_THREADS=~{select_first([runtime_attr.cpu_cores, default_attr.cpu_cores])}
         export OMP_NUM_THREADS=~{select_first([runtime_attr.cpu_cores, default_attr.cpu_cores])}
 
+        function getJavaMem() {
+            # get JVM memory in MiB as 80% of total memory from /proc/meminfo
+            cat /proc/meminfo \
+                | awk -v MEM_FIELD="$1" '{
+                    f[substr($1, 1, length($1)-1)] = $2
+                } END {
+                    printf "%dM", f[MEM_FIELD] * 0.8 / 1024
+                }'
+        }
+        JVM_MAX_MEM=$(getJavaMem MemTotal)
+        echo "JVM memory: $JVM_MAX_MEM"
+
         mkdir contig-ploidy-calls
         tar xzf ~{contig_ploidy_calls_tar} -C contig-ploidy-calls
 
@@ -1348,7 +1358,7 @@ task GermlineCNVCallerCaseMode {
         tar xzf ~{gcnv_model_tar} -C gcnv-model
 
         # Case mode takes its intervals and denoising hyperparameters from the fitted model, so neither may be passed again
-        gatk --java-options "-Xmx~{command_mem_mb}m"  GermlineCNVCaller \
+        gatk --java-options "-Xmx${JVM_MAX_MEM}"  GermlineCNVCaller \
             --run-mode CASE \
             --input ~{sep=" --input " read_count_files} \
             --contig-ploidy-calls contig-ploidy-calls \
@@ -1432,7 +1442,7 @@ task GermlineCNVCallerCaseMode {
     RuntimeAttr runtime_attr = select_first([runtime_attr_override, default_attr])
     runtime {
         cpu: select_first([runtime_attr.cpu_cores, default_attr.cpu_cores])
-        memory: select_first([runtime_attr.mem_gb, default_attr.mem_gb]) + " GiB"
+        memory: "10 GiB"
         disks: "local-disk " + select_first([runtime_attr.disk_gb, default_attr.disk_gb]) + " HDD"
         bootDiskSizeGb: select_first([runtime_attr.boot_disk_gb, default_attr.boot_disk_gb])
         docker: docker
