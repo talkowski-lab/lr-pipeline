@@ -54,7 +54,6 @@ workflows:
     filters:
       branches:
         - main
-        - kj-public-release-prep
       tags:
         - /.*/
 
@@ -155,7 +154,6 @@ workflows:
     filters:
       branches:
         - main
-        - kj-public-release-prep
       tags:
         - /.*/
 
@@ -165,7 +163,6 @@ workflows:
     filters:
       branches:
         - main
-        - kj-public-release-prep
       tags:
         - /.*/
 
