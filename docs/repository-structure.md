@@ -14,11 +14,18 @@ scripts/
   helper/            # Shared standalone utility scripts, including Hail helpers
   mei/               # MEI analysis scripts
   benchmark/         # Benchmarking scripts
-dockerfiles/         # Dockerfile.<image-name> (lowercase) for each container, plus build_docker.sh and versions.env
+dockerfiles/         # Dockerfile.<image-name> (lowercase) for each container, plus build_docker.sh, build_args.sh and versions.env
+tests/
+  unit/              # pytest tests of scripts/ functions and the .github/scripts checkers
+  wdl/               # miniwdl smoke tests of utils-image workflows
+  data/              # Small open-access test inputs, e.g. an HPRC/HGSVC V10 chr22 VCF subset
 data/                # Local-only analysis inputs, outputs and scratch work; gitignored and never referenced by WDL
 docs/                # Extended documentation (this file included)
 .github/
   workflows/         # Active GitHub Actions CI
+  dependabot.yml     # Weekly updates for GitHub Actions, pip dependencies and Docker base images
+  ISSUE_TEMPLATE/    # Bug report and feature request issue forms
+  PULL_REQUEST_TEMPLATE.md
   scripts/           # CI check scripts, also run locally, plus new_worktree.sh and merge_branch.sh for the branch lifecycle
   hooks/             # Agent hook scripts keeping sessions out of the main checkout and in a worktree
 archive/             # Retired workflows, scripts, Dockerfiles, notebooks and their reference docs
@@ -30,9 +37,12 @@ archive/             # Retired workflows, scripts, Dockerfiles, notebooks and th
   hooks.json         # Wires the same scripts into Codex
 .githooks/
   pre-commit         # Tool-agnostic backstop refusing commits in the main checkout
-.worktreelinks       # Gitignored local-only paths each worktree symlinks from the main checkout
+pyproject.toml       # Project metadata, extras, and ruff and pytest configuration
+.hadolint.yaml       # hadolint configuration for dockerfiles/
+.worktreelinks       # Gitignored local-only paths (data, womtool.jar) each worktree symlinks from the main checkout
 .dockstore.yml       # Dockstore registration for every directly-run workflow
 AGENTS.md            # Canonical agent instructions; .claude/CLAUDE.md and .github/copilot-instructions.md are symlinks to it
+CONTRIBUTING.md      # How to contribute; CODE_OF_CONDUCT.md, SECURITY.md and CITATION.cff sit beside it
 ```
 
 
@@ -55,19 +65,19 @@ Every container image is built from a `dockerfiles/Dockerfile.<image-name>` file
 ## Scripts
 `scripts/` holds standalone Python and R scripts that run inside a Docker container as CLI tools. They are not imported as a library across containers - each script is self-contained within the container that runs it.
 
-Scripts reach a running task by one of two routes. Most are baked into the `utils` image, which copies the whole tree to `/opt/scripts` (see `COPY ./scripts /opt/scripts` in `Dockerfile.utils`), so a change to one of them only takes effect once `utils` is rebuilt and every image inheriting from it is refreshed. The three Hail scripts are instead fetched at run time over HTTPS from the `main` branch of this repository, so changes to those go live on push without any rebuild.
+Scripts reach a running task baked into an image, never fetched by URL. The `utils`, `hail` and `vephail` images each copy the whole tree to `/opt/scripts` (see `COPY ./scripts /opt/scripts` in `Dockerfile.utils`, `Dockerfile.hail` and `Dockerfile.vephail`), so a task calls `/opt/scripts/<directory>/<script>`. A change to a script only takes effect once those images are rebuilt and every image inheriting from `utils` is refreshed. The Hail scripts run in the `hail` and `vephail` images, so they must stay compatible with Python 3.9 and 3.6 respectively; the rest run in `utils` on Python 3.10.
 
 | Script | Called by | Purpose |
 |---|---|---|
 | `annotation/annotate_genomic_context.R` | AnnotateRegion | Assign genomic context labels to variants from breakpoint and CNV body coverage tables. |
-| `annotation/annotate_insilico_predictors.py` | AnnotateInSilicoPredictors, PostProcessTRLociAoU, PostProcessTRLociHPRCHGSVC (fetched by URL) | Annotate a VCF with gnomAD in-silico predictor scores (CADD, REVEL, phyloP, SpliceAI, Pangolin) from Hail tables. |
+| `annotation/annotate_insilico_predictors.py` | AnnotateInSilicoPredictors | Annotate a VCF with gnomAD in-silico predictor scores (CADD, REVEL, phyloP, SpliceAI, Pangolin) from Hail tables. |
 | `benchmark/R1.bedtools_closest_CNV.R` | BedtoolsClosestSV | Compare CNVs against their closest reference callset records. |
 | `benchmark/R2.bedtools_closest_INS.R` | BedtoolsClosestSV | Compare insertions against their closest reference callset records. |
 | `helper/estimatePloidy.R` | CreateCohortDepthFiles | Estimate per-sample ploidy from binned coverage. Vendored unmodified from GATK-SV `src/WGD/bin/`; preserve its license header. |
 | `helper/estimated_CN_denoising.py` | CreateCohortDepthFiles | Denoise estimated copy number across samples. Vendored from GATK-SV; preserve its license header. |
 | `helper/medianCoverage.R` | CreateCohortDepthFiles | Calculate median bin coverage per sample from a bincov matrix. Loads the matrix into memory, so split large inputs by contig. |
-| `helper/split_vcf_hail.py` | AnnotateVEPHail, ScatterVcf (fetched by URL) | Split a VCF into a fixed number of shards using Hail. |
-| `helper/vep_annotate_hail.py` | AnnotateVEPHail (fetched by URL) | Run VEP over a VCF via Hail and emit the annotated result. |
+| `helper/split_vcf_hail.py` | ScatterVcf | Split a VCF into a fixed number of shards, or shards of a fixed record count, using Hail. |
+| `helper/vep_annotate_hail.py` | AnnotateVEPHail | Run VEP over a VCF via Hail and emit the annotated result. |
 | `mei/PALMER_to_vcf.py` | Helpers.wdl | Convert raw PALMER mobile-element calls into a VCF. |
 | `mei/PALMER_transfer_annotations.py` | AnnotatePALMER | Transfer PALMER annotations onto matching callset records, using edit distance to resolve near-matches. |
 
@@ -75,4 +85,4 @@ Some workflows invoke scripts under `/opt/sv-pipeline/` or `/app/SVAN/`. Those b
 
 
 ## CI-CD
-Seven GitHub Actions workflows gate `main`, covering WDL syntax, WDL style, Markdown style, Python linting, Dockstore registration, agent-instruction sync and workflow-documentation generation. See [CI/CD](ci-cd.md) for the full table, the matching commands to run locally before pushing, and how Dockstore registration and image releases work.
+Nine GitHub Actions workflows gate `main`, covering WDL syntax, WDL style, Markdown style, Python linting, unit and WDL smoke tests, shell and Dockerfile linting, Dockstore registration, agent-instruction sync and workflow-documentation generation. See [CI/CD](ci-cd.md) for the full table, the matching commands to run locally before pushing, and how Dockstore registration and image releases work.

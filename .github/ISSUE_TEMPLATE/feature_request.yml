@@ -1,0 +1,34 @@
+name: Feature request
+description: Propose a new workflow, a change to an existing one, or a new tool
+labels: ["enhancement"]
+body:
+  - type: input
+    id: workflow
+    attributes:
+      label: Workflow
+      description: The existing workflow this changes, or "new" for a new workflow.
+    validations:
+      required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What you are trying to do and why the current workflows do not cover it.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed change
+      description: The inputs, outputs and tools involved, and any Docker image it would need.
+    validations:
+      required: true
+  - type: input
+    id: backend
+    attributes:
+      label: Backend
+      description: Where you would run it, e.g. Terra on GCP.
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered

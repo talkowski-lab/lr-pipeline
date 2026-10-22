@@ -1,3 +1,4 @@
 # Gitignored, local-only paths every worktree shares with the main checkout via symlink.
 # One path per line, relative to the repository root; consumed by .github/scripts/new_worktree.sh.
 data
+womtool.jar

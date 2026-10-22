@@ -10,29 +10,34 @@ Images are pushed to Artifact Registry at:
 us-central1-docker.pkg.dev/talkowski-sv-gnomad/kj-dockers/<image-name>
 ```
 
+This registry is private. To run the pipeline elsewhere, build the images you need from [`dockerfiles/`](../dockerfiles/), push them to a registry your Terra workspace can pull from, and point the workspace data at them.
+
 Build and push an image with the helper script, which takes the image name as its only argument:
 ```bash
-dockerfiles/build_docker.sh <image-name>
+dockerfiles/build_docker.sh [--no-push] <image-name>
 # e.g. dockerfiles/build_docker.sh utils
 ```
 
 The script does the following:
-- Resolves any `ARG` declared in the Dockerfile without an inline default from [`dockerfiles/versions.env`](../dockerfiles/versions.env), keyed as `<image-name>__<ARG_NAME>`, and passes each as a `--build-arg`. That file is the single source of truth for pinned tool and library versions.
+- Resolves the build arguments through [`dockerfiles/build_args.sh`](../dockerfiles/build_args.sh) `<image-name>`, which prints a `NAME=value` line for every `ARG` declared in the Dockerfile without an inline default, taken from [`dockerfiles/versions.env`](../dockerfiles/versions.env) where it is keyed as `<image-name>__<ARG_NAME>`. CI uses the same script, so local and CI builds resolve identically. A missing key fails the build.
 - Builds with `podman build --platform linux/amd64` from the repository root - meaning the worktree it is run from, so each branch builds its own tree.
 - Tags the build by the branch it was built on, since branches are developed in parallel worktrees - see [Branches](conventions.md#branches).
+- With `--no-push`, builds and tags locally only, as `localhost/<image-name>:<tag>`, and pushes nothing. This is how contributors without registry access build images, and how the utils image for the [smoke tests](ci-cd.md#tests) is made.
 
 | Branch | Tags pushed | How the tag is chosen |
 |---|---|---|
-| `main` | `kj_V<N>` and `:latest` | `gcloud artifacts docker tags list` gives the highest `kj_V<N>` already pushed, which the script increments |
-| `kj-<topic>` | `:<branch>` only | The branch name itself, so parallel branches never overwrite each other's images or `:latest` |
+| `main` | `<YYYYMMDD>-<short-sha>` and `:latest` | The HEAD commit's date and 7-character SHA, e.g. `20261022-72ee249`, so every tag maps to exactly one commit |
+| any other branch | `:<branch>` only | The branch name itself, so parallel branches never overwrite each other's images or `:latest` |
 
-A branch build also passes `--from <registry>/<base>:<branch>` when the Dockerfile's first `FROM` is a `:latest` image from this registry and that base has a build on the same branch, so a branch that changes what the base image bakes in is testable end to end. `merge_branch.sh` deletes the branch's image tags once the branch merges, and the merged change reaches `:latest` only when the image is rebuilt from the main checkout. Two `main` builds of the same image started at once would still race for the same `kj_V<N>`; build one at a time.
+A `main` build refuses to push from a dirty tree, because its tag names the HEAD commit. A branch build also passes `--from <registry>/<base>:<branch>` when the Dockerfile's first `FROM` is a `:latest` image from this registry and that base has a build on the same branch, so a branch that changes what the base image bakes in is testable end to end. `merge_branch.sh` deletes the branch's image tags once the branch merges, and the merged change reaches `:latest` only when the image is rebuilt from the main checkout. The earlier `kj_V<N>` auto-increment tags are no longer produced; the existing ones remain in Artifact Registry as history.
+
+Every upstream tool is pinned in `versions.env`: released tools by version, and tools built from a git clone by commit, as `<image>__<NAME>_COMMIT` keys - for example `svan__SVAN_COMMIT` and `stranalysis__STR_ANALYSIS_COMMIT`. The commits are the ones baked into the current `:latest` images, so a rebuild reproduces them rather than picking up the upstream default branch. `Dockerfile.palmer` is intentionally left unpinned. [`.hadolint.yaml`](../.hadolint.yaml) configures `hadolint` for the Dockerfiles, which CI runs - see [CI/CD](ci-cd.md#github-actions).
 
 Two consequences worth knowing:
-- Because the build context is the repository root, `Dockerfile.utils` bakes the live `scripts/` tree into the image, so a change under `scripts/` reaches a running task only once `utils` and the images inheriting from it are rebuilt - see [Scripts](repository-structure.md#scripts) for how each script reaches a task, including the Hail scripts that are fetched by URL instead.
-- The script needs an authenticated `gcloud` for tag discovery and a `podman` logged in to the registry for the push.
+- Because the build context is the repository root, `Dockerfile.utils`, `Dockerfile.hail` and `Dockerfile.vephail` bake the live `scripts/` tree into the image at `/opt/scripts`, so a change under `scripts/` reaches a running task only once those images and the images inheriting from `utils` are rebuilt - see [Scripts](repository-structure.md#scripts) for how each script reaches a task.
+- The script needs an authenticated `gcloud` for the branch base-image lookup and a `podman` logged in to the registry for the push; neither is needed with `--no-push` on a branch.
 
-**Which tag to use:** WDL tasks never hardcode a docker image URI - the `String docker` task input is always supplied by the caller via Terra workspace data, per [Conventions](conventions.md). Workspace data should point at the `:latest` tag for each image, since every `main` build retags `:latest` to the newest build. The `kj_V<N>` tags exist purely as an immutable version history, for pinning or rolling back to a specific prior build. While testing a branch, point that branch's Terra method config at the `:<branch>` tag instead, and drop back to `:latest` after the merge and rebuild.
+**Which tag to use:** WDL tasks never hardcode a docker image URI - the `String docker` task input is always supplied by the caller via Terra workspace data, per [Conventions](conventions.md). Workspace data should point at the `:latest` tag for each image, since every `main` build retags `:latest` to the newest build. The dated tags exist purely as an immutable version history, for pinning or rolling back to a specific prior build. While testing a branch, point that branch's Terra method config at the `:<branch>` tag instead, and drop back to `:latest` after the merge and rebuild. Workspace data `hail_docker` should point at `kj-dockers/hail:latest` once the first `main` build of the `hail` image has been pushed.
 
 
 ## Repository
@@ -46,6 +51,7 @@ Built from [dockerfiles/](../dockerfiles/) in this repository.
 | `vrs_docker` | kj-dockers/vrs:latest | `Dockerfile.vrs` |
 | `l1meaid_docker` | kj-dockers/l1meaid:latest | `Dockerfile.l1meaid` |
 | `vep_hail_docker` | kj-dockers/vephail:latest | `Dockerfile.vephail` |
+| `hail_docker` | kj-dockers/hail:latest | `Dockerfile.hail` |
 | `stranalysis_docker` | kj-dockers/stranalysis:latest | `Dockerfile.stranalysis` |
 | `utils_docker` | kj-dockers/utils:latest | `Dockerfile.utils` |
 | `pav_docker` | kj-dockers/pav:latest | `Dockerfile.pav` |
@@ -63,7 +69,7 @@ Built from [dockerfiles/](../dockerfiles/) in this repository.
 | `pbsv_docker` | kj-dockers/pbsv:latest | `Dockerfile.pbsv` |
 | `sniffles_docker` | kj-dockers/sniffles:latest | `Dockerfile.sniffles` |
 
-`Dockerfile.utils` is the base image for most other repo Dockerfiles. Every Dockerfile in `dockerfiles/` maps to exactly one argument above; retired ones live in [`archive/dockerfiles/`](../archive/dockerfiles/) and are not built.
+`Dockerfile.utils` is the base image for most other repo Dockerfiles. `Dockerfile.hail` is `hailgenetics/hail:0.2.122` plus the `scripts/` tree, and `Dockerfile.vephail` builds on the VEP image with Hail pinned through `HAIL_VERSION`; neither inherits from `utils`. Every Dockerfile in `dockerfiles/` maps to exactly one argument above; retired ones live in [`archive/dockerfiles/`](../archive/dockerfiles/) and are not built.
 
 
 ## Collaborators
@@ -90,5 +96,4 @@ Public images.
 | Argument Name | Image | Source |
 |---|---|---|
 | `repeatmasker_docker` | dfam/tetools:1.8 | Dfam consortium |
-| `hail_docker` | hailgenetics/hail:0.2.122 | Hail team |
 | `glnexus_docker` | ghcr.io/dnanexus-rnd/glnexus:v1.4.1 | DNAnexus |

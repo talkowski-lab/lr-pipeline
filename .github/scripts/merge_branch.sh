@@ -23,7 +23,7 @@ fi
 
 # Reject characters that would change the meaning of the sed address used to edit .dockstore.yml
 if [[ ! "$BRANCH" =~ ^[A-Za-z0-9._-]+$ ]]; then
-    echo "Branch name '$BRANCH' is not of the form kj-<kebab-topic>." >&2
+    echo "Branch name '$BRANCH' may only use letters, digits, '.', '_' and '-'." >&2
     exit 1
 fi
 

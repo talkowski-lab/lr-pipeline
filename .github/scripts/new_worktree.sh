@@ -6,7 +6,7 @@ set -euo pipefail
 
 usage() {
     echo "Usage: $(basename "$0") <branch>" >&2
-    echo "Creates or reuses the worktree for <branch>, named kj-<kebab-topic>. Run from anywhere in the repository." >&2
+    echo "Creates or reuses the worktree for <branch>, any valid branch name other than main. Run from anywhere in the repository." >&2
     exit 2
 }
 
@@ -16,8 +16,9 @@ fi
 
 BRANCH="$1"
 
-if [[ ! "$BRANCH" =~ ^kj-[a-z0-9]+(-[a-z0-9]+)*$ ]]; then
-    echo "Branch name '$BRANCH' is not of the form kj-<kebab-topic>." >&2
+# merge_branch.sh embeds the name in a sed address and the worktree path, so keep to a safe character set
+if [[ "$BRANCH" == "main" || ! "$BRANCH" =~ ^[A-Za-z0-9._-]+$ ]] || ! git check-ref-format --branch "$BRANCH" > /dev/null 2>&1; then
+    echo "Branch name '$BRANCH' must be a valid branch name other than main, using only letters, digits, '.', '_' and '-'." >&2
     exit 1
 fi
 

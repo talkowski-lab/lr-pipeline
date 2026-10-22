@@ -8,16 +8,27 @@ need judgement - wording, section ordering, link targets - are left to review.
 Fenced code blocks hold code rather than Markdown, so they are exempt from the
 heading and list rules; tabs and trailing whitespace are still checked there.
 
-Usage: check_markdown_style.py [PATH ...]   (defaults to README.md, AGENTS.md and
-docs/; directories recurse for *.md). Symlinks are skipped so the AGENTS.md mirrors
-at .claude/CLAUDE.md and .github/copilot-instructions.md are reported once.
+Usage: check_markdown_style.py [PATH ...]   (defaults to README.md, AGENTS.md,
+CONTRIBUTING.md, CODE_OF_CONDUCT.md, SECURITY.md, .github/PULL_REQUEST_TEMPLATE.md,
+docs/ and tests/; directories recurse for *.md). Symlinks are skipped so the AGENTS.md
+mirrors at .claude/CLAUDE.md and .github/copilot-instructions.md are reported once.
 """
+
 import re
 import sys
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-DEFAULT_PATHS = ["README.md", "AGENTS.md", "docs"]
+DEFAULT_PATHS = [
+    "README.md",
+    "AGENTS.md",
+    "CONTRIBUTING.md",
+    "CODE_OF_CONDUCT.md",
+    "SECURITY.md",
+    ".github/PULL_REQUEST_TEMPLATE.md",
+    "docs",
+    "tests",
+]
 
 FENCE_RE = re.compile(r"^\s*(```|~~~)")
 HEADING_RE = re.compile(r"^(#{1,6})\s+\S")

@@ -1,0 +1,49 @@
+name: Bug report
+description: A workflow, script or image does not behave as documented
+labels: ["bug"]
+body:
+  - type: input
+    id: workflow
+    attributes:
+      label: Workflow or script
+      description: The workflow name, e.g. `AnnotateVEPHail`, or the script path.
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: The Dockstore version, branch or commit you ran, and the image tags you used.
+    validations:
+      required: true
+  - type: input
+    id: backend
+    attributes:
+      label: Backend
+      description: Where it ran, e.g. Terra on GCP, and the Cromwell version if known.
+    validations:
+      required: true
+  - type: textarea
+    id: inputs
+    attributes:
+      label: Inputs and configuration
+      description: The workflow inputs and runtime attributes, with paths and sample identifiers redacted as needed.
+      render: json
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Error logs
+      description: The failing task's stderr or the Cromwell error message. Remove credentials and private paths.
+      render: text
