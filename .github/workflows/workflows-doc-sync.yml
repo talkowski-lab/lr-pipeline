@@ -18,6 +18,13 @@ on:
       - '.github/scripts/wdl_meta.py'
       - '.github/scripts/generate_workflows_doc.py'
 
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   check:
     if: github.event_name == 'pull_request'
@@ -25,12 +32,12 @@ jobs:
     name: Check Workflow Documentation
     steps:
       - name: Checkout code
-        uses: actions/checkout@v3
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - name: Set up Python 3.8
-        uses: actions/setup-python@v3
+      - name: Set up Python 3.10
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
-          python-version: 3.8
+          python-version: "3.10"
 
       - name: Check the meta and parameter_meta blocks the document is built from
         run: |
@@ -49,23 +56,24 @@ jobs:
     if: github.event_name == 'push'
     runs-on: ubuntu-latest
     name: Generate Workflow Documentation
-    permissions:
-      contents: write
     steps:
+      # The write deploy key is the ruleset's bypass actor for the pull-request rule on main
       - name: Checkout code
-        uses: actions/checkout@v3
-
-      - name: Set up Python 3.8
-        uses: actions/setup-python@v3
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          python-version: 3.8
+          ssh-key: ${{ secrets.DOCS_DEPLOY_KEY }}
+
+      - name: Set up Python 3.10
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.10"
 
       - name: Regenerate the workflow documents
         run: |
           python .github/scripts/generate_workflows_doc.py
           python .github/scripts/generate_workflows_doc.py --site archive
 
-      # A push made with GITHUB_TOKEN does not start another workflow run, so this cannot loop
+      # The commit touches only the generated documents, which are outside this workflow's trigger paths, so it cannot loop
       - name: Commit the workflow documents when they changed
         run: |
           if git diff --quiet -- docs/workflows.md archive/docs/workflows.md; then

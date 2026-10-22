@@ -1,0 +1,50 @@
+name: Shell and Dockerfile Lint
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - '**/*.sh'
+      - '.githooks/**'
+      - 'dockerfiles/**'
+      - '.hadolint.yaml'
+      - '.github/workflows/shell-lint.yml'
+  pull_request:
+    branches: [ main ]
+    paths:
+      - '**/*.sh'
+      - '.githooks/**'
+      - 'dockerfiles/**'
+      - '.hadolint.yaml'
+      - '.github/workflows/shell-lint.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  shellcheck:
+    runs-on: ubuntu-latest
+    name: ShellCheck
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Run ShellCheck
+        run: |
+          shellcheck -S warning dockerfiles/*.sh .github/scripts/*.sh .github/hooks/*.sh .githooks/pre-commit tests/*.sh
+
+  hadolint:
+    runs-on: ubuntu-latest
+    name: Hadolint
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      # Run from the repo root so .hadolint.yaml is picked up
+      - name: Run Hadolint
+        run: |
+          docker run --rm -v "$PWD:/work" -w /work hadolint/hadolint:v2.15.1@sha256:32dac94127fd60b7b7e3fbfc65e1383b9b5e25c9bfd7b8536de7a539fe68a12d hadolint dockerfiles/Dockerfile.*

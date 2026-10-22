@@ -10,34 +10,41 @@ on:
     paths:
       - 'wdl/**'
 
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   womtool_syntax_check:
     runs-on: ubuntu-latest
     name: Womtool Syntax Check
     steps:
       - name: Checkout code
-        uses: actions/checkout@v3
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Setup Java
-        uses: actions/setup-java@v3
+        uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
         with:
           distribution: 'temurin'
           java-version: '17'
 
-      - name: Download Womtool
-        run: |
-          wget -O womtool.jar https://github.com/broadinstitute/cromwell/releases/download/87/womtool-87.jar
+      - name: Cache Womtool
+        id: womtool-cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: womtool.jar
+          key: womtool-87
 
+      - name: Download Womtool
+        if: steps.womtool-cache.outputs.cache-hit != 'true'
+        run: |
+          curl -fsSL -o womtool.jar https://github.com/broadinstitute/cromwell/releases/download/87/womtool-87.jar
+
+      # Validates in parallel; xargs exits non-zero if any validation fails
       - name: Validate all WDLs
         run: |
-          find wdl -type f -name "*.wdl" -print0 | while IFS= read -r -d '' wdl_file; do
-            echo "---------------------------------------------------"
-            echo "Validating: $wdl_file"
-            
-            java -jar womtool.jar validate "$wdl_file"
-            
-            if [ $? -ne 0 ]; then
-              echo "❌ Validation failed for $wdl_file"
-              exit 1
-            fi
-          done
+          # shellcheck disable=SC2016
+          find wdl -type f -name '*.wdl' -print0 | xargs -0 -P "$(nproc)" -I{} sh -c 'out=$(java -XX:TieredStopAtLevel=1 -jar womtool.jar validate "$1" 2>&1) || { printf "FAILED %s\n%s\n" "$1" "$out"; exit 255; }; echo "OK $1"' _ {}
