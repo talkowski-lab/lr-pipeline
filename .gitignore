@@ -40,3 +40,12 @@
 *.fai
 *.fai.gz
 *.fai.gz.tbi
+
+# Test fixtures are tracked despite the data-file patterns above; miniwdl run directories are not
+!/tests/**/*.json
+!/tests/**/*.tsv
+!/tests/**/*.txt
+!/tests/data/*.vcf.gz
+!/tests/data/*.vcf.gz.tbi
+!/tests/data/*.fai
+/tests/.runs/
