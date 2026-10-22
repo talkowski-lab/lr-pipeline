@@ -14,5 +14,5 @@ fi
 [[ -d "$top/.git" ]] || exit 0
 
 cat <<'EOF'
-This session is in the shared main checkout of lr-pipeline, which stays on `main`, is never switched, and is read-only: a hook denies Edit and Write here. Before changing anything, run `.github/scripts/new_worktree.sh kj-<kebab-topic>` with a fresh topic name, then do every edit, command and check inside the path it prints. If it reports "Reusing existing worktree" and you are not resuming that task, pick another name. Read-only investigation and `.github/scripts/merge_branch.sh` are the only work that belongs in this checkout.
+This session is in the shared main checkout of lr-pipeline, which stays on `main`, is never switched, and is read-only: a hook denies Edit and Write here. Before changing anything, run `.github/scripts/new_worktree.sh <branch>` with a fresh branch name, then do every edit, command and check inside the path it prints. If it reports "Reusing existing worktree" and you are not resuming that task, pick another name. Read-only investigation and `.github/scripts/merge_branch.sh` are the only work that belongs in this checkout.
 EOF

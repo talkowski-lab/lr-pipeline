@@ -8,6 +8,6 @@ top="$(git rev-parse --show-toplevel)"
 # A linked worktree has a .git file rather than a directory
 if [[ -d "$top/.git" ]]; then
     echo "Refusing to commit in the main checkout $top, which stays on main and is shared by every agent." >&2
-    echo "Run .github/scripts/new_worktree.sh kj-<kebab-topic> and commit inside the worktree it prints." >&2
+    echo "Run .github/scripts/new_worktree.sh <branch> and commit inside the worktree it prints." >&2
     exit 1
 fi

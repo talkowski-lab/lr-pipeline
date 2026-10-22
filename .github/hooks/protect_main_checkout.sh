@@ -10,7 +10,7 @@ deny() {
     exit 0
 }
 
-REASON="The main checkout stays on main and is read-only; run .github/scripts/new_worktree.sh kj-<kebab-topic> and edit inside the worktree it prints."
+REASON="The main checkout stays on main and is read-only; run .github/scripts/new_worktree.sh <branch> and edit inside the worktree it prints."
 
 input="$(cat)"
 path="$(jq -r '.tool_input.file_path // .tool_input.notebook_path // empty' <<<"$input")"
