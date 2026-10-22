@@ -1,0 +1,11 @@
+failure-threshold: warning
+ignored:
+  - DL3002  # vephail runs as root, as the VEP base image expects
+  - DL3003  # cd inside RUN is the build pattern for every from-source tool here
+  - DL3007  # FROM <registry>/utils:latest is the intentional base-image chain, see docs/dockers.md
+  - DL3008  # apt package versions follow the pinned Ubuntu base release
+  - DL3013  # pip pins live in dockerfiles/versions.env where they matter
+  - DL3042  # the remaining cache-enabled installs are base pip upgrades
+  - DL4000  # MAINTAINER is kept so existing image layer caches survive
+  - DL4001  # wget and curl are both installed on purpose in utils
+  - DL4006  # pipes in RUN are confined to the gcloud and k8 installers

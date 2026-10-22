@@ -62,17 +62,13 @@ RUN wget -q https://github.com/Benson-Genomics-Lab/TRF/releases/download/v4.09.1
     && chmod 755 trf409.linux64 \
     && mv trf409.linux64 /usr/bin/trf
 
-RUN python3 -m pip install --no-cache-dir git+https://github.com/bw2/trviz@9068d9abc50ec9b8ba478505d3d19496e1f431b9 pyarrow
-
-
+ARG TRVIZ_COMMIT
+RUN python3 -m pip install --no-cache-dir git+https://github.com/bw2/trviz@${TRVIZ_COMMIT} pyarrow
 
 ENV HTSLIB_CONFIGURE_OPTIONS="--enable-s3 --enable-gcs --enable-libcurl --with-libdeflate"
-ADD https://api.github.com/repos/broadinstitute/str-analysis/commits/main /opt/str-analysis-main.json
-RUN str_analysis_commit="$(python3 -c 'import json; print(json.load(open("/opt/str-analysis-main.json"))["sha"])')" \
-    && test -n "${str_analysis_commit}" \
-    && python3 -m pip install --upgrade --no-cache-dir \
+ARG STR_ANALYSIS_COMMIT
+RUN python3 -m pip install --upgrade --no-cache-dir \
         configargparse \
-        git+https://github.com/broadinstitute/str-analysis@${str_analysis_commit} \
-    && printf '%s\n' "${str_analysis_commit}" > /opt/str-analysis-commit
+        git+https://github.com/broadinstitute/str-analysis@${STR_ANALYSIS_COMMIT}
 
 ENV PYTHONPATH=/:.:$PYTHONPATH

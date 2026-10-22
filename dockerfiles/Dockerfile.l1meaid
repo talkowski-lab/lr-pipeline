@@ -11,6 +11,8 @@ RUN pip3 install matplotlib pandas pysam tqdm bio more_itertools --break-system-
 RUN rm -rf /opt/RepeatMasker/Libraries/famdb/*
 
 WORKDIR /opt/src
-RUN git clone https://github.com/Markloftus/L1ME-AID.git /opt/src/L1ME-AID
+ARG L1MEAID_COMMIT
+RUN git clone https://github.com/Markloftus/L1ME-AID.git /opt/src/L1ME-AID \
+    && git -C /opt/src/L1ME-AID checkout ${L1MEAID_COMMIT}
 RUN mv /opt/src/L1ME-AID/*.py /opt/src/L1ME-AID/limeaid.py
 ENV PATH="/opt/src/L1ME-AID:${PATH}"

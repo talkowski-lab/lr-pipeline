@@ -43,9 +43,11 @@ RUN wget -q https://github.com/samtools/samtools/releases/download/${SAMTOOLS_VE
 	&& make clean
 
 # Install Minimap2
+ARG MINIMAP2_COMMIT
 RUN cd /opt && \
     git clone https://github.com/lh3/minimap2.git && \
     cd minimap2 && \
+    git checkout ${MINIMAP2_COMMIT} && \
     make && \
     curl -L https://github.com/attractivechaos/k8/releases/download/v0.2.4/k8-0.2.4.tar.bz2 | tar -jxf - && \
     cp k8-0.2.4/k8-`uname -s` k8
@@ -53,8 +55,9 @@ RUN cd /opt && \
 ENV PATH="/opt/minimap2:/opt/minimap2/misc:${PATH}"
 
 # Install PAV and dependencies
+ARG PAV_VERSION
 RUN python3 -m pip install --no-cache-dir \
-    pav3 \
+    "pav3==${PAV_VERSION}" \
     snakemake \
     drmaa \
     joblib \
