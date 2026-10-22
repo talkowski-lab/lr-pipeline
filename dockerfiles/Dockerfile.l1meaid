@@ -1,4 +1,4 @@
-FROM dfam/tetools:1.92
+FROM dfam/tetools:1.99
 
 MAINTAINER Karan Jaisingh
 
