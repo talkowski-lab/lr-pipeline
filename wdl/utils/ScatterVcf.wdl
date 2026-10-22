@@ -14,7 +14,6 @@ workflow ScatterVcf {
         file: "VCF or Hail MatrixTable to shard."
         n_shards: "Target shard count."
         records_per_shard: "Target records per shard."
-        split_vcf_hail_script: "URL of the Hail sharding script; defaults to this repository's copy on `main`."
         genome_build: "Reference genome build."
         localize_vcf: "Localize the input rather than streaming it remotely."
         get_chromosome_sizes: "Query contig sizes to size the shards."
@@ -31,7 +30,6 @@ workflow ScatterVcf {
         Int n_shards = 0
         Int records_per_shard = 0
 
-        String split_vcf_hail_script = "https://raw.githubusercontent.com/talkowski-lab/lr-pipeline/main/scripts/helper/split_vcf_hail.py"
         String genome_build = 'GRCh38'
         Boolean localize_vcf
         Boolean get_chromosome_sizes
@@ -107,7 +105,6 @@ workflow ScatterVcf {
                 call ExecuteScattering as ScatterChromosomes {
                     input:
                         vcf_file = chrom_shard,
-                        split_vcf_hail_script = split_vcf_hail_script,
                         n_shards = chrom_n_shards,
                         records_per_shard = 0,
                         prefix = chrom_shard_prefix,
@@ -124,7 +121,6 @@ workflow ScatterVcf {
                 call ExecuteScattering {
                     input:
                         vcf_file = file,
-                        split_vcf_hail_script = split_vcf_hail_script,
                         n_shards = select_first([n_shards]),
                         records_per_shard = select_first([records_per_shard, 0]),
                         prefix = prefix,
@@ -147,7 +143,6 @@ workflow ScatterVcf {
                     input:
                         vcf_file = mt_uri,
                         input_size = GetHailMTSize.mt_size,
-                        split_vcf_hail_script = split_vcf_hail_script,
                         n_shards = select_first([n_shards]),
                         records_per_shard = select_first([records_per_shard, 0]),
                         prefix = prefix,
@@ -324,7 +319,6 @@ task ExecuteScattering {
         Int n_shards
         Int records_per_shard
         String prefix
-        String split_vcf_hail_script
         String genome_build
         String docker
         RuntimeAttr? runtime_attr_override
@@ -337,9 +331,14 @@ task ExecuteScattering {
     command <<<
         set -euo pipefail
 
-        curl  ~{split_vcf_hail_script} > split_vcf.py
-
-        python3 split_vcf.py ~{vcf_file} ~{n_shards} ~{records_per_shard} ~{prefix} ~{select_first([runtime_attr.cpu_cores, default_attr.cpu_cores])} ~{select_first([runtime_attr.mem_gb, default_attr.mem_gb])} ~{genome_build}
+        python3 /opt/scripts/helper/split_vcf_hail.py \
+            --vcf ~{vcf_file} \
+            --n-shards ~{n_shards} \
+            --records-per-shard ~{records_per_shard} \
+            --prefix ~{prefix} \
+            --cores ~{select_first([runtime_attr.cpu_cores, default_attr.cpu_cores])} \
+            --mem ~{select_first([runtime_attr.mem_gb, default_attr.mem_gb])} \
+            --build ~{genome_build}
 
         for file in $(ls ~{prefix}.vcf.bgz | grep '.bgz'); do
             shard_num=$(echo $file | cut -d '-' -f2);
@@ -379,7 +378,6 @@ task ScatterVcfRemote {
         Int n_shards
         Int records_per_shard
         String prefix
-        String split_vcf_hail_script
         String genome_build
         String docker
         RuntimeAttr? runtime_attr_override
@@ -391,9 +389,14 @@ task ScatterVcfRemote {
     command <<<
         set -euo pipefail
 
-        curl  ~{split_vcf_hail_script} > split_vcf.py
-
-        python3 split_vcf.py ~{vcf_file} ~{n_shards} ~{records_per_shard} ~{prefix} ~{select_first([runtime_attr.cpu_cores, default_attr.cpu_cores])} ~{select_first([runtime_attr.mem_gb, default_attr.mem_gb])} ~{genome_build}
+        python3 /opt/scripts/helper/split_vcf_hail.py \
+            --vcf ~{vcf_file} \
+            --n-shards ~{n_shards} \
+            --records-per-shard ~{records_per_shard} \
+            --prefix ~{prefix} \
+            --cores ~{select_first([runtime_attr.cpu_cores, default_attr.cpu_cores])} \
+            --mem ~{select_first([runtime_attr.mem_gb, default_attr.mem_gb])} \
+            --build ~{genome_build}
 
         for file in $(ls ~{prefix}.vcf.bgz | grep '.bgz'); do
             shard_num=$(echo $file | cut -d '-' -f2);

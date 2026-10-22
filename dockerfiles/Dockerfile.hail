@@ -1,0 +1,6 @@
+FROM hailgenetics/hail:0.2.122
+
+MAINTAINER Karan Jaisingh
+
+# Bake the repository scripts in so the Hail tasks run the committed copies
+COPY ./scripts /opt/scripts

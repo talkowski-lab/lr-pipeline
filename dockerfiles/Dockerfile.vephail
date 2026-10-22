@@ -66,12 +66,16 @@ ENV PATH=/opt/google-cloud-sdk/bin:$PATH
 RUN python3 -m pip install --upgrade pip --no-cache-dir
 
 # Install Hail with timeout and specific version constraints
-RUN python3 -m pip install --no-cache-dir --timeout=300 hail
+ARG HAIL_VERSION
+RUN python3 -m pip install --no-cache-dir --timeout=300 "hail==${HAIL_VERSION}"
 
 # Verify installations
 RUN java -version && \
     gcloud version && \
     python3 -c "import hail; print('Hail version:', hail.__version__)"
+
+# Bake the repository scripts in so the Hail tasks run the committed copies
+COPY ./scripts /opt/scripts
 
 # Set default command
 CMD ["/bin/bash"]

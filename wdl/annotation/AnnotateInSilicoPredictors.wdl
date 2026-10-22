@@ -20,7 +20,6 @@ workflow AnnotateInSilicoPredictors {
         phylop_ht: "From references."
         revel_ht: "From references."
         spliceai_ht: "From references."
-        annotate_in_silico_predictors_script: "Path to the Hail script that performs the lookups (defaults to this repository's copy on `main`)."
         genome_build: "Genome build to annotate against."
         annotations_tsv_insilico: "TSV of per-variant in-silico predictor scores."
     }
@@ -38,7 +37,6 @@ workflow AnnotateInSilicoPredictors {
         String phylop_ht
         String revel_ht
         String spliceai_ht
-        String annotate_in_silico_predictors_script = "https://raw.githubusercontent.com/talkowski-lab/lr-pipeline/main/scripts/annotation/annotate_insilico_predictors.py"
         String genome_build = "GRCh38"
 
         String hail_docker
@@ -94,7 +92,6 @@ workflow AnnotateInSilicoPredictors {
                     phylop_ht = phylop_ht,
                     revel_ht = revel_ht,
                     spliceai_ht = spliceai_ht,
-                    annotate_in_silico_predictors_script = annotate_in_silico_predictors_script,
                     genome_build = genome_build,
                     prefix = "~{prefix}.~{contig}.in_silico_predictors.shard_~{i}",
                     docker = hail_docker,
@@ -141,7 +138,6 @@ task AnnotateInSilicoPredictorsTask {
         String phylop_ht
         String revel_ht
         String spliceai_ht
-        String annotate_in_silico_predictors_script
         String genome_build = "GRCh38"
         String prefix
         String docker
@@ -151,9 +147,7 @@ task AnnotateInSilicoPredictorsTask {
     command <<<
         set -euo pipefail
 
-        curl ~{annotate_in_silico_predictors_script} > annotate.py
-
-        python3 annotate.py \
+        python3 /opt/scripts/annotation/annotate_insilico_predictors.py \
             --build ~{genome_build} \
             --cores ~{select_first([runtime_attr.cpu_cores, default_attr.cpu_cores])} \
             --mem ~{select_first([runtime_attr.mem_gb, default_attr.mem_gb])} \
