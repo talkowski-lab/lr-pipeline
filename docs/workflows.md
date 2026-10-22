@@ -1660,7 +1660,7 @@ Outputs:
 ### [LongReadCNVs](../wdl/tools/LongReadCNVs.wdl)
 This workflow calls cohort CNVs from long-read depth profiles with GATK gCNV, then converts, clusters and genotypes the depth calls. It outputs merged CNV calls, ploidy, and genotyped depth VCFs.
 
-With `num_training_samples` left at -1 every sample is called in gCNV cohort mode. Setting it below the cohort size instead runs a hybrid case-cohort mode, fitting the contig-ploidy and gCNV models on that many randomly drawn samples and calling every remaining sample against those models in case mode. All downstream steps and outputs still cover the whole cohort either way.
+With `num_training_samples` left at -1 every sample is called in gCNV cohort mode. Setting it below the cohort size instead runs a hybrid case-cohort mode, fitting the contig-ploidy and gCNV models on that many randomly drawn samples and then calling every sample, the training samples included, against those models in case mode, as GATK-SV does. The case-mode steps take their own `ploidy_case_*` and `gcnv_case_*` settings, each falling back to the matching cohort-mode input when unset. All downstream steps and outputs still cover the whole cohort either way.
 
 Inputs:
 - `File intervals`: Interval list over which CNVs are called.
@@ -1679,7 +1679,7 @@ Inputs:
 - `File training_intervals`: Intervals used to train the depth genotyping model.
 - `File median_coverage`: Per-sample median coverage table used by depth genotyping.
 - `String variant_prefix`: Prefix used for generated variant IDs.
-- `Int num_training_samples`: Number of samples drawn at random to fit the contig-ploidy and gCNV models in cohort mode, with every remaining sample called against those models in case mode. Set to -1, or to at least the cohort size, every sample is called in cohort mode instead. Interval filtering percentages apply over the training samples alone, so a training set of fewer than a few dozen samples degrades the fitted models. (default `-1`)
+- `Int num_training_samples`: Number of samples drawn at random to fit the contig-ploidy and gCNV models in cohort mode, with every sample, the training samples included, then called against those models in case mode. Set to -1, or to at least the cohort size, every sample is called in cohort mode instead. Interval filtering percentages apply over the training samples alone, so a training set of fewer than a few dozen samples degrades the fitted models. (default `-1`)
 - `Int gcnv_qs_cutoff`: Minimum gCNV quality score for a segment to be kept. (default `30`)
 - `Int num_intervals_per_scatter`: Number of intervals processed per gCNV scatter shard. GermlineCNVCaller memory grows with samples times intervals per shard, so raising this above the default needs more memory in `runtime_attr_germline_cnv_caller`. (default `10000`)
 - `Int subsample_seed`: Random seed used to draw the training samples. (default `42`)
@@ -1701,6 +1701,8 @@ Inputs:
 - `Float? ploidy_mapping_error_rate`: DetermineGermlineContigPloidy --mapping-error-rate.
 - `Float? ploidy_global_psi_scale`: DetermineGermlineContigPloidy --global-psi-scale.
 - `Float? ploidy_sample_psi_scale`: DetermineGermlineContigPloidy --sample-psi-scale.
+- `Float? ploidy_case_mapping_error_rate`: DetermineGermlineContigPloidy case-mode --mapping-error-rate, falling back to `ploidy_mapping_error_rate` when unset.
+- `Float? ploidy_case_sample_psi_scale`: DetermineGermlineContigPloidy case-mode --sample-psi-scale, falling back to `ploidy_sample_psi_scale` when unset.
 - `Float? gcnv_p_alt`: GermlineCNVCaller --p-alt.
 - `Float? gcnv_p_active`: GermlineCNVCaller --p-active.
 - `Float? gcnv_cnv_coherence_length`: GermlineCNVCaller --cnv-coherence-length.
@@ -1738,6 +1740,34 @@ Inputs:
 - `Float? gcnv_caller_internal_admixing_rate`: GermlineCNVCaller --caller-internal-admixing-rate.
 - `Float? gcnv_caller_external_admixing_rate`: GermlineCNVCaller --caller-external-admixing-rate.
 - `Boolean? gcnv_disable_annealing`: GermlineCNVCaller --disable-annealing.
+- `Float? gcnv_case_p_alt`: GermlineCNVCaller case-mode --p-alt, falling back to `gcnv_p_alt` when unset.
+- `Float? gcnv_case_cnv_coherence_length`: GermlineCNVCaller case-mode --cnv-coherence-length, falling back to `gcnv_cnv_coherence_length` when unset.
+- `Int? gcnv_case_max_copy_number`: GermlineCNVCaller case-mode --max-copy-number, falling back to `gcnv_max_copy_number` when unset.
+- `Float? gcnv_case_mapping_error_rate`: GermlineCNVCaller case-mode --mapping-error-rate, falling back to `gcnv_mapping_error_rate` when unset.
+- `Float? gcnv_case_sample_psi_scale`: GermlineCNVCaller case-mode --sample-psi-scale, falling back to `gcnv_sample_psi_scale` when unset.
+- `Float? gcnv_case_depth_correction_tau`: GermlineCNVCaller case-mode --depth-correction-tau, falling back to `gcnv_depth_correction_tau` when unset.
+- `String? gcnv_case_copy_number_posterior_expectation_mode`: GermlineCNVCaller case-mode --copy-number-posterior-expectation-mode, falling back to `gcnv_copy_number_posterior_expectation_mode` when unset.
+- `Int? gcnv_case_active_class_padding_hybrid_mode`: GermlineCNVCaller case-mode --active-class-padding-hybrid-mode, falling back to `gcnv_active_class_padding_hybrid_mode` when unset.
+- `Float? gcnv_case_learning_rate`: GermlineCNVCaller case-mode --learning-rate, falling back to `gcnv_learning_rate` when unset.
+- `Float? gcnv_case_adamax_beta_1`: GermlineCNVCaller case-mode --adamax-beta-1, falling back to `gcnv_adamax_beta_1` when unset.
+- `Float? gcnv_case_adamax_beta_2`: GermlineCNVCaller case-mode --adamax-beta-2, falling back to `gcnv_adamax_beta_2` when unset.
+- `Int? gcnv_case_log_emission_samples_per_round`: GermlineCNVCaller case-mode --log-emission-samples-per-round, falling back to `gcnv_log_emission_samples_per_round` when unset.
+- `Float? gcnv_case_log_emission_sampling_median_rel_error`: GermlineCNVCaller case-mode --log-emission-sampling-median-rel-error, falling back to `gcnv_log_emission_sampling_median_rel_error` when unset.
+- `Int? gcnv_case_log_emission_sampling_rounds`: GermlineCNVCaller case-mode --log-emission-sampling-rounds, falling back to `gcnv_log_emission_sampling_rounds` when unset.
+- `Int? gcnv_case_max_advi_iter_first_epoch`: GermlineCNVCaller case-mode --max-advi-iter-first-epoch, falling back to `gcnv_max_advi_iter_first_epoch` when unset.
+- `Int? gcnv_case_max_advi_iter_subsequent_epochs`: GermlineCNVCaller case-mode --max-advi-iter-subsequent-epochs, falling back to `gcnv_max_advi_iter_subsequent_epochs` when unset.
+- `Int? gcnv_case_min_training_epochs`: GermlineCNVCaller case-mode --min-training-epochs, falling back to `gcnv_min_training_epochs` when unset.
+- `Int? gcnv_case_max_training_epochs`: GermlineCNVCaller case-mode --max-training-epochs, falling back to `gcnv_max_training_epochs` when unset.
+- `Float? gcnv_case_initial_temperature`: GermlineCNVCaller case-mode --initial-temperature, falling back to `gcnv_initial_temperature` when unset.
+- `Int? gcnv_case_num_thermal_advi_iters`: GermlineCNVCaller case-mode --num-thermal-advi-iters, falling back to `gcnv_num_thermal_advi_iters` when unset.
+- `Int? gcnv_case_convergence_snr_averaging_window`: GermlineCNVCaller case-mode --convergence-snr-averaging-window, falling back to `gcnv_convergence_snr_averaging_window` when unset.
+- `Float? gcnv_case_convergence_snr_trigger_threshold`: GermlineCNVCaller case-mode --convergence-snr-trigger-threshold, falling back to `gcnv_convergence_snr_trigger_threshold` when unset.
+- `Int? gcnv_case_convergence_snr_countdown_window`: GermlineCNVCaller case-mode --convergence-snr-countdown-window, falling back to `gcnv_convergence_snr_countdown_window` when unset.
+- `Int? gcnv_case_max_calling_iters`: GermlineCNVCaller case-mode --max-calling-iters, falling back to `gcnv_max_calling_iters` when unset.
+- `Float? gcnv_case_caller_update_convergence_threshold`: GermlineCNVCaller case-mode --caller-update-convergence-threshold, falling back to `gcnv_caller_update_convergence_threshold` when unset.
+- `Float? gcnv_case_caller_internal_admixing_rate`: GermlineCNVCaller case-mode --caller-internal-admixing-rate, falling back to `gcnv_caller_internal_admixing_rate` when unset.
+- `Float? gcnv_case_caller_external_admixing_rate`: GermlineCNVCaller case-mode --caller-external-admixing-rate, falling back to `gcnv_caller_external_admixing_rate` when unset.
+- `Boolean? gcnv_case_disable_annealing`: GermlineCNVCaller case-mode --disable-annealing, falling back to `gcnv_disable_annealing` when unset.
 - `Int ref_copy_number_autosomal_contigs`: Reference copy number for autosomes. (default `2`)
 - `Array[String]? allosomal_contigs`: Contigs treated as allosomal.
 - `Int maximum_number_events_per_sample`: Maximum number of events permitted per sample. (default `1000`)
@@ -1760,7 +1790,7 @@ Inputs:
 - `Boolean svtk_set_pass`: Set FILTER to PASS during conversion. (default `false`)
 - `String prefix`: Prefix for output file names.
 - `String gatk_docker`, `String sv_base_mini_docker`, `String sv_pipeline_docker`: Container images.
-- `RuntimeAttr? runtime_attr_*`: Optional per-task runtime overrides (27).
+- `RuntimeAttr? runtime_attr_*`: Optional per-task runtime overrides (25).
 
 Outputs:
 - `File merged_cnvs_vcf`: Cohort CNV VCF after depth preprocessing.
@@ -2248,7 +2278,7 @@ These workflows live in `wdl/utils/` and are building blocks rather than entry p
 ### [LRCNVs](../wdl/utils/LRCNVs.wdl)
 This component calls copy-number variants across a cohort using GATK germline CNV (gCNV) cohort mode. From per-sample depth profiles over a shared interval list it annotates and filters intervals, determines contig ploidy, fits gCNV across scattered interval shards, post-processes per-sample calls into genotyped interval and segment VCFs, and collects sample- and model-level QC.
 
-Setting `num_training_samples` to a positive value below the cohort size switches the component to a hybrid case-cohort mode: that many samples are drawn at random and used to fit the contig-ploidy and gCNV models in cohort mode, and every remaining sample is then called against those models in case mode. Interval annotation, interval filtering and the fitted models therefore derive from the training samples alone, while the per-sample genotyped VCFs, denoised copy ratios, sample QC and contig-ploidy calls still cover the whole cohort in `sample_ids` order.
+Setting `num_training_samples` to a positive value below the cohort size switches the component to a hybrid case-cohort mode: that many samples are drawn at random and used only to fit the contig-ploidy and gCNV models in cohort mode, and every sample, the training samples included, is then called against those models in case mode, as in GATK-SV. Interval annotation, interval filtering and the fitted models therefore derive from the training samples alone, while the per-sample genotyped VCFs, denoised copy ratios, sample QC and contig-ploidy calls all come from case mode and cover the whole cohort in `sample_ids` order. The case-mode steps take their own `ploidy_case_*` and `gcnv_case_*` settings, each falling back to the matching cohort-mode input when unset.
 
 Inputs:
 - `File intervals`: Interval list over which CNVs are called.
@@ -2260,7 +2290,7 @@ Inputs:
 - `File ref_fai`: From references.
 - `File ref_dict`: From references.
 - `Int num_intervals_per_scatter`: Number of intervals processed per gCNV scatter shard. GermlineCNVCaller memory grows with samples times intervals per shard, so raising this above the default needs more memory in `runtime_attr_germline_cnv_caller`.
-- `Int num_training_samples`: Number of samples drawn at random to fit the contig-ploidy and gCNV models in cohort mode, with every remaining sample called against those models in case mode. Set to -1, or to at least the cohort size, every sample is called in cohort mode instead. Interval filtering percentages apply over the training samples alone, so a training set of fewer than a few dozen samples degrades the fitted models. (default `-1`)
+- `Int num_training_samples`: Number of samples drawn at random to fit the contig-ploidy and gCNV models in cohort mode, with every sample, the training samples included, then called against those models in case mode. Set to -1, or to at least the cohort size, every sample is called in cohort mode instead. Interval filtering percentages apply over the training samples alone, so a training set of fewer than a few dozen samples degrades the fitted models. (default `-1`)
 - `Int subsample_seed`: Random seed used to draw the training samples. (default `42`)
 - `File? gatk4_jar_override`: Override GATK4 jar.
 - `File? mappability_track_bed`: Mappability track used to annotate intervals.
@@ -2278,6 +2308,8 @@ Inputs:
 - `Float? ploidy_mapping_error_rate`: DetermineGermlineContigPloidy --mapping-error-rate.
 - `Float? ploidy_global_psi_scale`: DetermineGermlineContigPloidy --global-psi-scale.
 - `Float? ploidy_sample_psi_scale`: DetermineGermlineContigPloidy --sample-psi-scale.
+- `Float? ploidy_case_mapping_error_rate`: DetermineGermlineContigPloidy case-mode --mapping-error-rate, falling back to `ploidy_mapping_error_rate` when unset.
+- `Float? ploidy_case_sample_psi_scale`: DetermineGermlineContigPloidy case-mode --sample-psi-scale, falling back to `ploidy_sample_psi_scale` when unset.
 - `Float? gcnv_p_alt`: GermlineCNVCaller --p-alt.
 - `Float? gcnv_p_active`: GermlineCNVCaller --p-active.
 - `Float? gcnv_cnv_coherence_length`: GermlineCNVCaller --cnv-coherence-length.
@@ -2315,12 +2347,40 @@ Inputs:
 - `Float? gcnv_caller_internal_admixing_rate`: GermlineCNVCaller --caller-internal-admixing-rate.
 - `Float? gcnv_caller_external_admixing_rate`: GermlineCNVCaller --caller-external-admixing-rate.
 - `Boolean? gcnv_disable_annealing`: GermlineCNVCaller --disable-annealing.
+- `Float? gcnv_case_p_alt`: GermlineCNVCaller case-mode --p-alt, falling back to `gcnv_p_alt` when unset.
+- `Float? gcnv_case_cnv_coherence_length`: GermlineCNVCaller case-mode --cnv-coherence-length, falling back to `gcnv_cnv_coherence_length` when unset.
+- `Int? gcnv_case_max_copy_number`: GermlineCNVCaller case-mode --max-copy-number, falling back to `gcnv_max_copy_number` when unset.
+- `Float? gcnv_case_mapping_error_rate`: GermlineCNVCaller case-mode --mapping-error-rate, falling back to `gcnv_mapping_error_rate` when unset.
+- `Float? gcnv_case_sample_psi_scale`: GermlineCNVCaller case-mode --sample-psi-scale, falling back to `gcnv_sample_psi_scale` when unset.
+- `Float? gcnv_case_depth_correction_tau`: GermlineCNVCaller case-mode --depth-correction-tau, falling back to `gcnv_depth_correction_tau` when unset.
+- `String? gcnv_case_copy_number_posterior_expectation_mode`: GermlineCNVCaller case-mode --copy-number-posterior-expectation-mode, falling back to `gcnv_copy_number_posterior_expectation_mode` when unset.
+- `Int? gcnv_case_active_class_padding_hybrid_mode`: GermlineCNVCaller case-mode --active-class-padding-hybrid-mode, falling back to `gcnv_active_class_padding_hybrid_mode` when unset.
+- `Float? gcnv_case_learning_rate`: GermlineCNVCaller case-mode --learning-rate, falling back to `gcnv_learning_rate` when unset.
+- `Float? gcnv_case_adamax_beta_1`: GermlineCNVCaller case-mode --adamax-beta-1, falling back to `gcnv_adamax_beta_1` when unset.
+- `Float? gcnv_case_adamax_beta_2`: GermlineCNVCaller case-mode --adamax-beta-2, falling back to `gcnv_adamax_beta_2` when unset.
+- `Int? gcnv_case_log_emission_samples_per_round`: GermlineCNVCaller case-mode --log-emission-samples-per-round, falling back to `gcnv_log_emission_samples_per_round` when unset.
+- `Float? gcnv_case_log_emission_sampling_median_rel_error`: GermlineCNVCaller case-mode --log-emission-sampling-median-rel-error, falling back to `gcnv_log_emission_sampling_median_rel_error` when unset.
+- `Int? gcnv_case_log_emission_sampling_rounds`: GermlineCNVCaller case-mode --log-emission-sampling-rounds, falling back to `gcnv_log_emission_sampling_rounds` when unset.
+- `Int? gcnv_case_max_advi_iter_first_epoch`: GermlineCNVCaller case-mode --max-advi-iter-first-epoch, falling back to `gcnv_max_advi_iter_first_epoch` when unset.
+- `Int? gcnv_case_max_advi_iter_subsequent_epochs`: GermlineCNVCaller case-mode --max-advi-iter-subsequent-epochs, falling back to `gcnv_max_advi_iter_subsequent_epochs` when unset.
+- `Int? gcnv_case_min_training_epochs`: GermlineCNVCaller case-mode --min-training-epochs, falling back to `gcnv_min_training_epochs` when unset.
+- `Int? gcnv_case_max_training_epochs`: GermlineCNVCaller case-mode --max-training-epochs, falling back to `gcnv_max_training_epochs` when unset.
+- `Float? gcnv_case_initial_temperature`: GermlineCNVCaller case-mode --initial-temperature, falling back to `gcnv_initial_temperature` when unset.
+- `Int? gcnv_case_num_thermal_advi_iters`: GermlineCNVCaller case-mode --num-thermal-advi-iters, falling back to `gcnv_num_thermal_advi_iters` when unset.
+- `Int? gcnv_case_convergence_snr_averaging_window`: GermlineCNVCaller case-mode --convergence-snr-averaging-window, falling back to `gcnv_convergence_snr_averaging_window` when unset.
+- `Float? gcnv_case_convergence_snr_trigger_threshold`: GermlineCNVCaller case-mode --convergence-snr-trigger-threshold, falling back to `gcnv_convergence_snr_trigger_threshold` when unset.
+- `Int? gcnv_case_convergence_snr_countdown_window`: GermlineCNVCaller case-mode --convergence-snr-countdown-window, falling back to `gcnv_convergence_snr_countdown_window` when unset.
+- `Int? gcnv_case_max_calling_iters`: GermlineCNVCaller case-mode --max-calling-iters, falling back to `gcnv_max_calling_iters` when unset.
+- `Float? gcnv_case_caller_update_convergence_threshold`: GermlineCNVCaller case-mode --caller-update-convergence-threshold, falling back to `gcnv_caller_update_convergence_threshold` when unset.
+- `Float? gcnv_case_caller_internal_admixing_rate`: GermlineCNVCaller case-mode --caller-internal-admixing-rate, falling back to `gcnv_caller_internal_admixing_rate` when unset.
+- `Float? gcnv_case_caller_external_admixing_rate`: GermlineCNVCaller case-mode --caller-external-admixing-rate, falling back to `gcnv_caller_external_admixing_rate` when unset.
+- `Boolean? gcnv_case_disable_annealing`: GermlineCNVCaller case-mode --disable-annealing, falling back to `gcnv_disable_annealing` when unset.
 - `Int ref_copy_number_autosomal_contigs`: Reference copy number for autosomes. (default `2`)
 - `Array[String]? allosomal_contigs`: Contigs treated as allosomal.
 - `Int maximum_number_events_per_sample`: Maximum number of events permitted per sample. (default `1000`)
 - `String prefix`: Prefix for output file names.
 - `String gatk_docker`, `String sv_pipeline_docker`: Container images.
-- `RuntimeAttr? runtime_attr_*`: Optional per-task runtime overrides (12).
+- `RuntimeAttr? runtime_attr_*`: Optional per-task runtime overrides (10).
 
 Outputs:
 - `File annotated_intervals`: Intervals annotated with GC content and tracks.
@@ -2328,7 +2388,7 @@ Outputs:
 - `File contig_ploidy_model_tar`: Contig-ploidy model fitted on the training samples.
 - `File contig_ploidy_calls_tar`: Per-sample contig-ploidy calls for every sample, ordered as `sample_ids`.
 - `Array[File] gcnv_model_tars`: gCNV models fitted on the training samples, one per scatter shard.
-- `Array[Array[File]] gcnv_calls_tars`: Per-shard gCNV calls for the training samples.
+- `Array[Array[File]] gcnv_calls_tars`: Per-shard gCNV calls for every sample, from case mode when `num_training_samples` selects it.
 - `Array[File] gcnv_tracking_tars`: Per-shard model-fitting tracking files for the training samples.
 - `Array[File] genotyped_intervals_vcfs`: Per-sample genotyped interval VCFs.
 - `Array[File] genotyped_intervals_vcf_idxs`: Indexes for `genotyped_intervals_vcfs`.
@@ -2336,8 +2396,6 @@ Outputs:
 - `Array[File] genotyped_segments_vcf_idxs`: Indexes for `genotyped_segments_vcfs`.
 - `Array[File] sample_qc_status_files`: Per-sample QC status files.
 - `Array[String] sample_qc_status_strings`: Per-sample QC status strings.
-- `File model_qc_status_file`: Model-level QC status file for the models fitted on the training samples.
-- `String model_qc_string`: Model-level QC status string for the models fitted on the training samples.
 - `Array[File] denoised_copy_ratios`: Per-sample denoised copy ratios.
 
 ### [DepthPreprocessing](../wdl/utils/DepthPreprocessing.wdl)
