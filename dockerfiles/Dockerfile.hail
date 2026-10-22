@@ -1,4 +1,4 @@
-FROM hailgenetics/hail:0.2.122
+FROM hailgenetics/hail:0.2.139
 
 MAINTAINER Karan Jaisingh
 
