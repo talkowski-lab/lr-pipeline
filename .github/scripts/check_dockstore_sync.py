@@ -7,6 +7,7 @@ entry must point to a file that exists. Every entry must also list main under
 filters.branches; --main-only additionally fails on any feature branch left
 listed there, and is run before merging a feature branch into main.
 """
+
 import argparse
 import sys
 from pathlib import Path
@@ -42,8 +43,7 @@ def check_branch_filters(name, entry, main_only):
         extra = [b for b in branches if b != "main"]
         if extra:
             errors.append(
-                f".dockstore.yml entry '{name}' still lists feature branch(es) under filters.branches: "
-                f"{', '.join(extra)}"
+                f".dockstore.yml entry '{name}' still lists feature branch(es) under filters.branches: {', '.join(extra)}"
             )
     return errors
 
@@ -69,9 +69,7 @@ def main():
     for name, entry in entries_by_name.items():
         path = REPO_ROOT / entry["primaryDescriptorPath"].lstrip("/")
         if not path.is_file():
-            errors.append(
-                f".dockstore.yml entry '{name}' points to missing file: {entry['primaryDescriptorPath']}"
-            )
+            errors.append(f".dockstore.yml entry '{name}' points to missing file: {entry['primaryDescriptorPath']}")
         errors.extend(check_branch_filters(name, entry, args.main_only))
 
     active_files = find_active_workflow_files()
@@ -101,8 +99,7 @@ def main():
         sys.exit(1)
 
     print(
-        f"Dockstore sync check passed: {len(active_files)} active workflow files, "
-        f"{len(entries_by_name)} .dockstore.yml entries."
+        f"Dockstore sync check passed: {len(active_files)} active workflow files, {len(entries_by_name)} .dockstore.yml entries."
     )
 
 

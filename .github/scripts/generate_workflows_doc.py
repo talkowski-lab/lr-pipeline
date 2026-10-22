@@ -17,6 +17,7 @@ is current, or --dry-run to confirm the document can be built without writing it
 
 Usage: generate_workflows_doc.py [--site {active,archive}] [--check | --dry-run]
 """
+
 import argparse
 import difflib
 import os
@@ -240,7 +241,8 @@ def build(site):
     if site is ARCHIVE_SITE:
         for title, directory in ARCHIVE_SECTIONS:
             names = sorted(
-                name for name, (_, path) in workflows.items()
+                name
+                for name, (_, path) in workflows.items()
                 if Path(path).parent.as_posix() == (REPO_ROOT / directory).as_posix()
             )
             if not names:

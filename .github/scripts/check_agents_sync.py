@@ -6,6 +6,7 @@ content equality rather than symlink-ness, so it also catches the case where a t
 (e.g. GitHub's web editor, a symlink-unaware checkout) replaces the symlink with a
 materialized file whose content has drifted from AGENTS.md.
 """
+
 import sys
 from pathlib import Path
 

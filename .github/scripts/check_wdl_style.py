@@ -11,6 +11,7 @@ deliberately starts at column 0. Tabs and trailing whitespace are still checked 
 
 Usage: check_wdl_style.py [PATH ...]   (defaults to wdl/; directories recurse for *.wdl)
 """
+
 import re
 import sys
 from pathlib import Path

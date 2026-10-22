@@ -8,9 +8,10 @@
 # https://github.com/broadinstitute/gatk-sv/blob/main/LICENSE.TXT
 
 import argparse
+
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-import matplotlib.pyplot as plt
 from matplotlib.backends.backend_pdf import PdfPages
 
 

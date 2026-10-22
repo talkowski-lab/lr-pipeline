@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 
 import argparse
+import re
+
 import numpy
 import pysam
-import re
 
 
 def parse_args():
@@ -82,11 +83,7 @@ def parse_palmer_calls(callfile_path, insertion_seqs, ref_fasta, min_conf=1):
             # Parse call information
             cid = fields[0]
             chrom = fields[1]
-            pos = round(
-                numpy.median(
-                    [int(fields[2]), int(fields[3]), int(fields[4]), int(fields[5])]
-                )
-            )
+            pos = round(numpy.median([int(fields[2]), int(fields[3]), int(fields[4]), int(fields[5])]))
 
             # Derive REF and ALT
             insertion_seq = insertion_seqs.get(cid, "")
@@ -114,13 +111,7 @@ def parse_palmer_calls(callfile_path, insertion_seqs, ref_fasta, min_conf=1):
             if call["5inv"]:
                 tmp_5invend = int(fields[19])
                 tmp_5invstart = int(fields[20])
-                call["length"] = (
-                    tmp_end
-                    - tmp_start
-                    + int(call["transDlen"])
-                    + tmp_5invend
-                    - tmp_5invstart
-                )
+                call["length"] = tmp_end - tmp_start + int(call["transDlen"]) + tmp_5invend - tmp_5invstart
             else:
                 call["length"] = tmp_end - tmp_start + int(call["transDlen"])
 
@@ -140,9 +131,7 @@ def write_vcf_records(calls, mei_type, haplotype):
         if call["5inv"]:
             info_fields += ";INVERSION_5PRIME"
 
-        print(
-            f"{call['chrom']}\t{call['pos']}\t{cid}\t{call['ref']}\t{call['alt']}\t60\t.\t{info_fields}\tGT\t{haplotype}"
-        )
+        print(f"{call['chrom']}\t{call['pos']}\t{cid}\t{call['ref']}\t{call['alt']}\t60\t.\t{info_fields}\tGT\t{haplotype}")
 
 
 def main():

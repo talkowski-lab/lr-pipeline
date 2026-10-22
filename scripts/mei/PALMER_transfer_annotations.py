@@ -2,17 +2,15 @@
 
 
 import argparse
-import edlib
 
+import edlib
 from pysam import VariantFile
 
 
 def parse_intersection_line(line: str):
     fields = line.strip().split("\t")
     palmer_alts_raw = fields[13]
-    palmer_alts = (
-        palmer_alts_raw.split(",") if "," in palmer_alts_raw else [palmer_alts_raw]
-    )
+    palmer_alts = palmer_alts_raw.split(",") if "," in palmer_alts_raw else [palmer_alts_raw]
     return {
         "chrom": fields[0],
         "sv_positions": fields[3].split(","),
@@ -34,9 +32,7 @@ def compute_size_similarity(target_length: int, mei_length: int) -> float:
     return min(target_length, mei_length) / max(target_length, mei_length)
 
 
-def compute_reciprocal_overlap(
-    target_start: int, target_length: int, mei_start: int, mei_length: int
-) -> float:
+def compute_reciprocal_overlap(target_start: int, target_length: int, mei_start: int, mei_length: int) -> float:
     target_end = target_start + target_length
     mei_end = mei_start + mei_length
     overlap = min(target_end, mei_end) - max(target_start, mei_start)
@@ -122,11 +118,7 @@ def record_passes_filters(
     if breakpoint_distance > args.breakpoint_window:
         return False
 
-    sv_samples = [
-        sample
-        for sample in samples
-        if is_non_ref_genotype(record.samples[sample]["GT"])
-    ]
+    sv_samples = [sample for sample in samples if is_non_ref_genotype(record.samples[sample]["GT"])]
     shared = set(sv_samples) & set(mei_data["mei_samples"])
     if len(shared) < args.min_shared_samples:
         return False
@@ -135,12 +127,8 @@ def record_passes_filters(
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(
-        description="Transfer PALMER MEI annotations onto a short-read VCF"
-    )
-    parser.add_argument(
-        "--intersection", required=True, help="Path to bedtools intersect output"
-    )
+    parser = argparse.ArgumentParser(description="Transfer PALMER MEI annotations onto a short-read VCF")
+    parser.add_argument("--intersection", required=True, help="Path to bedtools intersect output")
     parser.add_argument("--target-vcf", required=True, help="Target VCF to annotate")
     parser.add_argument("--me-type", required=True, help="MEI class under evaluation")
     parser.add_argument(
@@ -183,15 +171,11 @@ def main() -> None:
     target_vcf = VariantFile(args.target_vcf)
     samples = list(target_vcf.header.samples)
 
-    with open(args.intersection, "r", encoding="utf-8") as source, open(
-        args.output, "w", encoding="utf-8"
-    ) as output_handle:
+    with open(args.intersection, "r", encoding="utf-8") as source, open(args.output, "w", encoding="utf-8") as output_handle:
         for raw_line in source:
             mei_data = parse_intersection_line(raw_line)
             chrom = mei_data["chrom"]
-            for ref, pos, length in zip(
-                mei_data["sv_refs"], mei_data["sv_positions"], mei_data["sv_lengths"]
-            ):
+            for ref, pos, length in zip(mei_data["sv_refs"], mei_data["sv_positions"], mei_data["sv_lengths"]):
                 sv_pos = int(pos)
                 sv_length = int(length)
                 ref_allele = ref.split("_")[0]
@@ -213,12 +197,8 @@ def main() -> None:
                         continue
 
                     all_alts = ",".join(record.alts)
-                    output_handle.write(
-                        f"{chrom}\t{sv_pos}\t{record.ref}\t{all_alts}\t{record.id}\t"
-                    )
-                    output_handle.write(
-                        f"{args.me_type}\t{mei_data['mei_length']}\t{mei_data['mei_id']}\n"
-                    )
+                    output_handle.write(f"{chrom}\t{sv_pos}\t{record.ref}\t{all_alts}\t{record.id}\t")
+                    output_handle.write(f"{args.me_type}\t{mei_data['mei_length']}\t{mei_data['mei_id']}\n")
 
     target_vcf.close()
 

@@ -10,6 +10,7 @@ not look like `<Type> <name>[ = <default>]` is reported as an error rather than
 silently dropped, so a future syntax change fails loudly instead of quietly losing a
 parameter from the generated documentation.
 """
+
 import re
 from pathlib import Path
 

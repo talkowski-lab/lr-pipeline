@@ -21,6 +21,7 @@ therefore skipped unless --force is given.
 
 Usage: migrate_workflows_doc.py SNAPSHOT [--report] [--force]
 """
+
 import argparse
 import re
 from pathlib import Path
@@ -139,13 +140,13 @@ def build_description(section):
             if buffer:
                 paragraphs.append(" ".join(buffer))
                 buffer = []
-            buffer.append("Note: " + line[note.end():])
+            buffer.append("Note: " + line[note.end() :])
             paragraphs.append(" ".join(buffer))
             buffer = []
             continue
         item = LIST_ITEM_RE.match(line)
         if item:
-            buffer.append(f"({item.group(1)})" + " " + line[item.end():])
+            buffer.append(f"({item.group(1)})" + " " + line[item.end() :])
             continue
         buffer.append(line)
     if buffer:
@@ -212,7 +213,7 @@ def stub(name, described):
                 return f"Index for {base}."
     for prefix, tool in (("gcnv_", "GermlineCNVCaller"), ("ploidy_", "DetermineGermlineContigPloidy")):
         if name.startswith(prefix):
-            flag = name[len(prefix):].replace("_", "-")
+            flag = name[len(prefix) :].replace("_", "-")
             return f"{tool} --{flag}."
     return "TODO."
 
@@ -274,10 +275,7 @@ def describe(section, workflow, shared):
     todo = []
     for decl in documented:
         ordered[decl.name] = (
-            described.get(decl.name)
-            or existing.get(decl.name)
-            or shared.get(decl.name)
-            or stub(decl.name, described)
+            described.get(decl.name) or existing.get(decl.name) or shared.get(decl.name) or stub(decl.name, described)
         )
     for name, text in ordered.items():
         if text == "TODO.":
