@@ -336,3 +336,23 @@ def test_extract_random_calls_is_reproducible_and_respects_allele_type_filter(ru
     first = open(outputs["ExtractRandomCalls.variant_sample_pairs"]).read()
     again = run_workflow(f"{UTILS}/ExtractRandomCalls.wdl", inputs)
     assert open(again["ExtractRandomCalls.variant_sample_pairs"]).read() == first
+
+
+def test_extract_random_calls_keeps_records_sharing_a_span(run_workflow, vcf_inputs, source):
+    # The subset holds distinct insertions with identical POS and END, which must each reach the VCF
+    inputs = {
+        "vcfs": [vcf_inputs["vcf"]],
+        "vcf_idxs": [vcf_inputs["vcf_idx"]],
+        "prefix": "random",
+        "count": 10000,
+        "allele_types": ["ins"],
+        "utils_docker": vcf_inputs["utils_docker"],
+    }
+    outputs = run_workflow(f"{UTILS}/ExtractRandomCalls.wdl", inputs)
+
+    _, rows = read_pairs(outputs["ExtractRandomCalls.variant_sample_pairs"])
+    carried = {r["id"] for r in source[1] if r["info"]["allele_type"] == "ins" and any(is_carrier(r, s) for s in SAMPLES)}
+    assert {row["ID"] for row in rows} == carried
+
+    _, selected_vcf = load_records(outputs["ExtractRandomCalls.variant_vcf"])
+    assert sorted(r["id"] for r in selected_vcf) == sorted(carried)

@@ -231,7 +231,7 @@ for record in vcf_in:
     ac_field = record.info.get("AC")
     af_field = record.info.get("AF")
     need_allele_check = min_ac is not None or max_ac is not None or min_af is not None or max_af is not None
-    key = (chrom, start, end)
+    key = (chrom, start, end, vid)
 
     for sample in candidate_samples:
         gt = record.samples[sample]["GT"]
@@ -263,7 +263,7 @@ with open("~{prefix}.pairs.tsv", "w") as out:
 with open("~{prefix}.candidate_count.txt", "w") as out:
     out.write(str(n_seen) + "\n")
 
-final_keys = {(c, s, e) for c, s, e, _, _, _ in reservoir}
+final_keys = {(c, s, e, v) for c, s, e, v, _, _ in reservoir}
 with pysam.VariantFile("candidate_sites.unsorted.vcf", "w", header=vcf_in.header) as sites_out:
     for key in final_keys:
         sites_out.write(record_cache[key])
@@ -349,13 +349,13 @@ with open("~{prefix}.candidate_summary.txt", "w") as out:
     out.write(f"total_candidates_found\t{sum(COUNTS)}\n")
     out.write(f"pairs_written\t{len(selected)}\n")
 
-# Key on (chrom, start, end) to pull the final draw out of the pooled candidate superset
-final_keys = {(line.split("\t")[0], int(line.split("\t")[1]), int(line.split("\t")[2])) for line in selected}
+# Key on (chrom, start, end, ID) to pull the final draw out of the pooled candidate superset, since distinct records can share a span
+final_keys = {(f[0], int(f[1]), int(f[2]), f[3]) for f in (line.split("\t") for line in selected)}
 pooled = pysam.VariantFile("pooled.vcf.gz")
 written = set()
 with pysam.VariantFile("~{prefix}.variant_sample_pairs.vcf.gz", "w", header=pooled.header) as vcf_out:
     for record in pooled:
-        key = (record.chrom, record.pos + 1, record.stop)
+        key = (record.chrom, record.pos + 1, record.stop, record.id if record.id else ".")
         if key in final_keys and key not in written:
             vcf_out.write(record)
             written.add(key)
