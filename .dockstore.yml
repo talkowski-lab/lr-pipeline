@@ -532,7 +532,6 @@ workflows:
     filters:
       branches:
         - main
-        - kj-pipeline-annotation-order
       tags:
         - /.*/
 
@@ -542,7 +541,6 @@ workflows:
     filters:
       branches:
         - main
-        - kj-pipeline-annotation-order
       tags:
         - /.*/
 
