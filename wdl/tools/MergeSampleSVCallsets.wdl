@@ -251,7 +251,7 @@ task MakeManifests {
         mem_gb: 2,
         disk_gb: 16,
         boot_disk_gb: 10,
-        preemptible_tries: 3,
+        preemptible_tries: 1,
         max_retries: 0
     }
     RuntimeAttr runtime_attr = select_first([runtime_attr_override, default_attr])
@@ -948,7 +948,7 @@ END
         mem_gb: 8,
         disk_gb: 256,
         boot_disk_gb: 10,
-        preemptible_tries: 4,
+        preemptible_tries: 1,
         max_retries: 0
     }
     RuntimeAttr runtime_attr = select_first([runtime_attr_override, default_attr])
@@ -1126,7 +1126,7 @@ task ScoreSampleCallsBatch {
         mem_gb: 3,
         disk_gb: 20,
         boot_disk_gb: 10,
-        preemptible_tries: 4,
+        preemptible_tries: 1,
         max_retries: 0
     }
     RuntimeAttr runtime_attr = select_first([runtime_attr_override, default_attr])

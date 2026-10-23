@@ -121,7 +121,7 @@ task WriteSampleList {
         mem_gb: 2,
         disk_gb: 16,
         boot_disk_gb: 10,
-        preemptible_tries: 3,
+        preemptible_tries: 1,
         max_retries: 0
     }
     RuntimeAttr runtime_attr = select_first([runtime_attr_override, default_attr])
@@ -159,7 +159,7 @@ task MakeChunkIdsCsv {
         mem_gb: 2,
         disk_gb: 16,
         boot_disk_gb: 10,
-        preemptible_tries: 3,
+        preemptible_tries: 1,
         max_retries: 0
     }
     RuntimeAttr runtime_attr = select_first([runtime_attr_override, default_attr])
@@ -227,7 +227,7 @@ task ConcatRegenotypedChunks {
         mem_gb: 4,
         disk_gb: 50,
         boot_disk_gb: 10,
-        preemptible_tries: 4,
+        preemptible_tries: 1,
         max_retries: 0
     }
     RuntimeAttr runtime_attr = select_first([runtime_attr_override, default_attr])

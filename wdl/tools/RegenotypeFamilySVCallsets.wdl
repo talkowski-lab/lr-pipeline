@@ -150,7 +150,7 @@ EOF_SAMPLE_IDS
         mem_gb: 2,
         disk_gb: 16,
         boot_disk_gb: 10,
-        preemptible_tries: 3,
+        preemptible_tries: 1,
         max_retries: 0
     }
     RuntimeAttr runtime_attr = select_first([runtime_attr_override, default_attr])
@@ -424,7 +424,7 @@ EOF_FAMILY_IDS
         mem_gb: 8,
         disk_gb: 100,
         boot_disk_gb: 10,
-        preemptible_tries: 4,
+        preemptible_tries: 1,
         max_retries: 0
     }
     RuntimeAttr runtime_attr = select_first([runtime_attr_override, default_attr])

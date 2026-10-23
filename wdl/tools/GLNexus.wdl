@@ -99,7 +99,6 @@ workflow GLNexus {
                 ranges = GetRanges.ranges,
                 remove_duplicates = remove_duplicate_zero_depth_reference_blocks,
                 create_indexes = false,
-                default_max_retries = 1,
                 docker = glnexus_docker,
                 runtime_attr_override = runtime_attr_shard_vcf_by_ranges
         }
@@ -188,7 +187,7 @@ task GetRanges {
         disk_gb: disk_size,
         boot_disk_gb: 25,
         preemptible_tries: 1,
-        max_retries: 1
+        max_retries: 0
     }
     RuntimeAttr runtime_attr = select_first([runtime_attr_override, default_attr])
     runtime {
@@ -269,8 +268,8 @@ task GLNexusJointCall {
         mem_gb: mem,
         disk_gb: disk_size,
         boot_disk_gb: 25,
-        preemptible_tries: 0,
-        max_retries: 1
+        preemptible_tries: 1,
+        max_retries: 0
     }
     RuntimeAttr runtime_attr = select_first([runtime_attr_override, default_attr])
     runtime {
@@ -316,7 +315,7 @@ task ConcatVariants {
         disk_gb: disk_size,
         boot_disk_gb: 25,
         preemptible_tries: 1,
-        max_retries: 1
+        max_retries: 0
     }
     RuntimeAttr runtime_attr = select_first([runtime_attr_override, default_attr])
     runtime {

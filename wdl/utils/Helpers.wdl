@@ -632,7 +632,7 @@ task BcftoolsMergeChunk {
         mem_gb: 16,
         disk_gb: 100,
         boot_disk_gb: 10,
-        preemptible_tries: 4,
+        preemptible_tries: 1,
         max_retries: 0
     }
     RuntimeAttr runtime_attr = select_first([runtime_attr_override, default_attr])
@@ -1497,7 +1497,7 @@ task ConvertToHailMT {
         mem_gb: 64,
         disk_gb: disk_size,
         boot_disk_gb: 25,
-        preemptible_tries: 0,
+        preemptible_tries: 1,
         max_retries: 0
     }
     RuntimeAttr runtime_attr = select_first([runtime_attr_override, default_attr])
