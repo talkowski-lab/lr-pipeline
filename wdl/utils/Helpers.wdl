@@ -2563,20 +2563,13 @@ task GetHailMTSize {
     command <<<
         set -euo pipefail
 
-        tot_size=$(gsutil -m du -sh ~{mt_uri} | awk -F '    ' '{ print $1 }')
-
+        # The Hail image ships google-cloud-storage but not gsutil; sums a single VCF or every blob under a MatrixTable directory
         python3 <<CODE > mt_size.txt
-import sys
+from google.cloud import storage
 
-size = "$tot_size".split()[0]
-unit = "$tot_size".split()[1]
-
-def convert_to_gib(size, unit):
-    size_dict = {"KiB": 2**10, "MiB": 2**20, "GB": 2**30, "TiB": 2**40}
-    return float(size) * size_dict[unit] / size_dict["GB"]
-
-size_in_gib = convert_to_gib(size, unit)
-print(size_in_gib)
+bucket, _, path = "~{mt_uri}".rstrip("/")[len("gs://"):].partition("/")
+blobs = storage.Client().list_blobs(bucket, prefix=path)
+print(sum(b.size for b in blobs if b.name == path or b.name.startswith(path + "/")) / 2**30)
 CODE
     >>>
 
