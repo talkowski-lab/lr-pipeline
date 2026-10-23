@@ -34,6 +34,21 @@ BLANK_COMMENT_RE = re.compile(r"^\s*#{2,}\s*$")
 PASCAL_CASE_RE = re.compile(r"^[A-Z][A-Za-z0-9]*$")
 CALL_ALIAS_RE = re.compile(r"^\s*call\s+[\w.]+\s+as\s+(\w+)")
 RUNTIME_ATTR_INPUT_RE = re.compile(r"^ {8}RuntimeAttr\?\s+(\w+)\s*$")
+RETRY_DEFAULT_RE = re.compile(r"\b(preemptible_tries|max_retries):\s*(\d+)\b")
+RETRY_DEFAULTS = {"preemptible_tries": "1", "max_retries": "0"}
+MEMORY_RE = re.compile(r"^\s*memory:\s*(.*?)\s*$")
+STANDARD_MEMORY = 'select_first([runtime_attr.mem_gb, default_attr.mem_gb]) + " GiB"'
+SECTION_OPEN_RE = re.compile(r"^ {4}(input|output)\s*\{")
+DECL_LINE_RE = re.compile(r"^ {8}(?:(?:Array|Map|Pair)\[.*?\]|[A-Z]\w*)[?+]*\s+(\w+)(?:\s*=.*)?$")
+SNAKE_CASE_RE = re.compile(r"^[a-z][a-z0-9_]*$")
+# Names the conventions retire, each with the form to use instead
+RETIRED_NAME_PARTS = [
+    (re.compile(r"(^|_)fasta(_|$)"), "use 'fa' instead of 'fasta'"),
+    (re.compile(r"(^|_)(fasta_index|fasta_fai|fa_fai|fa_idx)(_|$)"), "use 'fai' for a FASTA index"),
+    (re.compile(r"(^|_)vcf_(index|tbi)(_|$)"), "use 'vcf_idx' for a VCF index"),
+    (re.compile(r"(^|_)tbi(_|$)"), "use '_idx' instead of '_tbi' for an index"),
+]
+DOCKER_INPUT_NAME_RE = re.compile(r"^[a-z0-9_]+_docker$")
 
 # Markdown that docs/workflows.md is generated from, so descriptions must not carry it
 MARKDOWN_LINK_RE = re.compile(r"\]\(")
@@ -48,6 +63,14 @@ TOOL_URL_RE = re.compile(r"\(https?://[^\s()]+\)")
 # Tasks whose command block deliberately opens with something other than `set -euo pipefail`.
 # Add an entry only when the standard flags would change runtime behavior, and say why.
 SET_LINE_ALLOWLIST = set()
+
+# Tasks whose runtime memory is deliberately not the standard expression (W031), as (path, task).
+# The LRCNVs tasks size memory from the input; TRGTLPS is pending its own runtime rewrite.
+MEMORY_ALLOWLIST = {
+    ("wdl/utils/LRCNVs.wdl", "GermlineCNVCallerCohortMode"),
+    ("wdl/utils/LRCNVs.wdl", "GermlineCNVCallerCaseMode"),
+    ("wdl/tools/TRGTLPS.wdl", "*"),
+}
 
 
 class Checker:
@@ -102,11 +125,53 @@ class Checker:
                 self.error(1, "W013", "workflow '{}' must match the file name '{}.wdl'".format(name, stem))
 
         self.check_comment_runs()
+        self.check_declaration_names()
         self.check_unused_runtime_attrs()
         if workflows:
             self.check_workflow_meta()
         else:
             self.check_alphabetical_tasks()
+
+    def check_declaration_names(self):
+        """Enforce snake_case and the retired-name rules on input and output declarations; structs are exempt."""
+        kind = None
+        section = None
+        in_command = False
+        for index, line in enumerate(self.lines):
+            if in_command:
+                in_command = line.strip() != ">>>"
+                continue
+            if COMMAND_OPEN_RE.match(line):
+                in_command = True
+                continue
+            block_match = BLOCK_RE.match(line)
+            if block_match:
+                kind, section = block_match.group(1), None
+                continue
+            open_match = SECTION_OPEN_RE.match(line)
+            if open_match:
+                section = open_match.group(1)
+                continue
+            if section and line.startswith("    }"):
+                section = None
+                continue
+            if not section or kind not in ("task", "workflow"):
+                continue
+            decl_match = DECL_LINE_RE.match(line)
+            if decl_match:
+                self.check_declaration_name(index + 1, kind, section, decl_match.group(1), line.split()[0])
+
+    def check_declaration_name(self, line_no, kind, section, name, type_name):
+        if not SNAKE_CASE_RE.match(name):
+            self.error(line_no, "W033", "{} '{}' must be snake_case: lowercase letters, digits and '_'".format(section, name))
+        for pattern, advice in RETIRED_NAME_PARTS:
+            if pattern.search(name):
+                self.error(line_no, "W033", "{} '{}': {}".format(section, name, advice))
+                break
+        is_docker = "docker" in name
+        if kind == "workflow" and section == "input" and type_name == "String" and is_docker:
+            if not DOCKER_INPUT_NAME_RE.match(name):
+                self.error(line_no, "W033", "workflow docker input '{}' must end in '_docker'".format(name))
 
     def check_comment_runs(self):
         """A comment must fit on one line; only a header starting at line 1 may span several."""
@@ -278,6 +343,19 @@ class Checker:
         if alias_match and not PASCAL_CASE_RE.match(alias_match.group(1)):
             self.error(line_no, "W015", "call alias '{}' must be in Pascal case".format(alias_match.group(1)))
 
+        retry_match = RETRY_DEFAULT_RE.search(line)
+        if retry_match and retry_match.group(2) != RETRY_DEFAULTS[retry_match.group(1)]:
+            self.error(
+                line_no,
+                "W030",
+                "default {} must be {}, found {}".format(
+                    retry_match.group(1), RETRY_DEFAULTS[retry_match.group(1)], retry_match.group(2)
+                ),
+            )
+        memory_match = MEMORY_RE.match(line)
+        if memory_match and memory_match.group(1) != STANDARD_MEMORY and not self.memory_allowed():
+            self.error(line_no, "W031", "runtime memory must be '{}'".format(STANDARD_MEMORY))
+
         block_match = BLOCK_RE.match(line)
         if block_match:
             self.flush_task(line_no)
@@ -289,6 +367,9 @@ class Checker:
         section_match = SECTION_RE.match(line)
         if section_match and self.block_kind == "task":
             self.sections.append((section_match.group(1), line_no))
+
+    def memory_allowed(self):
+        return (self.path, self.block_name) in MEMORY_ALLOWLIST or (self.path, "*") in MEMORY_ALLOWLIST
 
     def enter_command(self, index, line, open_match):
         line_no = index + 1
@@ -362,6 +443,33 @@ class Checker:
         self.sections = []
 
 
+def duplicate_task_errors(sources):
+    """Report every task name declared more than once across (path, text) sources (W032)."""
+    seen = {}
+    errors = []
+    for path, text in sources:
+        in_command = False
+        for index, line in enumerate(text.split("\n")):
+            if in_command:
+                in_command = line.strip() != ">>>"
+                continue
+            if COMMAND_OPEN_RE.match(line):
+                in_command = True
+                continue
+            match = BLOCK_RE.match(line)
+            if not match or match.group(1) != "task":
+                continue
+            name = match.group(2)
+            if name in seen:
+                first_path, first_line = seen[name]
+                errors.append(
+                    (path, index + 1, "W032", "task '{}' is already declared at {}:{}".format(name, first_path, first_line))
+                )
+            else:
+                seen[name] = (path, index + 1)
+    return errors
+
+
 def collect_files(paths):
     files = []
     for raw in paths:
@@ -381,9 +489,13 @@ def main():
     paths = sys.argv[1:] or DEFAULT_PATHS
     files = collect_files(paths)
     errors = []
+    sources = []
     for path in files:
         rel = str(path.relative_to(REPO_ROOT)) if REPO_ROOT in path.parents else str(path)
-        errors.extend(Checker(rel, path.read_text()).run())
+        text = path.read_text()
+        sources.append((rel, text))
+        errors.extend(Checker(rel, text).run())
+    errors.extend(duplicate_task_errors(sources))
 
     if errors:
         print("WDL style check failed:\n")
