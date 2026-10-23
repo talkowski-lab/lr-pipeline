@@ -13,8 +13,8 @@ workflow AnnotatePALMER {
     parameter_meta {
         vcf: "VCF to annotate."
         vcf_idx: "Index for VCF to annotate."
-        PALMER_vcf: "VCF of PALMER MEI calls to match against."
-        PALMER_vcf_idx: "Index for `PALMER_vcf`."
+        palmer_vcf: "VCF of PALMER MEI calls to match against."
+        palmer_vcf_idx: "Index for `palmer_vcf`."
         contigs: "Contigs to annotate within the input VCF."
         records_per_shard: "Number of variants to keep within a single shard during annotation."
         mei_types: "MEI types to run on - must be a subset of [`ALU`, `SVA`, `LINE` or `HERVK`]."
@@ -48,8 +48,8 @@ workflow AnnotatePALMER {
     input {
         File vcf
         File vcf_idx
-        File PALMER_vcf
-        File PALMER_vcf_idx
+        File palmer_vcf
+        File palmer_vcf_idx
         Array[String] contigs
         String prefix
 
@@ -128,8 +128,8 @@ workflow AnnotatePALMER {
                 input:
                     vcf = vcfs_to_process[i],
                     vcf_idx = vcf_idxs_to_process[i],
-                    PALMER_vcf = PALMER_vcf,
-                    PALMER_vcf_idx = PALMER_vcf_idx,
+                    palmer_vcf = palmer_vcf,
+                    palmer_vcf_idx = palmer_vcf_idx,
                     mei_types = mei_types,
                     rm_out = rm_out,
                     rm_buffer = rm_buffer,
@@ -194,8 +194,8 @@ task FilterPALMER {
     input {
         File vcf
         File vcf_idx
-        File PALMER_vcf
-        File PALMER_vcf_idx
+        File palmer_vcf
+        File palmer_vcf_idx
         Array[String] mei_types
         File rm_out
         Int rm_buffer
@@ -237,7 +237,7 @@ task FilterPALMER {
                 -i "INFO/ME_TYPE='${ME_type}'" \
                 -Oz \
                 -o ${ME_type}_subset.vcf.gz \
-                ~{PALMER_vcf}
+                ~{palmer_vcf}
             tabix ${ME_type}_subset.vcf.gz
 
             MEfilter=""
@@ -322,7 +322,7 @@ task FilterPALMER {
     RuntimeAttr default_attr = object {
         cpu_cores: 1,
         mem_gb: 4,
-        disk_gb: 3*ceil(size(vcf, "GB")+size(PALMER_vcf, "GB")+size(rm_out, "GB"))+20,
+        disk_gb: 3*ceil(size(vcf, "GB")+size(palmer_vcf, "GB")+size(rm_out, "GB"))+20,
         boot_disk_gb: 10,
         preemptible_tries: 1,
         max_retries: 0

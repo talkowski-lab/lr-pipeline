@@ -34,7 +34,7 @@ workflow BackbonePhase {
         File? swap_samples_base
         Boolean allow_unphased_match_phase = false
 
-        String docker
+        String utils_docker
 
         RuntimeAttr? runtime_attr_swap_sample_ids
         RuntimeAttr? runtime_attr_subset_base_vcf
@@ -52,7 +52,7 @@ workflow BackbonePhase {
                     vcf_idx = base_vcf_idxs[i],
                     sample_swap_list = select_first([swap_samples_base]),
                     prefix = "~{prefix}.base_~{i}.swapped",
-                    docker = docker,
+                    docker = utils_docker,
                     runtime_attr_override = runtime_attr_swap_sample_ids
             }
         }
@@ -63,7 +63,7 @@ workflow BackbonePhase {
                 vcf_idx = select_first([SwapSampleIds.swapped_vcf_idx, base_vcf_idxs[i]]),
                 contig = contig,
                 prefix = "~{prefix}.base_~{i}.contig",
-                docker = docker,
+                docker = utils_docker,
                 runtime_attr_override = runtime_attr_subset_base_vcf
         }
 
@@ -72,7 +72,7 @@ workflow BackbonePhase {
                 vcf = SubsetVcfToContig.subset_vcf,
                 vcf_idx = SubsetVcfToContig.subset_vcf_idx,
                 prefix = "~{prefix}.base_~{i}.prepared",
-                docker = docker,
+                docker = utils_docker,
                 runtime_attr_override = runtime_attr_prepare_base_vcf
         }
     }
@@ -83,7 +83,7 @@ workflow BackbonePhase {
             vcf_idx = vcf_idx,
             base_vcfs = PrepareBaseVcf.prepared_vcf,
             prefix = "~{prefix}.assignments",
-            docker = docker,
+            docker = utils_docker,
             runtime_attr_override = runtime_attr_assign_samples
     }
 
@@ -95,10 +95,10 @@ workflow BackbonePhase {
                 base_vcf = PrepareBaseVcf.prepared_vcf[i],
                 base_vcf_idx = PrepareBaseVcf.prepared_vcf_idx[i],
                 assignment_tsv = AssignSamplesToBaseVcfs.assignment_tsv,
-                base_vcf_index = i,
+                base_vcf_number = i,
                 allow_unphased_match_phase = allow_unphased_match_phase,
                 prefix = "~{prefix}.base_~{i}.flips",
-                docker = docker,
+                docker = utils_docker,
                 runtime_attr_override = runtime_attr_compute_flips
         }
     }
@@ -110,7 +110,7 @@ workflow BackbonePhase {
             flip_tsvs = ComputePhaseFlips.flips_tsv,
             missing_samples_file = AssignSamplesToBaseVcfs.missing_samples,
             prefix = "~{prefix}.transferred",
-            docker = docker,
+            docker = utils_docker,
             runtime_attr_override = runtime_attr_apply_flips
     }
 
@@ -239,7 +239,7 @@ task ComputePhaseFlips {
         File base_vcf
         File base_vcf_idx
         File assignment_tsv
-        Int base_vcf_index
+        Int base_vcf_number
         Boolean allow_unphased_match_phase
         String prefix
         String docker
@@ -319,13 +319,13 @@ def phase_unphased_gt_by_base_match(rec, gt, base_gts):
         return (a, b) if a_support == 0 else (b, a)
     return None
 
-base_vcf_index = ~{base_vcf_index}
+base_vcf_number = ~{base_vcf_number}
 allow_unphased_match_phase = "~{allow_unphased_match_phase}" == "true"
 assigned_samples = []
 with open("~{assignment_tsv}") as f:
     for line in f:
         sample, idx = line.rstrip("\n").split("\t")
-        if int(idx) == base_vcf_index:
+        if int(idx) == base_vcf_number:
             assigned_samples.append(sample)
 
 with open("~{prefix}.tsv", "w") as out:

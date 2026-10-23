@@ -79,7 +79,7 @@ workflow EvaluateBackbonePhasing {
         call ExtractAssignedSamplesForBaseVcf {
             input:
                 assignment_tsv = AssignSamplesToBaseVcfs.assignment_tsv,
-                base_vcf_index = j,
+                base_vcf_number = j,
                 prefix = "~{prefix}.base_~{j}.assigned_samples",
                 docker = utils_docker,
                 runtime_attr_override = runtime_attr_extract_assigned_samples
@@ -176,7 +176,7 @@ workflow EvaluateBackbonePhasing {
 task ExtractAssignedSamplesForBaseVcf {
     input {
         File assignment_tsv
-        Int base_vcf_index
+        Int base_vcf_number
         String prefix
         String docker
         RuntimeAttr? runtime_attr_override
@@ -190,7 +190,7 @@ samples = []
 with open("~{assignment_tsv}") as handle:
     for line in handle:
         sample, base_idx = line.rstrip("\n").split("\t")
-        if int(base_idx) == ~{base_vcf_index}:
+        if int(base_idx) == ~{base_vcf_number}:
             samples.append(sample)
 
 samples = sorted(samples)

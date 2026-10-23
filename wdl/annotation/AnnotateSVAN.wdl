@@ -26,9 +26,9 @@ workflow AnnotateSVAN {
         exons_bed: "From references."
         repeats_bed: "From references."
         ref_fa: "From references."
-        ref_fa_idx: "From references."
+        ref_fai: "From references."
         mei_fa: "From references."
-        mei_fa_idx: "From references."
+        mei_fai: "From references."
         annotations_tsv_svan: "TSV of SVAN annotations."
         annotations_header_svan: "Header lines describing the SVAN annotation fields."
     }
@@ -53,9 +53,9 @@ workflow AnnotateSVAN {
         File exons_bed
         File repeats_bed
         File ref_fa
-        Array[File] ref_fa_idx
+        Array[File] ref_fai
         File mei_fa
-        Array[File] mei_fa_idx
+        Array[File] mei_fai
 
         String svan_docker
         String utils_docker
@@ -165,9 +165,9 @@ workflow AnnotateSVAN {
                         exons_bed = exons_bed,
                         repeats_bed = repeats_bed,
                         mei_fa = mei_fa,
-                        mei_fa_idx = mei_fa_idx,
+                        mei_fai = mei_fai,
                         ref_fa = ref_fa,
-                        ref_fa_idx = ref_fa_idx,
+                        ref_fai = ref_fai,
                         mode = "ins",
                         prefix = "~{prefix}.~{contig}.ins_shard_~{i}.svan",
                         docker = svan_docker,
@@ -276,9 +276,9 @@ workflow AnnotateSVAN {
                         exons_bed = exons_bed,
                         repeats_bed = repeats_bed,
                         mei_fa = mei_fa,
-                        mei_fa_idx = mei_fa_idx,
+                        mei_fai = mei_fai,
                         ref_fa = ref_fa,
-                        ref_fa_idx = ref_fa_idx,
+                        ref_fai = ref_fai,
                         mode = "del",
                         prefix = "~{prefix}.~{contig}.del_shard_~{i}.svan",
                         docker = svan_docker,
@@ -388,9 +388,9 @@ task RunSvanAnnotate {
         File exons_bed
         File repeats_bed
         File mei_fa
-        Array[File] mei_fa_idx
+        Array[File] mei_fai
         File ref_fa
-        Array[File] ref_fa_idx
+        Array[File] ref_fai
         String mode
         String prefix
         String docker
@@ -447,7 +447,7 @@ task RunSvanAnnotate {
     RuntimeAttr default_attr = object {
         cpu_cores: 4,
         mem_gb: 16,
-        disk_gb: 2 * ceil(size(vcf, "GB") + size(mei_fa, "GB") + size(mei_fa_idx, "GB") + size(ref_fa, "GB")  + size(ref_fa_idx, "GB")) + 20,
+        disk_gb: 2 * ceil(size(vcf, "GB") + size(mei_fa, "GB") + size(mei_fai, "GB") + size(ref_fa, "GB")  + size(ref_fai, "GB")) + 20,
         boot_disk_gb: 10,
         preemptible_tries: 1,
         max_retries: 0

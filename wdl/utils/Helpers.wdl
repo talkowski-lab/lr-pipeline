@@ -1433,7 +1433,7 @@ task ConvertToHailMT {
 
     parameter_meta {
         gvcf: "VCF to convert to a MatrixTable."
-        tbi: "Index for gvcf."
+        gvcf_idx: "Index for gvcf."
         reference: "Reference assembly label; only GRCh38 is supported."
         ref_fa: "Reference sequences FASTA file; downloaded from Hail if not provided."
         ref_fai: "Index for ref_fa; downloaded from Hail if not provided."
@@ -1444,7 +1444,7 @@ task ConvertToHailMT {
 
     input {
         File gvcf
-        File tbi
+        File gvcf_idx
         String prefix = "out"
 
         String reference = "GRCh38"
