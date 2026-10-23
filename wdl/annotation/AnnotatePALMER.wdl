@@ -231,6 +231,11 @@ task FilterPALMER {
     command <<<
         set -euo pipefail
 
+        # Sharded inputs arrive with the index in a separate glob directory, but pysam fetch expects it beside the VCF
+        if [[ "~{vcf_idx}" != "~{vcf}.tbi" ]]; then
+            ln -sf "~{vcf_idx}" "~{vcf}.tbi"
+        fi
+
         cut -f1,2 ~{ref_fai} > genome_file
 
         mei_types=(~{sep=' ' mei_types})
