@@ -60,7 +60,7 @@ workflow CreateTRGTHistograms {
         }
 
         if (!single_contig) {
-            call SubsetLpsTsvToContig {
+            call Helpers.SubsetLpsTsvToContig {
                 input:
                     tsv = filtered_lps_tsv,
                     contig = contig,
@@ -98,72 +98,6 @@ workflow CreateTRGTHistograms {
 
     output {
         File trgt_histograms_tsv = select_first([ConcatTsvs.concatenated_tsv, ConvertLPSTableToAFHistograms.af_histograms_tsv[0]])
-    }
-}
-
-task SubsetLpsTsvToContig {
-    input {
-        File tsv
-        String contig
-        String prefix
-        String docker
-        RuntimeAttr? runtime_attr_override
-    }
-
-    command <<<
-        set -euo pipefail
-
-        zcat -f ~{tsv} \
-            | awk -F'\t' -v contig="~{contig}" '
-                BEGIN {
-                    if (contig ~ /^chr/) contig = substr(contig, 4)
-                }
-
-                {
-                    split($1, arr, ",")
-                    # Variation cluster TRIDs carry their contig in the second colon-delimited field, not the first
-                    if (arr[1] ~ /^VC:/) {
-                        split(arr[1], vcparts, ":")
-                        chr = vcparts[2]
-                    } else {
-                        split(arr[1], parts, "-")
-                        chr = parts[1]
-                    }
-                    if (chr ~ /^chr/) chr = substr(chr, 4)
-                    if (chr ~ /^trid/) header = $0
-                    else if (chr == contig) data[++n] = $0
-                }
-
-                END {
-                    print header
-                    for (i = 1; i <= n; i++) print data[i]
-                }
-            ' \
-            | gzip -c \
-            > ~{prefix}.tsv.gz
-    >>>
-
-    output {
-        File subset_tsv = "~{prefix}.tsv.gz"
-    }
-
-    RuntimeAttr default_attr = object {
-        cpu_cores: 1,
-        mem_gb: 4,
-        disk_gb: 2 * ceil(size(tsv, "GB")) + 5,
-        boot_disk_gb: 10,
-        preemptible_tries: 1,
-        max_retries: 0
-    }
-    RuntimeAttr runtime_attr = select_first([runtime_attr_override, default_attr])
-    runtime {
-        cpu: select_first([runtime_attr.cpu_cores, default_attr.cpu_cores])
-        memory: select_first([runtime_attr.mem_gb, default_attr.mem_gb]) + " GiB"
-        disks: "local-disk " + select_first([runtime_attr.disk_gb, default_attr.disk_gb]) + " HDD"
-        bootDiskSizeGb: select_first([runtime_attr.boot_disk_gb, default_attr.boot_disk_gb])
-        docker: docker
-        preemptible: select_first([runtime_attr.preemptible_tries, default_attr.preemptible_tries])
-        maxRetries: select_first([runtime_attr.max_retries, default_attr.max_retries])
     }
 }
 

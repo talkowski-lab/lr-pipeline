@@ -7,6 +7,7 @@
 
 version 1.0
 
+import "Helpers.wdl"
 import "Structs.wdl"
 
 workflow MergeCohortLongSVClass {
@@ -72,18 +73,18 @@ workflow MergeCohortLongSVClass {
     String collapse_dir = remote_outdir_suffix + "/14_collapse"
     String concat_dir = remote_outdir_suffix + "/15_concat"
 
-    call WriteSampleList {
+    call WriteLongSVSampleList {
         input:
             remote_indir = remote_indir,
             suffix = suffix,
             docker = sv_integration_docker,
             runtime_attr_override = runtime_attr_write_sample_list
     }
-    Int n_samples = select_first([n_expected_samples, WriteSampleList.n_samples])
+    Int n_samples = select_first([n_expected_samples, WriteLongSVSampleList.n_samples])
 
     call MergeCalls {
         input:
-            sample_ids = WriteSampleList.sample_ids_file,
+            sample_ids = WriteLongSVSampleList.sample_ids_file,
             suffix = suffix,
             chromosomes = chromosomes,
             remote_indir = remote_indir,
@@ -94,7 +95,7 @@ workflow MergeCohortLongSVClass {
     }
 
     scatter (chromosome in chromosomes) {
-        call ShardChromosome {
+        call ShardLongSVChromosome {
             input:
                 chromosome_id = chromosome,
                 suffix = suffix,
@@ -108,16 +109,16 @@ workflow MergeCohortLongSVClass {
                 runtime_attr_override = runtime_attr_shard_chromosome
         }
 
-        call DeriveChunkIds {
+        call Helpers.DeriveChunkIds {
             input:
-                regions_txt = ShardChromosome.regions_txt,
+                regions_txt = ShardLongSVChromosome.regions_txt,
                 chunk_ids_per_file = chunk_ids_per_file,
                 docker = sv_integration_docker,
                 runtime_attr_override = runtime_attr_derive_chunk_ids
         }
 
         scatter (chunk_ids_file in DeriveChunkIds.chunk_id_files) {
-            call CollapseShards {
+            call CollapseLongSVShards {
                 input:
                     remote_indir = shard_dir,
                     chromosome_id = chromosome,
@@ -133,21 +134,21 @@ workflow MergeCohortLongSVClass {
             }
         }
 
-        call ConcatChromosomeShards {
+        call ConcatLongSVChromosomeShards {
             input:
                 chromosome = chromosome,
                 remote_indir = collapse_dir,
                 remote_outdir = concat_dir,
-                upstream_signal = CollapseShards.done,
+                upstream_signal = CollapseLongSVShards.done,
                 docker = sv_integration_docker,
                 runtime_attr_override = runtime_attr_concat_chromosome_shards
         }
     }
 
-    call ConcatChromosomes {
+    call ConcatLongSVChromosomes {
         input:
             chromosomes = chromosomes,
-            out_txt = ConcatChromosomeShards.out_txt,
+            out_txt = ConcatLongSVChromosomeShards.out_txt,
             remote_outdir = concat_dir,
             prefix = prefix,
             naive = concat_all_naive,
@@ -156,12 +157,12 @@ workflow MergeCohortLongSVClass {
     }
 
     output {
-        String done = ConcatChromosomes.done
+        String done = ConcatLongSVChromosomes.done
         String cohort_dir = concat_dir
     }
 }
 
-task WriteSampleList {
+task WriteLongSVSampleList {
     input {
         String remote_indir
         String suffix
@@ -366,7 +367,7 @@ END
     }
 }
 
-task ShardChromosome {
+task ShardLongSVChromosome {
     input {
         String chromosome_id
         String suffix
@@ -466,52 +467,7 @@ END
     }
 }
 
-task DeriveChunkIds {
-    input {
-        File regions_txt
-        Int chunk_ids_per_file
-        String docker
-
-        RuntimeAttr? runtime_attr_override
-    }
-
-    command <<<
-        set -euo pipefail
-
-        awk 'NF>=2 {print $2}' ~{regions_txt} > ids.txt
-        if [ ! -s ids.txt ]; then
-            echo "ERROR: no chunk ids found in regions.txt."
-            exit 1
-        fi
-        split -l ~{chunk_ids_per_file} -d -a 4 ids.txt chunk_ids_
-        ls chunk_ids_* 1>&2
-    >>>
-
-    output {
-        Array[File] chunk_id_files = glob("chunk_ids_*")
-    }
-
-    RuntimeAttr default_attr = object {
-        cpu_cores: 1,
-        mem_gb: 2,
-        disk_gb: 16,
-        boot_disk_gb: 10,
-        preemptible_tries: 1,
-        max_retries: 0
-    }
-    RuntimeAttr runtime_attr = select_first([runtime_attr_override, default_attr])
-    runtime {
-        cpu: select_first([runtime_attr.cpu_cores, default_attr.cpu_cores])
-        memory: select_first([runtime_attr.mem_gb, default_attr.mem_gb]) + " GiB"
-        disks: "local-disk " + select_first([runtime_attr.disk_gb, default_attr.disk_gb]) + " HDD"
-        bootDiskSizeGb: select_first([runtime_attr.boot_disk_gb, default_attr.boot_disk_gb])
-        docker: docker
-        preemptible: select_first([runtime_attr.preemptible_tries, default_attr.preemptible_tries])
-        maxRetries: select_first([runtime_attr.max_retries, default_attr.max_retries])
-    }
-}
-
-task CollapseShards {
+task CollapseLongSVShards {
     input {
         String remote_indir
         String chromosome_id
@@ -656,7 +612,7 @@ task CollapseShards {
     }
 }
 
-task ConcatChromosomeShards {
+task ConcatLongSVChromosomeShards {
     input {
         String chromosome
         String remote_indir
@@ -746,7 +702,7 @@ task ConcatChromosomeShards {
     }
 }
 
-task ConcatChromosomes {
+task ConcatLongSVChromosomes {
     input {
         Array[String] chromosomes
         Array[File] out_txt

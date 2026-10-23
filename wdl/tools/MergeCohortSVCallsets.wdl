@@ -73,7 +73,7 @@ workflow MergeCohortSVCallsets {
     Int n_chunks = length(read_lines(split_for_bcftools_merge_csv))
 
     if (!defined(sample_ids_file)) {
-        call WriteSampleList {
+        call Helpers.WriteSampleList {
             input:
                 remote_indir = indir,
                 docker = sv_integration_docker,
@@ -118,7 +118,7 @@ workflow MergeCohortSVCallsets {
                 runtime_attr_override = runtime_attr_shard_chromosome
         }
 
-        call DeriveChunkIds {
+        call Helpers.DeriveChunkIds {
             input:
                 regions_txt = ShardChromosome.regions_txt,
                 chunk_ids_per_file = chunk_ids_per_file,
@@ -163,49 +163,6 @@ workflow MergeCohortSVCallsets {
     }
 
     output {
-    }
-}
-
-task WriteSampleList {
-    input {
-        String remote_indir
-        String docker
-
-        RuntimeAttr? runtime_attr_override
-    }
-
-    command <<<
-        set -euo pipefail
-
-        gcloud storage ls ~{remote_indir}/'*.done' | sed 's#.*/##; s#\.done$##' | sort -u > sample_ids.txt
-        wc -l sample_ids.txt 1>&2
-        if [ ! -s sample_ids.txt ]; then
-            echo "ERROR: no <sample>.done markers found under ~{remote_indir}."
-            exit 1
-        fi
-    >>>
-
-    output {
-        File sample_ids_file = "sample_ids.txt"
-    }
-
-    RuntimeAttr default_attr = object {
-        cpu_cores: 1,
-        mem_gb: 2,
-        disk_gb: 16,
-        boot_disk_gb: 10,
-        preemptible_tries: 1,
-        max_retries: 0
-    }
-    RuntimeAttr runtime_attr = select_first([runtime_attr_override, default_attr])
-    runtime {
-        cpu: select_first([runtime_attr.cpu_cores, default_attr.cpu_cores])
-        memory: select_first([runtime_attr.mem_gb, default_attr.mem_gb]) + " GiB"
-        disks: "local-disk " + select_first([runtime_attr.disk_gb, default_attr.disk_gb]) + " HDD"
-        bootDiskSizeGb: select_first([runtime_attr.boot_disk_gb, default_attr.boot_disk_gb])
-        docker: docker
-        preemptible: select_first([runtime_attr.preemptible_tries, default_attr.preemptible_tries])
-        maxRetries: select_first([runtime_attr.max_retries, default_attr.max_retries])
     }
 }
 
@@ -367,51 +324,6 @@ END
         cpu: select_first([runtime_attr.cpu_cores, default_attr.cpu_cores])
         memory: select_first([runtime_attr.mem_gb, default_attr.mem_gb]) + " GiB"
         disks: "local-disk " + select_first([runtime_attr.disk_gb, default_attr.disk_gb]) + " SSD"
-        bootDiskSizeGb: select_first([runtime_attr.boot_disk_gb, default_attr.boot_disk_gb])
-        docker: docker
-        preemptible: select_first([runtime_attr.preemptible_tries, default_attr.preemptible_tries])
-        maxRetries: select_first([runtime_attr.max_retries, default_attr.max_retries])
-    }
-}
-
-task DeriveChunkIds {
-    input {
-        File regions_txt
-        Int chunk_ids_per_file
-        String docker
-
-        RuntimeAttr? runtime_attr_override
-    }
-
-    command <<<
-        set -euo pipefail
-
-        awk 'NF>=2 {print $2}' ~{regions_txt} > ids.txt
-        if [ ! -s ids.txt ]; then
-            echo "ERROR: no chunk ids found in regions.txt."
-            exit 1
-        fi
-        split -l ~{chunk_ids_per_file} -d -a 4 ids.txt chunk_ids_
-        ls chunk_ids_* 1>&2
-    >>>
-
-    output {
-        Array[File] chunk_id_files = glob("chunk_ids_*")
-    }
-
-    RuntimeAttr default_attr = object {
-        cpu_cores: 1,
-        mem_gb: 2,
-        disk_gb: 16,
-        boot_disk_gb: 10,
-        preemptible_tries: 1,
-        max_retries: 0
-    }
-    RuntimeAttr runtime_attr = select_first([runtime_attr_override, default_attr])
-    runtime {
-        cpu: select_first([runtime_attr.cpu_cores, default_attr.cpu_cores])
-        memory: select_first([runtime_attr.mem_gb, default_attr.mem_gb]) + " GiB"
-        disks: "local-disk " + select_first([runtime_attr.disk_gb, default_attr.disk_gb]) + " HDD"
         bootDiskSizeGb: select_first([runtime_attr.boot_disk_gb, default_attr.boot_disk_gb])
         docker: docker
         preemptible: select_first([runtime_attr.preemptible_tries, default_attr.preemptible_tries])

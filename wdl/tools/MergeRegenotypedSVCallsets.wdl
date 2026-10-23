@@ -49,7 +49,7 @@ workflow MergeRegenotypedSVCallsets {
     Int n_chunks = length(read_lines(split_for_bcftools_merge_csv))
 
     if (!defined(sample_ids_file)) {
-        call WriteSampleList {
+        call Helpers.WriteSampleList {
             input:
                 remote_indir = indir,
                 docker = sv_integration_docker,
@@ -90,49 +90,6 @@ workflow MergeRegenotypedSVCallsets {
     }
 
     output {
-    }
-}
-
-task WriteSampleList {
-    input {
-        String remote_indir
-        String docker
-
-        RuntimeAttr? runtime_attr_override
-    }
-
-    command <<<
-        set -euo pipefail
-
-        gcloud storage ls ~{remote_indir}/'*.done' | sed 's#.*/##; s#\.done$##' | sort -u > sample_ids.txt
-        wc -l sample_ids.txt 1>&2
-        if [ ! -s sample_ids.txt ]; then
-            echo "ERROR: no <sample>.done markers found under ~{remote_indir}."
-            exit 1
-        fi
-    >>>
-
-    output {
-        File sample_ids_file = "sample_ids.txt"
-    }
-
-    RuntimeAttr default_attr = object {
-        cpu_cores: 1,
-        mem_gb: 2,
-        disk_gb: 16,
-        boot_disk_gb: 10,
-        preemptible_tries: 1,
-        max_retries: 0
-    }
-    RuntimeAttr runtime_attr = select_first([runtime_attr_override, default_attr])
-    runtime {
-        cpu: select_first([runtime_attr.cpu_cores, default_attr.cpu_cores])
-        memory: select_first([runtime_attr.mem_gb, default_attr.mem_gb]) + " GiB"
-        disks: "local-disk " + select_first([runtime_attr.disk_gb, default_attr.disk_gb]) + " HDD"
-        bootDiskSizeGb: select_first([runtime_attr.boot_disk_gb, default_attr.boot_disk_gb])
-        docker: docker
-        preemptible: select_first([runtime_attr.preemptible_tries, default_attr.preemptible_tries])
-        maxRetries: select_first([runtime_attr.max_retries, default_attr.max_retries])
     }
 }
 
