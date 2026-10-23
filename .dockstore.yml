@@ -813,6 +813,7 @@ workflows:
     filters:
       branches:
         - main
+        - kj-platinum-template
       tags:
         - /.*/
 
