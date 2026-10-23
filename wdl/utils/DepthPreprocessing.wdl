@@ -273,10 +273,15 @@ task MergeSample {
 
         sort ~{gcnv} -k1,1V -k2,2n > ~{prefix}.bed
         bedtools merge -i ~{prefix}.bed -d 0 -c 4,5,6,7 -o distinct > ~{prefix}.merged.bed
-        /opt/sv-pipeline/00_preprocessing/scripts/defragment_cnvs.py \
-            --max-dist ~{if defined(max_dist) then max_dist else "0.25"} \
-            ~{prefix}.merged.bed \
-            ~{prefix}.merged.defrag.bed
+        # A sample with no calls of this type has an empty BED, which defragment_cnvs.py cannot read
+        if [ -s ~{prefix}.merged.bed ]; then
+            /opt/sv-pipeline/00_preprocessing/scripts/defragment_cnvs.py \
+                --max-dist ~{if defined(max_dist) then max_dist else "0.25"} \
+                ~{prefix}.merged.bed \
+                ~{prefix}.merged.defrag.bed
+        else
+            touch ~{prefix}.merged.defrag.bed
+        fi
         sort -k1,1V -k2,2n ~{prefix}.merged.defrag.bed > ~{prefix}.merged.defrag.sorted.bed
     >>>
 
