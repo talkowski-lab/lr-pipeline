@@ -20,6 +20,3 @@
 # Test fixtures are tracked despite the genomic-file patterns above; miniwdl run directories are not
 !/tests/data/*
 /tests/.runs/
-
-# Example workflow inputs are tracked
-!/inputs/**/*.json
