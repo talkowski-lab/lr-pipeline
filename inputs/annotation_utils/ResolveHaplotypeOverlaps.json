@@ -1,0 +1,8 @@
+{
+    "ResolveHaplotypeOverlaps.vcf": "gs://<cohort-bucket>/cohort.vcf.gz",
+    "ResolveHaplotypeOverlaps.vcf_idx": "gs://<cohort-bucket>/cohort.vcf.gz.tbi",
+    "ResolveHaplotypeOverlaps.contig": "chr22",
+    "ResolveHaplotypeOverlaps.prefix": "cohort",
+    "ResolveHaplotypeOverlaps.records_per_shard": 10000,
+    "ResolveHaplotypeOverlaps.utils_docker": "us-central1-docker.pkg.dev/talkowski-sv-gnomad/kj-dockers/utils:latest"
+}

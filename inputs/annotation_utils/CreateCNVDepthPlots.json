@@ -1,0 +1,14 @@
+{
+    "CreateCNVDepthPlots.genotyped_depth_vcf": "gs://<cohort-bucket>/genotyped_depth.vcf.gz",
+    "CreateCNVDepthPlots.genotyped_depth_vcf_idx": "gs://<cohort-bucket>/genotyped_depth.vcf.gz.tbi",
+    "CreateCNVDepthPlots.regions_bed": "gs://<cohort-bucket>/regions.bed",
+    "CreateCNVDepthPlots.merged_bincov": "gs://<cohort-bucket>/merged_bincov",
+    "CreateCNVDepthPlots.merged_bincov_idx": "gs://<cohort-bucket>/merged_bincov.tbi",
+    "CreateCNVDepthPlots.median_coverage": "gs://<cohort-bucket>/median_coverage",
+    "CreateCNVDepthPlots.prefix": "cohort",
+    "CreateCNVDepthPlots.simple_repeats_bed": "gs://<references-bucket>/hg38.SimpRep.sorted.merged.bed",
+    "CreateCNVDepthPlots.seg_dup_bed": "gs://<references-bucket>/hg38.SegDup.sorted.merged.bed",
+    "CreateCNVDepthPlots.repeat_masked_bed": "gs://<references-bucket>/hg38.RM.sorted.merged.bed",
+    "CreateCNVDepthPlots.utils_docker": "us-central1-docker.pkg.dev/talkowski-sv-gnomad/kj-dockers/utils:latest",
+    "CreateCNVDepthPlots.records_per_shard": 10000
+}

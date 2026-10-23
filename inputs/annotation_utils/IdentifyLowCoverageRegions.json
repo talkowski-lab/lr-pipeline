@@ -1,0 +1,13 @@
+{
+    "IdentifyLowCoverageRegions.mosdepth_bed_files": [
+        "gs://<cohort-bucket>/mosdepth_bed_file"
+    ],
+    "IdentifyLowCoverageRegions.sample_ids": [
+        "sample1",
+        "sample2"
+    ],
+    "IdentifyLowCoverageRegions.ped": "gs://<cohort-bucket>/cohort.ped",
+    "IdentifyLowCoverageRegions.prefix": "cohort",
+    "IdentifyLowCoverageRegions.bin_size": 1000,
+    "IdentifyLowCoverageRegions.utils_docker": "us-central1-docker.pkg.dev/talkowski-sv-gnomad/kj-dockers/utils:latest"
+}

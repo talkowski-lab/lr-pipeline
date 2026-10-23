@@ -22,7 +22,8 @@ The pipeline targets the GRCh38 reference and PacBio HiFi long reads. Cromwell o
 1. Import the workflows you need into Terra from [Dockstore](https://dockstore.org/search?entryType=workflows&search=lr-pipeline), where each is registered as `github.com/talkowski-lab/lr-pipeline/<WorkflowName>`; use the `main` version.
 2. Set the workspace data for every `*_docker` input as described in [Docker images](docs/dockers.md), and for the reference files as described in [References](docs/references.md), fetching each from its public source where the listed copy is not publicly readable. The images in the maintainers' registry are private, so build your own with `dockerfiles/build_docker.sh`.
 3. Follow [Pipeline](docs/pipeline.md) to run the stages end to end on a new cohort. Each workflow runs on its own, with its outputs passed as inputs to the next, and [Workflows](docs/workflows.md) describes every input and output.
-4. To check a local setup, run the smoke tests described in [tests/README.md](tests/README.md).
+4. Example input JSONs with standard placeholder values for every workflow are in [`inputs/`](inputs/), one per workflow.
+5. To check a local setup, run the smoke tests described in [tests/README.md](tests/README.md).
 
 
 ## Documentation

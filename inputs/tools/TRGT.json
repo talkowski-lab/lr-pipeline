@@ -1,0 +1,12 @@
+{
+    "TRGT.bam": "gs://<cohort-bucket>/sample.bam",
+    "TRGT.bai": "gs://<cohort-bucket>/sample.bam.bai",
+    "TRGT.prefix": "cohort",
+    "TRGT.sample_id": "sample1",
+    "TRGT.sex": "female",
+    "TRGT.catalog_name": "catalog_name",
+    "TRGT.ref_fa": "gs://<references-bucket>/hg38.no_alt.fa",
+    "TRGT.ref_fai": "gs://<references-bucket>/hg38.no_alt.fa.fai",
+    "TRGT.repeat_catalog_trgt": "gs://<cohort-bucket>/repeat_catalog_trgt",
+    "TRGT.trgt_docker": "us-central1-docker.pkg.dev/talkowski-sv-gnomad/kj-dockers/trgt:latest"
+}

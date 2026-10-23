@@ -1,0 +1,10 @@
+{
+    "MergeVariantBaseTables.site_bases_tsvs": [
+        "gs://<cohort-bucket>/site_bases.tsv"
+    ],
+    "MergeVariantBaseTables.sample_bases_tsvs": [
+        "gs://<cohort-bucket>/sample_bases.tsv"
+    ],
+    "MergeVariantBaseTables.prefix": "cohort",
+    "MergeVariantBaseTables.utils_docker": "us-central1-docker.pkg.dev/talkowski-sv-gnomad/kj-dockers/utils:latest"
+}

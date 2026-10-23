@@ -1,0 +1,6 @@
+{
+    "Vamos.repeat_catalog_vamos": "gs://<references-bucket>/vamos_catalog.ori.v2.1.TRGT.bed.gz",
+    "Vamos.prefix": "cohort",
+    "Vamos.sample_id": "sample1",
+    "Vamos.vamos_docker": "us-central1-docker.pkg.dev/talkowski-sv-gnomad/kj-dockers/vamos:latest"
+}

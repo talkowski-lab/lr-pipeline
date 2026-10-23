@@ -1,0 +1,10 @@
+{
+    "MergeTRVLengthDeltas.allele_deltas_tsvs": [
+        "gs://<cohort-bucket>/allele_deltas.tsv"
+    ],
+    "MergeTRVLengthDeltas.length_deltas_tsvs": [
+        "gs://<cohort-bucket>/length_deltas.tsv"
+    ],
+    "MergeTRVLengthDeltas.prefix": "cohort",
+    "MergeTRVLengthDeltas.utils_docker": "us-central1-docker.pkg.dev/talkowski-sv-gnomad/kj-dockers/utils:latest"
+}

@@ -1,0 +1,11 @@
+{
+    "CreateCohortDepthFiles.sample_ids": [
+        "sample1",
+        "sample2"
+    ],
+    "CreateCohortDepthFiles.mosdepth_bed_files": [
+        "gs://<cohort-bucket>/mosdepth_bed_file"
+    ],
+    "CreateCohortDepthFiles.prefix": "cohort",
+    "CreateCohortDepthFiles.utils_docker": "us-central1-docker.pkg.dev/talkowski-sv-gnomad/kj-dockers/utils:latest"
+}

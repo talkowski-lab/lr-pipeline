@@ -1,0 +1,8 @@
+{
+    "MergeCohortLongSVCallsets.remote_indir": "gs://<cohort-bucket>/indir",
+    "MergeCohortLongSVCallsets.remote_outdir": "gs://<cohort-bucket>/outdir",
+    "MergeCohortLongSVCallsets.prefix": "cohort",
+    "MergeCohortLongSVCallsets.ref_fa": "gs://<references-bucket>/hg38.no_alt.fa",
+    "MergeCohortLongSVCallsets.ref_fai": "gs://<references-bucket>/hg38.no_alt.fa.fai",
+    "MergeCohortLongSVCallsets.sv_integration_docker": "us.gcr.io/broad-dsp-lrma/fcunial/callset_integration_phase2_workpackages"
+}

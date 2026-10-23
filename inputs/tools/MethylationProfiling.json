@@ -1,0 +1,8 @@
+{
+    "MethylationProfiling.bam": "gs://<cohort-bucket>/sample.bam",
+    "MethylationProfiling.bai": "gs://<cohort-bucket>/sample.bam.bai",
+    "MethylationProfiling.ref_fa": "gs://<references-bucket>/hg38.no_alt.fa",
+    "MethylationProfiling.ref_fai": "gs://<references-bucket>/hg38.no_alt.fa.fai",
+    "MethylationProfiling.prefix": "cohort",
+    "MethylationProfiling.cpg_docker": "us-central1-docker.pkg.dev/talkowski-sv-gnomad/kj-dockers/cpgtools:latest"
+}

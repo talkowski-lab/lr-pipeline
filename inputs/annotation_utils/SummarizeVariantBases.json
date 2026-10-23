@@ -1,0 +1,17 @@
+{
+    "SummarizeVariantBases.vcfs": [
+        "gs://<cohort-bucket>/cohort_1.vcf.gz",
+        "gs://<cohort-bucket>/cohort_2.vcf.gz"
+    ],
+    "SummarizeVariantBases.vcf_idxs": [
+        "gs://<cohort-bucket>/cohort_1.vcf.gz.tbi",
+        "gs://<cohort-bucket>/cohort_2.vcf.gz.tbi"
+    ],
+    "SummarizeVariantBases.vcf_names": [
+        "vcf_name"
+    ],
+    "SummarizeVariantBases.contig": "chr22",
+    "SummarizeVariantBases.prefix": "cohort",
+    "SummarizeVariantBases.ref_fai": "gs://<references-bucket>/hg38.no_alt.fa.fai",
+    "SummarizeVariantBases.utils_docker": "us-central1-docker.pkg.dev/talkowski-sv-gnomad/kj-dockers/utils:latest"
+}

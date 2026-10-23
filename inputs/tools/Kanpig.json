@@ -1,0 +1,27 @@
+{
+    "Kanpig.cohort_vcf": "gs://<cohort-bucket>/cohort.vcf.gz",
+    "Kanpig.cohort_vcf_idx": "gs://<cohort-bucket>/cohort.vcf.gz.tbi",
+    "Kanpig.bams": [
+        "gs://<cohort-bucket>/sample_1.bam",
+        "gs://<cohort-bucket>/sample_2.bam"
+    ],
+    "Kanpig.bais": [
+        "gs://<cohort-bucket>/sample_1.bam.bai",
+        "gs://<cohort-bucket>/sample_2.bam.bai"
+    ],
+    "Kanpig.ref_fa": "gs://<references-bucket>/hg38.no_alt.fa",
+    "Kanpig.ref_fai": "gs://<references-bucket>/hg38.no_alt.fa.fai",
+    "Kanpig.ploidy_bed_male": "gs://<references-bucket>/grch38_male.bed",
+    "Kanpig.ploidy_bed_female": "gs://<references-bucket>/grch38_female.bed",
+    "Kanpig.sample_ids": [
+        "sample1",
+        "sample2"
+    ],
+    "Kanpig.sexes": [
+        "female",
+        "male"
+    ],
+    "Kanpig.prefix": "cohort",
+    "Kanpig.kanpig_docker": "us-central1-docker.pkg.dev/talkowski-sv-gnomad/kj-dockers/kanpig:latest",
+    "Kanpig.utils_docker": "us-central1-docker.pkg.dev/talkowski-sv-gnomad/kj-dockers/utils:latest"
+}

@@ -1,0 +1,11 @@
+{
+    "MinimapReadAlignment.bams": [
+        "gs://<cohort-bucket>/sample_1.bam",
+        "gs://<cohort-bucket>/sample_2.bam"
+    ],
+    "MinimapReadAlignment.prefix": "cohort",
+    "MinimapReadAlignment.sample_id": "sample1",
+    "MinimapReadAlignment.ref_fa": "gs://<references-bucket>/hg38.no_alt.fa",
+    "MinimapReadAlignment.ref_fai": "gs://<references-bucket>/hg38.no_alt.fa.fai",
+    "MinimapReadAlignment.minimap2_docker": "us-central1-docker.pkg.dev/talkowski-sv-gnomad/kj-dockers/minimap2:latest"
+}

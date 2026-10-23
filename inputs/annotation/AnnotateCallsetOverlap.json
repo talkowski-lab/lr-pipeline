@@ -1,0 +1,22 @@
+{
+    "AnnotateCallsetOverlap.vcf": "gs://<cohort-bucket>/cohort.vcf.gz",
+    "AnnotateCallsetOverlap.vcf_idx": "gs://<cohort-bucket>/cohort.vcf.gz.tbi",
+    "AnnotateCallsetOverlap.truth_snv_indel_vcf": "gs://<cohort-bucket>/truth_snv_indel.vcf.gz",
+    "AnnotateCallsetOverlap.truth_snv_indel_vcf_idx": "gs://<cohort-bucket>/truth_snv_indel.vcf.gz.tbi",
+    "AnnotateCallsetOverlap.truth_sv_vcf": "gs://<cohort-bucket>/truth_sv.vcf.gz",
+    "AnnotateCallsetOverlap.truth_sv_vcf_idx": "gs://<cohort-bucket>/truth_sv.vcf.gz.tbi",
+    "AnnotateCallsetOverlap.contig": "chr22",
+    "AnnotateCallsetOverlap.prefix": "cohort",
+    "AnnotateCallsetOverlap.run_exact_matching": false,
+    "AnnotateCallsetOverlap.run_truvari_matching": false,
+    "AnnotateCallsetOverlap.run_bedtools_closest_matching": false,
+    "AnnotateCallsetOverlap.min_sv_length_truvari_vcf": 0,
+    "AnnotateCallsetOverlap.min_sv_length_truvari_truth_snv_indel_vcf": 0,
+    "AnnotateCallsetOverlap.min_sv_length_bedtools_closest_vcf": 0,
+    "AnnotateCallsetOverlap.min_sv_length_bedtools_closest_truth_vcf": 0,
+    "AnnotateCallsetOverlap.convert_symbolic_truth_sv_vcf": false,
+    "AnnotateCallsetOverlap.move_dup_to_origin": false,
+    "AnnotateCallsetOverlap.subset_contig_truth_sv_vcf": false,
+    "AnnotateCallsetOverlap.gatk_sv_lr_docker": "us-central1-docker.pkg.dev/talkowski-sv-gnomad/kj-dockers/sv-pipeline:latest",
+    "AnnotateCallsetOverlap.utils_docker": "us-central1-docker.pkg.dev/talkowski-sv-gnomad/kj-dockers/utils:latest"
+}

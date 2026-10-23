@@ -1,0 +1,30 @@
+{
+    "RegenotypeFamilySVCallsets.family_id": "family_id",
+    "RegenotypeFamilySVCallsets.sample_ids": [
+        "sample1",
+        "sample2"
+    ],
+    "RegenotypeFamilySVCallsets.sample_sexes": [
+        "female",
+        "male"
+    ],
+    "RegenotypeFamilySVCallsets.aligned_bams": [
+        "gs://<cohort-bucket>/aligned_1.bam",
+        "gs://<cohort-bucket>/aligned_2.bam"
+    ],
+    "RegenotypeFamilySVCallsets.aligned_bais": [
+        "gs://<cohort-bucket>/aligned_1.bam.bai",
+        "gs://<cohort-bucket>/aligned_2.bam.bai"
+    ],
+    "RegenotypeFamilySVCallsets.ped": "gs://<cohort-bucket>/cohort.ped",
+    "RegenotypeFamilySVCallsets.remote_indir": "gs://<cohort-bucket>/indir",
+    "RegenotypeFamilySVCallsets.remote_outdir": "gs://<cohort-bucket>/outdir",
+    "RegenotypeFamilySVCallsets.prefix": "cohort",
+    "RegenotypeFamilySVCallsets.split_for_bcftools_merge_csv": "gs://<cohort-bucket>/split_for_bcftools_merge.csv",
+    "RegenotypeFamilySVCallsets.ref_fa": "gs://<references-bucket>/hg38.no_alt.fa",
+    "RegenotypeFamilySVCallsets.ref_fai": "gs://<references-bucket>/hg38.no_alt.fa.fai",
+    "RegenotypeFamilySVCallsets.ploidy_bed_female": "gs://<references-bucket>/grch38_female.bed",
+    "RegenotypeFamilySVCallsets.ploidy_bed_male": "gs://<references-bucket>/grch38_male.bed",
+    "RegenotypeFamilySVCallsets.autosomes_bed": "gs://<references-bucket>/autosomes.bed",
+    "RegenotypeFamilySVCallsets.sv_integration_docker": "us.gcr.io/broad-dsp-lrma/fcunial/callset_integration_phase2_workpackages"
+}

@@ -1,0 +1,6 @@
+{
+    "CreateCohortMetadata.ped_file": "gs://<cohort-bucket>/cohort.ped",
+    "CreateCohortMetadata.ancestry_file": "gs://<cohort-bucket>/ancestry_file",
+    "CreateCohortMetadata.prefix": "cohort",
+    "CreateCohortMetadata.utils_docker": "us-central1-docker.pkg.dev/talkowski-sv-gnomad/kj-dockers/utils:latest"
+}

@@ -1,0 +1,52 @@
+{
+    "MergeSampleSVCallsets.sample_ids": [
+        "sample1",
+        "sample2"
+    ],
+    "MergeSampleSVCallsets.sample_sexes": [
+        "female",
+        "male"
+    ],
+    "MergeSampleSVCallsets.aligned_bams": [
+        "gs://<cohort-bucket>/aligned_1.bam",
+        "gs://<cohort-bucket>/aligned_2.bam"
+    ],
+    "MergeSampleSVCallsets.aligned_bais": [
+        "gs://<cohort-bucket>/aligned_1.bam.bai",
+        "gs://<cohort-bucket>/aligned_2.bam.bai"
+    ],
+    "MergeSampleSVCallsets.pbsv_vcfs": [
+        "gs://<cohort-bucket>/pbsv_1.vcf.gz",
+        "gs://<cohort-bucket>/pbsv_2.vcf.gz"
+    ],
+    "MergeSampleSVCallsets.pbsv_vcf_idxs": [
+        "gs://<cohort-bucket>/pbsv_1.vcf.gz.tbi",
+        "gs://<cohort-bucket>/pbsv_2.vcf.gz.tbi"
+    ],
+    "MergeSampleSVCallsets.sniffles_vcfs": [
+        "gs://<cohort-bucket>/sniffles_1.vcf.gz",
+        "gs://<cohort-bucket>/sniffles_2.vcf.gz"
+    ],
+    "MergeSampleSVCallsets.sniffles_vcf_idxs": [
+        "gs://<cohort-bucket>/sniffles_1.vcf.gz.tbi",
+        "gs://<cohort-bucket>/sniffles_2.vcf.gz.tbi"
+    ],
+    "MergeSampleSVCallsets.remote_outdir": "gs://<cohort-bucket>/outdir",
+    "MergeSampleSVCallsets.prefix": "cohort",
+    "MergeSampleSVCallsets.training_resource_vcf": "gs://<cohort-bucket>/training_resource.vcf.gz",
+    "MergeSampleSVCallsets.training_resource_vcf_idx": "gs://<cohort-bucket>/training_resource.vcf.gz.tbi",
+    "MergeSampleSVCallsets.training_resource_bed": "gs://<references-bucket>/training_resource.bed",
+    "MergeSampleSVCallsets.ref_fa": "gs://<references-bucket>/hg38.no_alt.fa",
+    "MergeSampleSVCallsets.ref_fai": "gs://<references-bucket>/hg38.no_alt.fa.fai",
+    "MergeSampleSVCallsets.standard_chromosomes_bed": "gs://<references-bucket>/standard_chromosomes.bed",
+    "MergeSampleSVCallsets.autosomes_bed": "gs://<references-bucket>/autosomes.bed",
+    "MergeSampleSVCallsets.ref_agp": "gs://<references-bucket>/ref.agp",
+    "MergeSampleSVCallsets.ploidy_bed_female": "gs://<references-bucket>/grch38_female.bed",
+    "MergeSampleSVCallsets.ploidy_bed_male": "gs://<references-bucket>/grch38_male.bed",
+    "MergeSampleSVCallsets.split_for_bcftools_merge_csv": "gs://<cohort-bucket>/split_for_bcftools_merge.csv",
+    "MergeSampleSVCallsets.training_python_script": "gs://<cohort-bucket>/training_python.py",
+    "MergeSampleSVCallsets.scoring_python_script": "gs://<cohort-bucket>/scoring_python.py",
+    "MergeSampleSVCallsets.hyperparameters_json": "gs://<cohort-bucket>/hyperparameters.json",
+    "MergeSampleSVCallsets.sv_integration_docker": "us.gcr.io/broad-dsp-lrma/fcunial/callset_integration_phase2_workpackages",
+    "MergeSampleSVCallsets.xgb_scoring_docker": "us.gcr.io/broad-dsde-methods/broad-gatk-snapshots/gatk:sl_aou_lr_intrasample_filtering_xgb"
+}

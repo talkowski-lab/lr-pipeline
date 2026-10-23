@@ -1,0 +1,8 @@
+{
+    "Hifiasm.bams": [
+        "gs://<cohort-bucket>/sample_1.bam",
+        "gs://<cohort-bucket>/sample_2.bam"
+    ],
+    "Hifiasm.prefix": "cohort",
+    "Hifiasm.hifiasm_docker": "us-central1-docker.pkg.dev/talkowski-sv-gnomad/kj-dockers/hifiasm:latest"
+}

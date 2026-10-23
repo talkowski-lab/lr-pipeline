@@ -1,0 +1,51 @@
+{
+    "AnnotateGQMetrics.vcf": "gs://<cohort-bucket>/cohort.vcf.gz",
+    "AnnotateGQMetrics.vcf_idx": "gs://<cohort-bucket>/cohort.vcf.gz.tbi",
+    "AnnotateGQMetrics.contigs": [
+        "chr1",
+        "chr2",
+        "chr3",
+        "chr4",
+        "chr5",
+        "chr6",
+        "chr7",
+        "chr8",
+        "chr9",
+        "chr10",
+        "chr11",
+        "chr12",
+        "chr13",
+        "chr14",
+        "chr15",
+        "chr16",
+        "chr17",
+        "chr18",
+        "chr19",
+        "chr20",
+        "chr21",
+        "chr22",
+        "chrX",
+        "chrY"
+    ],
+    "AnnotateGQMetrics.prefix": "cohort",
+    "AnnotateGQMetrics.records_per_shard": 10000,
+    "AnnotateGQMetrics.gq_fields": [
+        "gq_field"
+    ],
+    "AnnotateGQMetrics.gq_bins": [
+        [
+            0
+        ]
+    ],
+    "AnnotateGQMetrics.gq_variant_filters": [
+        "gq_variant_filter"
+    ],
+    "AnnotateGQMetrics.gq_larger_field": [
+        false
+    ],
+    "AnnotateGQMetrics.ab_annotation": false,
+    "AnnotateGQMetrics.ab_bins": [
+        0.0
+    ],
+    "AnnotateGQMetrics.utils_docker": "us-central1-docker.pkg.dev/talkowski-sv-gnomad/kj-dockers/utils:latest"
+}

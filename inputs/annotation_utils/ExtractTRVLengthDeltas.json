@@ -1,0 +1,6 @@
+{
+    "ExtractTRVLengthDeltas.vcf": "gs://<cohort-bucket>/cohort.vcf.gz",
+    "ExtractTRVLengthDeltas.vcf_idx": "gs://<cohort-bucket>/cohort.vcf.gz.tbi",
+    "ExtractTRVLengthDeltas.prefix": "cohort",
+    "ExtractTRVLengthDeltas.utils_docker": "us-central1-docker.pkg.dev/talkowski-sv-gnomad/kj-dockers/utils:latest"
+}

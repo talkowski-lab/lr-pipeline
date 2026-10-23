@@ -1,0 +1,7 @@
+{
+    "ConcatenateMosDepth.mosdepth_bed_files": [
+        "gs://<cohort-bucket>/mosdepth_bed_file"
+    ],
+    "ConcatenateMosDepth.prefix": "cohort",
+    "ConcatenateMosDepth.utils_docker": "us-central1-docker.pkg.dev/talkowski-sv-gnomad/kj-dockers/utils:latest"
+}

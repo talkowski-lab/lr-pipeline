@@ -1,0 +1,9 @@
+{
+    "Sniffles.bam": "gs://<cohort-bucket>/sample.bam",
+    "Sniffles.bai": "gs://<cohort-bucket>/sample.bam.bai",
+    "Sniffles.prefix": "cohort",
+    "Sniffles.sample_id": "sample1",
+    "Sniffles.ref_fa": "gs://<references-bucket>/hg38.no_alt.fa",
+    "Sniffles.ref_fai": "gs://<references-bucket>/hg38.no_alt.fa.fai",
+    "Sniffles.sniffles_docker": "us-central1-docker.pkg.dev/talkowski-sv-gnomad/kj-dockers/sniffles:latest"
+}

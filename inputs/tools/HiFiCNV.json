@@ -1,0 +1,13 @@
+{
+    "HiFiCNV.bam": "gs://<cohort-bucket>/sample.bam",
+    "HiFiCNV.bai": "gs://<cohort-bucket>/sample.bam.bai",
+    "HiFiCNV.prefix": "cohort",
+    "HiFiCNV.sex": "female",
+    "HiFiCNV.ref_fa": "gs://<references-bucket>/hg38.no_alt.fa",
+    "HiFiCNV.ref_fai": "gs://<references-bucket>/hg38.no_alt.fa.fai",
+    "HiFiCNV.exclude_bed": "gs://<references-bucket>/exclude.bed",
+    "HiFiCNV.exclude_bed_idx": "gs://<references-bucket>/exclude.bed.tbi",
+    "HiFiCNV.expected_cn_male": "gs://<references-bucket>/expected_cn_male",
+    "HiFiCNV.expected_cn_female": "gs://<references-bucket>/expected_cn_female",
+    "HiFiCNV.hificnv_docker": "us-central1-docker.pkg.dev/talkowski-sv-gnomad/kj-dockers/hificnv:latest"
+}

@@ -1,0 +1,9 @@
+{
+    "MinimapAlignment.assembly_mat": "gs://<cohort-bucket>/assembly_mat",
+    "MinimapAlignment.assembly_pat": "gs://<cohort-bucket>/assembly_pat",
+    "MinimapAlignment.ref_fa": "gs://<references-bucket>/hg38.no_alt.fa",
+    "MinimapAlignment.ref_fai": "gs://<references-bucket>/hg38.no_alt.fa.fai",
+    "MinimapAlignment.prefix": "cohort",
+    "MinimapAlignment.sample_id": "sample1",
+    "MinimapAlignment.minimap2_docker": "us-central1-docker.pkg.dev/talkowski-sv-gnomad/kj-dockers/minimap2:latest"
+}

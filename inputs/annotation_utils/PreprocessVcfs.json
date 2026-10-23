@@ -1,0 +1,37 @@
+{
+    "PreprocessVcfs.vcfs": [
+        "gs://<cohort-bucket>/cohort_1.vcf.gz",
+        "gs://<cohort-bucket>/cohort_2.vcf.gz"
+    ],
+    "PreprocessVcfs.vcf_idxs": [
+        "gs://<cohort-bucket>/cohort_1.vcf.gz.tbi",
+        "gs://<cohort-bucket>/cohort_2.vcf.gz.tbi"
+    ],
+    "PreprocessVcfs.prefix": "cohort",
+    "PreprocessVcfs.normalize_vcfs": [
+        false
+    ],
+    "PreprocessVcfs.convert_aou_phase2_symbolic_alleles": [
+        false
+    ],
+    "PreprocessVcfs.source_tags": [
+        "source_tag"
+    ],
+    "PreprocessVcfs.swap_sample_lists": [
+        "gs://<cohort-bucket>/swap_sample_list"
+    ],
+    "PreprocessVcfs.min_length_cutoffs": [
+        0
+    ],
+    "PreprocessVcfs.max_length_cutoffs": [
+        0
+    ],
+    "PreprocessVcfs.records_per_shard": 10000,
+    "PreprocessVcfs.sample_ids": [
+        "sample1",
+        "sample2"
+    ],
+    "PreprocessVcfs.ref_fa": "gs://<references-bucket>/hg38.no_alt.fa",
+    "PreprocessVcfs.ref_fai": "gs://<references-bucket>/hg38.no_alt.fa.fai",
+    "PreprocessVcfs.utils_docker": "us-central1-docker.pkg.dev/talkowski-sv-gnomad/kj-dockers/utils:latest"
+}

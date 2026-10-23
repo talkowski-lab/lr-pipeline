@@ -1,0 +1,26 @@
+{
+    "Sawfish.bams": [
+        "gs://<cohort-bucket>/sample_1.bam",
+        "gs://<cohort-bucket>/sample_2.bam"
+    ],
+    "Sawfish.bais": [
+        "gs://<cohort-bucket>/sample_1.bam.bai",
+        "gs://<cohort-bucket>/sample_2.bam.bai"
+    ],
+    "Sawfish.sexes": [
+        "female",
+        "male"
+    ],
+    "Sawfish.sample_ids": [
+        "sample1",
+        "sample2"
+    ],
+    "Sawfish.prefix": "cohort",
+    "Sawfish.ref_fa": "gs://<references-bucket>/hg38.no_alt.fa",
+    "Sawfish.ref_fai": "gs://<references-bucket>/hg38.no_alt.fa.fai",
+    "Sawfish.expected_cn_male": "gs://<references-bucket>/expected_cn_male",
+    "Sawfish.expected_cn_female": "gs://<references-bucket>/expected_cn_female",
+    "Sawfish.exclude_bed": "gs://<references-bucket>/exclude.bed",
+    "Sawfish.exclude_bed_idx": "gs://<references-bucket>/exclude.bed.tbi",
+    "Sawfish.sawfish_docker": "us-central1-docker.pkg.dev/talkowski-sv-gnomad/kj-dockers/sawfish:latest"
+}
