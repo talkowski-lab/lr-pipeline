@@ -214,8 +214,7 @@ task IntersectMED {
             -b ~{bed_b} \
             -wa \
             -wb \
-            -r \
-            -f ~{del_reciprocal_overlap} \
+            ~{if del_reciprocal_overlap > 0 then "-r -f ~{del_reciprocal_overlap}" else ""} \
             > ~{prefix}.intersect.bed
     >>>
 

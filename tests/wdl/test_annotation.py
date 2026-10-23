@@ -467,7 +467,9 @@ def test_annotate_age_metrics_bins_heterozygous_and_homozygous_carriers_by_age(r
     assert {"smaller", "larger", 0, 1} <= {where for _, where in seen}
 
 
-def test_annotate_meds_labels_deletions_matching_catalog_elements_by_family(run_workflow, run_dir, vcf_inputs, source):
+# The default overlap of 0 skips the bedtools reciprocal-overlap filter, which rejects -f 0
+@pytest.mark.parametrize("overlap", [{}, {"del_reciprocal_overlap": 0.5}], ids=["default", "half"])
+def test_annotate_meds_labels_deletions_matching_catalog_elements_by_family(run_workflow, run_dir, vcf_inputs, source, overlap):
     deletions = [r for r in source[1] if r["info"]["allele_type"] == "del" and len(r["ref"]) > 50]
     # Only deletions with no other deletion nearby get a catalog element, so that none can match a neighbour's element
     isolated = [r for r in deletions if all(abs(o["pos"] - r["pos"]) > 1000 for o in deletions if o is not r)]
@@ -492,7 +494,7 @@ def test_annotate_meds_labels_deletions_matching_catalog_elements_by_family(run_
             "contigs": [CONTIG],
             "prefix": "meds",
             "records_per_shard": 20,
-            "del_reciprocal_overlap": 0.5,
+            **overlap,
             "mei_catalog": str(mei_catalog),
         },
     )
