@@ -41,6 +41,8 @@ workflow ExtractSampleVcfs {
         RuntimeAttr? runtime_attr_concat_sv
     }
 
+    # Cromwell rejects an undefined optional entering a nested scatter, so these cross as one-element arrays
+
     Boolean single_contig = length(contigs) == 1
 
     scatter (contig in contigs) {

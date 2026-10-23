@@ -1,0 +1,9 @@
+{
+    "PAV.mat_haplotype": "gs://<cohort-bucket>/mat_haplotype",
+    "PAV.pat_haplotype": "gs://<cohort-bucket>/pat_haplotype",
+    "PAV.sample_id": "sample1",
+    "PAV.prefix": "cohort",
+    "PAV.ref_fa": "gs://<references-bucket>/hg38.no_alt.fa",
+    "PAV.ref_fai": "gs://<references-bucket>/hg38.no_alt.fa.fai",
+    "PAV.pav_docker": "us-central1-docker.pkg.dev/talkowski-sv-gnomad/kj-dockers/pav:latest"
+}

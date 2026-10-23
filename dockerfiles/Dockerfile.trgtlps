@@ -1,10 +1,5 @@
-FROM us-central1-docker.pkg.dev/talkowski-sv-gnomad/kj-dockers/trgt:latest
-
-# Install dependencies
-RUN apt-get update && \
-    apt-get install -y wget && \
-    apt-get clean && \
-    rm -rf /var/lib/apt/lists/*
+ARG BASE_IMAGE=us-central1-docker.pkg.dev/talkowski-sv-gnomad/kj-dockers/trgt:latest
+FROM ${BASE_IMAGE}
 
 # Install trgt-lps
 ARG TRGT_LPS_VERSION
@@ -13,4 +8,4 @@ RUN wget https://github.com/PacificBiosciences/trgt-lps/releases/download/${TRGT
     chmod +x /usr/bin/trgt-lps
 
 # Verify installation
-RUN trgt-lps --help || true
+RUN trgt-lps --help

@@ -1,5 +1,7 @@
-**__py_cache/
-**__pycache__/
+**/__py_cache/
+**/__pycache__/
+.pytest_cache/
+.ruff_cache/
 
 /data
 /docs/scratch.md
@@ -9,43 +11,12 @@
 
 *.pyc
 *.jar
-*.tsv
-*.csv
-*.txt
-*.json
-!/.claude/settings.json
-!/.codex/hooks.json
 
-*.vcf
-*.vcf.gz
-*.vcf.gz.tbi
+*.vcf*
+*.bam*
+*.cram*
+*.fa*
 
-*.bed
-*.bed.gz
-*.bed.gz.tbi
-
-*.bam
-*.bam.bai
-*.cram
-*.cram.crai
-
-*.fa
-*.fa.gz
-*.fa.gz.tbi
-
-*.fasta
-.*fasta.gz
-*.fasta.gz.tbi
-
-*.fai
-*.fai.gz
-*.fai.gz.tbi
-
-# Test fixtures are tracked despite the data-file patterns above; miniwdl run directories are not
-!/tests/**/*.json
-!/tests/**/*.tsv
-!/tests/**/*.txt
-!/tests/data/*.vcf.gz
-!/tests/data/*.vcf.gz.tbi
-!/tests/data/*.fai
+# Test fixtures are tracked despite the genomic-file patterns above; miniwdl run directories are not
+!/tests/data/*
 /tests/.runs/

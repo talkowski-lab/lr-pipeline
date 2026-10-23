@@ -52,3 +52,43 @@ def test_wdl_script_paths_exist():
 def test_wdl_never_fetches_from_github():
     offenders = [str(wdl.relative_to(REPO_ROOT)) for wdl in WDL_FILES if "raw.githubusercontent.com" in wdl.read_text()]
     assert offenders == []
+
+
+PIN_TOKEN = re.compile(
+    r"^[A-Za-z0-9_.\[\]-]+==(\$\{[A-Z0-9_]+\}|\d[\w.+!-]*)$"
+    r"|^git\+https?://\S+@(\$\{[A-Z0-9_]+_COMMIT\}|[0-9a-f]{40})$"
+)
+PIP_INSTALL = re.compile(r"(?:pip3?|-m pip) install\b|python3? \S*get-pip\.py")
+
+
+def unpinned_pip_packages(dockerfile):
+    unpinned = []
+    for line in instructions(dockerfile):
+        for segment in re.split(r"&&|;|\|", line):
+            match = PIP_INSTALL.search(segment)
+            if not match:
+                continue
+            for token in segment[match.end() :].split():
+                token = token.strip("\"'")
+                if token and not token.startswith("-") and not PIN_TOKEN.match(token):
+                    unpinned.append(token)
+    return unpinned
+
+
+@pytest.mark.parametrize("dockerfile", [d for d in DOCKERFILES if image_name(d) not in UNPINNED_CLONES], ids=image_name)
+def test_pip_installs_are_pinned(dockerfile):
+    assert unpinned_pip_packages(dockerfile) == []
+
+
+@pytest.mark.parametrize("dockerfile", DOCKERFILES, ids=image_name)
+def test_no_apt_upgrade_or_masked_failures(dockerfile):
+    offenders = [line for line in instructions(dockerfile) if re.search(r"apt(-get)? (dist-)?upgrade|\|\| true", line)]
+    assert offenders == []
+
+
+@pytest.mark.parametrize("dockerfile", DOCKERFILES, ids=image_name)
+def test_derived_dockerfiles_use_base_image_arg(dockerfile):
+    text = dockerfile.read_text()
+    assert not re.search(r"^FROM us-central1-docker\.pkg\.dev/", text, re.M)
+    if re.search(r"^ARG BASE_IMAGE=", text, re.M):
+        assert re.search(r"^ARG BASE_IMAGE=us-central1-docker\.pkg\.dev/\S+:latest\n+FROM \$\{BASE_IMAGE\}$", text, re.M)

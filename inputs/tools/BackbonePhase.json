@@ -1,0 +1,15 @@
+{
+    "BackbonePhase.vcf": "gs://<cohort-bucket>/cohort.vcf.gz",
+    "BackbonePhase.vcf_idx": "gs://<cohort-bucket>/cohort.vcf.gz.tbi",
+    "BackbonePhase.base_vcfs": [
+        "gs://<cohort-bucket>/base_1.vcf.gz",
+        "gs://<cohort-bucket>/base_2.vcf.gz"
+    ],
+    "BackbonePhase.base_vcf_idxs": [
+        "gs://<cohort-bucket>/base_1.vcf.gz.tbi",
+        "gs://<cohort-bucket>/base_2.vcf.gz.tbi"
+    ],
+    "BackbonePhase.contig": "chr22",
+    "BackbonePhase.prefix": "cohort",
+    "BackbonePhase.utils_docker": "us-central1-docker.pkg.dev/talkowski-sv-gnomad/kj-dockers/utils:latest"
+}

@@ -45,6 +45,10 @@ workflow SummarizeVariantBases {
         RuntimeAttr? runtime_attr_merge_counts
     }
 
+    # Cromwell rejects an undefined optional entering a nested scatter, so these cross as one-element arrays
+    Array[Array[String]?] subset_vcf_strings_wrapped = [subset_vcf_strings]
+    Array[RuntimeAttr?] runtime_attr_count_shard_wrapped = [runtime_attr_count_shard]
+
     call Helpers.CreateContigShards {
         input:
             vcfs = vcfs,
@@ -68,9 +72,9 @@ workflow SummarizeVariantBases {
                     region = CreateContigShards.shard_regions[j],
                     is_last_shard = is_last_shard,
                     prefix = "~{prefix}.shard_~{j}.callset_~{i}",
-                    subset_vcf_string = if defined(subset_vcf_strings) then select_first([subset_vcf_strings])[i] else "",
+                    subset_vcf_string = if defined(subset_vcf_strings_wrapped[0]) then select_first([subset_vcf_strings_wrapped[0]])[i] else "",
                     docker = utils_docker,
-                    runtime_attr_override = runtime_attr_count_shard
+                    runtime_attr_override = runtime_attr_count_shard_wrapped[0]
             }
         }
     }

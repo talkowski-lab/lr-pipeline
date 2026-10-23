@@ -37,7 +37,7 @@ workflow MinimapAlignment {
         String minimap_flags = "-a -x asm20 --cs --eqx"
         Int minimap_threads = 32
 
-        String minimap_docker
+        String minimap2_docker
 
         RuntimeAttr? runtime_attr_align_asm2ref
     }
@@ -52,7 +52,7 @@ workflow MinimapAlignment {
             ref_fai = ref_fai,
             sample_id = sample_id,
             prefix = prefix,
-            docker = minimap_docker,
+            docker = minimap2_docker,
             runtime_attr_override = runtime_attr_align_asm2ref
     }
 
@@ -66,17 +66,17 @@ workflow MinimapAlignment {
             ref_fai = ref_fai,
             sample_id = sample_id,
             prefix = prefix,
-            docker = minimap_docker,
+            docker = minimap2_docker,
             runtime_attr_override = runtime_attr_align_asm2ref
     }
 
     output {
-        File minimap_assembled_bam_mat = AlignMat.bamOut
-        File minimap_assembled_bai_mat = AlignMat.baiOut
-        File minimap_assembled_paf_mat = AlignMat.pafOut
-        File minimap_assembled_bam_pat = AlignPat.bamOut
-        File minimap_assembled_bai_pat = AlignPat.baiOut
-        File minimap_assembled_paf_pat = AlignPat.pafOut
+        File minimap_assembled_bam_mat = AlignMat.bam
+        File minimap_assembled_bai_mat = AlignMat.bai
+        File minimap_assembled_paf_mat = AlignMat.paf
+        File minimap_assembled_bam_pat = AlignPat.bam
+        File minimap_assembled_bai_pat = AlignPat.bai
+        File minimap_assembled_paf_pat = AlignPat.paf
     }
 }
 
@@ -117,9 +117,9 @@ task AlignAssembly {
     >>>
 
     output {
-        File bamOut = "~{out_prefix}.bam"
-        File baiOut = "~{out_prefix}.bam.bai"
-        File pafOut = "~{out_prefix}.paf"
+        File bam = "~{out_prefix}.bam"
+        File bai = "~{out_prefix}.bam.bai"
+        File paf = "~{out_prefix}.paf"
     }
 
     RuntimeAttr default_attr = object {

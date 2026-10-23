@@ -50,6 +50,12 @@ workflow EvaluateBackbonePhasing {
         RuntimeAttr? runtime_attr_aggregate_results
     }
 
+    # Cromwell rejects an undefined optional entering a nested scatter, so these cross as one-element arrays
+    Array[RuntimeAttr?] runtime_attr_subset_base_contig_wrapped = [runtime_attr_subset_base_contig]
+    Array[RuntimeAttr?] runtime_attr_subset_base_samples_wrapped = [runtime_attr_subset_base_samples]
+    Array[RuntimeAttr?] runtime_attr_subset_backbone_samples_wrapped = [runtime_attr_subset_backbone_samples]
+    Array[RuntimeAttr?] runtime_attr_compare_shard_wrapped = [runtime_attr_compare_shard]
+
     if (defined(subset_samples)) {
         call Helpers.SubsetVcfToSamples as SubsetAssignmentVcf {
             input:
@@ -79,7 +85,7 @@ workflow EvaluateBackbonePhasing {
         call ExtractAssignedSamplesForBaseVcf {
             input:
                 assignment_tsv = AssignSamplesToBaseVcfs.assignment_tsv,
-                base_vcf_index = j,
+                base_vcf_number = j,
                 prefix = "~{prefix}.base_~{j}.assigned_samples",
                 docker = utils_docker,
                 runtime_attr_override = runtime_attr_extract_assigned_samples
@@ -95,7 +101,7 @@ workflow EvaluateBackbonePhasing {
                     contig = contigs[i],
                     prefix = "~{prefix}.base_~{j}.~{contigs[i]}.contig",
                     docker = utils_docker,
-                    runtime_attr_override = runtime_attr_subset_base_contig
+                    runtime_attr_override = runtime_attr_subset_base_contig_wrapped[0]
             }
 
             call Helpers.SubsetVcfToSamples as SubsetBaseSamples {
@@ -105,7 +111,7 @@ workflow EvaluateBackbonePhasing {
                     samples = ExtractAssignedSamplesForBaseVcf.assigned_samples[j],
                     prefix = "~{prefix}.base_~{j}.~{contigs[i]}.samples",
                     docker = utils_docker,
-                    runtime_attr_override = runtime_attr_subset_base_samples
+                    runtime_attr_override = runtime_attr_subset_base_samples_wrapped[0]
             }
 
             call Helpers.SubsetVcfToSamples as SubsetBackboneSamples {
@@ -115,7 +121,7 @@ workflow EvaluateBackbonePhasing {
                     samples = ExtractAssignedSamplesForBaseVcf.assigned_samples[j],
                     prefix = "~{prefix}.backbone_~{contigs[i]}.base_~{j}.samples",
                     docker = utils_docker,
-                    runtime_attr_override = runtime_attr_subset_backbone_samples
+                    runtime_attr_override = runtime_attr_subset_backbone_samples_wrapped[0]
             }
 
             call CompareBackbonePhasingShard {
@@ -128,7 +134,7 @@ workflow EvaluateBackbonePhasing {
                     max_variants = max_variants,
                     prefix = "~{prefix}.~{contigs[i]}.base_~{j}",
                     docker = utils_docker,
-                    runtime_attr_override = runtime_attr_compare_shard
+                    runtime_attr_override = runtime_attr_compare_shard_wrapped[0]
             }
         }
 
@@ -176,7 +182,7 @@ workflow EvaluateBackbonePhasing {
 task ExtractAssignedSamplesForBaseVcf {
     input {
         File assignment_tsv
-        Int base_vcf_index
+        Int base_vcf_number
         String prefix
         String docker
         RuntimeAttr? runtime_attr_override
@@ -190,7 +196,7 @@ samples = []
 with open("~{assignment_tsv}") as handle:
     for line in handle:
         sample, base_idx = line.rstrip("\n").split("\t")
-        if int(base_idx) == ~{base_vcf_index}:
+        if int(base_idx) == ~{base_vcf_number}:
             samples.append(sample)
 
 samples = sorted(samples)

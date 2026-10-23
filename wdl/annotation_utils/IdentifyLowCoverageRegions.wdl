@@ -17,7 +17,7 @@ workflow IdentifyLowCoverageRegions {
         bin_size: "Fixed genomic bin size in bp."
         median_coverage_cutoff: "Fraction of the floored sample median coverage defining the inclusive regular low-coverage cutoff. The operational cutoff is also rounded down: `floor(floor(median_coverage) * median_coverage_cutoff)`. For example, `0.2` gives a `12x` cutoff for a sample with median coverage `60x`."
         sample_proportion_cutoff: "Inclusive minimum proportion of eligible samples with low coverage required to fail a cohort bin."
-        chrY_coverage_cutoff: "Fraction of a sample's autosomal median coverage that its chrY median coverage must reach for the sample to be inferred male."
+        chry_coverage_cutoff: "Fraction of a sample's autosomal median coverage that its chrY median coverage must reach for the sample to be inferred male."
         sample_histograms_tar: "Tarball of per-sample coverage histograms with weighted, data-driven bins. The displayed range extends through at least the 95th percentile and the `Q3 + 3 * IQR` upper fence; omitted extreme bins are counted, actual low-coverage bins are orange, and the sample median plus regular/sex-chromosome cutoffs are annotated."
         chromosome_low_coverage_tar: "Tarball of per-chromosome plots showing number of samples flagged in each genomic bin."
         cohort_coverage_counts_tsv: "Raw, uncompressed TSV underlying the chromosome plots, with low-coverage and eligible-sample counts for every eligible genomic bin, including bins with zero low-coverage samples. chrY includes only male samples in its eligibility denominator and is omitted when no male samples are present."
@@ -34,7 +34,7 @@ workflow IdentifyLowCoverageRegions {
         Int bin_size
         Float median_coverage_cutoff = 0.2
         Float sample_proportion_cutoff = 0.5
-        Float chrY_coverage_cutoff = 0.2
+        Float chry_coverage_cutoff = 0.2
 
         String utils_docker
 
@@ -53,7 +53,7 @@ workflow IdentifyLowCoverageRegions {
                 prefix = "~{prefix}.~{sample_input.right}",
                 bin_size = bin_size,
                 median_coverage_cutoff = median_coverage_cutoff,
-                chrY_coverage_cutoff = chrY_coverage_cutoff,
+                chry_coverage_cutoff = chry_coverage_cutoff,
                 docker = utils_docker,
                 runtime_attr_override = runtime_attr_bin_coverage
         }
@@ -90,7 +90,7 @@ task BinSampleCoverage {
         String prefix
         Int bin_size
         Float median_coverage_cutoff
-        Float chrY_coverage_cutoff
+        Float chry_coverage_cutoff
         String docker
         RuntimeAttr? runtime_attr_override
     }
@@ -113,7 +113,7 @@ PED = "~{ped}"
 SAMPLE_ID = "~{sample_id}"
 BIN_SIZE = ~{bin_size}
 MEDIAN_COVERAGE_CUTOFF = ~{median_coverage_cutoff}
-CHR_Y_COVERAGE_CUTOFF = ~{chrY_coverage_cutoff}
+CHR_Y_COVERAGE_CUTOFF = ~{chry_coverage_cutoff}
 PREFIX = "~{prefix}"
 CHR_X = "chrX"
 CHR_Y = "chrY"
@@ -176,7 +176,7 @@ def read_sample_sex(path, sample_id):
         raise ValueError(f"Sample {sample_id} is missing from PED")
     return sex
 
-def determine_sex_from_coverage(path, chrY_coverage_cutoff):
+def determine_sex_from_coverage(path, chry_coverage_cutoff):
     autosome_counts = Counter()
     autosome_bases = 0
     chrY_counts = Counter()
@@ -200,7 +200,7 @@ def determine_sex_from_coverage(path, chrY_coverage_cutoff):
         raise ValueError("Cannot infer sex from coverage: no autosomal coverage found")
     autosome_median = weighted_median(autosome_counts, autosome_bases)
     chrY_median = weighted_median(chrY_counts, chrY_bases) if chrY_bases else 0.0
-    if chrY_median >= chrY_coverage_cutoff * autosome_median:
+    if chrY_median >= chry_coverage_cutoff * autosome_median:
         return "male"
     return "female"
 
@@ -407,7 +407,7 @@ if BIN_SIZE <= 0:
 if not 0 < MEDIAN_COVERAGE_CUTOFF <= 1:
     raise ValueError("median_coverage_cutoff must be greater than 0 and at most 1")
 if not 0 < CHR_Y_COVERAGE_CUTOFF <= 1:
-    raise ValueError("chrY_coverage_cutoff must be greater than 0 and at most 1")
+    raise ValueError("chry_coverage_cutoff must be greater than 0 and at most 1")
 if not re.fullmatch(r"[A-Za-z0-9._-]+", SAMPLE_ID):
     raise ValueError("sample_id may contain only letters, numbers, '.', '_', and '-'")
 

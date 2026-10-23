@@ -75,6 +75,9 @@ workflow MergeVcfs {
         RuntimeAttr? runtime_attr_summarize_merge
     }
 
+    # Cromwell rejects an undefined optional entering a nested scatter, so these cross as one-element arrays
+    Array[RuntimeAttr?] runtime_attr_subset_shard_wrapped = [runtime_attr_subset_shard]
+
     scatter (i in range(length(vcfs))) {
         String subset_vcf_string = if defined(subset_vcf_strings) then select_first([subset_vcf_strings])[i] else ""
 
@@ -114,7 +117,7 @@ workflow MergeVcfs {
                     region = CreateContigShards.shard_regions[j],
                     prefix = "~{prefix}.shard_~{j}.callset_~{i}",
                     docker = utils_docker,
-                    runtime_attr_override = runtime_attr_subset_shard
+                    runtime_attr_override = runtime_attr_subset_shard_wrapped[0]
             }
         }
 

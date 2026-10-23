@@ -34,6 +34,10 @@ workflow SummarizeSingletonCalls {
         RuntimeAttr? runtime_attr_merge
     }
 
+    # Cromwell rejects an undefined optional entering a nested scatter, so these cross as one-element arrays
+    Array[RuntimeAttr?] runtime_attr_subset_wrapped = [runtime_attr_subset]
+    Array[RuntimeAttr?] runtime_attr_count_wrapped = [runtime_attr_count]
+
     scatter (i in range(length(vcfs))) {
         if (defined(records_per_shard)) {
             call Helpers.ShardVcfByRecords {
@@ -58,7 +62,7 @@ workflow SummarizeSingletonCalls {
                     min_length = min_length,
                     prefix = "~{prefix}.input_~{i}.shard_~{j}.subset",
                     docker = utils_docker,
-                    runtime_attr_override = runtime_attr_subset
+                    runtime_attr_override = runtime_attr_subset_wrapped[0]
             }
 
             call CountSingletonShard {
@@ -67,7 +71,7 @@ workflow SummarizeSingletonCalls {
                     vcf_idx = SubsetVcfByLength.subset_vcf_idx,
                     prefix = "~{prefix}.input_~{i}.shard_~{j}.counts",
                     docker = utils_docker,
-                    runtime_attr_override = runtime_attr_count
+                    runtime_attr_override = runtime_attr_count_wrapped[0]
             }
         }
     }

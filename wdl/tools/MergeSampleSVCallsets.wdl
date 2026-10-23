@@ -1,4 +1,7 @@
-# Derived from yuliamostovoy/lr_callset_integration, a fork of fabio-cunial/callset_integration_phase2:
+# Derived from yuliamostovoy/lr_callset_integration wdl/SV_Integration_WorkflowA_Intrasample_Scoring.wdl
+# Derived from yuliamostovoy/lr_callset_integration wdl/SV_Integration_Workpackage1_intrasample_merge.wdl
+# Derived from yuliamostovoy/lr_callset_integration wdl/SV_Integration_Workpackage2_Main_scoring.wdl
+# Fork of fabio-cunial/callset_integration_phase2
 # https://github.com/yuliamostovoy/lr_callset_integration/blob/main/wdl/SV_Integration_WorkflowA_Intrasample_Scoring.wdl
 # https://github.com/yuliamostovoy/lr_callset_integration/blob/main/wdl/SV_Integration_Workpackage1_intrasample_merge.wdl
 # https://github.com/yuliamostovoy/lr_callset_integration/blob/main/wdl/SV_Integration_Workpackage2_Main_scoring.wdl
@@ -12,7 +15,7 @@ workflow MergeSampleSVCallsets {
         description: [
             "This tool merges each sample's PAV, pbsv and Sniffles calls into one scored VCF per sample. Each caller's VCF is normalized and split into SVs between the minimum and maximum length, longer SVs and breakends, and the callers are merged within each class with Truvari (https://github.com/ACEnglish/truvari) collapse. The SVs within the length range are then genotyped against the sample's reads with Kanpig (https://github.com/ACEnglish/kanpig), keeping only calls with ALT support, and records matching the training resource are marked for XGBoost training.",
             "Each sample is then scored with an XGBoost model trained on those records, through GATK ScoreVariantAnnotations, and split into the chunks of the interval CSV for the cohort merge. Samples are processed in batches, one batch per VM.",
-            "Nothing is returned as a workflow output. The per-sample merged, longer-SV and breakend calls are written under '01_intrasample' in 'remote_outdir', which MergeCohortLongSVCallsets reads, and the scored chunks with one marker file per sample are written under '02_scoring', which MergeCohortSVCallsets reads. A sample whose outputs already exist is skipped, so a resubmission only reruns the samples that failed."
+            "Nothing is returned as a workflow output. The per-sample merged, longer-SV and breakend calls are written under '01_intrasample' in 'remote_outdir', which MergeCohortLongSVCallsets reads, and the scored chunks with one marker file per sample are written under '02_scoring', which MergeCohortSVCallsets reads. A sample whose outputs already exist is skipped, so a resubmission only reruns the samples that failed. These outputs are named by sample, so 'prefix' only names the local batch-completion signal files."
         ]
     }
 
@@ -69,6 +72,7 @@ workflow MergeSampleSVCallsets {
         Array[String] pav_beds = []
         Boolean has_pav = true
         String remote_outdir
+        String prefix
 
         String region = "all"
         String requester_pays_project = ""
@@ -133,6 +137,7 @@ workflow MergeSampleSVCallsets {
                 has_pav = has_pav,
                 region = region,
                 remote_outdir = intrasample_dir,
+                prefix = prefix,
                 requester_pays_project = requester_pays_project,
                 min_sv_length = min_sv_length,
                 max_sv_length = max_sv_length,
@@ -159,6 +164,7 @@ workflow MergeSampleSVCallsets {
                 filter_string = filter_string,
                 remote_indir = intrasample_dir,
                 remote_outdir = scoring_dir,
+                prefix = prefix,
                 training_resource_bed = training_resource_bed,
                 annotations = annotations,
                 training_python_script = training_python_script,
@@ -248,7 +254,7 @@ task MakeManifests {
         mem_gb: 2,
         disk_gb: 16,
         boot_disk_gb: 10,
-        preemptible_tries: 3,
+        preemptible_tries: 1,
         max_retries: 0
     }
     RuntimeAttr runtime_attr = select_first([runtime_attr_override, default_attr])
@@ -269,6 +275,7 @@ task MergeSampleCallsBatch {
         Boolean has_pav
         String region
         String remote_outdir
+        String prefix
         String requester_pays_project
 
         Int min_sv_length
@@ -932,11 +939,11 @@ END
         done 3< chunk.csv
 
         # Batch-completion signal, consumed by orchestrator workflows to order a downstream step after this one. Ignored by standalone runs.
-        echo "done" > wp1.signal
+        echo "done" > ~{prefix}.merge.signal
     >>>
 
     output {
-        String done = read_string("wp1.signal")
+        String done = read_string("~{prefix}.merge.signal")
     }
 
     RuntimeAttr default_attr = object {
@@ -944,7 +951,7 @@ END
         mem_gb: 8,
         disk_gb: 256,
         boot_disk_gb: 10,
-        preemptible_tries: 4,
+        preemptible_tries: 1,
         max_retries: 0
     }
     RuntimeAttr runtime_attr = select_first([runtime_attr_override, default_attr])
@@ -967,6 +974,7 @@ task ScoreSampleCallsBatch {
 
         String remote_indir
         String remote_outdir
+        String prefix
 
         File training_resource_bed
 
@@ -1109,11 +1117,11 @@ task ScoreSampleCallsBatch {
         done 3< chunk.csv
 
         # Batch-completion signal for orchestrator ordering. Ignored standalone.
-        echo "done" > wp2.signal
+        echo "done" > ~{prefix}.score.signal
     >>>
 
     output {
-        String done = read_string("wp2.signal")
+        String done = read_string("~{prefix}.score.signal")
     }
 
     RuntimeAttr default_attr = object {
@@ -1121,7 +1129,7 @@ task ScoreSampleCallsBatch {
         mem_gb: 3,
         disk_gb: 20,
         boot_disk_gb: 10,
-        preemptible_tries: 4,
+        preemptible_tries: 1,
         max_retries: 0
     }
     RuntimeAttr runtime_attr = select_first([runtime_attr_override, default_attr])

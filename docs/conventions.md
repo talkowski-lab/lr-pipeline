@@ -13,7 +13,7 @@ These rules apply to WDL, Python, R and Bash alike, including code embedded in a
 - Comments should be placed on their own line directly above the code they describe, never trailing at the end of a line of code. The exception is a machine-read directive such as `# noqa: E302`.
 - Commented-out code should be deleted rather than left in place.
 - Comments inside a WDL `command` block must never contain `~{`, `${` or backticks. Cromwell and Bash expand these even within a comment.
-- License, copyright and upstream-provenance headers are exempt from all of the above and must be preserved verbatim. Provenance headers use the form `# Derived from <repo> <path or URL>`.
+- License, copyright and upstream-provenance headers are exempt from all of the above and must be preserved verbatim. A provenance header is one `# Derived from <org/repo>[ (branch X)] <path>` line per upstream file, followed by an optional `# Fork of ...` line and the file's URLs, then a blank line and `version 1.0` - a single `# Derived from` line directly above a task is allowed for a task copied into a library. Add one only where the lineage is known.
 - Terminology should be used consistently: `gVCF` (not `GVCF`), `contig` (not `chr` or `chrom`), `locus`/`loci` and `FORMAT`/`INFO` field names in uppercase.
 
 
@@ -46,6 +46,7 @@ These rules apply to WDL, Python, R and Bash alike, including code embedded in a
 - Call aliases introduced with `as` should be in Pascal case, matching the task and workflow naming rules - e.g. `as RunTruvari09`, not `as RunTruvari_09` or `as run_truvari_09`. Do not alias a call to the name it already has.
 - A task should not declare an input it never references, except for index and companion files - e.g. `vcf_idxs` alongside `vcfs`, or `ref_fai` alongside `ref_fa`. Those inputs exist so Cromwell localizes the index next to the file it belongs to, which tools such as `bcftools concat --allow-overlaps`, `bcftools merge` and `tabix` require. They are load-bearing and must not be removed as unused.
 - A workflow should not declare an input or variable it never references. Every `RuntimeAttr?` input should be passed as the `runtime_attr_override` of a call.
+- Cromwell fails a scatter nested inside another scatter when a value entering it is undefined - an unset optional input, or a call or declaration inside an `if` used outside it - with `Failed to lookup input value for required input`. miniwdl runs the same workflow fine, so the smoke tests cannot catch it. Wrap each such value in a one-element array declared right after the workflow `input` block - `Array[RuntimeAttr?] runtime_attr_x_wrapped = [runtime_attr_x]` - and pass `runtime_attr_x_wrapped[0]` inside the nested scatter. The style check reports any value this rule misses.
 - A call whose outputs nothing references is acceptable only when the call exists for its failure behavior - e.g. `CheckSampleConsistency` and `ValidateContigOrder`, which gate the workflow by exiting non-zero.
 - Workflows should never contain any blank comments - e.g. `#########################`.
 - Workflows should never contain any consecutive blank lines outside a `command` block - i.e. they should have a maximum of one blank line at a time. Embedded Python inside a `command` block follows PEP 8 instead, so two blank lines between definitions are expected there.
@@ -61,7 +62,9 @@ These rules apply to WDL, Python, R and Bash alike, including code embedded in a
 - The default `disk_gb` for a task should be calculated dynamically based on the largest sized input file - or multiple if there are several large inputs, like multiple reference fastas or input catalogs. It should be defined in-line in the default runtime attributes section, unless it is a complicated function in which it can have a dedicated variable `disk_gb`.
 - The default `mem_gb`, `boot_disk_gb` and `cpu_cores` for a task should be explicitly defined rather than based on an input file - it should be set based on the intensity of compute needed by that task.
 - The default `preemptible_tries` for a task should always be 1.
-- The default `max_retries` for a task should always be 0.
+- The default `max_retries` for a task should always be 0. A literal in `default_attr` that differs is a style error; an identifier such as `default_max_retries` is allowed.
+- The `memory` of a task's `runtime` block should always be `select_first([runtime_attr.mem_gb, default_attr.mem_gb]) + " GiB"`, so every task's memory can be overridden. The only exceptions are the two `LRCNVs.wdl` gCNV caller tasks, which hardcode memory because it sets the Java heap, and `TRGTLPS.wdl` until it is migrated.
+- Task names should be unique across all of `wdl/`, so a task can be referred to by name alone. Where two tasks diverge, name each for what makes it different - e.g. `ShardLongSVChromosome` beside `ShardChromosome`.
 - The names of workflows and tasks should never include a `_` character within them - rather, they should always be in Pascal case.
 - A task should not share its name with the workflow in the same file. Where a thin wrapper workflow and its task would collide, prefix the task with `Run` - e.g. workflow `TRGTLPS` with task `RunTRGTLPS`.
 - Top-level workflow names should describe their primary operation using consistent action verbs:
@@ -77,19 +80,20 @@ These rules apply to WDL, Python, R and Bash alike, including code embedded in a
 - Do not use `Create` merely because a workflow produces an output; choose the verb that describes its primary operation.
 - Thin tool wrappers should use the underlying tool name. Add a purpose suffix when multiple wrappers or orchestration variants exist, such as `PALMERAssembly` and `PALMERDiploid`.
 - Avoid vague verbs such as `Generate`, `Process` and `Plot` when a more specific operation or output can be named.
-- The names of inputs, variables and outputs should include a `_` to separate words, and be entirely lowercase unless they refer to a noun that is capitalized (e.g. PALMER or L1MEAID) - i.e. they should always be in snake case.
+- The names of inputs, variables and outputs should always be in snake case: entirely lowercase, with `_` separating words - e.g. `palmer_vcf`, `chry_coverage_cutoff` and `more_pl`, never `PALMER_vcf` or `chrY_coverage_cutoff`. Workflow-level Docker image inputs should end in `_docker`.
 - There should never be any additional indentation in order to better align parts of the code to the length or horizontal/vertical spacing of other components in its section - indentation should only be applied at the start of a line.
 - All mentions of `fasta` should instead use `fa` - e.g. `ref_fa` instead of `ref_fasta`.
 - All mentions of `fasta_index`, `fasta_fai` or `fa_fai` should instead use `fai` - e.g. `ref_fai` instead of `ref_fasta_index`, `ref_fasta_fai` or `ref_fa_fai`.
 - All mentions of `vcf_index` or `vcf_tbi` should instead use `vcf_idx`.
-- All VCFs should have suffix `_vcf`, and be coupled with a VCF index file that has a suffix `_vcf_idx`.
+- All VCFs should have suffix `_vcf`, and be coupled with a VCF index file that has a suffix `_vcf_idx`. Any other index should likewise use `_idx` rather than `_tbi`.
+- Members of a `struct` are exempt from the naming rules, since they are read from JSON written elsewhere - e.g. `HumanReferenceBundle` keeps `fasta` and `PAR_bed`.
 - Reusable tasks should live in `Helpers.wdl` and be imported rather than duplicated across workflows.
 - In a task library - a file that defines tasks but no workflow, such as `Helpers.wdl` - tasks should be declared in alphabetical order, so a task can be located without searching. A provenance or license comment directly above a task belongs to that task and moves with it. Tasks in a workflow file should instead follow the order in which the workflow calls them.
 - Before adding a reusable task, check existing helper modules for equivalent behavior. Generalize an existing task only when current callers' interfaces, commands, runtime behavior and outputs can be preserved or explicitly migrated.
 - Do not extract inline WDL command logic into a repository script without explicit approval. Such extraction changes Docker image dependencies and deployment requirements and must be disclosed before implementation.
 - Workflow file names must always match the workflow defined within them.
 - Annotation workflows should always output a TSV file rather than a VCF, unless its annotations are done for every single variant in the input VCF or if the underlying workflow is designed to annotate variants in a VCF.
-- The mechanically checkable rules above are enforced by `.github/scripts/check_wdl_style.py`, which should be run after editing any file under `wdl/`. The rules it cannot check - input grouping, naming verbs, runtime sizing, comment wording - still apply and are left to review.
+- The mechanically checkable rules above - including the retry defaults, the memory expression, unique task names, input and output naming and undefined values entering a nested scatter - are enforced by `.github/scripts/check_wdl_style.py`, which should be run after editing any file under `wdl/`. The rules it cannot check - input grouping, naming verbs, runtime sizing, comment wording - still apply and are left to review.
 
 
 ## Workflow documentation

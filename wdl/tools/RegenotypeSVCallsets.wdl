@@ -1,4 +1,6 @@
-# Derived from yuliamostovoy/lr_callset_integration, a fork of fabio-cunial/callset_integration_phase2:
+# Derived from yuliamostovoy/lr_callset_integration wdl/SV_Integration_WorkflowC_Regenotype.wdl
+# Derived from yuliamostovoy/lr_callset_integration wdl/SV_Integration_Workpackage7_Main_joint_genotype_families.wdl
+# Fork of fabio-cunial/callset_integration_phase2
 # https://github.com/yuliamostovoy/lr_callset_integration/blob/main/wdl/SV_Integration_WorkflowC_Regenotype.wdl
 # https://github.com/yuliamostovoy/lr_callset_integration/blob/main/wdl/SV_Integration_Workpackage7_Main_joint_genotype_families.wdl
 
@@ -19,7 +21,7 @@ workflow RegenotypeSVCallsets {
         sample_sexes: "Sex of each sample. 'M' selects the male ploidy BED for Kanpig; any other value selects the female one."
         aligned_bams: "GCS paths to each sample's aligned reads."
         aligned_bais: "GCS paths to the indexes for 'aligned_bams'."
-        remote_indir: "The 'remote_outdir' of MergeCohortSVCallsets, whose '06_concat' subdirectory holds the cohort callset."
+        remote_indir: "The 'remote_outdir' of MergeCohortSVCallsets, whose '06_concat' subdirectory holds the cohort callset as '<prefix>.bcf'. The workflow 'prefix' must match the one given to MergeCohortSVCallsets."
         remote_outdir: "GCS directory the per-sample regenotyped chunks are written under, without a trailing slash."
         requester_pays_project: "Project billed for reads from requester-pays buckets. Leave empty when none are read."
         kanpig_params_cohort: "Kanpig arguments for regenotyping against the cohort callset."
@@ -38,6 +40,7 @@ workflow RegenotypeSVCallsets {
         Array[String] aligned_bais
         String remote_indir
         String remote_outdir
+        String prefix
 
         String requester_pays_project = ""
         String kanpig_params_cohort = "--neighdist 500 --gpenalty 0.04 --hapsim 0.97"
@@ -67,6 +70,7 @@ workflow RegenotypeSVCallsets {
                 split_for_bcftools_merge_csv = split_for_bcftools_merge_csv,
                 remote_indir = cohort_indir,
                 remote_outdir = regenotyped_dir,
+                prefix = prefix,
                 requester_pays_project = requester_pays_project,
                 ref_fa = ref_fa,
                 ref_fai = ref_fai,
@@ -93,6 +97,7 @@ task RegenotypeSample {
 
         String remote_indir
         String remote_outdir
+        String prefix
         String requester_pays_project
 
         File ref_fa
@@ -233,9 +238,8 @@ task RegenotypeSample {
         ~{docker_dir}/kanpig --version 1>&2
 
         # Localizing the WP6 cohort VCF.
-        ${TIME_COMMAND} gcloud storage cp ~{remote_indir}/truvari_collapsed.'bcf*' .
-        mv truvari_collapsed.bcf cohort.bcf
-        mv truvari_collapsed.bcf.csi cohort.bcf.csi
+        ${TIME_COMMAND} gcloud storage cp ~{remote_indir}/~{prefix}.bcf cohort.bcf
+        gcloud storage cp ~{remote_indir}/~{prefix}.bcf.csi cohort.bcf.csi
 
         TEST=$(gcloud storage ls ~{remote_outdir}/~{sample_id}.done || echo "0")
         if [ ${TEST} == "0" ]; then
@@ -263,7 +267,7 @@ task RegenotypeSample {
         mem_gb: 8,
         disk_gb: 100,
         boot_disk_gb: 10,
-        preemptible_tries: 4,
+        preemptible_tries: 1,
         max_retries: 0
     }
     RuntimeAttr runtime_attr = select_first([runtime_attr_override, default_attr])

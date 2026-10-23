@@ -2,70 +2,6 @@ version 1.0
 
 import "Structs.wdl"
 
-task AddFilter {
-    input {
-        File vcf
-        File vcf_idx
-        String filter_name
-        String filter_description
-        String filter_expression
-        String prefix
-        String docker
-        RuntimeAttr? runtime_attr_override
-    }
-
-    command <<<
-        set -euo pipefail
-
-        bcftools view \
-            -h \
-            ~{vcf} \
-        | grep "^##" > header.txt
-
-        echo '##FILTER=<ID=~{filter_name},Description="~{filter_description}">' >> header.txt
-
-        bcftools view \
-            -h \
-            ~{vcf} \
-        | grep "^#CHROM" >> header.txt
-
-        bcftools reheader \
-            -h header.txt \
-            ~{vcf} \
-        | bcftools filter \
-            --mode + \
-            -s ~{filter_name} \
-            -e '~{filter_expression}' \
-            -Oz -o ~{prefix}.vcf.gz
-
-        tabix -p vcf ~{prefix}.vcf.gz
-    >>>
-
-    output {
-        File flagged_vcf = "~{prefix}.vcf.gz"
-        File flagged_vcf_idx = "~{prefix}.vcf.gz.tbi"
-    }
-
-    RuntimeAttr default_attr = object {
-        cpu_cores: 1,
-        mem_gb: 4,
-        disk_gb: 2 * ceil(size(vcf, "GB")) + 5,
-        boot_disk_gb: 10,
-        preemptible_tries: 1,
-        max_retries: 0
-    }
-    RuntimeAttr runtime_attr = select_first([runtime_attr_override, default_attr])
-    runtime {
-        cpu: select_first([runtime_attr.cpu_cores, default_attr.cpu_cores])
-        memory: select_first([runtime_attr.mem_gb, default_attr.mem_gb]) + " GiB"
-        disks: "local-disk " + select_first([runtime_attr.disk_gb, default_attr.disk_gb]) + " HDD"
-        bootDiskSizeGb: select_first([runtime_attr.boot_disk_gb, default_attr.boot_disk_gb])
-        docker: docker
-        preemptible: select_first([runtime_attr.preemptible_tries, default_attr.preemptible_tries])
-        maxRetries: select_first([runtime_attr.max_retries, default_attr.max_retries])
-    }
-}
-
 task AddInfo {
     input {
         File vcf
@@ -463,7 +399,7 @@ EOF
     }
 }
 
-# Derived from yuliamostovoy/lr_callset_integration SV_Integration_Workpackage3_Main_bcftools_merge.wdl.
+# Derived from yuliamostovoy/lr_callset_integration wdl/SV_Integration_Workpackage3_Main_bcftools_merge.wdl
 task BcftoolsMergeChunk {
     input {
         Int chunk_id
@@ -632,7 +568,7 @@ task BcftoolsMergeChunk {
         mem_gb: 16,
         disk_gb: 100,
         boot_disk_gb: 10,
-        preemptible_tries: 4,
+        preemptible_tries: 1,
         max_retries: 0
     }
     RuntimeAttr runtime_attr = select_first([runtime_attr_override, default_attr])
@@ -1384,7 +1320,7 @@ task ConvertPALMERToVcf {
     command <<<
         set -euo pipefail
 
-        python /opt/scripts/mei/PALMER_to_vcf.py \
+        python3 /opt/scripts/mei/PALMER_to_vcf.py \
             --palmer_calls ~{palmer_calls} \
             --palmer_tsd_reads ~{palmer_tsd_reads} \
             --mei_type ~{mei_type} \
@@ -1425,7 +1361,7 @@ task ConvertPALMERToVcf {
     }
 }
 
-# Derived from broadinstitute/long-read-pipelines ConvertToHailMT.wdl.
+# Derived from broadinstitute/long-read-pipelines ConvertToHailMT.wdl
 task ConvertToHailMT {
     meta {
         description: "Convert a .vcf.bgz file to a Hail MatrixTable."
@@ -1433,7 +1369,7 @@ task ConvertToHailMT {
 
     parameter_meta {
         gvcf: "VCF to convert to a MatrixTable."
-        tbi: "Index for gvcf."
+        gvcf_idx: "Index for gvcf."
         reference: "Reference assembly label; only GRCh38 is supported."
         ref_fa: "Reference sequences FASTA file; downloaded from Hail if not provided."
         ref_fai: "Index for ref_fa; downloaded from Hail if not provided."
@@ -1444,7 +1380,7 @@ task ConvertToHailMT {
 
     input {
         File gvcf
-        File tbi
+        File gvcf_idx
         String prefix = "out"
 
         String reference = "GRCh38"
@@ -1497,7 +1433,7 @@ task ConvertToHailMT {
         mem_gb: 64,
         disk_gb: disk_size,
         boot_disk_gb: 25,
-        preemptible_tries: 0,
+        preemptible_tries: 1,
         max_retries: 0
     }
     RuntimeAttr runtime_attr = select_first([runtime_attr_override, default_attr])
@@ -1789,6 +1725,51 @@ CODE
         cpu_cores: 1,
         mem_gb: 4,
         disk_gb: ceil(2 * size(vcfs, "GB")) + 10,
+        boot_disk_gb: 10,
+        preemptible_tries: 1,
+        max_retries: 0
+    }
+    RuntimeAttr runtime_attr = select_first([runtime_attr_override, default_attr])
+    runtime {
+        cpu: select_first([runtime_attr.cpu_cores, default_attr.cpu_cores])
+        memory: select_first([runtime_attr.mem_gb, default_attr.mem_gb]) + " GiB"
+        disks: "local-disk " + select_first([runtime_attr.disk_gb, default_attr.disk_gb]) + " HDD"
+        bootDiskSizeGb: select_first([runtime_attr.boot_disk_gb, default_attr.boot_disk_gb])
+        docker: docker
+        preemptible: select_first([runtime_attr.preemptible_tries, default_attr.preemptible_tries])
+        maxRetries: select_first([runtime_attr.max_retries, default_attr.max_retries])
+    }
+}
+
+task DeriveChunkIds {
+    input {
+        File regions_txt
+        Int chunk_ids_per_file
+        String docker
+
+        RuntimeAttr? runtime_attr_override
+    }
+
+    command <<<
+        set -euo pipefail
+
+        awk 'NF>=2 {print $2}' ~{regions_txt} > ids.txt
+        if [ ! -s ids.txt ]; then
+            echo "ERROR: no chunk ids found in regions.txt."
+            exit 1
+        fi
+        split -l ~{chunk_ids_per_file} -d -a 4 ids.txt chunk_ids_
+        ls chunk_ids_* 1>&2
+    >>>
+
+    output {
+        Array[File] chunk_id_files = glob("chunk_ids_*")
+    }
+
+    RuntimeAttr default_attr = object {
+        cpu_cores: 1,
+        mem_gb: 2,
+        disk_gb: 16,
         boot_disk_gb: 10,
         preemptible_tries: 1,
         max_retries: 0
@@ -2516,43 +2497,6 @@ task GetContigsFromIntervalList {
     }
 }
 
-task GetContigsFromTsv {
-    input {
-        File tsv
-        String docker
-        RuntimeAttr? runtime_attr_override
-    }
-
-    command <<<
-        set -euo pipefail
-
-        cut -f1 ~{tsv} | sort -u > contigs.txt
-    >>>
-
-    output {
-        Array[String] contigs = read_lines("contigs.txt")
-    }
-
-    RuntimeAttr default_attr = object {
-        cpu_cores: 1,
-        mem_gb: 4,
-        disk_gb: 2 * ceil(size(tsv, "GB")) + 5,
-        boot_disk_gb: 10,
-        preemptible_tries: 1,
-        max_retries: 0
-    }
-    RuntimeAttr runtime_attr = select_first([runtime_attr_override, default_attr])
-    runtime {
-        cpu: select_first([runtime_attr.cpu_cores, default_attr.cpu_cores])
-        memory: select_first([runtime_attr.mem_gb, default_attr.mem_gb]) + " GiB"
-        disks: "local-disk " + select_first([runtime_attr.disk_gb, default_attr.disk_gb]) + " HDD"
-        bootDiskSizeGb: select_first([runtime_attr.boot_disk_gb, default_attr.boot_disk_gb])
-        docker: docker
-        preemptible: select_first([runtime_attr.preemptible_tries, default_attr.preemptible_tries])
-        maxRetries: select_first([runtime_attr.max_retries, default_attr.max_retries])
-    }
-}
-
 task GetHailMTSize {
     input {
         String mt_uri
@@ -2849,44 +2793,6 @@ task MergeBams {
         cpu_cores: 4,
         mem_gb: 4,
         disk_gb: ceil(2.5 * size(bams, "GB")) + 20,
-        boot_disk_gb: 10,
-        preemptible_tries: 1,
-        max_retries: 0
-    }
-    RuntimeAttr runtime_attr = select_first([runtime_attr_override, default_attr])
-    runtime {
-        cpu: select_first([runtime_attr.cpu_cores, default_attr.cpu_cores])
-        memory: select_first([runtime_attr.mem_gb, default_attr.mem_gb]) + " GiB"
-        disks: "local-disk " + select_first([runtime_attr.disk_gb, default_attr.disk_gb]) + " HDD"
-        bootDiskSizeGb: select_first([runtime_attr.boot_disk_gb, default_attr.boot_disk_gb])
-        docker: docker
-        preemptible: select_first([runtime_attr.preemptible_tries, default_attr.preemptible_tries])
-        maxRetries: select_first([runtime_attr.max_retries, default_attr.max_retries])
-    }
-}
-
-task MergeFastq {
-    input {
-        Array[File] fastq_gz_files
-        String prefix
-        String docker
-        RuntimeAttr? runtime_attr_override
-    }
-
-    command <<<
-        set -euo pipefail
-
-        cat ~{sep=" " fastq_gz_files} > ~{prefix}.merged.fastq.gz
-    >>>
-
-    output {
-        File merged_fastq_gz = "~{prefix}.merged.fastq.gz"
-    }
-
-    RuntimeAttr default_attr = object {
-        cpu_cores: 4,
-        mem_gb: 8,
-        disk_gb: 2 * ceil(size(fastq_gz_files, "GB")) + 50,
         boot_disk_gb: 10,
         preemptible_tries: 1,
         max_retries: 0
@@ -3874,64 +3780,6 @@ PYCODE
     }
 }
 
-task SubsetBamToContig {
-    input {
-        File bam
-        File bai
-        String contig
-        String prefix
-        String docker
-        RuntimeAttr? runtime_attr_override
-    }
-
-    parameter_meta {
-        bam: { localization_optional: true }
-        bai: { localization_optional: true }
-    }
-
-    command <<<
-        set -euo pipefail
-
-        export GCS_OAUTH_TOKEN=$(gcloud auth application-default print-access-token)
-
-        samtools view \
-            -@ ~{select_first([runtime_attr.cpu_cores, default_attr.cpu_cores])} \
-            -h \
-            -b \
-            -o ~{prefix}.bam \
-            ~{bam} \
-            ~{contig}
-
-        samtools index \
-            -@ ~{select_first([runtime_attr.cpu_cores, default_attr.cpu_cores])} \
-            ~{prefix}.bam
-    >>>
-
-    output {
-        File contig_bam = "~{prefix}.bam"
-        File contig_bai = "~{prefix}.bam.bai"
-    }
-
-    RuntimeAttr default_attr = object {
-        cpu_cores: 4,
-        mem_gb: 2,
-        disk_gb: 20,
-        boot_disk_gb: 10,
-        preemptible_tries: 1,
-        max_retries: 0
-    }
-    RuntimeAttr runtime_attr = select_first([runtime_attr_override, default_attr])
-    runtime {
-        cpu: select_first([runtime_attr.cpu_cores, default_attr.cpu_cores])
-        memory: select_first([runtime_attr.mem_gb, default_attr.mem_gb]) + " GiB"
-        disks: "local-disk " + select_first([runtime_attr.disk_gb, default_attr.disk_gb]) + " HDD"
-        bootDiskSizeGb: select_first([runtime_attr.boot_disk_gb, default_attr.boot_disk_gb])
-        docker: docker
-        preemptible: select_first([runtime_attr.preemptible_tries, default_attr.preemptible_tries])
-        maxRetries: select_first([runtime_attr.max_retries, default_attr.max_retries])
-    }
-}
-
 task SubsetBamToRegions {
     meta {
         description: "Subset a BAM to the regions listed in a file."
@@ -4026,6 +3874,72 @@ task SubsetBedToContig {
         cpu_cores: 1,
         mem_gb: 2,
         disk_gb: 2 * ceil(size(bed, "GB")) + 5,
+        boot_disk_gb: 10,
+        preemptible_tries: 1,
+        max_retries: 0
+    }
+    RuntimeAttr runtime_attr = select_first([runtime_attr_override, default_attr])
+    runtime {
+        cpu: select_first([runtime_attr.cpu_cores, default_attr.cpu_cores])
+        memory: select_first([runtime_attr.mem_gb, default_attr.mem_gb]) + " GiB"
+        disks: "local-disk " + select_first([runtime_attr.disk_gb, default_attr.disk_gb]) + " HDD"
+        bootDiskSizeGb: select_first([runtime_attr.boot_disk_gb, default_attr.boot_disk_gb])
+        docker: docker
+        preemptible: select_first([runtime_attr.preemptible_tries, default_attr.preemptible_tries])
+        maxRetries: select_first([runtime_attr.max_retries, default_attr.max_retries])
+    }
+}
+
+task SubsetLpsTsvToContig {
+    input {
+        File tsv
+        String contig
+        String prefix
+        String docker
+        RuntimeAttr? runtime_attr_override
+    }
+
+    command <<<
+        set -euo pipefail
+
+        zcat -f ~{tsv} \
+            | awk -F'\t' -v contig="~{contig}" '
+                BEGIN {
+                    if (contig ~ /^chr/) contig = substr(contig, 4)
+                }
+
+                {
+                    split($1, arr, ",")
+                    # Variation cluster TRIDs carry their contig in the second colon-delimited field, not the first
+                    if (arr[1] ~ /^VC:/) {
+                        split(arr[1], vcparts, ":")
+                        chr = vcparts[2]
+                    } else {
+                        split(arr[1], parts, "-")
+                        chr = parts[1]
+                    }
+                    if (chr ~ /^chr/) chr = substr(chr, 4)
+                    if (chr ~ /^trid/) header = $0
+                    else if (chr == contig) data[++n] = $0
+                }
+
+                END {
+                    print header
+                    for (i = 1; i <= n; i++) print data[i]
+                }
+            ' \
+            | gzip -c \
+            > ~{prefix}.tsv.gz
+    >>>
+
+    output {
+        File subset_tsv = "~{prefix}.tsv.gz"
+    }
+
+    RuntimeAttr default_attr = object {
+        cpu_cores: 1,
+        mem_gb: 4,
+        disk_gb: 2 * ceil(size(tsv, "GB")) + 5,
         boot_disk_gb: 10,
         preemptible_tries: 1,
         max_retries: 0
@@ -4530,32 +4444,33 @@ task SwapSampleIds {
     }
 }
 
-task TransferAWSToGCS {
+task WriteSampleList {
     input {
-        String aws_path
-        String output_gcs_path
+        String remote_indir
         String docker
+
         RuntimeAttr? runtime_attr_override
     }
 
     command <<<
         set -euo pipefail
 
-        filename=$(basename "~{aws_path}")
-
-        aws s3 cp --no-sign-request "~{aws_path}" "$filename"
-
-        gsutil cp "$filename" "~{output_gcs_path}"
+        gcloud storage ls ~{remote_indir}/'*.done' | sed 's#.*/##; s#\.done$##' | sort -u > sample_ids.txt
+        wc -l sample_ids.txt 1>&2
+        if [ ! -s sample_ids.txt ]; then
+            echo "ERROR: no <sample>.done markers found under ~{remote_indir}."
+            exit 1
+        fi
     >>>
 
     output {
-        String gcs_path = output_gcs_path
+        File sample_ids_file = "sample_ids.txt"
     }
 
     RuntimeAttr default_attr = object {
-        cpu_cores: 2,
-        mem_gb: 4,
-        disk_gb: 600,
+        cpu_cores: 1,
+        mem_gb: 2,
+        disk_gb: 16,
         boot_disk_gb: 10,
         preemptible_tries: 1,
         max_retries: 0

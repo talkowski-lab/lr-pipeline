@@ -13,8 +13,8 @@ workflow AnnotatePALMER {
     parameter_meta {
         vcf: "VCF to annotate."
         vcf_idx: "Index for VCF to annotate."
-        PALMER_vcf: "VCF of PALMER MEI calls to match against."
-        PALMER_vcf_idx: "Index for `PALMER_vcf`."
+        palmer_vcf: "VCF of PALMER MEI calls to match against."
+        palmer_vcf_idx: "Index for `palmer_vcf`."
         contigs: "Contigs to annotate within the input VCF."
         records_per_shard: "Number of variants to keep within a single shard during annotation."
         mei_types: "MEI types to run on - must be a subset of [`ALU`, `SVA`, `LINE` or `HERVK`]."
@@ -48,8 +48,8 @@ workflow AnnotatePALMER {
     input {
         File vcf
         File vcf_idx
-        File PALMER_vcf
-        File PALMER_vcf_idx
+        File palmer_vcf
+        File palmer_vcf_idx
         Array[String] contigs
         String prefix
 
@@ -94,6 +94,9 @@ workflow AnnotatePALMER {
         RuntimeAttr? runtime_attr_concat
     }
 
+    # Cromwell rejects an undefined optional entering a nested scatter, so these cross as one-element arrays
+    Array[RuntimeAttr?] runtime_attr_filter_palmer_wrapped = [runtime_attr_filter_palmer]
+
     Boolean single_contig = length(contigs) == 1
 
     scatter (contig in contigs) {
@@ -128,8 +131,8 @@ workflow AnnotatePALMER {
                 input:
                     vcf = vcfs_to_process[i],
                     vcf_idx = vcf_idxs_to_process[i],
-                    PALMER_vcf = PALMER_vcf,
-                    PALMER_vcf_idx = PALMER_vcf_idx,
+                    palmer_vcf = palmer_vcf,
+                    palmer_vcf_idx = palmer_vcf_idx,
                     mei_types = mei_types,
                     rm_out = rm_out,
                     rm_buffer = rm_buffer,
@@ -156,7 +159,7 @@ workflow AnnotatePALMER {
                     ins_min_shared_samples_hervk = ins_min_shared_samples_hervk,
                     prefix = "~{prefix}.~{contig}.filtered.shard_~{i}",
                     docker = utils_docker,
-                    runtime_attr_override = runtime_attr_filter_palmer
+                    runtime_attr_override = runtime_attr_filter_palmer_wrapped[0]
             }
         }
 
@@ -194,8 +197,8 @@ task FilterPALMER {
     input {
         File vcf
         File vcf_idx
-        File PALMER_vcf
-        File PALMER_vcf_idx
+        File palmer_vcf
+        File palmer_vcf_idx
         Array[String] mei_types
         File rm_out
         Int rm_buffer
@@ -228,6 +231,11 @@ task FilterPALMER {
     command <<<
         set -euo pipefail
 
+        # Sharded inputs arrive with the index in a separate glob directory, but pysam fetch expects it beside the VCF
+        if [[ "~{vcf_idx}" != "~{vcf}.tbi" ]]; then
+            ln -sf "~{vcf_idx}" "~{vcf}.tbi"
+        fi
+
         cut -f1,2 ~{ref_fai} > genome_file
 
         mei_types=(~{sep=' ' mei_types})
@@ -237,7 +245,7 @@ task FilterPALMER {
                 -i "INFO/ME_TYPE='${ME_type}'" \
                 -Oz \
                 -o ${ME_type}_subset.vcf.gz \
-                ~{PALMER_vcf}
+                ~{palmer_vcf}
             tabix ${ME_type}_subset.vcf.gz
 
             MEfilter=""
@@ -295,7 +303,7 @@ task FilterPALMER {
                 -b PALMER_calls.bed \
                 > intersection.bed
 
-            python /opt/scripts/mei/PALMER_transfer_annotations.py \
+            python3 /opt/scripts/mei/PALMER_transfer_annotations.py \
                 --intersection intersection.bed \
                 --target-vcf ~{vcf} \
                 --me-type ${ME_type} \
@@ -322,7 +330,7 @@ task FilterPALMER {
     RuntimeAttr default_attr = object {
         cpu_cores: 1,
         mem_gb: 4,
-        disk_gb: 3*ceil(size(vcf, "GB")+size(PALMER_vcf, "GB")+size(rm_out, "GB"))+20,
+        disk_gb: 3*ceil(size(vcf, "GB")+size(palmer_vcf, "GB")+size(rm_out, "GB"))+20,
         boot_disk_gb: 10,
         preemptible_tries: 1,
         max_retries: 0

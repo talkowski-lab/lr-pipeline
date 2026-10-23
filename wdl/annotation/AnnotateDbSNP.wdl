@@ -40,6 +40,11 @@ workflow AnnotateDbSNP {
         RuntimeAttr? runtime_attr_concat
     }
 
+    # Cromwell rejects an undefined optional entering a nested scatter, so these cross as one-element arrays
+    Array[RuntimeAttr?] runtime_attr_subset_vcf_wrapped = [runtime_attr_subset_vcf]
+    Array[RuntimeAttr?] runtime_attr_subset_dbsnp_vcf_wrapped = [runtime_attr_subset_dbsnp_vcf]
+    Array[RuntimeAttr?] runtime_attr_annotate_wrapped = [runtime_attr_annotate]
+
     Boolean single_contig = length(contigs) == 1
 
     scatter (contig in contigs) {
@@ -92,7 +97,7 @@ workflow AnnotateDbSNP {
                         region = shard_region,
                         prefix = "~{prefix}.~{contig}.shard_~{i}",
                         docker = utils_docker,
-                        runtime_attr_override = runtime_attr_subset_vcf
+                        runtime_attr_override = runtime_attr_subset_vcf_wrapped[0]
                 }
 
                 call Helpers.SubsetVcfToRegion as SubsetDbSNPVcfShard {
@@ -102,7 +107,7 @@ workflow AnnotateDbSNP {
                         region = shard_region,
                         prefix = "~{prefix}.~{contig}.shard_~{i}.dbsnp",
                         docker = utils_docker,
-                        runtime_attr_override = runtime_attr_subset_dbsnp_vcf
+                        runtime_attr_override = runtime_attr_subset_dbsnp_vcf_wrapped[0]
                 }
 
                 call AnnotateDbSNPIds as AnnotateDbSNPIdsShard {
@@ -113,7 +118,7 @@ workflow AnnotateDbSNP {
                         dbsnp_vcf_idx = SubsetDbSNPVcfShard.subset_vcf_idx,
                         prefix = "~{prefix}.~{contig}.shard_~{i}.annotated",
                         docker = utils_docker,
-                        runtime_attr_override = runtime_attr_annotate
+                        runtime_attr_override = runtime_attr_annotate_wrapped[0]
                 }
             }
 

@@ -63,8 +63,9 @@ RUN cd /tmp && \
 
 ENV PATH=/opt/google-cloud-sdk/bin:$PATH
 
-# Upgrade pip
-RUN python3 -m pip install --upgrade pip --no-cache-dir
+# Pin pip (21.3.1 is the last release supporting Python 3.6)
+ARG SETUP_PIP_VERSION
+RUN python3 -m pip install --no-cache-dir "pip==${SETUP_PIP_VERSION}"
 
 # Install Hail with timeout and specific version constraints
 ARG HAIL_VERSION

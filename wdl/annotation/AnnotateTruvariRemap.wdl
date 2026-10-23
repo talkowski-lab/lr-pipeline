@@ -54,6 +54,9 @@ workflow AnnotateTruvariRemap {
         RuntimeAttr? runtime_attr_concat
     }
 
+    # Cromwell rejects an undefined optional entering a nested scatter, so these cross as one-element arrays
+    Array[RuntimeAttr?] runtime_attr_ins_remap_wrapped = [runtime_attr_ins_remap]
+
     Boolean single_contig = length(contigs) == 1
 
     scatter (contig in contigs) {
@@ -96,7 +99,7 @@ workflow AnnotateTruvariRemap {
                     ref_bwa_idx = ref_bwa_idx,
                     prefix = "~{prefix}.~{contig}.remapped.shard_~{i}",
                     docker = remap_docker,
-                    runtime_attr_override = runtime_attr_ins_remap
+                    runtime_attr_override = runtime_attr_ins_remap_wrapped[0]
             }
         }
 

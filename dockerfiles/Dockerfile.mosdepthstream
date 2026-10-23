@@ -1,4 +1,5 @@
-FROM us-central1-docker.pkg.dev/talkowski-sv-gnomad/kj-dockers/utils:latest
+ARG BASE_IMAGE=us-central1-docker.pkg.dev/talkowski-sv-gnomad/kj-dockers/utils:latest
+FROM ${BASE_IMAGE}
 
 MAINTAINER Karan Jaisingh
 
@@ -18,7 +19,9 @@ ENV PATH="/usr/local/nim/bin:${PATH}"
 # build without this support. d4 output support is skipped since it needs
 # a separate Rust toolchain and is unused here.
 ARG MOSDEPTH_VERSION
-RUN nimble install -y hts docopt@0.7.1 \
+ARG HTS_NIM_VERSION
+ARG DOCOPT_NIM_VERSION
+RUN nimble install -y hts@${HTS_NIM_VERSION} docopt@${DOCOPT_NIM_VERSION} \
     && git clone --branch ${MOSDEPTH_VERSION} --depth 1 https://github.com/brentp/mosdepth \
     && cd mosdepth \
     && nim c --mm:refc -d:danger -d:release -o:/usr/local/bin/mosdepth mosdepth.nim \

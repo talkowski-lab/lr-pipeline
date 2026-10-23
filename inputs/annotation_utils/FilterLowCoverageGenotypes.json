@@ -1,0 +1,9 @@
+{
+    "FilterLowCoverageGenotypes.vcf": "gs://<cohort-bucket>/cohort.vcf.gz",
+    "FilterLowCoverageGenotypes.vcf_idx": "gs://<cohort-bucket>/cohort.vcf.gz.tbi",
+    "FilterLowCoverageGenotypes.prefix": "cohort",
+    "FilterLowCoverageGenotypes.sample_cutoffs_tsv": "gs://<cohort-bucket>/sample_cutoffs.tsv",
+    "FilterLowCoverageGenotypes.ped": "gs://<cohort-bucket>/cohort.ped",
+    "FilterLowCoverageGenotypes.records_per_shard": 10000,
+    "FilterLowCoverageGenotypes.utils_docker": "us-central1-docker.pkg.dev/talkowski-sv-gnomad/kj-dockers/utils:latest"
+}

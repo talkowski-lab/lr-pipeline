@@ -1,0 +1,38 @@
+{
+    "ConcatenateVcfsAcrossContigs.vcfs": [
+        "gs://<cohort-bucket>/cohort_1.vcf.gz",
+        "gs://<cohort-bucket>/cohort_2.vcf.gz"
+    ],
+    "ConcatenateVcfsAcrossContigs.vcf_idxs": [
+        "gs://<cohort-bucket>/cohort_1.vcf.gz.tbi",
+        "gs://<cohort-bucket>/cohort_2.vcf.gz.tbi"
+    ],
+    "ConcatenateVcfsAcrossContigs.contigs": [
+        "chr1",
+        "chr2",
+        "chr3",
+        "chr4",
+        "chr5",
+        "chr6",
+        "chr7",
+        "chr8",
+        "chr9",
+        "chr10",
+        "chr11",
+        "chr12",
+        "chr13",
+        "chr14",
+        "chr15",
+        "chr16",
+        "chr17",
+        "chr18",
+        "chr19",
+        "chr20",
+        "chr21",
+        "chr22",
+        "chrX",
+        "chrY"
+    ],
+    "ConcatenateVcfsAcrossContigs.prefix": "cohort",
+    "ConcatenateVcfsAcrossContigs.utils_docker": "us-central1-docker.pkg.dev/talkowski-sv-gnomad/kj-dockers/utils:latest"
+}

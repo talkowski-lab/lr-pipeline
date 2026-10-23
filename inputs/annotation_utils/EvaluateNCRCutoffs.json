@@ -1,0 +1,9 @@
+{
+    "EvaluateNCRCutoffs.vcf": "gs://<cohort-bucket>/cohort.vcf.gz",
+    "EvaluateNCRCutoffs.vcf_idx": "gs://<cohort-bucket>/cohort.vcf.gz.tbi",
+    "EvaluateNCRCutoffs.contig": "chr22",
+    "EvaluateNCRCutoffs.records_per_shard": 10000,
+    "EvaluateNCRCutoffs.prefix": "cohort",
+    "EvaluateNCRCutoffs.ped": "gs://<cohort-bucket>/cohort.ped",
+    "EvaluateNCRCutoffs.utils_docker": "us-central1-docker.pkg.dev/talkowski-sv-gnomad/kj-dockers/utils:latest"
+}

@@ -48,6 +48,10 @@ workflow AnnotateMEDs {
         RuntimeAttr? runtime_attr_concat
     }
 
+    # Cromwell rejects an undefined optional entering a nested scatter, so these cross as one-element arrays
+    Array[RuntimeAttr?] runtime_attr_bedtools_wrapped = [runtime_attr_bedtools]
+    Array[RuntimeAttr?] runtime_attr_annotate_wrapped = [runtime_attr_annotate]
+
     Boolean single_contig = length(contigs) == 1
 
     scatter (contig in contigs) {
@@ -96,7 +100,7 @@ workflow AnnotateMEDs {
                     vcf = vcfs_to_process[i],
                     prefix = "~{prefix}.~{contig}.shard_~{i}",
                     docker = utils_docker,
-                    runtime_attr_override = runtime_attr_bedtools
+                    runtime_attr_override = runtime_attr_bedtools_wrapped[0]
             }
 
             call IntersectMED {
@@ -106,7 +110,7 @@ workflow AnnotateMEDs {
                     del_reciprocal_overlap = del_reciprocal_overlap,
                     prefix = "~{prefix}.~{contig}.shard_~{i}",
                     docker = utils_docker,
-                    runtime_attr_override = runtime_attr_bedtools
+                    runtime_attr_override = runtime_attr_bedtools_wrapped[0]
             }
 
             call GenerateMedAnnotationTable {
@@ -118,7 +122,7 @@ workflow AnnotateMEDs {
                     del_size_similarity = del_size_similarity,
                     prefix = "~{prefix}.~{contig}.shard_~{i}",
                     docker = utils_docker,
-                    runtime_attr_override = runtime_attr_annotate
+                    runtime_attr_override = runtime_attr_annotate_wrapped[0]
             }
         }
 
@@ -210,8 +214,7 @@ task IntersectMED {
             -b ~{bed_b} \
             -wa \
             -wb \
-            -r \
-            -f ~{del_reciprocal_overlap} \
+            ~{if del_reciprocal_overlap > 0 then "-r -f ~{del_reciprocal_overlap}" else ""} \
             > ~{prefix}.intersect.bed
     >>>
 

@@ -1,4 +1,5 @@
-FROM us-central1-docker.pkg.dev/talkowski-sv-gnomad/kj-dockers/utils:latest
+ARG BASE_IMAGE=us-central1-docker.pkg.dev/talkowski-sv-gnomad/kj-dockers/utils:latest
+FROM ${BASE_IMAGE}
 
 MAINTAINER Karan Jaisingh
 
@@ -14,7 +15,7 @@ RUN apt-get update && apt-get install -y \
     libsqlite3-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# Install Python 3.12
+# Install Python 3.12 (deadsnakes PPA, so the patch version follows the PPA and cannot be pinned)
 RUN add-apt-repository ppa:deadsnakes/ppa -y && \
     apt-get update && \
     apt-get install -y \
@@ -29,7 +30,10 @@ RUN update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.12 1
     ln -s /usr/bin/python3 /usr/bin/python
 
 # Install pip for Python 3.12
-RUN curl -sS https://bootstrap.pypa.io/get-pip.py | python3
+ARG SETUP_PIP_VERSION
+RUN curl -sSo /tmp/get-pip.py https://bootstrap.pypa.io/get-pip.py \
+    && python3 /tmp/get-pip.py "pip==${SETUP_PIP_VERSION}" \
+    && rm /tmp/get-pip.py
 
 # Install samtools (GCS/S3-enabled, matching Utils' htslib build)
 ARG SAMTOOLS_VERSION
@@ -57,13 +61,21 @@ ENV PATH="/opt/minimap2:/opt/minimap2/misc:${PATH}"
 
 # Install PAV and dependencies
 ARG PAV_VERSION
+ARG SNAKEMAKE_VERSION
+ARG DRMAA_VERSION
+ARG JOBLIB_VERSION
+ARG PULP_VERSION
+ARG MATPLOTLIB_VERSION
+ARG MATPLOTLIB_VENN_VERSION
+ARG PANDAS_VERSION
+ARG PYSAM_VERSION
 RUN python3 -m pip install --no-cache-dir \
     "pav3==${PAV_VERSION}" \
-    snakemake \
-    drmaa \
-    joblib \
-    pulp \
-    matplotlib \
-    matplotlib-venn \
-    pandas \
-    pysam
+    "snakemake==${SNAKEMAKE_VERSION}" \
+    "drmaa==${DRMAA_VERSION}" \
+    "joblib==${JOBLIB_VERSION}" \
+    "pulp==${PULP_VERSION}" \
+    "matplotlib==${MATPLOTLIB_VERSION}" \
+    "matplotlib-venn==${MATPLOTLIB_VENN_VERSION}" \
+    "pandas==${PANDAS_VERSION}" \
+    "pysam==${PYSAM_VERSION}"

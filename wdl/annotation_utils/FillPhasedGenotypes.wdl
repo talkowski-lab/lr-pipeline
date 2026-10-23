@@ -39,6 +39,10 @@ workflow FillPhasedGenotypes {
         RuntimeAttr? runtime_attr_concat
     }
 
+    # Cromwell rejects an undefined optional entering a nested scatter, so these cross as one-element arrays
+    Array[RuntimeAttr?] runtime_attr_subset_wrapped = [runtime_attr_subset]
+    Array[RuntimeAttr?] runtime_attr_fill_wrapped = [runtime_attr_fill]
+
     scatter (contig in contigs) {
         call Helpers.SubsetVcfToContig as SubsetPhased {
             input:
@@ -82,7 +86,7 @@ workflow FillPhasedGenotypes {
                         region = shard_region,
                         prefix = "~{prefix}.~{contig}.shard_~{i}.phased",
                         docker = utils_docker,
-                        runtime_attr_override = runtime_attr_subset
+                        runtime_attr_override = runtime_attr_subset_wrapped[0]
                 }
 
                 call Helpers.SubsetVcfToRegion as SubsetUnphasedShard {
@@ -92,7 +96,7 @@ workflow FillPhasedGenotypes {
                         region = shard_region,
                         prefix = "~{prefix}.~{contig}.shard_~{i}.unphased",
                         docker = utils_docker,
-                        runtime_attr_override = runtime_attr_subset
+                        runtime_attr_override = runtime_attr_subset_wrapped[0]
                 }
 
                 call FillGenotypes {
@@ -103,7 +107,7 @@ workflow FillPhasedGenotypes {
                         unphased_vcf_idx = SubsetUnphasedShard.subset_vcf_idx,
                         prefix = "~{prefix}.~{contig}.shard_~{i}.filled",
                         docker = utils_docker,
-                        runtime_attr_override = runtime_attr_fill
+                        runtime_attr_override = runtime_attr_fill_wrapped[0]
                 }
             }
 

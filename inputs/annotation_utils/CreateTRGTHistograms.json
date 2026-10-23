@@ -1,0 +1,41 @@
+{
+    "CreateTRGTHistograms.lps_tsv": "gs://<cohort-bucket>/lps.tsv",
+    "CreateTRGTHistograms.metadata_tsv": "gs://<cohort-bucket>/metadata.tsv",
+    "CreateTRGTHistograms.vcf_trid_metadata_tsvs": [
+        "gs://<cohort-bucket>/vcf_trid_metadata.tsv"
+    ],
+    "CreateTRGTHistograms.contigs": [
+        "chr1",
+        "chr2",
+        "chr3",
+        "chr4",
+        "chr5",
+        "chr6",
+        "chr7",
+        "chr8",
+        "chr9",
+        "chr10",
+        "chr11",
+        "chr12",
+        "chr13",
+        "chr14",
+        "chr15",
+        "chr16",
+        "chr17",
+        "chr18",
+        "chr19",
+        "chr20",
+        "chr21",
+        "chr22",
+        "chrX",
+        "chrY"
+    ],
+    "CreateTRGTHistograms.prefix": "cohort",
+    "CreateTRGTHistograms.filter_trid_motif_pairs": [
+        [
+            "filter_trid_motif_pair"
+        ]
+    ],
+    "CreateTRGTHistograms.stranalysis_docker": "us-central1-docker.pkg.dev/talkowski-sv-gnomad/kj-dockers/stranalysis:latest",
+    "CreateTRGTHistograms.utils_docker": "us-central1-docker.pkg.dev/talkowski-sv-gnomad/kj-dockers/utils:latest"
+}

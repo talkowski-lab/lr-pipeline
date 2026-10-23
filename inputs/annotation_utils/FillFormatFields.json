@@ -1,0 +1,24 @@
+{
+    "FillFormatFields.unfilled_vcf": "gs://<cohort-bucket>/unfilled.vcf.gz",
+    "FillFormatFields.unfilled_vcf_idx": "gs://<cohort-bucket>/unfilled.vcf.gz.tbi",
+    "FillFormatFields.filled_vcf": "gs://<cohort-bucket>/filled.vcf.gz",
+    "FillFormatFields.filled_vcf_idx": "gs://<cohort-bucket>/filled.vcf.gz.tbi",
+    "FillFormatFields.contig": "chr22",
+    "FillFormatFields.prefix": "cohort",
+    "FillFormatFields.transfer_format_fields": [
+        "transfer_format_field"
+    ],
+    "FillFormatFields.drop_format_fields": [
+        "drop_format_field"
+    ],
+    "FillFormatFields.fill_alt_gts": false,
+    "FillFormatFields.fill_ref_gts": false,
+    "FillFormatFields.match_by_id": false,
+    "FillFormatFields.unphase_gts": false,
+    "FillFormatFields.add_missing_pl_via_ad": false,
+    "FillFormatFields.expand_ad_across_alleles": false,
+    "FillFormatFields.split_rnc_across_alleles": false,
+    "FillFormatFields.normalize_unfilled_vcf": false,
+    "FillFormatFields.normalize_filled_vcf": false,
+    "FillFormatFields.utils_docker": "us-central1-docker.pkg.dev/talkowski-sv-gnomad/kj-dockers/utils:latest"
+}

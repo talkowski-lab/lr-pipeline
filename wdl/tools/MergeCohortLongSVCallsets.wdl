@@ -1,4 +1,5 @@
-# Derived from yuliamostovoy/lr_callset_integration, a fork of fabio-cunial/callset_integration_phase2:
+# Derived from yuliamostovoy/lr_callset_integration wdl/SV_Integration_WorkflowD_Ultralong_Bnd.wdl
+# Fork of fabio-cunial/callset_integration_phase2
 # https://github.com/yuliamostovoy/lr_callset_integration/blob/main/wdl/SV_Integration_WorkflowD_Ultralong_Bnd.wdl
 
 version 1.0
@@ -10,13 +11,13 @@ workflow MergeCohortLongSVCallsets {
     meta {
         description: [
             "This tool merges the per-sample SVs longer than the MergeSampleSVCallsets length range, and the per-sample breakends, into one cohort callset for each class. Each class runs through the same bcftools merge, truvari-collapse sharding, Truvari (https://github.com/ACEnglish/truvari) collapse and concatenation stages as MergeCohortSVCallsets, without scoring or regenotyping.",
-            "Nothing is returned as a workflow output. Each class writes under its own subdirectory of 'remote_outdir', named after the class, and that class's cohort callset is '15_concat/truvari_collapsed.bcf' there."
+            "Nothing is returned as a workflow output. Each class writes under its own subdirectory of 'remote_outdir', named after the class, and that class's cohort callset is '15_concat/' followed by 'prefix' and '.bcf' there."
         ]
     }
 
     parameter_meta {
         remote_indir: "The 'remote_outdir' of MergeSampleSVCallsets."
-        remote_outdir: "GCS directory each class's stages are written under, without a trailing slash."
+        remote_outdir: "GCS directory each class's stages are written under, without a trailing slash. Each class's cohort callset is written as '<class>/15_concat/<prefix>.bcf'."
         suffixes: "Classes to merge: 'ultralong' for the longer SVs and 'bnd' for the breakends."
         intrasample_subdir: "Subdirectory of 'remote_indir' holding the per-sample calls of each class. Leave empty to read them from 'remote_indir' itself."
         chromosomes: "Chromosomes to process, in output order."
@@ -36,6 +37,7 @@ workflow MergeCohortLongSVCallsets {
     input {
         String remote_indir
         String remote_outdir
+        String prefix
         Array[String] suffixes = ["ultralong", "bnd"]
         String intrasample_subdir = "01_intrasample"
         Array[String] chromosomes = ["chr1", "chr2", "chr3", "chr4", "chr5", "chr6", "chr7", "chr8", "chr9", "chr10", "chr11", "chr12", "chr13", "chr14", "chr15", "chr16", "chr17", "chr18", "chr19", "chr20", "chr21", "chr22", "chrX", "chrY"]
@@ -72,6 +74,7 @@ workflow MergeCohortLongSVCallsets {
         call MergeCohortLongSVClass.MergeCohortLongSVClass {
             input:
                 suffix = suffix,
+                prefix = prefix,
                 remote_indir = indir,
                 remote_outdir_suffix = outdir + "/" + suffix,
                 chromosomes = chromosomes,

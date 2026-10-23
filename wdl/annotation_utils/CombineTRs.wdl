@@ -41,6 +41,13 @@ workflow CombineTRs {
         RuntimeAttr? runtime_attr_concat_vcf
     }
 
+    # Cromwell rejects an undefined optional entering a nested scatter, so these cross as one-element arrays
+    Array[RuntimeAttr?] runtime_attr_subset_contig_wrapped = [runtime_attr_subset_contig]
+    Array[RuntimeAttr?] runtime_attr_set_missing_filters_wrapped = [runtime_attr_set_missing_filters]
+    Array[RuntimeAttr?] runtime_attr_tag_tr_vcf_wrapped = [runtime_attr_tag_tr_vcf]
+    Array[RuntimeAttr?] runtime_attr_set_tr_ids_wrapped = [runtime_attr_set_tr_ids]
+    Array[RuntimeAttr?] runtime_attr_deduplicate_trs_wrapped = [runtime_attr_deduplicate_trs]
+
     call Helpers.CheckSampleConsistency {
         input:
             vcfs = tr_vcfs,
@@ -59,7 +66,7 @@ workflow CombineTRs {
                     contig = contig,
                     prefix = "~{prefix}.~{contig}.tr~{i}",
                     docker = utils_docker,
-                    runtime_attr_override = runtime_attr_subset_contig
+                    runtime_attr_override = runtime_attr_subset_contig_wrapped[0]
             }
 
             call Helpers.SetMissingFiltersToPass {
@@ -68,7 +75,7 @@ workflow CombineTRs {
                     vcf_idx = SubsetContigTr.subset_vcf_idx,
                     prefix = "~{prefix}.~{contig}.tr~{i}.refiltered",
                     docker = utils_docker,
-                    runtime_attr_override = runtime_attr_set_missing_filters
+                    runtime_attr_override = runtime_attr_set_missing_filters_wrapped[0]
             }
 
             call TagTRVcf {
@@ -78,7 +85,7 @@ workflow CombineTRs {
                     tr_caller = tr_callers[i],
                     prefix = "~{prefix}.~{contig}.tr~{i}.tagged",
                     docker = utils_docker,
-                    runtime_attr_override = runtime_attr_tag_tr_vcf
+                    runtime_attr_override = runtime_attr_tag_tr_vcf_wrapped[0]
             }
 
             call SetTRVariantIds {
@@ -87,7 +94,7 @@ workflow CombineTRs {
                     vcf_idx = TagTRVcf.tagged_vcf_idx,
                     prefix = "~{prefix}.~{contig}.tr~{i}.ids",
                     docker = utils_docker,
-                    runtime_attr_override = runtime_attr_set_tr_ids
+                    runtime_attr_override = runtime_attr_set_tr_ids_wrapped[0]
             }
 
             call DeduplicateOverlappingVariants {
@@ -96,7 +103,7 @@ workflow CombineTRs {
                     vcf_idx = SetTRVariantIds.renamed_vcf_idx,
                     prefix = "~{prefix}.~{contig}.tr~{i}.dedup",
                     docker = utils_docker,
-                    runtime_attr_override = runtime_attr_deduplicate_trs
+                    runtime_attr_override = runtime_attr_deduplicate_trs_wrapped[0]
             }
         }
 

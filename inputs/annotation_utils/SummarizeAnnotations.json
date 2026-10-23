@@ -1,0 +1,14 @@
+{
+    "SummarizeAnnotations.vcfs": [
+        "gs://<cohort-bucket>/cohort_1.vcf.gz",
+        "gs://<cohort-bucket>/cohort_2.vcf.gz"
+    ],
+    "SummarizeAnnotations.vcf_idxs": [
+        "gs://<cohort-bucket>/cohort_1.vcf.gz.tbi",
+        "gs://<cohort-bucket>/cohort_2.vcf.gz.tbi"
+    ],
+    "SummarizeAnnotations.prefix": "cohort",
+    "SummarizeAnnotations.ped": "gs://<cohort-bucket>/cohort.ped",
+    "SummarizeAnnotations.records_per_shard": 10000,
+    "SummarizeAnnotations.utils_docker": "us-central1-docker.pkg.dev/talkowski-sv-gnomad/kj-dockers/utils:latest"
+}

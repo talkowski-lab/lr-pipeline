@@ -133,8 +133,178 @@ def test_multi_line_comment_inside_file_is_reported():
     assert "W027" in codes(text)
 
 
+RUNTIME_TASK = GOOD_TASK.replace(
+    "        docker: docker\n",
+    "        docker: docker\n        memory: MEMORY\n        preemptible: PREEMPT\n",
+)
+
+
+def default_attr(preemptible="1", retries="0"):
+    text = (
+        "    RuntimeAttr default_attr = object {\n"
+        "        mem_gb: 1,\n"
+        "        preemptible_tries: PREEMPT,\n"
+        "        max_retries: RETRIES\n"
+        "    }\n"
+    )
+    return text.replace("PREEMPT", preemptible).replace("RETRIES", retries)
+
+
+@pytest.mark.parametrize("value", ["1", "preemptible_default"])
+def test_default_attr_allowed_preemptible_values_pass(value):
+    assert "W030" not in codes(GOOD_TASK.replace("    runtime {", default_attr(preemptible=value) + "    runtime {"))
+
+
+@pytest.mark.parametrize("preemptible,retries", [("0", "0"), ("3", "0"), ("1", "1"), ("4", "2")])
+def test_default_attr_literal_retry_values_are_reported(preemptible, retries):
+    text = GOOD_TASK.replace("    runtime {", default_attr(preemptible, retries) + "    runtime {")
+    assert "W030" in codes(text)
+
+
+def test_default_attr_identifier_retries_pass():
+    text = GOOD_TASK.replace("    runtime {", default_attr(retries="default_retries") + "    runtime {")
+    assert "W030" not in codes(text)
+
+
+def test_retry_literals_inside_command_are_ignored():
+    assert "W030" not in codes(GOOD_TASK.replace("echo hi", "echo max_retries: 5"))
+
+
+def test_standard_memory_expression_passes():
+    standard = 'select_first([runtime_attr.mem_gb, default_attr.mem_gb]) + " GiB"'
+    assert "W031" not in codes(RUNTIME_TASK.replace("MEMORY", standard).replace("PREEMPT", "1"))
+
+
+@pytest.mark.parametrize(
+    "memory",
+    [
+        '"1 GiB"',
+        '4 + " GiB"',
+        'select_first([runtime_attr.mem_gb, default_attr.mem_gb]) + " GB"',
+        'select_first([default_attr.mem_gb, runtime_attr.mem_gb]) + " GiB"',
+    ],
+)
+def test_nonstandard_memory_is_reported(memory):
+    assert "W031" in codes(RUNTIME_TASK.replace("MEMORY", memory).replace("PREEMPT", "1"))
+
+
+def test_allowlisted_memory_task_passes():
+    text = RUNTIME_TASK.replace("MEMORY", '"10 GiB"').replace("PREEMPT", "1").replace("AlphaTask", "GermlineCNVCallerCaseMode")
+    assert "W031" not in codes(text, "wdl/utils/LRCNVs.wdl")
+    assert "W031" in codes(text, "wdl/utils/Other.wdl")
+
+
+def test_task_names_must_be_unique_across_files():
+    sources = [("wdl/a/One.wdl", GOOD_TASK), ("wdl/a/Two.wdl", GOOD_TASK.replace("AlphaTask", "BetaTask"))]
+    assert style.duplicate_task_errors(sources) == []
+    duplicate = style.duplicate_task_errors(sources + [("wdl/a/Three.wdl", GOOD_TASK)])
+    assert [error[:3] for error in duplicate] == [("wdl/a/Three.wdl", 3, "W032")]
+
+
+def test_task_name_in_command_text_is_not_a_declaration():
+    text = GOOD_TASK.replace("AlphaTask", "BetaTask").replace("echo hi", "\ntask AlphaTask")
+    assert style.duplicate_task_errors([("wdl/a/One.wdl", GOOD_TASK), ("wdl/a/Two.wdl", text)]) == []
+
+
+@pytest.mark.parametrize(
+    "name",
+    [
+        "PALMER_vcf",
+        "chrY_coverage_cutoff",
+        "bamOut",
+        "ref_fasta",
+        "ref_fasta_index",
+        "ref_fa_idx",
+        "vcf_index",
+        "vcf_tbi",
+        "combined_tbi",
+    ],
+)
+def test_bad_input_names_are_reported(name):
+    assert "W033" in codes(GOOD_TASK.replace("String docker", "String " + name))
+
+
+@pytest.mark.parametrize("name", ["ref_fa", "ref_fai", "vcf_idx", "more_pl", "chry_coverage_cutoff", "bam", "base_vcf_number"])
+def test_good_input_names_pass(name):
+    assert "W033" not in codes(GOOD_TASK.replace("String docker", "String " + name))
+
+
+def test_bad_output_name_is_reported():
+    assert "W033" in codes(GOOD_TASK.replace("String message", "String statusOut"))
+
+
+def test_struct_members_are_exempt_from_naming():
+    struct = "version 1.0\n\nstruct Bundle {\n    File fasta\n    File PAR_bed\n}\n"
+    assert "W033" not in codes(struct)
+
+
+def test_workflow_docker_input_must_end_in_docker():
+    workflow = "wdl/annotation_utils/Example.wdl"
+    assert "W033" in codes(GOOD_WORKFLOW.replace("String utils_docker", "String docker"), workflow)
+    assert "W033" in codes(GOOD_WORKFLOW.replace("String utils_docker", "String dockerimage"), workflow)
+    assert "W033" not in codes(GOOD_WORKFLOW, workflow)
+
+
+def test_task_docker_input_is_not_renamed():
+    assert "W033" not in codes(GOOD_TASK)
+
+
 def test_repository_wdl_passes_style_check(repo_root):
     errors = []
+    sources = []
     for path in style.collect_files(["wdl"]):
-        errors.extend(style.Checker(str(path.relative_to(repo_root)), path.read_text()).run())
+        rel, text = str(path.relative_to(repo_root)), path.read_text()
+        sources.append((rel, text))
+        errors.extend(style.Checker(rel, text).run())
+    errors.extend(style.duplicate_task_errors(sources))
     assert errors == []
+
+
+NESTED_WORKFLOW = """\
+version 1.0
+
+workflow Nested {
+    input {
+        Array[String] contigs
+        Int records = 10
+        RuntimeAttr? runtime_attr_inner
+    }
+
+    Array[RuntimeAttr?] runtime_attr_inner_wrapped = [runtime_attr_inner]
+
+    scatter (contig in contigs) {
+        if (records > 0) {
+            call Shard { input: n = records }
+        }
+        INNER
+    }
+}
+"""
+
+
+def nested_hits(inner):
+    text = NESTED_WORKFLOW.replace("INNER", inner)
+    return [name for _, name in style.Checker("wdl/annotation/Nested.wdl", text).nested_scatter_optionals()]
+
+
+@pytest.mark.parametrize(
+    "inner,expected",
+    [
+        ("scatter (i in range(2)) {\n call Inner { input: attr = runtime_attr_inner }\n }", ["runtime_attr_inner"]),
+        ('scatter (i in range(2)) {\n call Inner { input: s = "~{runtime_attr_inner}" }\n }', ["runtime_attr_inner"]),
+        ("scatter (i in range(2)) {\n call Inner { input: s = Shard.out }\n }", ["Shard"]),
+        ("scatter (i in range(2)) {\n call Inner { input: attr = runtime_attr_inner_wrapped[0] }\n }", []),
+        ("scatter (i in range(2)) {\n call Inner { input: n = records, s = contig, i = i }\n }", []),
+        ("call Inner { input: attr = runtime_attr_inner }", []),
+    ],
+)
+def test_undefined_optionals_entering_nested_scatters_are_reported(inner, expected):
+    assert nested_hits(inner) == expected
+
+
+def test_conditional_call_used_inside_its_own_if_passes():
+    inner = (
+        "if (records > 0) {\n call Shard2 { input: n = 1 }\n"
+        " scatter (i in Shard2.out) {\n call Inner { input: s = Shard2.out }\n }\n }"
+    )
+    assert nested_hits(inner) == []

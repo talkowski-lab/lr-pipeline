@@ -1,0 +1,14 @@
+{
+    "SummarizeTRVAllelesPerGenome.vcfs": [
+        "gs://<cohort-bucket>/cohort_1.vcf.gz",
+        "gs://<cohort-bucket>/cohort_2.vcf.gz"
+    ],
+    "SummarizeTRVAllelesPerGenome.vcf_idxs": [
+        "gs://<cohort-bucket>/cohort_1.vcf.gz.tbi",
+        "gs://<cohort-bucket>/cohort_2.vcf.gz.tbi"
+    ],
+    "SummarizeTRVAllelesPerGenome.prefix": "cohort",
+    "SummarizeTRVAllelesPerGenome.coding_gtf": "gs://<references-bucket>/genes_grch38_annotated_4_mapped_gencode_v39.CDS.gtf",
+    "SummarizeTRVAllelesPerGenome.records_per_shard": 10000,
+    "SummarizeTRVAllelesPerGenome.utils_docker": "us-central1-docker.pkg.dev/talkowski-sv-gnomad/kj-dockers/utils:latest"
+}

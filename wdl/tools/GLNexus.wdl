@@ -1,4 +1,4 @@
-# Derived from broadinstitute/long-read-pipelines:
+# Derived from broadinstitute/long-read-pipelines wdl/pipelines/TechAgnostic/VariantCalling/LRJointCallGVCFs.wdl
 # https://github.com/broadinstitute/long-read-pipelines/blob/main/wdl/pipelines/TechAgnostic/VariantCalling/LRJointCallGVCFs.wdl
 
 version 1.0
@@ -23,7 +23,7 @@ workflow GLNexus {
         bed: "Restrict calling to these regions."
         config: "GLnexus preset configuration."
         config_file: "Custom GLnexus configuration, used in place of `config`."
-        more_PL: "Emit additional PL values."
+        more_pl: "Emit additional PL values."
         squeeze: "Squeeze the output representation."
         trim_uncalled_alleles: "Remove alleles that no sample carries."
         num_cpus: "CPU count for the calling task; derived from the input count when unset."
@@ -49,7 +49,7 @@ workflow GLNexus {
         File? bed
         String config = "DeepVariantWGS"
         File? config_file
-        Boolean more_PL = false
+        Boolean more_pl = false
         Boolean squeeze = false
         Boolean trim_uncalled_alleles = false
         Int? num_cpus
@@ -99,7 +99,6 @@ workflow GLNexus {
                 ranges = GetRanges.ranges,
                 remove_duplicates = remove_duplicate_zero_depth_reference_blocks,
                 create_indexes = false,
-                default_max_retries = 1,
                 docker = glnexus_docker,
                 runtime_attr_override = runtime_attr_shard_vcf_by_ranges
         }
@@ -113,7 +112,7 @@ workflow GLNexus {
                 gvcfs = per_contig_gvcfs,
                 config = config,
                 config_file = config_file,
-                more_PL = more_PL,
+                more_pl = more_pl,
                 squeeze = squeeze,
                 trim_uncalled_alleles = trim_uncalled_alleles,
                 force_add_missing_dp = force_add_missing_dp,
@@ -137,7 +136,7 @@ workflow GLNexus {
     call Helpers.ConvertToHailMT {
         input:
             gvcf = ConcatVariants.combined_vcf,
-            tbi = ConcatVariants.combined_vcf_tbi,
+            gvcf_idx = ConcatVariants.combined_vcf_idx,
             prefix = prefix,
             docker = hail_docker,
             reference = reference,
@@ -148,7 +147,7 @@ workflow GLNexus {
 
     output {
         File joint_vcf = ConcatVariants.combined_vcf
-        File joint_vcf_idx = ConcatVariants.combined_vcf_tbi
+        File joint_vcf_idx = ConcatVariants.combined_vcf_idx
         File joint_mt = ConvertToHailMT.mt_tar
     }
 }
@@ -188,7 +187,7 @@ task GetRanges {
         disk_gb: disk_size,
         boot_disk_gb: 25,
         preemptible_tries: 1,
-        max_retries: 1
+        max_retries: 0
     }
     RuntimeAttr runtime_attr = select_first([runtime_attr_override, default_attr])
     runtime {
@@ -208,7 +207,7 @@ task GLNexusJointCall {
         Array[File] gvcfs
         String config = "DeepVariantWGS"
         File? config_file
-        Boolean more_PL = false
+        Boolean more_pl = false
         Boolean squeeze = false
         Boolean trim_uncalled_alleles = false
         Boolean force_add_missing_dp = false
@@ -253,7 +252,7 @@ task GLNexusJointCall {
         glnexus_cli \
             --config ~{if (defined(config_file)) then "~{config_file}" else "~{config}"} \
             --bed range.bed \
-            ~{if more_PL then "--more-PL" else ""} \
+            ~{if more_pl then "--more-PL" else ""} \
             ~{if squeeze then "--squeeze" else ""} \
             ~{if trim_uncalled_alleles then "--trim-uncalled-alleles" else ""} \
             --list ${gvcf_file_list} \
@@ -269,8 +268,8 @@ task GLNexusJointCall {
         mem_gb: mem,
         disk_gb: disk_size,
         boot_disk_gb: 25,
-        preemptible_tries: 0,
-        max_retries: 1
+        preemptible_tries: 1,
+        max_retries: 0
     }
     RuntimeAttr runtime_attr = select_first([runtime_attr_override, default_attr])
     runtime {
@@ -307,7 +306,7 @@ task ConcatVariants {
 
     output {
         File combined_vcf = "~{prefix}.~{file_suffix}"
-        File combined_vcf_tbi = "~{prefix}.~{file_suffix}.tbi"
+        File combined_vcf_idx = "~{prefix}.~{file_suffix}.tbi"
     }
 
     RuntimeAttr default_attr = object {
@@ -316,7 +315,7 @@ task ConcatVariants {
         disk_gb: disk_size,
         boot_disk_gb: 25,
         preemptible_tries: 1,
-        max_retries: 1
+        max_retries: 0
     }
     RuntimeAttr runtime_attr = select_first([runtime_attr_override, default_attr])
     runtime {

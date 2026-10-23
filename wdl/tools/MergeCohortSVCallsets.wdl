@@ -1,4 +1,8 @@
-# Derived from yuliamostovoy/lr_callset_integration, a fork of fabio-cunial/callset_integration_phase2:
+# Derived from yuliamostovoy/lr_callset_integration wdl/SV_Integration_WorkflowB_Merge_Collapse.wdl
+# Derived from yuliamostovoy/lr_callset_integration wdl/SV_Integration_Workpackage4_Main_shard.wdl
+# Derived from yuliamostovoy/lr_callset_integration wdl/SV_Integration_Workpackage5_Main_truvari_collapse.wdl
+# Derived from yuliamostovoy/lr_callset_integration wdl/SV_Integration_Workpackage6_Main_concat_shards.wdl
+# Fork of fabio-cunial/callset_integration_phase2
 # https://github.com/yuliamostovoy/lr_callset_integration/blob/main/wdl/SV_Integration_WorkflowB_Merge_Collapse.wdl
 # https://github.com/yuliamostovoy/lr_callset_integration/blob/main/wdl/SV_Integration_Workpackage4_Main_shard.wdl
 # https://github.com/yuliamostovoy/lr_callset_integration/blob/main/wdl/SV_Integration_Workpackage5_Main_truvari_collapse.wdl
@@ -13,13 +17,13 @@ workflow MergeCohortSVCallsets {
     meta {
         description: [
             "This tool merges the scored per-sample SV calls written by MergeSampleSVCallsets into one cohort SV callset. Each chunk of the interval CSV is merged across samples with bcftools merge, each chromosome is resharded into truvari-collapse shards, matching sites within each shard are collapsed with Truvari (https://github.com/ACEnglish/truvari) collapse, and the collapsed shards are concatenated per chromosome and then genome-wide.",
-            "Nothing is returned as a workflow output. Each stage writes under 'remote_outdir', and the cohort callset is '06_concat/truvari_collapsed.bcf' there, which RegenotypeSVCallsets reads."
+            "Nothing is returned as a workflow output. Each stage writes under 'remote_outdir', and the cohort callset is '06_concat/' followed by 'prefix' and '.bcf' there, which RegenotypeSVCallsets reads with the same 'prefix'."
         ]
     }
 
     parameter_meta {
         remote_indir: "The 'remote_outdir' of MergeSampleSVCallsets, whose '02_scoring' subdirectory is read."
-        remote_outdir: "GCS directory the merge, shard, collapse and concatenation stages are written under, without a trailing slash."
+        remote_outdir: "GCS directory the merge, shard, collapse and concatenation stages are written under, without a trailing slash. The cohort callset is written as '06_concat/<prefix>.bcf'; RegenotypeSVCallsets must be given the same prefix."
         sample_ids_file: "Samples to merge, one per line, in the column order of the merged VCF. Derived from the per-sample marker files in 'remote_indir' when omitted."
         chromosomes: "Chromosomes to process, in output order."
         merge_mode: "How bcftools merge matches records: 1 by CHROM, POS, REF and ALT, or 2 by ID."
@@ -36,6 +40,7 @@ workflow MergeCohortSVCallsets {
     input {
         String remote_indir
         String remote_outdir
+        String prefix
         File? sample_ids_file
         Array[String] chromosomes = ["chr1", "chr2", "chr3", "chr4", "chr5", "chr6", "chr7", "chr8", "chr9", "chr10", "chr11", "chr12", "chr13", "chr14", "chr15", "chr16", "chr17", "chr18", "chr19", "chr20", "chr21", "chr22", "chrX", "chrY"]
 
@@ -62,6 +67,9 @@ workflow MergeCohortSVCallsets {
         RuntimeAttr? runtime_attr_concat_chromosomes
     }
 
+    # Cromwell rejects an undefined optional entering a nested scatter, so these cross as one-element arrays
+    Array[RuntimeAttr?] runtime_attr_collapse_shards_wrapped = [runtime_attr_collapse_shards]
+
     String indir = sub(remote_indir, "/+$", "") + "/02_scoring"
     String outdir = sub(remote_outdir, "/+$", "")
     String merge_dir = outdir + "/03_merge"
@@ -72,7 +80,7 @@ workflow MergeCohortSVCallsets {
     Int n_chunks = length(read_lines(split_for_bcftools_merge_csv))
 
     if (!defined(sample_ids_file)) {
-        call WriteSampleList {
+        call Helpers.WriteSampleList {
             input:
                 remote_indir = indir,
                 docker = sv_integration_docker,
@@ -117,7 +125,7 @@ workflow MergeCohortSVCallsets {
                 runtime_attr_override = runtime_attr_shard_chromosome
         }
 
-        call DeriveChunkIds {
+        call Helpers.DeriveChunkIds {
             input:
                 regions_txt = ShardChromosome.regions_txt,
                 chunk_ids_per_file = chunk_ids_per_file,
@@ -135,7 +143,7 @@ workflow MergeCohortSVCallsets {
                     truvari_matching_parameters = truvari_matching_parameters,
                     use_bed = use_bed,
                     docker = sv_integration_docker,
-                    runtime_attr_override = runtime_attr_collapse_shards
+                    runtime_attr_override = runtime_attr_collapse_shards_wrapped[0]
             }
         }
 
@@ -155,55 +163,13 @@ workflow MergeCohortSVCallsets {
             chromosomes = chromosomes,
             out_txt = ConcatChromosomeShards.out_txt,
             remote_outdir = concat_dir,
+            prefix = prefix,
             naive = concat_all_naive,
             docker = sv_integration_docker,
             runtime_attr_override = runtime_attr_concat_chromosomes
     }
 
     output {
-    }
-}
-
-task WriteSampleList {
-    input {
-        String remote_indir
-        String docker
-
-        RuntimeAttr? runtime_attr_override
-    }
-
-    command <<<
-        set -euo pipefail
-
-        gcloud storage ls ~{remote_indir}/'*.done' | sed 's#.*/##; s#\.done$##' | sort -u > sample_ids.txt
-        wc -l sample_ids.txt 1>&2
-        if [ ! -s sample_ids.txt ]; then
-            echo "ERROR: no <sample>.done markers found under ~{remote_indir}."
-            exit 1
-        fi
-    >>>
-
-    output {
-        File sample_ids_file = "sample_ids.txt"
-    }
-
-    RuntimeAttr default_attr = object {
-        cpu_cores: 1,
-        mem_gb: 2,
-        disk_gb: 16,
-        boot_disk_gb: 10,
-        preemptible_tries: 3,
-        max_retries: 0
-    }
-    RuntimeAttr runtime_attr = select_first([runtime_attr_override, default_attr])
-    runtime {
-        cpu: select_first([runtime_attr.cpu_cores, default_attr.cpu_cores])
-        memory: select_first([runtime_attr.mem_gb, default_attr.mem_gb]) + " GiB"
-        disks: "local-disk " + select_first([runtime_attr.disk_gb, default_attr.disk_gb]) + " HDD"
-        bootDiskSizeGb: select_first([runtime_attr.boot_disk_gb, default_attr.boot_disk_gb])
-        docker: docker
-        preemptible: select_first([runtime_attr.preemptible_tries, default_attr.preemptible_tries])
-        maxRetries: select_first([runtime_attr.max_retries, default_attr.max_retries])
     }
 }
 
@@ -236,7 +202,7 @@ task ChunksForChromosome {
         mem_gb: 2,
         disk_gb: 16,
         boot_disk_gb: 10,
-        preemptible_tries: 3,
+        preemptible_tries: 1,
         max_retries: 0
     }
     RuntimeAttr runtime_attr = select_first([runtime_attr_override, default_attr])
@@ -357,7 +323,7 @@ END
         mem_gb: 12,
         disk_gb: 50,
         boot_disk_gb: 10,
-        preemptible_tries: 4,
+        preemptible_tries: 1,
         max_retries: 0
     }
     RuntimeAttr runtime_attr = select_first([runtime_attr_override, default_attr])
@@ -365,51 +331,6 @@ END
         cpu: select_first([runtime_attr.cpu_cores, default_attr.cpu_cores])
         memory: select_first([runtime_attr.mem_gb, default_attr.mem_gb]) + " GiB"
         disks: "local-disk " + select_first([runtime_attr.disk_gb, default_attr.disk_gb]) + " SSD"
-        bootDiskSizeGb: select_first([runtime_attr.boot_disk_gb, default_attr.boot_disk_gb])
-        docker: docker
-        preemptible: select_first([runtime_attr.preemptible_tries, default_attr.preemptible_tries])
-        maxRetries: select_first([runtime_attr.max_retries, default_attr.max_retries])
-    }
-}
-
-task DeriveChunkIds {
-    input {
-        File regions_txt
-        Int chunk_ids_per_file
-        String docker
-
-        RuntimeAttr? runtime_attr_override
-    }
-
-    command <<<
-        set -euo pipefail
-
-        awk 'NF>=2 {print $2}' ~{regions_txt} > ids.txt
-        if [ ! -s ids.txt ]; then
-            echo "ERROR: no chunk ids found in regions.txt."
-            exit 1
-        fi
-        split -l ~{chunk_ids_per_file} -d -a 4 ids.txt chunk_ids_
-        ls chunk_ids_* 1>&2
-    >>>
-
-    output {
-        Array[File] chunk_id_files = glob("chunk_ids_*")
-    }
-
-    RuntimeAttr default_attr = object {
-        cpu_cores: 1,
-        mem_gb: 2,
-        disk_gb: 16,
-        boot_disk_gb: 10,
-        preemptible_tries: 3,
-        max_retries: 0
-    }
-    RuntimeAttr runtime_attr = select_first([runtime_attr_override, default_attr])
-    runtime {
-        cpu: select_first([runtime_attr.cpu_cores, default_attr.cpu_cores])
-        memory: select_first([runtime_attr.mem_gb, default_attr.mem_gb]) + " GiB"
-        disks: "local-disk " + select_first([runtime_attr.disk_gb, default_attr.disk_gb]) + " HDD"
         bootDiskSizeGb: select_first([runtime_attr.boot_disk_gb, default_attr.boot_disk_gb])
         docker: docker
         preemptible: select_first([runtime_attr.preemptible_tries, default_attr.preemptible_tries])
@@ -529,7 +450,7 @@ task CollapseShards {
         mem_gb: 16,
         disk_gb: 20,
         boot_disk_gb: 10,
-        preemptible_tries: 4,
+        preemptible_tries: 1,
         max_retries: 0
     }
     RuntimeAttr runtime_attr = select_first([runtime_attr_override, default_attr])
@@ -616,7 +537,7 @@ task ConcatChromosomeShards {
         mem_gb: 4,
         disk_gb: 200,
         boot_disk_gb: 10,
-        preemptible_tries: 4,
+        preemptible_tries: 1,
         max_retries: 0
     }
     RuntimeAttr runtime_attr = select_first([runtime_attr_override, default_attr])
@@ -636,6 +557,7 @@ task ConcatChromosomes {
         Array[String] chromosomes
         Array[File] out_txt
         String remote_outdir
+        String prefix
         Int naive
         String docker
 
@@ -674,11 +596,11 @@ task ConcatChromosomes {
         else
             CONCAT_FLAGS=" "
         fi
-        ${TIME_COMMAND} bcftools concat --threads ${N_THREADS} ${CONCAT_FLAGS} --file-list file_list.txt --output-type b --output truvari_collapsed.bcf
-        bcftools index --threads ${N_THREADS} -f truvari_collapsed.bcf
+        ${TIME_COMMAND} bcftools concat --threads ${N_THREADS} ${CONCAT_FLAGS} --file-list file_list.txt --output-type b --output ~{prefix}.bcf
+        bcftools index --threads ${N_THREADS} -f ~{prefix}.bcf
 
         # Uploading
-        gcloud storage mv truvari_collapsed.'bcf*' ~{remote_outdir}/
+        gcloud storage mv ~{prefix}.'bcf*' ~{remote_outdir}/
     >>>
 
     output {
@@ -689,7 +611,7 @@ task ConcatChromosomes {
         mem_gb: 4,
         disk_gb: 200,
         boot_disk_gb: 10,
-        preemptible_tries: 4,
+        preemptible_tries: 1,
         max_retries: 0
     }
     RuntimeAttr runtime_attr = select_first([runtime_attr_override, default_attr])

@@ -1,0 +1,52 @@
+{
+    "LongReadCNVs.intervals": "gs://<references-bucket>/intervals",
+    "LongReadCNVs.sample_ids": [
+        "sample1",
+        "sample2"
+    ],
+    "LongReadCNVs.depth_profiles": [
+        "gs://<cohort-bucket>/depth_profile"
+    ],
+    "LongReadCNVs.sort_depth_profiles": false,
+    "LongReadCNVs.batch_id": "batch_id",
+    "LongReadCNVs.contig_ploidy_priors": "gs://<references-bucket>/hg38.contig_ploidy_priors_homo_sapiens.tsv",
+    "LongReadCNVs.merged_bincov": "gs://<cohort-bucket>/merged_bincov",
+    "LongReadCNVs.merged_bincov_idx": "gs://<cohort-bucket>/merged_bincov.tbi",
+    "LongReadCNVs.ref_fa": "gs://<references-bucket>/hg38.no_alt.fa",
+    "LongReadCNVs.ref_fai": "gs://<references-bucket>/hg38.no_alt.fa.fai",
+    "LongReadCNVs.ref_dict": "gs://<references-bucket>/hg38.no_alt.dict",
+    "LongReadCNVs.pedigree": "gs://<cohort-bucket>/cohort.ped",
+    "LongReadCNVs.contigs": [
+        "chr1",
+        "chr2",
+        "chr3",
+        "chr4",
+        "chr5",
+        "chr6",
+        "chr7",
+        "chr8",
+        "chr9",
+        "chr10",
+        "chr11",
+        "chr12",
+        "chr13",
+        "chr14",
+        "chr15",
+        "chr16",
+        "chr17",
+        "chr18",
+        "chr19",
+        "chr20",
+        "chr21",
+        "chr22",
+        "chrX",
+        "chrY"
+    ],
+    "LongReadCNVs.training_intervals": "gs://<references-bucket>/train_hg38_reviewed_final.bed",
+    "LongReadCNVs.median_coverage": "gs://<cohort-bucket>/median_coverage",
+    "LongReadCNVs.prefix": "cohort",
+    "LongReadCNVs.variant_prefix": "variant_prefix",
+    "LongReadCNVs.gatk_docker": "us.gcr.io/broad-dsde-methods/gatk-sv/gatk:mw-gatk-sv-672d85",
+    "LongReadCNVs.sv_base_mini_docker": "us.gcr.io/broad-dsde-methods/gatk-sv/sv-base-mini:2024-10-25-v0.29-beta-5ea22a52",
+    "LongReadCNVs.sv_pipeline_docker": "us.gcr.io/broad-dsde-methods/gatk-sv/sv-pipeline:2025-10-02-v1.1-483973d6"
+}

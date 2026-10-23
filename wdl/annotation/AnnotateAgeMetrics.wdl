@@ -42,6 +42,9 @@ workflow AnnotateAgeMetrics {
         RuntimeAttr? runtime_attr_concat_vcf
     }
 
+    # Cromwell rejects an undefined optional entering a nested scatter, so these cross as one-element arrays
+    Array[RuntimeAttr?] runtime_attr_generate_tsv_wrapped = [runtime_attr_generate_tsv]
+
     Boolean single_contig = length(contigs) == 1
 
     scatter (contig in contigs) {
@@ -85,7 +88,7 @@ workflow AnnotateAgeMetrics {
                     reference_date = reference_date,
                     prefix = "~{prefix}.~{contig}.age.shard_~{i}",
                     docker = utils_docker,
-                    runtime_attr_override = runtime_attr_generate_tsv
+                    runtime_attr_override = runtime_attr_generate_tsv_wrapped[0]
             }
         }
 

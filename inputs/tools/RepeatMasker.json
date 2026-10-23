@@ -1,0 +1,7 @@
+{
+    "RepeatMasker.vcf": "gs://<cohort-bucket>/cohort.vcf.gz",
+    "RepeatMasker.vcf_idx": "gs://<cohort-bucket>/cohort.vcf.gz.tbi",
+    "RepeatMasker.prefix": "cohort",
+    "RepeatMasker.repeatmasker_docker": "dfam/tetools:1.8",
+    "RepeatMasker.utils_docker": "us-central1-docker.pkg.dev/talkowski-sv-gnomad/kj-dockers/utils:latest"
+}

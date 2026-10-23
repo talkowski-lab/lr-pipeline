@@ -1,0 +1,9 @@
+{
+    "FilterNCRCutoffs.vcf": "gs://<cohort-bucket>/cohort.vcf.gz",
+    "FilterNCRCutoffs.vcf_idx": "gs://<cohort-bucket>/cohort.vcf.gz.tbi",
+    "FilterNCRCutoffs.prefix": "cohort",
+    "FilterNCRCutoffs.remove_no_calls": false,
+    "FilterNCRCutoffs.ncr_filter_pass_only": false,
+    "FilterNCRCutoffs.records_per_shard": 10000,
+    "FilterNCRCutoffs.utils_docker": "us-central1-docker.pkg.dev/talkowski-sv-gnomad/kj-dockers/utils:latest"
+}

@@ -1,0 +1,13 @@
+{
+    "ExtractRandomCalls.vcfs": [
+        "gs://<cohort-bucket>/cohort_1.vcf.gz",
+        "gs://<cohort-bucket>/cohort_2.vcf.gz"
+    ],
+    "ExtractRandomCalls.vcf_idxs": [
+        "gs://<cohort-bucket>/cohort_1.vcf.gz.tbi",
+        "gs://<cohort-bucket>/cohort_2.vcf.gz.tbi"
+    ],
+    "ExtractRandomCalls.prefix": "cohort",
+    "ExtractRandomCalls.count": 0,
+    "ExtractRandomCalls.utils_docker": "us-central1-docker.pkg.dev/talkowski-sv-gnomad/kj-dockers/utils:latest"
+}

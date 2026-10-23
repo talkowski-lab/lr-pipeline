@@ -1,0 +1,13 @@
+{
+    "AnnotateVEPTRVs.vcf": "gs://<cohort-bucket>/cohort.vcf.gz",
+    "AnnotateVEPTRVs.vcf_idx": "gs://<cohort-bucket>/cohort.vcf.gz.tbi",
+    "AnnotateVEPTRVs.prefix": "cohort",
+    "AnnotateVEPTRVs.records_per_shard": 10000,
+    "AnnotateVEPTRVs.ref_fa": "gs://<references-bucket>/hg38.no_alt.fa",
+    "AnnotateVEPTRVs.ref_fai": "gs://<references-bucket>/hg38.no_alt.fa.fai",
+    "AnnotateVEPTRVs.ref_fa_gz": "gs://<references-bucket>/hg38.no_alt.fa.gz",
+    "AnnotateVEPTRVs.ref_fai_gz": "gs://<references-bucket>/hg38.no_alt.fa.gz.fai",
+    "AnnotateVEPTRVs.ref_vep_cache": "gs://<references-bucket>/homo_sapiens_merged_vep_105_GRCh38.tar.gz",
+    "AnnotateVEPTRVs.utils_docker": "us-central1-docker.pkg.dev/talkowski-sv-gnomad/kj-dockers/utils:latest",
+    "AnnotateVEPTRVs.vep_hail_docker": "us-central1-docker.pkg.dev/talkowski-sv-gnomad/kj-dockers/vephail:latest"
+}

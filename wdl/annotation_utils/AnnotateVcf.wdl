@@ -62,6 +62,10 @@ workflow AnnotateVcf {
         RuntimeAttr? runtime_attr_concat
     }
 
+    # Cromwell rejects an undefined optional entering a nested scatter, so these cross as one-element arrays
+    Array[RuntimeAttr?] runtime_attr_subset_tsv_wrapped = [runtime_attr_subset_tsv]
+    Array[RuntimeAttr?] runtime_attr_annotate_wrapped = [runtime_attr_annotate]
+
     Boolean single_contig = length(contigs) == 1
     Boolean sort_requested = length(sort_tsvs) > 0
     Boolean per_tsv_strip_requested = length(strip_info_fields_per_tsv) > 0
@@ -89,7 +93,7 @@ workflow AnnotateVcf {
                         sort_output = if sort_requested then sort_tsvs[i] else false,
                         prefix = "~{prefix}.~{contig}.tsv~{i}",
                         docker = utils_docker,
-                        runtime_attr_override = runtime_attr_subset_tsv
+                        runtime_attr_override = runtime_attr_subset_tsv_wrapped[0]
                 }
             }
         }
@@ -144,7 +148,7 @@ workflow AnnotateVcf {
                     info_numbers = info_numbers,
                     prefix = "~{prefix}.~{contig}.annotated.shard_~{s}",
                     docker = utils_docker,
-                    runtime_attr_override = runtime_attr_annotate
+                    runtime_attr_override = runtime_attr_annotate_wrapped[0]
             }
         }
 

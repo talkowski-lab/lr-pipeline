@@ -50,6 +50,11 @@ workflow AnnotateGQMetrics {
         RuntimeAttr? runtime_attr_concat_vcf
     }
 
+    # Cromwell rejects an undefined optional entering a nested scatter, so these cross as one-element arrays
+    Array[RuntimeAttr?] runtime_attr_generate_tsv_wrapped = [runtime_attr_generate_tsv]
+    Array[RuntimeAttr?] runtime_attr_generate_ab_tsv_wrapped = [runtime_attr_generate_ab_tsv]
+    Array[RuntimeAttr?] runtime_attr_merge_aligned_tsv_wrapped = [runtime_attr_merge_aligned_tsv]
+
     Boolean single_contig = length(contigs) == 1
 
     scatter (contig in contigs) {
@@ -95,7 +100,7 @@ workflow AnnotateGQMetrics {
                         gq_larger_field = gq_larger_field[field_i],
                         prefix = "~{prefix}.~{contig}.~{gq_fields[field_i]}.shard_~{shard_i}",
                         docker = utils_docker,
-                        runtime_attr_override = runtime_attr_generate_tsv
+                        runtime_attr_override = runtime_attr_generate_tsv_wrapped[0]
                 }
             }
 
@@ -107,7 +112,7 @@ workflow AnnotateGQMetrics {
                         ab_bins = ab_bins,
                         prefix = "~{prefix}.~{contig}.ab_hist_alt.shard_~{shard_i}",
                         docker = utils_docker,
-                        runtime_attr_override = runtime_attr_generate_ab_tsv
+                        runtime_attr_override = runtime_attr_generate_ab_tsv_wrapped[0]
                 }
             }
 
@@ -116,7 +121,7 @@ workflow AnnotateGQMetrics {
                     tsvs = flatten([GenerateGQAnnotationTsv.annotation_tsv, select_all([GenerateABAnnotationTsv.annotation_tsv])]),
                     prefix = "~{prefix}.~{contig}.gq_annotations.shard_~{shard_i}",
                     docker = utils_docker,
-                    runtime_attr_override = runtime_attr_merge_aligned_tsv
+                    runtime_attr_override = runtime_attr_merge_aligned_tsv_wrapped[0]
             }
         }
 

@@ -1,4 +1,6 @@
-# Derived from broadinstitute/gatk-sv (branch kj_project_gnomad_lr) wdl/AnnotateAF.wdl and wdl/ShardedAnnotateVcf.wdl
+# Derived from broadinstitute/gatk-sv (branch kj_project_gnomad_lr) wdl/AnnotateAF.wdl
+# Derived from broadinstitute/gatk-sv (branch kj_project_gnomad_lr) wdl/ShardedAnnotateVcf.wdl
+
 version 1.0
 
 import "../utils/Helpers.wdl"
@@ -56,7 +58,7 @@ workflow AnnotateAF {
         String contig = contigs[c]
 
         if (defined(lps_tsv)) {
-            call SubsetLpsTsvToContig {
+            call Helpers.SubsetLpsTsvToContig {
                 input:
                     tsv = select_first([lps_tsv]),
                     contig = contig,
@@ -145,66 +147,6 @@ workflow AnnotateAF {
     }
 }
 
-task SubsetLpsTsvToContig {
-    input {
-        File tsv
-        String contig
-        String prefix
-        String docker
-        RuntimeAttr? runtime_attr_override
-    }
-
-    command <<<
-        set -euo pipefail
-
-        # Keep the header line and the loci whose TRID contig matches, ignoring any chr prefix
-        zcat -f ~{tsv} \
-            | awk -F'\t' -v contig="~{contig}" '
-                BEGIN {
-                    if (contig ~ /^chr/) contig = substr(contig, 4)
-                }
-
-                {
-                    split($1, arr, ",")
-                    split(arr[1], parts, "-")
-                    chr = parts[1]
-                    if (chr ~ /^chr/) chr = substr(chr, 4)
-                    if (chr ~ /^trid/) header = $0
-                    else if (chr == contig) data[++n] = $0
-                }
-
-                END {
-                    print header
-                    for (i = 1; i <= n; i++) print data[i]
-                }
-            ' \
-            > ~{prefix}.tsv
-    >>>
-
-    output {
-        File subset_tsv = "~{prefix}.tsv"
-    }
-
-    RuntimeAttr default_attr = object {
-        cpu_cores: 1,
-        mem_gb: 4,
-        disk_gb: 2 * ceil(size(tsv, "GB")) + 5,
-        boot_disk_gb: 10,
-        preemptible_tries: 1,
-        max_retries: 0
-    }
-    RuntimeAttr runtime_attr = select_first([runtime_attr_override, default_attr])
-    runtime {
-        cpu: select_first([runtime_attr.cpu_cores, default_attr.cpu_cores])
-        memory: select_first([runtime_attr.mem_gb, default_attr.mem_gb]) + " GiB"
-        disks: "local-disk " + select_first([runtime_attr.disk_gb, default_attr.disk_gb]) + " HDD"
-        bootDiskSizeGb: select_first([runtime_attr.boot_disk_gb, default_attr.boot_disk_gb])
-        docker: docker
-        preemptible: select_first([runtime_attr.preemptible_tries, default_attr.preemptible_tries])
-        maxRetries: select_first([runtime_attr.max_retries, default_attr.max_retries])
-    }
-}
-
 task ComputeAFs {
     input {
         File vcf
@@ -220,10 +162,13 @@ task ComputeAFs {
     command <<<
         set -euo pipefail
 
+        # Decompress the LPS table because compute_AFs.py reads it as plain text
+        ~{if defined(lps_tsv) then "zcat -f " + lps_tsv + " > lps.tsv" else ""}
+
         python3 /opt/scripts/annotation/compute_AFs.py "~{vcf}" stdout \
             ~{"-p " + sample_pop_assignments} \
             ~{"-f " + ped} \
-            ~{"-l " + lps_tsv} \
+            ~{if defined(lps_tsv) then "-l lps.tsv" else ""} \
             --par ~{par_bed} \
             | bgzip -c > "~{prefix}.vcf.gz"
 

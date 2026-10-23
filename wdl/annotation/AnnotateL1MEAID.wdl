@@ -46,6 +46,13 @@ workflow AnnotateL1MEAID {
         RuntimeAttr? runtime_attr_concat_contigs
     }
 
+    # Cromwell rejects an undefined optional entering a nested scatter, so these cross as one-element arrays
+    Array[RuntimeAttr?] runtime_attr_ins_to_fa_wrapped = [runtime_attr_ins_to_fa]
+    Array[RuntimeAttr?] runtime_attr_repeat_masker_wrapped = [runtime_attr_repeat_masker]
+    Array[RuntimeAttr?] runtime_attr_limeaid_wrapped = [runtime_attr_limeaid]
+    Array[RuntimeAttr?] runtime_attr_filter_wrapped = [runtime_attr_filter]
+    Array[RuntimeAttr?] runtime_attr_annotate_wrapped = [runtime_attr_annotate]
+
     Boolean single_contig = length(contigs) == 1
 
     scatter (contig in contigs) {
@@ -83,8 +90,8 @@ workflow AnnotateL1MEAID {
                     prefix = "~{prefix}.~{contig}.shard_~{i}.rm",
                     utils_docker = utils_docker,
                     repeatmasker_docker = repeatmasker_docker,
-                    runtime_attr_ins_to_fa = runtime_attr_ins_to_fa,
-                    runtime_attr_repeat_masker = runtime_attr_repeat_masker
+                    runtime_attr_ins_to_fa = runtime_attr_ins_to_fa_wrapped[0],
+                    runtime_attr_repeat_masker = runtime_attr_repeat_masker_wrapped[0]
             }
 
             call L1MEAID {
@@ -93,7 +100,7 @@ workflow AnnotateL1MEAID {
                     rm_out = RepeatMasker.rm_out,
                     prefix = "~{prefix}.~{contig}.shard_~{i}.l1meaid",
                     docker = l1meaid_docker,
-                    runtime_attr_override = runtime_attr_limeaid
+                    runtime_attr_override = runtime_attr_limeaid_wrapped[0]
             }
 
             call IntactMEI {
@@ -101,7 +108,7 @@ workflow AnnotateL1MEAID {
                     l1meaid_output = L1MEAID.l1meaid_output,
                     prefix = "~{prefix}.~{contig}.shard_~{i}.intactmei",
                     docker = intact_mei_docker,
-                    runtime_attr_override = runtime_attr_filter
+                    runtime_attr_override = runtime_attr_filter_wrapped[0]
             }
 
             call GenerateAnnotationTable {
@@ -110,7 +117,7 @@ workflow AnnotateL1MEAID {
                     filtered_tsv = IntactMEI.filtered_output,
                     prefix = "~{prefix}.~{contig}.shard_~{i}.intactmei_annotations",
                     docker = utils_docker,
-                    runtime_attr_override = runtime_attr_annotate
+                    runtime_attr_override = runtime_attr_annotate_wrapped[0]
             }
         }
 

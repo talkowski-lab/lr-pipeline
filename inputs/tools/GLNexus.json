@@ -1,0 +1,14 @@
+{
+    "GLNexus.gvcfs": [
+        "gs://<cohort-bucket>/gvcf_1",
+        "gs://<cohort-bucket>/gvcf_2"
+    ],
+    "GLNexus.gvcf_idxs": [
+        "gs://<cohort-bucket>/gvcf_1.tbi",
+        "gs://<cohort-bucket>/gvcf_2.tbi"
+    ],
+    "GLNexus.ref_map_file": "gs://<references-bucket>/ref_map_file",
+    "GLNexus.prefix": "cohort",
+    "GLNexus.glnexus_docker": "ghcr.io/dnanexus-rnd/glnexus:v1.4.1",
+    "GLNexus.hail_docker": "us-central1-docker.pkg.dev/talkowski-sv-gnomad/kj-dockers/hail:latest"
+}

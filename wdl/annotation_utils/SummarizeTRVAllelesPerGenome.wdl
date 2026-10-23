@@ -39,6 +39,9 @@ workflow SummarizeTRVAllelesPerGenome {
         RuntimeAttr? runtime_attr_merge
     }
 
+    # Cromwell rejects an undefined optional entering a nested scatter, so these cross as one-element arrays
+    Array[RuntimeAttr?] runtime_attr_count_wrapped = [runtime_attr_count]
+
     scatter (i in range(length(vcfs))) {
         if (defined(records_per_shard)) {
             call Helpers.ShardVcfByRecords {
@@ -63,7 +66,7 @@ workflow SummarizeTRVAllelesPerGenome {
                     coding_gtf = coding_gtf,
                     prefix = "~{prefix}.input_~{i}.shard_~{j}",
                     docker = utils_docker,
-                    runtime_attr_override = runtime_attr_count
+                    runtime_attr_override = runtime_attr_count_wrapped[0]
             }
         }
     }

@@ -1,11 +1,12 @@
-FROM us-central1-docker.pkg.dev/talkowski-sv-gnomad/kj-dockers/utils:latest
+ARG BASE_IMAGE=us-central1-docker.pkg.dev/talkowski-sv-gnomad/kj-dockers/utils:latest
+FROM ${BASE_IMAGE}
 
 MAINTAINER Karan Jaisingh
 
 ENV DEBIAN_FRONTEND=noninteractive
 
 RUN apt-get update && apt-get install -y \
-    last-align \
+    last-align=1260-1 \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /opt/src

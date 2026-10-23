@@ -1,0 +1,9 @@
+{
+    "ExtractDisparateTRLoci.vcf_a": "gs://<cohort-bucket>/vcf_a.vcf.gz",
+    "ExtractDisparateTRLoci.vcf_a_idx": "gs://<cohort-bucket>/vcf_a.vcf.gz.tbi",
+    "ExtractDisparateTRLoci.vcf_b": "gs://<cohort-bucket>/vcf_b.vcf.gz",
+    "ExtractDisparateTRLoci.vcf_b_idx": "gs://<cohort-bucket>/vcf_b.vcf.gz.tbi",
+    "ExtractDisparateTRLoci.contig": "chr22",
+    "ExtractDisparateTRLoci.prefix": "cohort",
+    "ExtractDisparateTRLoci.utils_docker": "us-central1-docker.pkg.dev/talkowski-sv-gnomad/kj-dockers/utils:latest"
+}

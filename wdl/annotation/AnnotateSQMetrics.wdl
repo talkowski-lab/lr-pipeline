@@ -35,6 +35,9 @@ workflow AnnotateSQMetrics {
         RuntimeAttr? runtime_attr_concat
     }
 
+    # Cromwell rejects an undefined optional entering a nested scatter, so these cross as one-element arrays
+    Array[RuntimeAttr?] runtime_attr_annotate_wrapped = [runtime_attr_annotate]
+
     Boolean single_contig = length(contigs) == 1
 
     scatter (contig in contigs) {
@@ -75,7 +78,7 @@ workflow AnnotateSQMetrics {
                     vcf_idx = vcf_idxs_to_process[i],
                     prefix = "~{prefix}.~{contig}.site_quality.shard_~{i}",
                     docker = utils_docker,
-                    runtime_attr_override = runtime_attr_annotate
+                    runtime_attr_override = runtime_attr_annotate_wrapped[0]
             }
         }
 

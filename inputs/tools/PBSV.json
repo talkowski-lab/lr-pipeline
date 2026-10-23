@@ -1,0 +1,8 @@
+{
+    "PBSV.bam": "gs://<cohort-bucket>/sample.bam",
+    "PBSV.bai": "gs://<cohort-bucket>/sample.bam.bai",
+    "PBSV.prefix": "cohort",
+    "PBSV.ref_fa": "gs://<references-bucket>/hg38.no_alt.fa",
+    "PBSV.ref_fai": "gs://<references-bucket>/hg38.no_alt.fa.fai",
+    "PBSV.pbsv_docker": "us-central1-docker.pkg.dev/talkowski-sv-gnomad/kj-dockers/pbsv:latest"
+}

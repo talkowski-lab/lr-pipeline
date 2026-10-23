@@ -50,6 +50,9 @@ workflow IntegrateTRs {
         RuntimeAttr? runtime_attr_concat_vcf
     }
 
+    # Cromwell rejects an undefined optional entering a nested scatter, so these cross as one-element arrays
+    Array[RuntimeAttr?] runtime_attr_subset_catalog_wrapped = [runtime_attr_subset_catalog]
+
     Boolean single_contig = length(contigs) == 1
 
     scatter (contig in contigs) {
@@ -127,7 +130,7 @@ workflow IntegrateTRs {
                     compressed_tsv = true,
                     prefix = "~{prefix}.~{contig}.catalog~{i}",
                     docker = utils_docker,
-                    runtime_attr_override = runtime_attr_subset_catalog
+                    runtime_attr_override = runtime_attr_subset_catalog_wrapped[0]
             }
         }
 

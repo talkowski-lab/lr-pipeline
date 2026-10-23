@@ -1,0 +1,9 @@
+{
+    "SubsetTsvToColumns.annotations_tsv": "gs://<cohort-bucket>/annotations.tsv",
+    "SubsetTsvToColumns.annotations_header": "gs://<cohort-bucket>/annotations_header",
+    "SubsetTsvToColumns.subset_columns": [
+        "subset_column"
+    ],
+    "SubsetTsvToColumns.prefix": "cohort",
+    "SubsetTsvToColumns.utils_docker": "us-central1-docker.pkg.dev/talkowski-sv-gnomad/kj-dockers/utils:latest"
+}

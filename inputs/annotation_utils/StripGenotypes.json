@@ -1,0 +1,7 @@
+{
+    "StripGenotypes.vcf": "gs://<cohort-bucket>/cohort.vcf.gz",
+    "StripGenotypes.vcf_idx": "gs://<cohort-bucket>/cohort.vcf.gz.tbi",
+    "StripGenotypes.prefix": "cohort",
+    "StripGenotypes.records_per_shard": 10000,
+    "StripGenotypes.utils_docker": "us-central1-docker.pkg.dev/talkowski-sv-gnomad/kj-dockers/utils:latest"
+}
