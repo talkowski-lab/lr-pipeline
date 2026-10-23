@@ -1,4 +1,4 @@
-# LR Annotation
+# lr-pipeline
 [![Validate Workflows](https://github.com/talkowski-lab/lr-pipeline/actions/workflows/wdl-validation.yml/badge.svg)](https://github.com/talkowski-lab/lr-pipeline/actions/workflows/wdl-validation.yml)
 [![Tests](https://github.com/talkowski-lab/lr-pipeline/actions/workflows/tests.yml/badge.svg)](https://github.com/talkowski-lab/lr-pipeline/actions/workflows/tests.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)

@@ -27,6 +27,12 @@ if [[ ! "$BRANCH" =~ ^[A-Za-z0-9._-]+$ ]]; then
     exit 1
 fi
 
+# check_dockstore_sync.py runs after .dockstore.yml is edited, so fail before touching anything if it can't import PyYAML
+if ! python3 -c 'import yaml' 2>/dev/null; then
+    echo "python3 ($(command -v python3)) can't import yaml; install PyYAML or put an environment that has it first on PATH." >&2
+    exit 1
+fi
+
 if ! git show-ref --verify --quiet "refs/heads/$BRANCH"; then
     echo "No local branch named '$BRANCH'." >&2
     exit 1

@@ -8,7 +8,7 @@ on:
       - '.github/scripts/**'
       - 'tests/**'
       - 'pyproject.toml'
-      - '.github/workflows/python-linting.yaml'
+      - '.github/workflows/python-lint.yml'
   pull_request:
     branches: [ main ]
     paths:
@@ -16,7 +16,7 @@ on:
       - '.github/scripts/**'
       - 'tests/**'
       - 'pyproject.toml'
-      - '.github/workflows/python-linting.yaml'
+      - '.github/workflows/python-lint.yml'
 
 permissions:
   contents: read
