@@ -68,6 +68,36 @@ def get_genotype_allele_value(gt, allele_idx, field_values, cast=None):
     return None
 
 
+def resolve_lps_alleles(carriers, num_alleles):
+    """
+    Assign an LPS value to each allele index from carriers' per-haplotype LPS values, without relying on their order.
+    The LPS table follows the TRGT VCF's haplotype order, which needn't match the callset GT, so a value is only
+    assigned when a carrier pins it down. Unresolved alleles are None.
+    """
+    lps = {}
+    # A carrier whose haplotypes share one LPS value fixes every allele it carries
+    for gt, values in carriers:
+        if len(set(values)) == 1:
+            for allele_idx in gt:
+                lps.setdefault(allele_idx, values[0])
+
+    # A heterozygous carrier with one allele resolved fixes the other, repeated until nothing changes
+    changed = True
+    while changed:
+        changed = False
+        for gt, values in carriers:
+            if len(gt) != 2:
+                continue
+            for allele_idx, other_idx in (gt, gt[::-1]):
+                if allele_idx not in lps and other_idx in lps and lps[other_idx] in values:
+                    remaining = list(values)
+                    remaining.remove(lps[other_idx])
+                    lps[allele_idx] = remaining[0]
+                    changed = True
+
+    return [lps.get(allele_idx) for allele_idx in range(num_alleles)]
+
+
 def is_biallelic(record):
     """
     Check if a record has at most one alternate allele.
@@ -362,20 +392,14 @@ def calc_allele_freq(record, samples, prefix=None, hemi=False, lps_dict=None):
                     mc_allele.append(mc_val if mc_val is not None else 0)
                 record.info["MC_allele"] = tuple(mc_allele)
 
-                if lps_dict is not None and record.id in lps_dict:
-                    lps_allele = []
-                    for allele_idx in allele_indices:
-                        lps_val = None
-                        for sample_name, gt in valid_GTs:
-                            lps_val = get_genotype_allele_value(
-                                gt,
-                                allele_idx,
-                                lps_dict[record.id].get(sample_name),
-                            )
-                            if lps_val is not None:
-                                break
-                        lps_allele.append(lps_val if lps_val is not None else 0)
-                    record.info["LPS_allele"] = tuple(lps_allele)
+                lps_key = (record.info.get("TRID"), motifs[0])
+                if lps_dict is not None and lps_key in lps_dict:
+                    carriers = []
+                    for sample_name, gt in valid_GTs:
+                        values = lps_dict[lps_key].get(sample_name)
+                        if values is not None and None not in gt and len(values) == len(gt):
+                            carriers.append((gt, values))
+                    record.info["LPS_allele"] = tuple(resolve_lps_alleles(carriers, num_alleles))
 
     return record
 
@@ -511,33 +535,36 @@ def main():
         pop_dict = {}
         pops = []
 
-    # Get LPS values
+    # Get LPS values per (TRID, motif), keeping only the loci in the VCF
     lps_dict = None
     if args.lpsfile is not None:
-        vcf_variant_ids = set(rec.id for rec in vcf.fetch())
+        vcf_trids = set(rec.info.get("TRID") for rec in vcf.fetch())
         vcf.reset()
         lps_dict = {}
+        # Older concatenated tables were sorted with their header, leaving it last rather than first
         lines = [line.rstrip("\n").rstrip("\r") for line in open(args.lpsfile) if line.strip()]
-        header = lines[-1].split("\t")
+        header = next(line for line in lines if line.startswith("trid\t")).split("\t")
         sample_names = header[2:]
-        for line in lines[:-1]:
+        for line in lines:
             fields = line.split("\t")
-            if len(fields) < 2:
+            if len(fields) < 2 or fields[0] == "trid":
                 continue
-            variant_id = fields[0]
-            if variant_id not in vcf_variant_ids:
+            trid, motif = fields[0], fields[1]
+            if trid not in vcf_trids:
                 continue
             sample_values = fields[2:]
-            lps_dict[variant_id] = {}
+            lps_dict[(trid, motif)] = {}
             for i, sample_name in enumerate(sample_names):
                 if i < len(sample_values):
                     val_str = sample_values[i].strip()
-                    if val_str == "." or val_str == "":
-                        lps_dict[variant_id][sample_name] = None
+                    # A missing haplotype can't be placed without knowing the order, so drop the whole call
+                    values = [v.strip() for v in val_str.split(",")]
+                    if val_str == "" or "." in values:
+                        lps_dict[(trid, motif)][sample_name] = None
                     else:
-                        lps_dict[variant_id][sample_name] = [int(v.strip()) for v in val_str.split(",")]
+                        lps_dict[(trid, motif)][sample_name] = [int(v) for v in values]
                 else:
-                    lps_dict[variant_id][sample_name] = None
+                    lps_dict[(trid, motif)][sample_name] = None
 
     # Get PAR regions
     par_regions = load_par_regions(args.par)
@@ -560,7 +587,12 @@ def main():
     ]
     if args.lpsfile is not None:
         INFO_ADD.append(
-            info_line("LPS_allele", ".", "Integer", "Longest polymer sequence for each allele index (multiallelic sites only).")
+            info_line(
+                "LPS_allele",
+                ".",
+                "Integer",
+                "Longest polymer sequence for each allele index, missing where no carrier resolves it (multiallelic sites only).",
+            )
         )
     if len(par_regions) > 0:
         INFO_ADD.append(info_line("par", "0", "Flag", "Variant overlaps pseudoautosomal region."))

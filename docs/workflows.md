@@ -145,7 +145,7 @@ Outputs:
 ### [AnnotateAF](../wdl/annotation/AnnotateAF.wdl)
 This workflow annotates each variant with allele counts, allele frequencies, no-call rates and genotype counts, computed from its genotypes. Frequencies are computed across the whole cohort and, when the matching inputs are given, per sex from a PED and per population from an ancestry table, together with the population with the highest allele frequency (grpmax) at biallelic sites. Variants on chrX and chrY outside the pseudoautosomal regions are counted as hemizygous in XY samples.
 
-At multiallelic sites, per-allele allele purity (`AP_allele`), motif count (`MC_allele`) and, when an LPS table is given, longest polymer sequence (`LPS_allele`) are taken from the first carrier of each allele. Each contig is sharded by record count, annotated in parallel and concatenated into one VCF.
+At multiallelic sites, per-allele allele purity (`AP_allele`) and motif count (`MC_allele`) are taken from the first carrier of each allele. When an LPS table is given, single-motif TR sites also get a per-allele longest polymer sequence (`LPS_allele`), matched on `INFO/TRID` and motif. Because the table's haplotype order needn't match the VCF genotypes, a value is only assigned when a carrier pins it down - a carrier whose two haplotypes share one value, or a heterozygous carrier whose other allele is already resolved - and is left missing otherwise. Each contig is sharded by record count, annotated in parallel and concatenated into one VCF.
 
 Inputs:
 - `File vcf`: VCF to annotate.
@@ -154,7 +154,7 @@ Inputs:
 - `Int records_per_shard`: Number of variants to keep within a single shard during annotation.
 - `File? sample_pop_assignments`: Two-column TSV of sample ID and population label, used for per-population frequencies. Labels must be one of afr, ami, amr, asj, eas, fin, mid, nfe, sas or oth, and '.' leaves a sample unassigned.
 - `File? ped`: Cohort pedigree, used for per-sex frequencies and hemizygous counting.
-- `File? lps_tsv`: TSV of longest polymer sequence values per TR locus and sample, from `TRGTLPS`, with its header line first.
+- `File? lps_tsv`: TSV of longest polymer sequence values per TR locus and sample, from `TRGTLPS`. The `trid` header line may sit first or, as in older concatenated tables, last.
 - `Array[String]? strip_info_fields`: INFO fields to remove from each shard before annotation.
 - `File par_bed`: From references.
 - `String prefix`: Prefix for output file names.

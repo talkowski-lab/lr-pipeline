@@ -39,7 +39,7 @@ Some names below depend on the inputs of the released callsets rather than being
   - `freq_homalt`: Homozygous alternate genotype frequency (biallelic sites only).
   - `freq_homref`: Homozygous reference genotype frequency (biallelic sites only).
   - `grpmax`: Population label with maximum allele frequency (biallelic sites only).
-  - `LPS_allele`: Longest polymer sequence per-allele (multiallelic sites only).
+  - `LPS_allele`: Longest polymer sequence per-allele, from the TRGT LPS table, at single-motif TR sites; missing for alleles no carrier resolves (multiallelic sites only).
   - `MC_allele`: Motif count per-allele (multiallelic sites only).
   - `n_bi_genos`: Total number of samples with complete genotypes (biallelic sites only).
   - `NCR`: Proportion of alleles that don't have a genotype call.

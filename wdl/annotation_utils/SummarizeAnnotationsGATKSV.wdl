@@ -446,7 +446,9 @@ PYCODE
 
         tabix ~{prefix}.sorted.vcf.gz
 
-        bash /opt/scripts/qc/vcf_qc/collectQC.vcf_wide.sh \
+        # Keep collectQC's scratch on the sized local disk rather than the boot disk's /tmp
+        mkdir -p collectQC_tmp
+        TMPDIR="$(pwd)/collectQC_tmp" bash /opt/scripts/qc/vcf_qc/collectQC.vcf_wide.sh \
             ~{prefix}.sorted.vcf.gz \
             /opt/scripts/qc/vcf_qc/SV_colors.txt \
             collectQC_vcfwide_output/
@@ -456,7 +458,7 @@ PYCODE
         bgzip -c collectQC_vcfwide_output/vcf2bed_raw.bed > ~{prefix}.vcf2bed.bed.gz
 
         rm -f ~{prefix}.sorted.vcf.gz ~{prefix}.sorted.vcf.gz.tbi
-        rm -rf collectQC_vcfwide_output/
+        rm -rf collectQC_vcfwide_output/ collectQC_tmp/
     >>>
 
     output {
@@ -468,7 +470,8 @@ PYCODE
     RuntimeAttr default_attr = object {
         cpu_cores: 1,
         mem_gb: 16,
-        disk_gb: 5 * ceil(size(vcf, "GB")) + 20,
+        # Split TR alleles each carry every INFO field and collectQC keeps several uncompressed copies, so a 37 MB shard can exceed 25 GB
+        disk_gb: 50 * ceil(size(vcf, "GB")) + 100,
         boot_disk_gb: 10,
         preemptible_tries: 1,
         max_retries: 0
