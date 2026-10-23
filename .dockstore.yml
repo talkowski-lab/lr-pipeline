@@ -154,6 +154,7 @@ workflows:
     filters:
       branches:
         - main
+        - kj-release-polish
       tags:
         - /.*/
 
