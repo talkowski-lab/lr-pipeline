@@ -66,7 +66,7 @@ Each characterization workflow writes an `annotations_tsv_*` column that [Annota
 14. **[FindUntrimmedAlleles](../archive/wdl/annotation_utils/FindUntrimmedAlleles.wdl)** then **[AnnotateVcfCleared](../archive/wdl/annotation_utils/AnnotateVcfCleared.wdl)** - re-annotated variants whose alleles had been trimmed, giving `untrimmed_vcf` then `cleared_annotated_vcf`.
 15. **[ResolveHaplotypeOverlaps](../wdl/annotation_utils/ResolveHaplotypeOverlaps.wdl)** _(HPRC/HGSVC)_ - resolved calls overlapping on the same haplotype, giving `overlap_resolved_vcf`.
 16. **[AnnotateAF](https://github.com/broadinstitute/gatk-sv/blob/kj_project_gnomad_lr/wdl/AnnotateAF.wdl)** _(HPRC/HGSVC)_ - recomputed frequencies after the genotype changes above, giving `af_annotated_posthoc_vcf`.
-17. **[NormalizeAlleleTypes](../archive/wdl/annotation_utils/NormalizeAlleleTypes.wdl)** - demoted non-tandem duplications, MEIs and NUMTs while recording `allele_subtype`, giving `transformed_vcf`.
+17. **[NormalizeAlleleTypes](../wdl/annotation_utils/NormalizeAlleleTypes.wdl)** - demoted non-tandem duplications, MEIs and NUMTs while recording `allele_subtype`, giving `transformed_vcf`.
 
 
 ## 4. Release

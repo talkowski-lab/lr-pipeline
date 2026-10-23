@@ -67,6 +67,25 @@ def write_vcf(src, dst, keep):
     return dst
 
 
+def rewrite_vcf(src, dst, drop_info, edit):
+    """Write a VCF without the drop_info INFO fields, applying edit() to each record, and return its bgzipped, indexed path."""
+    plain = dst.with_suffix("")
+    with pysam.VariantFile(str(src)) as vcf_in:
+        header = vcf_in.header.copy()
+        for key in drop_info:
+            header.info.remove_header(key)
+        with pysam.VariantFile(str(plain), "w", header=header) as vcf_out:
+            for record in vcf_in:
+                edit(record)
+                for key in drop_info:
+                    if key in record.info:
+                        del record.info[key]
+                record.translate(header)
+                vcf_out.write(record)
+    pysam.tabix_index(str(plain), preset="vcf", force=True)
+    return dst
+
+
 @pytest.fixture(scope="module")
 def source():
     return load_records(REPO_ROOT / "tests" / "data" / "hprc_hgsvc_v10.chr22.subset.vcf.gz")
@@ -240,6 +259,73 @@ def test_extract_trv_length_deltas_matches_independent_tabulation(run_workflow, 
         count_rows = list(csv.reader(handle, delimiter="\t"))
     assert count_rows[0] == ["contig", "length_delta", "n_alleles", "allele_count"]
     assert count_rows[1:] == [[CONTIG, str(d), str(n), str(a)] for d, (n, a) in sorted(counts.items())]
+
+
+@pytest.mark.parametrize("compute_allele_counts", [True, False])
+def test_postprocess_callset_recomputes_allele_counts_for_singleton_filter(
+    run_workflow, run_dir, subset_vcf, utils_docker, source, compute_allele_counts
+):
+    stripped = rewrite_vcf(subset_vcf, run_dir / "no_ac.vcf.gz", ["AC", "AN"], lambda r: r.filter.clear())
+    run_flags = [
+        "clean_vcf_header",
+        "decrement_trv_ids",
+        "drop_filters",
+        "filter_single_read_singletons",
+        "flag_homopolymer_trvs",
+        "normalize_ploidy",
+        "prune_meis",
+        "reassign_suffixes",
+        "sorting",
+        "transfer_genotypes",
+        "unphase_samples",
+    ]
+    inputs = {
+        "vcf": str(stripped),
+        "vcf_idx": f"{stripped}.tbi",
+        "contigs": [CONTIG],
+        "prefix": "post",
+        **{f"run_{flag}": False for flag in run_flags},
+        "run_compute_allele_counts": compute_allele_counts,
+        "run_filter_assembly_only_singletons": True,
+        "utils_docker": utils_docker,
+    }
+    # Without an AC header definition the assembly-only singleton filter cannot read AC and fails
+    if not compute_allele_counts:
+        with pytest.raises(WorkflowError):
+            run_workflow(f"{UTILS}/PostprocessCallset.wdl", inputs)
+        return
+
+    outputs = run_workflow(f"{UTILS}/PostprocessCallset.wdl", inputs)
+    _, records = load_records(outputs["PostprocessCallset.post_processed_vcf"])
+    assert [site_key(r) for r in records] == [site_key(r) for r in source[1]]
+    # The fixture's AC and AN were recomputed from these genotypes when it was subset
+    assert [r["info"]["AC"] for r in records] == [r["info"]["AC"] for r in source[1]]
+    assert [r["info"]["AN"] for r in records] == [r["info"]["AN"] for r in source[1]]
+    flagged = {r["id"] for r in records if "ASSEMBLY_ONLY_SINGLETON" in r["filter"]}
+    expected = {r["id"] for r in source[1] if "ASSEMBLY_ONLY_SINGLETON" in r["filter"]}
+    assert expected and expected <= flagged
+
+
+def test_normalize_allele_types_reproduces_released_types(run_workflow, run_dir, subset_vcf, utils_docker, source):
+    def restore_raw_type(record):
+        subtype = record.info.get("allele_subtype")
+        if subtype:
+            record.info["allele_type"] = "dup" if subtype == "tandem_dup" else subtype
+
+    raw = rewrite_vcf(subset_vcf, run_dir / "raw_types.vcf.gz", ["allele_subtype"], restore_raw_type)
+    outputs = run_workflow(
+        f"{UTILS}/NormalizeAlleleTypes.wdl",
+        {"vcf": str(raw), "vcf_idx": f"{raw}.tbi", "prefix": "normalized", "utils_docker": utils_docker},
+    )
+
+    _, records = load_records(outputs["NormalizeAlleleTypes.transformed_vcf"])
+    assert [site_key(r) for r in records] == [site_key(r) for r in source[1]]
+
+    def types(r):
+        return r["info"]["allele_type"], r["info"].get("allele_subtype")
+
+    assert [types(r) for r in records] == [types(r) for r in source[1]]
+    assert {"dup_interspersed", "alu_ins", "alu_del"} <= {r["info"].get("allele_subtype") for r in records}
 
 
 def read_base_table(path):

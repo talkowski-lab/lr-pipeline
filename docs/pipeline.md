@@ -112,20 +112,18 @@ The VCF advances only at stage 4. Stages 1 to 3 read the cohort phased VCF from 
    - **[AnnotatePALMER](../wdl/annotation/AnnotatePALMER.wdl)** - match the cohort PALMER VCF from step 1 against the callset insertions, using the RepeatMasker output.
    - **[AnnotateSVAN](../wdl/annotation/AnnotateSVAN.wdl)** - identify MEIs, MEDs, tandem duplications, dispersed duplications and NUMTs with SVAN.
    - **[AnnotateMEDs](../wdl/annotation/AnnotateMEDs.wdl)** - identify mobile element deletions by intersecting deletions against the MEI catalog.
-3. Independent characterization, in parallel on the cohort phased VCF. These need nothing from stages 1 and 2, so they can start as soon as step 2 finishes:
+3. Independent characterization, in parallel on the cohort phased VCF. These need nothing from stages 1 and 2, so they can start as soon as step 2 finishes. Site and genotype quality metrics are not computed here; they run in Integration and Release once the genotypes are final:
    - **[AnnotateIndelTRs](../wdl/annotation/AnnotateIndelTRs.wdl)** - flag short indels that represent tandem repeats.
    - **[AnnotateRegion](../wdl/annotation/AnnotateRegion.wdl)** - assign each variant a genomic region class (SR, SD, RM or US).
    - **[AnnotateInSilicoPredictors](../wdl/annotation/AnnotateInSilicoPredictors.wdl)** - look up CADD, Pangolin, PhyloP, REVEL and SpliceAI scores.
    - **[AnnotateGnomADSTR](../wdl/annotation/AnnotateGnomADSTR.wdl)** - match TR calls against the gnomAD V4 STR catalog.
    - **[AnnotateDbSNP](../wdl/annotation/AnnotateDbSNP.wdl)** - assign dbSNP rsIDs to matched SNVs and indels.
    - **[AnnotateVRS](../wdl/annotation/AnnotateVRS.wdl)** - annotate each variant with GA4GH VRS identifiers.
-   - **[AnnotateSQMetrics](../wdl/annotation/AnnotateSQMetrics.wdl)** - site-level quality metrics (HWE, inbreeding coefficient, AS fields).
-   - **[AnnotateGQMetrics](../wdl/annotation/AnnotateGQMetrics.wdl)** - binned genotype quality and allele balance distributions.
    - **[AnnotateAgeMetrics](../wdl/annotation/AnnotateAgeMetrics.wdl)** - age-bin carrier distributions per variant. Only run when sample age data was supplied.
 4. Consolidate the stage 2 evidence and settle `allele_type`, in order:
    1. **[AnnotateMEIs](../wdl/annotation/AnnotateMEIs.wdl)** - compare the L1MEAID, PALMER and SVAN evidence and synthesize one harmonized MEI TSV.
    2. **[SubsetTsvToColumns](../wdl/annotation_utils/SubsetTsvToColumns.wdl)** - extract the duplications of interest from the SVAN output.
-   3. **[AnnotateAlleleType](../wdl/annotation_utils/AnnotateAlleleType.wdl)** - rewrite the `allele_type` INFO field from the MED, MEI and duplication TSVs, producing the allele-type-annotated VCF.
+   3. **[AnnotateAlleleType](../wdl/annotation_utils/AnnotateAlleleType.wdl)** - rewrite the `allele_type` INFO field from the MED, MEI and duplication TSVs, and record each duplication's source coordinates in `ORIGIN`, producing the allele-type-annotated VCF.
 5. Functional and overlap annotation, in parallel on the allele-type-annotated VCF. These run after stage 4 because their predictions depend on the final `allele_type`:
    - **[AnnotateVEPHail](../wdl/annotation/AnnotateVEPHail.wdl)** - predict functional effects with VEP via Hail.
    - **[AnnotateSVAnnotate](../wdl/annotation/AnnotateSVAnnotate.wdl)** - predict functional effects for SVs with GATK SVAnnotate.
@@ -134,12 +132,18 @@ The VCF advances only at stage 4. Stages 1 to 3 read the cohort phased VCF from 
 
 ### Integration and Release
 Each step takes the previous step's VCF, starting from the allele-type-annotated VCF.
-1. **[AnnotateVcf](../wdl/annotation_utils/AnnotateVcf.wdl)** - write every annotation TSV from all five characterization stages into the allele-type-annotated VCF as INFO fields.
-2. **[PostprocessCallset](../wdl/annotation_utils/PostprocessCallset.wdl)** - transfer the phased genotypes from the step 2 cohort phased VCF, normalize ploidy, prune MEIs, flag homopolymer TRs, drop filters and filter singletons.
+1. **[AnnotateVcf](../wdl/annotation_utils/AnnotateVcf.wdl)** - write every annotation TSV produced by the characterization stages into the allele-type-annotated VCF as INFO fields.
+2. **[PostprocessCallset](../wdl/annotation_utils/PostprocessCallset.wdl)** - normalize ploidy, recompute `AC` and `AN` from the resulting genotypes, prune MEIs, flag homopolymer TRs, drop filters and filter singletons. The singleton filters read `AC`, which is why the counts are recomputed here rather than waiting for `AnnotateAF`.
 3. **[ResolveHaplotypeOverlaps](../wdl/annotation_utils/ResolveHaplotypeOverlaps.wdl)** - resolve calls that overlap on the same haplotype. Runs per contig, so reassemble with `ConcatenateVcfsAcrossContigs`.
 4. **[FilterLowCoverageRegions](../wdl/annotation_utils/FilterLowCoverageRegions.wdl)** - filter variants falling in the recurrently low-coverage bins identified in step 1.
 5. **[FilterLowCoverageGenotypes](../wdl/annotation_utils/FilterLowCoverageGenotypes.wdl)** - no-call genotypes falling below each sample's coverage cutoff from step 1.
-6. **[AnnotateAF](https://github.com/broadinstitute/gatk-sv/blob/kj_project_gnomad_lr/wdl/AnnotateAF.wdl)** - annotate allele frequencies from the cohort ancestry and PED files, the PAR BED reference and the TRGT LPS TSV. Runs last so that the frequencies reflect the filtered genotypes.
-7. **[StripGenotypes](../wdl/annotation_utils/StripGenotypes.wdl)** _(optional)_ - drop genotypes to produce a sites-only VCF alongside the full release.
+6. Quality metrics on the final genotypes, in order. These run after steps 2, 3 and 5 because those change genotypes:
+   1. In parallel:
+      - **[AnnotateSQMetrics](../wdl/annotation/AnnotateSQMetrics.wdl)** - site-level quality metrics (HWE, inbreeding coefficient, AS fields).
+      - **[AnnotateGQMetrics](../wdl/annotation/AnnotateGQMetrics.wdl)** - binned genotype quality and allele balance distributions.
+   2. **[AnnotateVcf](../wdl/annotation_utils/AnnotateVcf.wdl)** - write the two metric TSVs into the VCF.
+7. **[AnnotateAF](https://github.com/broadinstitute/gatk-sv/blob/kj_project_gnomad_lr/wdl/AnnotateAF.wdl)** - annotate allele frequencies from the cohort ancestry and PED files, the PAR BED reference and the TRGT LPS TSV, overwriting the interim `AC` and `AN` from step 2. Runs after the last genotype-changing step so that the frequencies reflect the filtered genotypes.
+8. **[NormalizeAlleleTypes](../wdl/annotation_utils/NormalizeAlleleTypes.wdl)** - demote non-tandem duplications, MEIs and NUMTs to plain insertions and deletions, recording the original class in `allele_subtype`. Tandemness is tested against the duplication source in `ORIGIN`, which `AnnotateAlleleType` set in characterization stage 4. Runs last so every earlier step sees the detailed classes; it changes only INFO fields.
+9. **[StripGenotypes](../wdl/annotation_utils/StripGenotypes.wdl)** _(optional)_ - drop genotypes to produce a sites-only VCF alongside the full release.
 
-Step 3 ends with the annotated, filtered, allele-frequency-annotated cohort VCF for release.
+Step 3 ends with the annotated, filtered, allele-frequency-annotated cohort VCF, with normalized allele types, for release.

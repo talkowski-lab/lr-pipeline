@@ -6,7 +6,7 @@ import "../utils/Structs.wdl"
 workflow PostprocessCallset {
     meta {
         description: [
-            "This utility bundles every genotype-update and post-processing step applied to a near-final callset into one workflow, with a required `run_` Boolean guarding each step so that the input VCF is left untouched when all are set to `false`. The per-record steps are applied in a single pass over the VCF: each variant is first matched against `transfer_vcf` and has its genotypes transferred (when `run_transfer_genotypes` is set) using its unmodified properties, after which the remaining steps - unphasing, ploidy normalization, TR-ID decrementing, MEI pruning, homopolymer flagging, singleton filtering and same-coordinate sorting - run in order. Some steps require an accompanying field - `run_transfer_genotypes` needs `transfer_vcf`, `run_unphase_samples` needs `unphase_samples`, and `run_normalize_ploidy` needs `ped`. The per-record pass can optionally be region-sharded via `shard_bin_size`."
+            "This utility bundles every genotype-update and post-processing step applied to a near-final callset into one workflow, with a required `run_` Boolean guarding each step so that the input VCF is left untouched when all are set to `false`. The per-record steps are applied in a single pass over the VCF: each variant is first matched against `transfer_vcf` and has its genotypes transferred (when `run_transfer_genotypes` is set) using its unmodified properties, after which the remaining steps - unphasing, ploidy normalization, allele-count recomputation, TR-ID decrementing, MEI pruning, homopolymer flagging, singleton filtering and same-coordinate sorting - run in order. Some steps require an accompanying field - `run_transfer_genotypes` needs `transfer_vcf`, `run_unphase_samples` needs `unphase_samples`, and `run_normalize_ploidy` needs `ped`. Setting `run_compute_allele_counts` writes `INFO/AC` and `INFO/AN` from the genotypes as they stand after ploidy normalization, which the two singleton filters read, so they can run before `AnnotateAF`. The per-record pass can optionally be region-sharded via `shard_bin_size`."
         ]
     }
 
@@ -16,6 +16,7 @@ workflow PostprocessCallset {
         contigs: "Contigs to process within the input VCF."
         shard_bin_size: "Region-bin size, in bp, used when sharding the per-record pass."
         run_clean_vcf_header: "Whether to run the header-cleaning step."
+        run_compute_allele_counts: "Whether to recompute `INFO/AC` and `INFO/AN` from the genotypes after ploidy normalization, adding their header definitions when absent; the singleton filters read `AC`, so set this when `AnnotateAF` has not yet run."
         run_decrement_trv_ids: "Whether to decrement tandem-repeat variant IDs."
         run_drop_filters: "Whether to drop the FILTER values listed in `drop_filters`."
         run_filter_assembly_only_singletons: "Whether to apply the `ASSEMBLY_ONLY_SINGLETON` filter and emit a matching TSV."
@@ -46,6 +47,7 @@ workflow PostprocessCallset {
         Int? shard_bin_size
 
         Boolean run_clean_vcf_header
+        Boolean run_compute_allele_counts
         Boolean run_decrement_trv_ids
         Boolean run_drop_filters
         Boolean run_filter_assembly_only_singletons
@@ -163,6 +165,7 @@ workflow PostprocessCallset {
                         unphase = do_unphase_samples,
                         normalize_ploidy = do_normalize_ploidy,
                         clean_vcf_header = run_clean_vcf_header,
+                        compute_allele_counts = run_compute_allele_counts,
                         decrement_trv_ids = run_decrement_trv_ids,
                         drop = run_drop_filters,
                         drop_filters = drop_filters,
@@ -218,6 +221,7 @@ workflow PostprocessCallset {
                     unphase = do_unphase_samples,
                     normalize_ploidy = do_normalize_ploidy,
                     clean_vcf_header = run_clean_vcf_header,
+                    compute_allele_counts = run_compute_allele_counts,
                     decrement_trv_ids = run_decrement_trv_ids,
                     drop = run_drop_filters,
                     drop_filters = drop_filters,
@@ -279,6 +283,7 @@ task PostProcessTask {
         Boolean transfer_genotypes
         Boolean unphase
         Boolean normalize_ploidy
+        Boolean compute_allele_counts
         Boolean decrement_trv_ids
         Boolean prune_meis
         Boolean flag_homopolymer_trvs
@@ -306,6 +311,7 @@ import pysam
 transfer_genotypes = ~{true="True" false="False" transfer_genotypes}
 unphase = ~{true="True" false="False" unphase}
 normalize_ploidy = ~{true="True" false="False" normalize_ploidy}
+compute_allele_counts = ~{true="True" false="False" compute_allele_counts}
 decrement_trv_ids = ~{true="True" false="False" decrement_trv_ids}
 prune_meis = ~{true="True" false="False" prune_meis}
 flag_homopolymer_trvs = ~{true="True" false="False" flag_homopolymer_trvs}
@@ -363,6 +369,22 @@ def right_align_unphased(gt):
     if gt is None:
         return gt
     return tuple(sorted(gt, key=lambda allele: (allele is not None, allele if allele is not None else -1)))
+
+def compute_record_allele_counts(record):
+    counts = [0] * len(record.alts)
+    allele_number = 0
+    for sample_data in record.samples.values():
+        gt = sample_data.get("GT")
+        if gt is None:
+            continue
+        for allele in gt:
+            if allele is None:
+                continue
+            allele_number += 1
+            if allele > 0:
+                counts[allele - 1] += 1
+    record.info["AC"] = tuple(counts)
+    record.info["AN"] = allele_number
 
 def decrement_trv_id(trv_id):
     if not trv_id:
@@ -597,6 +619,10 @@ transfer_reader = pysam.VariantFile("~{transfer_vcf}") if transfer_genotypes els
 header = base_reader.header.copy()
 if flag_homopolymer_trvs and "HOMOPOLYMER_TRV" not in header.info:
     header.info.add("HOMOPOLYMER_TRV", 0, "Flag", "Tandem repeat call where the shortest motif has length 1.")
+if compute_allele_counts and "AC" not in header.info:
+    header.info.add("AC", "A", "Integer", "Number of alleles observed.")
+if compute_allele_counts and "AN" not in header.info:
+    header.info.add("AN", 1, "Integer", "Total number of alleles genotyped.")
 if filter_singletons and "SINGLE_READ_SUPPORT" not in header.filters:
     header.filters.add("SINGLE_READ_SUPPORT", None, None, "Variant supported by a single read in a single sample.")
 if drop:
@@ -681,6 +707,10 @@ for record in base_reader:
                 # Right align unphased calls
                 if not sample_data.phased:
                     sample_data["GT"] = right_align_unphased(sample_data.get("GT"))
+
+    # Recompute allele counts from the final genotypes so the singleton filters see current values
+    if compute_allele_counts:
+        compute_record_allele_counts(record)
 
     # Decrement TR IDs
     if decrement_trv_ids:

@@ -532,6 +532,17 @@ workflows:
     filters:
       branches:
         - main
+        - kj-pipeline-annotation-order
+      tags:
+        - /.*/
+
+  - subclass: WDL
+    name: NormalizeAlleleTypes
+    primaryDescriptorPath: /wdl/annotation_utils/NormalizeAlleleTypes.wdl
+    filters:
+      branches:
+        - main
+        - kj-pipeline-annotation-order
       tags:
         - /.*/
 
