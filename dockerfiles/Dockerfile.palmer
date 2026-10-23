@@ -3,8 +3,8 @@ FROM us-central1-docker.pkg.dev/talkowski-sv-gnomad/kj-dockers/utils:latest
 MAINTAINER Karan Jaisingh
 
 RUN apt-get -y update \
-	&& apt-get -y install make cmake protobuf-compiler tree less pkg-config libncurses5-dev \
-	&& apt-get clean
+    && apt-get -y install make cmake protobuf-compiler tree less pkg-config libncurses5-dev \
+    && apt-get clean
 
 # Install blast
 RUN wget https://ftp.ncbi.nlm.nih.gov/blast/executables/blast+/2.14.0/ncbi-blast-2.14.0+-x64-linux.tar.gz \

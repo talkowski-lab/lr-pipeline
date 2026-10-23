@@ -3,7 +3,7 @@ This directory holds the test suite for the scripts and workflows in this reposi
 
 
 ## Layout
-- `unit/` - fast pytest tests of the Python under `scripts/` and `.github/scripts/`. They need no container and no Hail.
+- `unit/` - fast pytest tests of the Python under `scripts/` and `.github/scripts/`, plus repository invariants: Dockerfile pins resolve and are used, and every `/opt/scripts` path a workflow calls exists. They need no container and no Hail.
 - `wdl/` - smoke tests that run workflows under miniwdl in the `utils` image, marked `wdl`.
 - `data/` - test fixtures; see [data/README.md](data/README.md) for how the subset VCF was built.
 - `conftest.py` - shared fixtures, including `run_workflow`, which runs a WDL under miniwdl and returns its outputs.

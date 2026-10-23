@@ -5,19 +5,19 @@ LABEL maintainer="Karan Jaisingh"
 ENV DEBIAN_FRONTEND=noninteractive
 
 RUN apt-get update && apt-get install -y \
-	cmake \
-	libboost-dev \
-	libcurl4-gnutls-dev \
-	libhts-dev \
-	pkg-config \
-	&& rm -rf /var/lib/apt/lists/*
+    cmake \
+    libboost-dev \
+    libcurl4-gnutls-dev \
+    libhts-dev \
+    pkg-config \
+    && rm -rf /var/lib/apt/lists/*
 
 ARG VAMOS_COMMIT
 RUN mkdir -p /app && \
     cd /app && \
     git clone https://github.com/ChaissonLab/vamos.git && \
     git -C vamos checkout ${VAMOS_COMMIT} && \
-	cd vamos/src/ && \
+    cd vamos/src/ && \
     make
 
 ENV PATH="/app/vamos/src:${PATH}"

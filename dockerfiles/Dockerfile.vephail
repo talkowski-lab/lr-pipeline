@@ -30,28 +30,29 @@ RUN rm -rf /var/lib/apt/lists/* && \
     && rm -rf /var/lib/apt/lists/*
 
 # Install htslib
-ENV HTSLIB_VERSION="1.20"
+ARG HTSLIB_VERSION
 RUN wget -q https://github.com/samtools/htslib/releases/download/${HTSLIB_VERSION}/htslib-${HTSLIB_VERSION}.tar.bz2 \
-	&& tar xjf htslib-${HTSLIB_VERSION}.tar.bz2 \
-	&& rm htslib-${HTSLIB_VERSION}.tar.bz2 \
-	&& cd htslib-${HTSLIB_VERSION} \
-	&& ./configure --enable-libcurl --enable-gcs --enable-s3 \
-	&& make \
-	&& make install \
-	&& make clean
+    && tar xjf htslib-${HTSLIB_VERSION}.tar.bz2 \
+    && rm htslib-${HTSLIB_VERSION}.tar.bz2 \
+    && cd htslib-${HTSLIB_VERSION} \
+    && ./configure --enable-libcurl --enable-gcs --enable-s3 \
+    && make \
+    && make install \
+    && make clean
 
 # Install bcftools
-RUN wget -q https://github.com/samtools/bcftools/releases/download/${HTSLIB_VERSION}/bcftools-${HTSLIB_VERSION}.tar.bz2 \
-	&& tar xjf bcftools-${HTSLIB_VERSION}.tar.bz2 \
-	&& rm bcftools-${HTSLIB_VERSION}.tar.bz2 \
-	&& cd bcftools-${HTSLIB_VERSION} \
-	&& ./configure --enable-libcurl --enable-gcs --enable-s3 \
-	&& make \
-	&& make install \
-	&& make clean
+ARG BCFTOOLS_VERSION
+RUN wget -q https://github.com/samtools/bcftools/releases/download/${BCFTOOLS_VERSION}/bcftools-${BCFTOOLS_VERSION}.tar.bz2 \
+    && tar xjf bcftools-${BCFTOOLS_VERSION}.tar.bz2 \
+    && rm bcftools-${BCFTOOLS_VERSION}.tar.bz2 \
+    && cd bcftools-${BCFTOOLS_VERSION} \
+    && ./configure --enable-libcurl --enable-gcs --enable-s3 \
+    && make \
+    && make install \
+    && make clean
 
 # Install Google Cloud SDK
-ENV GCLOUD_SDK_VERSION="485.0.0"
+ARG GCLOUD_SDK_VERSION
 RUN cd /tmp && \
     wget -q https://dl.google.com/dl/cloudsdk/channels/rapid/downloads/google-cloud-sdk-${GCLOUD_SDK_VERSION}-linux-x86_64.tar.gz && \
     tar xzf google-cloud-sdk-${GCLOUD_SDK_VERSION}-linux-x86_64.tar.gz && \
