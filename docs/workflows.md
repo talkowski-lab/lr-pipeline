@@ -4,6 +4,123 @@ This document describes each WDL workflow in the pipeline, including its purpose
 This file is generated from the `meta` and `parameter_meta` blocks of each workflow by [`generate_workflows_doc.py`](../.github/scripts/generate_workflows_doc.py). Edit those blocks rather than this document. Inputs described as `From references.` are the shared reference files listed in [references](references.md).
 
 
+## Contents
+- [Annotations](#annotations)
+  - [AnnotateAgeMetrics](#annotateagemetrics)
+  - [AnnotateAF](#annotateaf)
+  - [AnnotateCallsetOverlap](#annotatecallsetoverlap)
+  - [AnnotateDbSNP](#annotatedbsnp)
+  - [AnnotateDbVaR](#annotatedbvar)
+  - [AnnotateIndelTRs](#annotateindeltrs)
+  - [AnnotateInSilicoPredictors](#annotateinsilicopredictors)
+  - [AnnotateGnomADSTR](#annotategnomadstr)
+  - [AnnotateGQMetrics](#annotategqmetrics)
+  - [AnnotateL1MEAID](#annotatel1meaid)
+  - [AnnotateMEDs](#annotatemeds)
+  - [AnnotateMEIs](#annotatemeis)
+  - [AnnotatePALMER](#annotatepalmer)
+  - [AnnotateRegion](#annotateregion)
+  - [AnnotateSQMetrics](#annotatesqmetrics)
+  - [AnnotateSVAN](#annotatesvan)
+  - [AnnotateSVAnnotate](#annotatesvannotate)
+  - [AnnotateVEPHail](#annotatevephail)
+  - [AnnotateVEPTRVs](#annotateveptrvs)
+  - [AnnotateVRS](#annotatevrs)
+  - [AnnotateTruvariRemap](#annotatetruvariremap)
+- [Annotation Utilities](#annotation-utilities)
+  - [AnnotateTREndTags](#annotatetrendtags)
+  - [AnnotateAlleleType](#annotatealleletype)
+  - [AnnotateVcf](#annotatevcf)
+  - [CombineTRs](#combinetrs)
+  - [ConcatenateMosDepth](#concatenatemosdepth)
+  - [ConcatenateVcfsAcrossContigs](#concatenatevcfsacrosscontigs)
+  - [ExtractDisparateTRLoci](#extractdisparatetrloci)
+  - [SummarizeAnnotations](#summarizeannotations)
+  - [SummarizeAnnotationsGATKSV](#summarizeannotationsgatksv)
+  - [SummarizeTRVAllelesPerGenome](#summarizetrvallelespergenome)
+  - [SummarizeVariantBases](#summarizevariantbases)
+  - [MergeVariantBaseTables](#mergevariantbasetables)
+  - [CreateCohortMethylationFile](#createcohortmethylationfile)
+  - [CreateCohortCoverageSummary](#createcohortcoveragesummary)
+  - [CreateDepthIntervals](#createdepthintervals)
+  - [CreateCohortDepthFiles](#createcohortdepthfiles)
+  - [CreateCNVDepthPlots](#createcnvdepthplots)
+  - [CreateCohortMetadata](#createcohortmetadata)
+  - [CreateSampleReadCounts](#createsamplereadcounts)
+  - [SummarizeSingletonCalls](#summarizesingletoncalls)
+  - [SplitVcfPerContig](#splitvcfpercontig)
+  - [StripGenotypes](#stripgenotypes)
+  - [ExtractSampleVcfs](#extractsamplevcfs)
+  - [IdentifyLowCoverageRegions](#identifylowcoverageregions)
+  - [FilterLowCoverageRegions](#filterlowcoverageregions)
+  - [FilterLowCoverageGenotypes](#filterlowcoveragegenotypes)
+  - [FilterNCRCutoffs](#filterncrcutoffs)
+  - [FillFormatFields](#fillformatfields)
+  - [FillPhasedGenotypes](#fillphasedgenotypes)
+  - [CreateTRGTHistograms](#createtrgthistograms)
+  - [IntegrateTRs](#integratetrs)
+  - [MergeVcfs](#mergevcfs)
+  - [PreprocessVcfs](#preprocessvcfs)
+  - [FillBackbonePhasedGenotypes](#fillbackbonephasedgenotypes)
+  - [EvaluateBackbonePhasing](#evaluatebackbonephasing)
+  - [EvaluateOverlappingTRLoci](#evaluateoverlappingtrloci)
+  - [EvaluateNCRCutoffs](#evaluatencrcutoffs)
+  - [PostprocessCallset](#postprocesscallset)
+  - [NormalizeAlleleTypes](#normalizealleletypes)
+  - [ResolveHaplotypeOverlaps](#resolvehaplotypeoverlaps)
+  - [SubsetTsvToColumns](#subsettsvtocolumns)
+  - [ConvertVcfToBed](#convertvcftobed)
+  - [ExtractRandomCalls](#extractrandomcalls)
+  - [ExtractTRVLengthDeltas](#extracttrvlengthdeltas)
+  - [MergeTRVLengthDeltas](#mergetrvlengthdeltas)
+- [Tools](#tools)
+  - [Automop](#automop)
+  - [BackbonePhase](#backbonephase)
+  - [DeepVariant](#deepvariant)
+  - [Hifiasm](#hifiasm)
+  - [HiFiCNV](#hificnv)
+  - [HiPhase](#hiphase)
+  - [MergeHiPhaseCallsets](#mergehiphasecallsets)
+  - [Kanpig](#kanpig)
+  - [GLNexus](#glnexus)
+  - [LongReadCNVs](#longreadcnvs)
+  - [MethylationProfiling](#methylationprofiling)
+  - [MinimapAlignment](#minimapalignment)
+  - [MinimapReadAlignment](#minimapreadalignment)
+  - [MosDepth](#mosdepth)
+  - [PALMERAssembly](#palmerassembly)
+  - [PALMERDiploid](#palmerdiploid)
+  - [MergePALMERCallsets](#mergepalmercallsets)
+  - [PAV](#pav)
+  - [PBSV](#pbsv)
+  - [RepeatMasker](#repeatmasker)
+  - [Sawfish](#sawfish)
+  - [Sniffles](#sniffles)
+  - [MergeSampleSVCallsets](#mergesamplesvcallsets)
+  - [MergeCohortSVCallsets](#mergecohortsvcallsets)
+  - [MergeCohortLongSVCallsets](#mergecohortlongsvcallsets)
+  - [RegenotypeFamilySVCallsets](#regenotypefamilysvcallsets)
+  - [MergeRegenotypedSVCallsets](#mergeregenotypedsvcallsets)
+  - [TRGT](#trgt)
+  - [TRGTLPS](#trgtlps)
+  - [Vamos](#vamos)
+- [Sub-workflows](#sub-workflows)
+  - [Depth-based CNV pipeline](#depth-based-cnv-pipeline)
+    - [LRCNVs](#lrcnvs)
+    - [DepthPreprocessing](#depthpreprocessing)
+    - [DepthClustering](#depthclustering)
+    - [GenotypeDepth](#genotypedepth)
+  - [Callset matching and sharding](#callset-matching-and-sharding)
+    - [ExactMatch](#exactmatch)
+    - [TruvariMatch](#truvarimatch)
+    - [BedtoolsClosestSV](#bedtoolsclosestsv)
+    - [ScatterVcf](#scattervcf)
+  - [Long SV cohort integration](#long-sv-cohort-integration)
+    - [MergeCohortLongSVClass](#mergecohortlongsvclass)
+  - [Annotation summary plotting](#annotation-summary-plotting)
+    - [CreateAnnotationPlots](#createannotationplots)
+
+
 ## Annotations
 
 
@@ -910,22 +1027,6 @@ Inputs:
 
 Outputs:
 - `File metadata`: Merged cohort metadata file.
-
-### [CreateCohortPedigreeAncestryFilesAoUPhase2](../wdl/annotation_utils/CreateCohortPedigreeAncestryFilesAoUPhase2.wdl)
-This utility builds the pedigree and two-column ancestry files consumed by `CreateCohortMetadata` from the All of Us Phase 2 ancestry-prediction table, keeping the `ancestry_pred` label for each requested sample. Every sample becomes a singleton PED row with unknown parents, sex and phenotype, since All of Us releases no pedigree or sex calls. The All of Us `eur` label is renamed to `nfe`, since that is the gnomAD label `compute_AFs.py` accepts; the remaining All of Us labels pass through unchanged. Samples the predictions do not cover are labelled `.`, the sentinel `compute_AFs.py` drops from its population list, so they contribute to the global `AC`/`AF`/`AN` but to no population-specific field. Both directions of mismatch between the cohort and the predictions are reported separately.
-
-Inputs:
-- `File ancestry_predictions`: All of Us Phase 2 ancestry predictions, keyed by `research_id`.
-- `Array[String] sample_ids`: Sample IDs making up the cohort.
-- `String prefix`: Prefix for output file names.
-- `String utils_docker`: Container image.
-- `RuntimeAttr? runtime_attr_*`: Optional per-task runtime overrides.
-
-Outputs:
-- `File ped`: Pedigree file covering every sample in `sample_ids`.
-- `File ancestry`: Two-column file of sample IDs and ancestry labels.
-- `File missing_samples`: Samples present in `ancestry_predictions` but not in `sample_ids`.
-- `File samples_missing_ancestry`: Samples present in `sample_ids` but not in `ancestry_predictions`.
 
 ### [CreateSampleReadCounts](../wdl/annotation_utils/CreateSampleReadCounts.wdl)
 This utility produces a binned read-counts file for a single sample from its per-contig mosdepth BED outputs, binning counts at a fixed resolution and merging across contigs. It outputs the binned read-counts file.

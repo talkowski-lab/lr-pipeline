@@ -3,7 +3,8 @@
 
 Every top-level workflow file under wdl/annotation, wdl/annotation_utils, and
 wdl/tools must have exactly one corresponding entry in .dockstore.yml, and every
-entry must point to a file that exists. Every entry must also list main under
+entry must point to a file that exists and set publish: true, so Dockstore
+publishes it on sync. Every entry must also list main under
 filters.branches; --main-only additionally fails on any feature branch left
 listed there, and is run before merging a feature branch into main.
 """
@@ -70,6 +71,8 @@ def main():
         path = REPO_ROOT / entry["primaryDescriptorPath"].lstrip("/")
         if not path.is_file():
             errors.append(f".dockstore.yml entry '{name}' points to missing file: {entry['primaryDescriptorPath']}")
+        if entry.get("publish") is not True:
+            errors.append(f".dockstore.yml entry '{name}' does not set publish: true")
         errors.extend(check_branch_filters(name, entry, args.main_only))
 
     active_files = find_active_workflow_files()

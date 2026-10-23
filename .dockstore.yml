@@ -6,6 +6,7 @@ workflows:
   - subclass: WDL
     name: AnnotateAgeMetrics
     primaryDescriptorPath: /wdl/annotation/AnnotateAgeMetrics.wdl
+    publish: true
     filters:
       branches:
         - main
@@ -15,6 +16,7 @@ workflows:
   - subclass: WDL
     name: AnnotateAF
     primaryDescriptorPath: /wdl/annotation/AnnotateAF.wdl
+    publish: true
     filters:
       branches:
         - main
@@ -24,6 +26,7 @@ workflows:
   - subclass: WDL
     name: AnnotateCallsetOverlap
     primaryDescriptorPath: /wdl/annotation/AnnotateCallsetOverlap.wdl
+    publish: true
     filters:
       branches:
         - main
@@ -33,6 +36,7 @@ workflows:
   - subclass: WDL
     name: AnnotateDbSNP
     primaryDescriptorPath: /wdl/annotation/AnnotateDbSNP.wdl
+    publish: true
     filters:
       branches:
         - main
@@ -42,6 +46,7 @@ workflows:
   - subclass: WDL
     name: AnnotateDbVaR
     primaryDescriptorPath: /wdl/annotation/AnnotateDbVaR.wdl
+    publish: true
     filters:
       branches:
         - main
@@ -51,6 +56,7 @@ workflows:
   - subclass: WDL
     name: AnnotateIndelTRs
     primaryDescriptorPath: /wdl/annotation/AnnotateIndelTRs.wdl
+    publish: true
     filters:
       branches:
         - main
@@ -60,6 +66,7 @@ workflows:
   - subclass: WDL
     name: AnnotateInSilicoPredictors
     primaryDescriptorPath: /wdl/annotation/AnnotateInSilicoPredictors.wdl
+    publish: true
     filters:
       branches:
         - main
@@ -69,6 +76,7 @@ workflows:
   - subclass: WDL
     name: AnnotateGnomADSTR
     primaryDescriptorPath: /wdl/annotation/AnnotateGnomADSTR.wdl
+    publish: true
     filters:
       branches:
         - main
@@ -78,6 +86,7 @@ workflows:
   - subclass: WDL
     name: AnnotateGQMetrics
     primaryDescriptorPath: /wdl/annotation/AnnotateGQMetrics.wdl
+    publish: true
     filters:
       branches:
         - main
@@ -87,6 +96,7 @@ workflows:
   - subclass: WDL
     name: AnnotateL1MEAID
     primaryDescriptorPath: /wdl/annotation/AnnotateL1MEAID.wdl
+    publish: true
     filters:
       branches:
         - main
@@ -96,6 +106,7 @@ workflows:
   - subclass: WDL
     name: AnnotateMEDs
     primaryDescriptorPath: /wdl/annotation/AnnotateMEDs.wdl
+    publish: true
     filters:
       branches:
         - main
@@ -105,6 +116,7 @@ workflows:
   - subclass: WDL
     name: AnnotateMEIs
     primaryDescriptorPath: /wdl/annotation/AnnotateMEIs.wdl
+    publish: true
     filters:
       branches:
         - main
@@ -114,6 +126,7 @@ workflows:
   - subclass: WDL
     name: AnnotatePALMER
     primaryDescriptorPath: /wdl/annotation/AnnotatePALMER.wdl
+    publish: true
     filters:
       branches:
         - main
@@ -123,6 +136,7 @@ workflows:
   - subclass: WDL
     name: AnnotateRegion
     primaryDescriptorPath: /wdl/annotation/AnnotateRegion.wdl
+    publish: true
     filters:
       branches:
         - main
@@ -132,6 +146,7 @@ workflows:
   - subclass: WDL
     name: AnnotateSQMetrics
     primaryDescriptorPath: /wdl/annotation/AnnotateSQMetrics.wdl
+    publish: true
     filters:
       branches:
         - main
@@ -141,6 +156,7 @@ workflows:
   - subclass: WDL
     name: AnnotateSVAN
     primaryDescriptorPath: /wdl/annotation/AnnotateSVAN.wdl
+    publish: true
     filters:
       branches:
         - main
@@ -150,16 +166,17 @@ workflows:
   - subclass: WDL
     name: AnnotateSVAnnotate
     primaryDescriptorPath: /wdl/annotation/AnnotateSVAnnotate.wdl
+    publish: true
     filters:
       branches:
         - main
       tags:
         - /.*/
 
-
   - subclass: WDL
     name: AnnotateVEPHail
     primaryDescriptorPath: /wdl/annotation/AnnotateVEPHail.wdl
+    publish: true
     filters:
       branches:
         - main
@@ -169,6 +186,7 @@ workflows:
   - subclass: WDL
     name: AnnotateVEPTRVs
     primaryDescriptorPath: /wdl/annotation/AnnotateVEPTRVs.wdl
+    publish: true
     filters:
       branches:
         - main
@@ -178,6 +196,7 @@ workflows:
   - subclass: WDL
     name: AnnotateVRS
     primaryDescriptorPath: /wdl/annotation/AnnotateVRS.wdl
+    publish: true
     filters:
       branches:
         - main
@@ -187,6 +206,7 @@ workflows:
   - subclass: WDL
     name: AnnotateTruvariRemap
     primaryDescriptorPath: /wdl/annotation/AnnotateTruvariRemap.wdl
+    publish: true
     filters:
       branches:
         - main
@@ -200,6 +220,7 @@ workflows:
   - subclass: WDL
     name: AnnotateTREndTags
     primaryDescriptorPath: /wdl/annotation_utils/AnnotateTREndTags.wdl
+    publish: true
     filters:
       branches:
         - main
@@ -209,6 +230,7 @@ workflows:
   - subclass: WDL
     name: AnnotateAlleleType
     primaryDescriptorPath: /wdl/annotation_utils/AnnotateAlleleType.wdl
+    publish: true
     filters:
       branches:
         - main
@@ -218,16 +240,17 @@ workflows:
   - subclass: WDL
     name: AnnotateVcf
     primaryDescriptorPath: /wdl/annotation_utils/AnnotateVcf.wdl
+    publish: true
     filters:
       branches:
         - main
       tags:
         - /.*/
 
-
   - subclass: WDL
     name: CombineTRs
     primaryDescriptorPath: /wdl/annotation_utils/CombineTRs.wdl
+    publish: true
     filters:
       branches:
         - main
@@ -237,6 +260,7 @@ workflows:
   - subclass: WDL
     name: ConcatenateMosDepth
     primaryDescriptorPath: /wdl/annotation_utils/ConcatenateMosDepth.wdl
+    publish: true
     filters:
       branches:
         - main
@@ -246,6 +270,7 @@ workflows:
   - subclass: WDL
     name: ConcatenateVcfsAcrossContigs
     primaryDescriptorPath: /wdl/annotation_utils/ConcatenateVcfsAcrossContigs.wdl
+    publish: true
     filters:
       branches:
         - main
@@ -255,6 +280,7 @@ workflows:
   - subclass: WDL
     name: ExtractDisparateTRLoci
     primaryDescriptorPath: /wdl/annotation_utils/ExtractDisparateTRLoci.wdl
+    publish: true
     filters:
       branches:
         - main
@@ -264,6 +290,7 @@ workflows:
   - subclass: WDL
     name: SummarizeAnnotations
     primaryDescriptorPath: /wdl/annotation_utils/SummarizeAnnotations.wdl
+    publish: true
     filters:
       branches:
         - main
@@ -273,6 +300,7 @@ workflows:
   - subclass: WDL
     name: SummarizeAnnotationsGATKSV
     primaryDescriptorPath: /wdl/annotation_utils/SummarizeAnnotationsGATKSV.wdl
+    publish: true
     filters:
       branches:
         - main
@@ -282,6 +310,7 @@ workflows:
   - subclass: WDL
     name: SummarizeTRVAllelesPerGenome
     primaryDescriptorPath: /wdl/annotation_utils/SummarizeTRVAllelesPerGenome.wdl
+    publish: true
     filters:
       branches:
         - main
@@ -291,6 +320,7 @@ workflows:
   - subclass: WDL
     name: SummarizeVariantBases
     primaryDescriptorPath: /wdl/annotation_utils/SummarizeVariantBases.wdl
+    publish: true
     filters:
       branches:
         - main
@@ -300,6 +330,7 @@ workflows:
   - subclass: WDL
     name: MergeVariantBaseTables
     primaryDescriptorPath: /wdl/annotation_utils/MergeVariantBaseTables.wdl
+    publish: true
     filters:
       branches:
         - main
@@ -309,6 +340,7 @@ workflows:
   - subclass: WDL
     name: CreateCohortMethylationFile
     primaryDescriptorPath: /wdl/annotation_utils/CreateCohortMethylationFile.wdl
+    publish: true
     filters:
       branches:
         - main
@@ -318,6 +350,7 @@ workflows:
   - subclass: WDL
     name: CreateCohortCoverageSummary
     primaryDescriptorPath: /wdl/annotation_utils/CreateCohortCoverageSummary.wdl
+    publish: true
     filters:
       branches:
         - main
@@ -327,16 +360,17 @@ workflows:
   - subclass: WDL
     name: CreateDepthIntervals
     primaryDescriptorPath: /wdl/annotation_utils/CreateDepthIntervals.wdl
+    publish: true
     filters:
       branches:
         - main
       tags:
         - /.*/
 
-
   - subclass: WDL
     name: CreateCohortDepthFiles
     primaryDescriptorPath: /wdl/annotation_utils/CreateCohortDepthFiles.wdl
+    publish: true
     filters:
       branches:
         - main
@@ -346,6 +380,7 @@ workflows:
   - subclass: WDL
     name: CreateCNVDepthPlots
     primaryDescriptorPath: /wdl/annotation_utils/CreateCNVDepthPlots.wdl
+    publish: true
     filters:
       branches:
         - main
@@ -355,15 +390,7 @@ workflows:
   - subclass: WDL
     name: CreateCohortMetadata
     primaryDescriptorPath: /wdl/annotation_utils/CreateCohortMetadata.wdl
-    filters:
-      branches:
-        - main
-      tags:
-        - /.*/
-
-  - subclass: WDL
-    name: CreateCohortPedigreeAncestryFilesAoUPhase2
-    primaryDescriptorPath: /wdl/annotation_utils/CreateCohortPedigreeAncestryFilesAoUPhase2.wdl
+    publish: true
     filters:
       branches:
         - main
@@ -373,6 +400,7 @@ workflows:
   - subclass: WDL
     name: CreateSampleReadCounts
     primaryDescriptorPath: /wdl/annotation_utils/CreateSampleReadCounts.wdl
+    publish: true
     filters:
       branches:
         - main
@@ -382,6 +410,7 @@ workflows:
   - subclass: WDL
     name: SummarizeSingletonCalls
     primaryDescriptorPath: /wdl/annotation_utils/SummarizeSingletonCalls.wdl
+    publish: true
     filters:
       branches:
         - main
@@ -391,6 +420,7 @@ workflows:
   - subclass: WDL
     name: SplitVcfPerContig
     primaryDescriptorPath: /wdl/annotation_utils/SplitVcfPerContig.wdl
+    publish: true
     filters:
       branches:
         - main
@@ -400,6 +430,7 @@ workflows:
   - subclass: WDL
     name: StripGenotypes
     primaryDescriptorPath: /wdl/annotation_utils/StripGenotypes.wdl
+    publish: true
     filters:
       branches:
         - main
@@ -409,6 +440,7 @@ workflows:
   - subclass: WDL
     name: ExtractSampleVcfs
     primaryDescriptorPath: /wdl/annotation_utils/ExtractSampleVcfs.wdl
+    publish: true
     filters:
       branches:
         - main
@@ -418,6 +450,7 @@ workflows:
   - subclass: WDL
     name: IdentifyLowCoverageRegions
     primaryDescriptorPath: /wdl/annotation_utils/IdentifyLowCoverageRegions.wdl
+    publish: true
     filters:
       branches:
         - main
@@ -427,6 +460,7 @@ workflows:
   - subclass: WDL
     name: FilterLowCoverageRegions
     primaryDescriptorPath: /wdl/annotation_utils/FilterLowCoverageRegions.wdl
+    publish: true
     filters:
       branches:
         - main
@@ -436,6 +470,7 @@ workflows:
   - subclass: WDL
     name: FilterLowCoverageGenotypes
     primaryDescriptorPath: /wdl/annotation_utils/FilterLowCoverageGenotypes.wdl
+    publish: true
     filters:
       branches:
         - main
@@ -445,6 +480,7 @@ workflows:
   - subclass: WDL
     name: FilterNCRCutoffs
     primaryDescriptorPath: /wdl/annotation_utils/FilterNCRCutoffs.wdl
+    publish: true
     filters:
       branches:
         - main
@@ -456,6 +492,7 @@ workflows:
   - subclass: WDL
     name: FillFormatFields
     primaryDescriptorPath: /wdl/annotation_utils/FillFormatFields.wdl
+    publish: true
     filters:
       branches:
         - main
@@ -465,16 +502,17 @@ workflows:
   - subclass: WDL
     name: FillPhasedGenotypes
     primaryDescriptorPath: /wdl/annotation_utils/FillPhasedGenotypes.wdl
+    publish: true
     filters:
       branches:
         - main
       tags:
         - /.*/
 
-
   - subclass: WDL
     name: CreateTRGTHistograms
     primaryDescriptorPath: /wdl/annotation_utils/CreateTRGTHistograms.wdl
+    publish: true
     filters:
       branches:
         - main
@@ -484,6 +522,7 @@ workflows:
   - subclass: WDL
     name: IntegrateTRs
     primaryDescriptorPath: /wdl/annotation_utils/IntegrateTRs.wdl
+    publish: true
     filters:
       branches:
         - main
@@ -493,6 +532,7 @@ workflows:
   - subclass: WDL
     name: MergeVcfs
     primaryDescriptorPath: /wdl/annotation_utils/MergeVcfs.wdl
+    publish: true
     filters:
       branches:
         - main
@@ -502,6 +542,7 @@ workflows:
   - subclass: WDL
     name: PreprocessVcfs
     primaryDescriptorPath: /wdl/annotation_utils/PreprocessVcfs.wdl
+    publish: true
     filters:
       branches:
         - main
@@ -511,6 +552,7 @@ workflows:
   - subclass: WDL
     name: FillBackbonePhasedGenotypes
     primaryDescriptorPath: /wdl/annotation_utils/FillBackbonePhasedGenotypes.wdl
+    publish: true
     filters:
       branches:
         - main
@@ -520,6 +562,7 @@ workflows:
   - subclass: WDL
     name: EvaluateBackbonePhasing
     primaryDescriptorPath: /wdl/annotation_utils/EvaluateBackbonePhasing.wdl
+    publish: true
     filters:
       branches:
         - main
@@ -529,6 +572,7 @@ workflows:
   - subclass: WDL
     name: EvaluateOverlappingTRLoci
     primaryDescriptorPath: /wdl/annotation_utils/EvaluateOverlappingTRLoci.wdl
+    publish: true
     filters:
       branches:
         - main
@@ -538,6 +582,7 @@ workflows:
   - subclass: WDL
     name: EvaluateNCRCutoffs
     primaryDescriptorPath: /wdl/annotation_utils/EvaluateNCRCutoffs.wdl
+    publish: true
     filters:
       branches:
         - main
@@ -547,6 +592,7 @@ workflows:
   - subclass: WDL
     name: PostprocessCallset
     primaryDescriptorPath: /wdl/annotation_utils/PostprocessCallset.wdl
+    publish: true
     filters:
       branches:
         - main
@@ -556,6 +602,7 @@ workflows:
   - subclass: WDL
     name: NormalizeAlleleTypes
     primaryDescriptorPath: /wdl/annotation_utils/NormalizeAlleleTypes.wdl
+    publish: true
     filters:
       branches:
         - main
@@ -565,6 +612,7 @@ workflows:
   - subclass: WDL
     name: ResolveHaplotypeOverlaps
     primaryDescriptorPath: /wdl/annotation_utils/ResolveHaplotypeOverlaps.wdl
+    publish: true
     filters:
       branches:
         - main
@@ -574,6 +622,7 @@ workflows:
   - subclass: WDL
     name: SubsetTsvToColumns
     primaryDescriptorPath: /wdl/annotation_utils/SubsetTsvToColumns.wdl
+    publish: true
     filters:
       branches:
         - main
@@ -585,6 +634,7 @@ workflows:
   - subclass: WDL
     name: ConvertVcfToBed
     primaryDescriptorPath: /wdl/annotation_utils/ConvertVcfToBed.wdl
+    publish: true
     filters:
       branches:
         - main
@@ -594,6 +644,7 @@ workflows:
   - subclass: WDL
     name: ExtractRandomCalls
     primaryDescriptorPath: /wdl/annotation_utils/ExtractRandomCalls.wdl
+    publish: true
     filters:
       branches:
         - main
@@ -603,6 +654,7 @@ workflows:
   - subclass: WDL
     name: ExtractTRVLengthDeltas
     primaryDescriptorPath: /wdl/annotation_utils/ExtractTRVLengthDeltas.wdl
+    publish: true
     filters:
       branches:
         - main
@@ -612,6 +664,7 @@ workflows:
   - subclass: WDL
     name: MergeTRVLengthDeltas
     primaryDescriptorPath: /wdl/annotation_utils/MergeTRVLengthDeltas.wdl
+    publish: true
     filters:
       branches:
         - main
@@ -624,6 +677,7 @@ workflows:
   - subclass: WDL
     name: Automop
     primaryDescriptorPath: /wdl/tools/Automop.wdl
+    publish: true
     filters:
       branches:
         - main
@@ -633,6 +687,7 @@ workflows:
   - subclass: WDL
     name: BackbonePhase
     primaryDescriptorPath: /wdl/tools/BackbonePhase.wdl
+    publish: true
     filters:
       branches:
         - main
@@ -642,6 +697,7 @@ workflows:
   - subclass: WDL
     name: DeepVariant
     primaryDescriptorPath: /wdl/tools/DeepVariant.wdl
+    publish: true
     filters:
       branches:
         - main
@@ -651,6 +707,7 @@ workflows:
   - subclass: WDL
     name: Hifiasm
     primaryDescriptorPath: /wdl/tools/Hifiasm.wdl
+    publish: true
     filters:
       branches:
         - main
@@ -660,6 +717,7 @@ workflows:
   - subclass: WDL
     name: HiFiCNV
     primaryDescriptorPath: /wdl/tools/HiFiCNV.wdl
+    publish: true
     filters:
       branches:
         - main
@@ -669,6 +727,7 @@ workflows:
   - subclass: WDL
     name: HiPhase
     primaryDescriptorPath: /wdl/tools/HiPhase.wdl
+    publish: true
     filters:
       branches:
         - main
@@ -678,6 +737,7 @@ workflows:
   - subclass: WDL
     name: MergeHiPhaseCallsets
     primaryDescriptorPath: /wdl/tools/MergeHiPhaseCallsets.wdl
+    publish: true
     filters:
       branches:
         - main
@@ -687,6 +747,7 @@ workflows:
   - subclass: WDL
     name: Kanpig
     primaryDescriptorPath: /wdl/tools/Kanpig.wdl
+    publish: true
     filters:
       branches:
         - main
@@ -696,6 +757,7 @@ workflows:
   - subclass: WDL
     name: GLNexus
     primaryDescriptorPath: /wdl/tools/GLNexus.wdl
+    publish: true
     filters:
       branches:
         - main
@@ -705,6 +767,7 @@ workflows:
   - subclass: WDL
     name: LongReadCNVs
     primaryDescriptorPath: /wdl/tools/LongReadCNVs.wdl
+    publish: true
     filters:
       branches:
         - main
@@ -714,6 +777,7 @@ workflows:
   - subclass: WDL
     name: MethylationProfiling
     primaryDescriptorPath: /wdl/tools/MethylationProfiling.wdl
+    publish: true
     filters:
       branches:
         - main
@@ -723,6 +787,7 @@ workflows:
   - subclass: WDL
     name: MinimapAlignment
     primaryDescriptorPath: /wdl/tools/MinimapAlignment.wdl
+    publish: true
     filters:
       branches:
         - main
@@ -732,6 +797,7 @@ workflows:
   - subclass: WDL
     name: MinimapReadAlignment
     primaryDescriptorPath: /wdl/tools/MinimapReadAlignment.wdl
+    publish: true
     filters:
       branches:
         - main
@@ -741,6 +807,7 @@ workflows:
   - subclass: WDL
     name: MosDepth
     primaryDescriptorPath: /wdl/tools/MosDepth.wdl
+    publish: true
     filters:
       branches:
         - main
@@ -750,6 +817,7 @@ workflows:
   - subclass: WDL
     name: PALMERAssembly
     primaryDescriptorPath: /wdl/tools/PALMERAssembly.wdl
+    publish: true
     filters:
       branches:
         - main
@@ -759,6 +827,7 @@ workflows:
   - subclass: WDL
     name: PALMERDiploid
     primaryDescriptorPath: /wdl/tools/PALMERDiploid.wdl
+    publish: true
     filters:
       branches:
         - main
@@ -768,16 +837,17 @@ workflows:
   - subclass: WDL
     name: MergePALMERCallsets
     primaryDescriptorPath: /wdl/tools/MergePALMERCallsets.wdl
+    publish: true
     filters:
       branches:
         - main
       tags:
         - /.*/
 
-
   - subclass: WDL
     name: PAV
     primaryDescriptorPath: /wdl/tools/PAV.wdl
+    publish: true
     filters:
       branches:
         - main
@@ -787,6 +857,7 @@ workflows:
   - subclass: WDL
     name: PBSV
     primaryDescriptorPath: /wdl/tools/PBSV.wdl
+    publish: true
     filters:
       branches:
         - main
@@ -796,6 +867,7 @@ workflows:
   - subclass: WDL
     name: RepeatMasker
     primaryDescriptorPath: /wdl/tools/RepeatMasker.wdl
+    publish: true
     filters:
       branches:
         - main
@@ -805,6 +877,7 @@ workflows:
   - subclass: WDL
     name: Sawfish
     primaryDescriptorPath: /wdl/tools/Sawfish.wdl
+    publish: true
     filters:
       branches:
         - main
@@ -814,6 +887,7 @@ workflows:
   - subclass: WDL
     name: Sniffles
     primaryDescriptorPath: /wdl/tools/Sniffles.wdl
+    publish: true
     filters:
       branches:
         - main
@@ -823,6 +897,7 @@ workflows:
   - subclass: WDL
     name: MergeSampleSVCallsets
     primaryDescriptorPath: /wdl/tools/MergeSampleSVCallsets.wdl
+    publish: true
     filters:
       branches:
         - main
@@ -832,6 +907,7 @@ workflows:
   - subclass: WDL
     name: MergeCohortSVCallsets
     primaryDescriptorPath: /wdl/tools/MergeCohortSVCallsets.wdl
+    publish: true
     filters:
       branches:
         - main
@@ -841,6 +917,7 @@ workflows:
   - subclass: WDL
     name: MergeCohortLongSVCallsets
     primaryDescriptorPath: /wdl/tools/MergeCohortLongSVCallsets.wdl
+    publish: true
     filters:
       branches:
         - main
@@ -850,6 +927,7 @@ workflows:
   - subclass: WDL
     name: RegenotypeFamilySVCallsets
     primaryDescriptorPath: /wdl/tools/RegenotypeFamilySVCallsets.wdl
+    publish: true
     filters:
       branches:
         - main
@@ -859,6 +937,7 @@ workflows:
   - subclass: WDL
     name: MergeRegenotypedSVCallsets
     primaryDescriptorPath: /wdl/tools/MergeRegenotypedSVCallsets.wdl
+    publish: true
     filters:
       branches:
         - main
@@ -868,6 +947,7 @@ workflows:
   - subclass: WDL
     name: TRGT
     primaryDescriptorPath: /wdl/tools/TRGT.wdl
+    publish: true
     filters:
       branches:
         - main
@@ -877,6 +957,7 @@ workflows:
   - subclass: WDL
     name: TRGTLPS
     primaryDescriptorPath: /wdl/tools/TRGTLPS.wdl
+    publish: true
     filters:
       branches:
         - main
@@ -886,6 +967,7 @@ workflows:
   - subclass: WDL
     name: Vamos
     primaryDescriptorPath: /wdl/tools/Vamos.wdl
+    publish: true
     filters:
       branches:
         - main

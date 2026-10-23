@@ -9,15 +9,20 @@ ENTRY = """\
   - subclass: WDL
     name: {name}
     primaryDescriptorPath: {path}
-    filters:
+{publish}    filters:
       branches:
 {branches}
 """
 
 
-def entry(name, path=None, branches=("main",)):
+def entry(name, path=None, branches=("main",), publish=True):
     path = path or f"/wdl/tools/{name}.wdl"
-    return ENTRY.format(name=name, path=path, branches="\n".join(f"        - {b}" for b in branches))
+    return ENTRY.format(
+        name=name,
+        path=path,
+        publish="    publish: true\n" if publish else "",
+        branches="\n".join(f"        - {b}" for b in branches),
+    )
 
 
 @pytest.fixture
@@ -112,3 +117,10 @@ def test_repository_dockstore_is_in_sync(repo_root):
     names = {e["name"] for e in entries}
     assert names == {p.stem for p in sync.find_active_workflow_files()}
     assert all("main" in e["filters"]["branches"] for e in entries)
+
+
+def test_entry_without_publish_fails(fake_repo, monkeypatch, capsys):
+    fake_repo(["A"], [entry("A", publish=False)])
+    code, out = run(monkeypatch, capsys)
+    assert code == 1
+    assert "publish: true" in out

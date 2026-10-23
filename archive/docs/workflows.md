@@ -4,6 +4,69 @@ This document describes each retired WDL workflow, including its purpose, inputs
 This file is generated from the `meta` and `parameter_meta` blocks of each workflow by [`generate_workflows_doc.py`](../../.github/scripts/generate_workflows_doc.py). Edit those blocks rather than this document. Inputs described as `From references.` are the shared reference files listed in [references](../../docs/references.md).
 
 
+## Contents
+- [Annotations](#annotations)
+  - [AnnotateSingletonReads](#annotatesingletonreads)
+- [Annotation Utilities](#annotation-utilities)
+  - [AnnotateCallsetOverlapWithPlotting](#annotatecallsetoverlapwithplotting)
+  - [AnnotateExternalAFs](#annotateexternalafs)
+  - [AnnotateExternalVariants](#annotateexternalvariants)
+  - [AnnotateSvCallerSupport](#annotatesvcallersupport)
+  - [AnnotateVcfCleared](#annotatevcfcleared)
+  - [BenchmarkSTRs](#benchmarkstrs)
+  - [CombineVcfs](#combinevcfs)
+  - [CompareBams](#comparebams)
+  - [CompareVcfSamples](#comparevcfsamples)
+  - [CreateBiallelicVcf](#createbiallelicvcf)
+  - [CreateCohortPedigreeAncestryFilesAoUPhase2](#createcohortpedigreeancestryfilesaouphase2)
+  - [CreateDepthProfile](#createdepthprofile)
+  - [CreateFastqFromS3Reads](#createfastqfroms3reads)
+  - [CreatePedigreeAncestryFilesAoUPhase1](#createpedigreeancestryfilesaouphase1)
+  - [DownloadAWSFile](#downloadawsfile)
+  - [ExtractBamRegion](#extractbamregion)
+  - [FillFormatFieldsBcfTools](#fillformatfieldsbcftools)
+  - [FilterDuplicateZeroDepthReferenceBlocks](#filterduplicatezerodepthreferenceblocks)
+  - [FilterTRGTCalls](#filtertrgtcalls)
+  - [FindUntrimmedAlleles](#finduntrimmedalleles)
+  - [GQCalculateCounts](#gqcalculatecounts)
+  - [GQCutoffs](#gqcutoffs)
+  - [IntegrateHGSVCReference](#integratehgsvcreference)
+  - [MakeDepthMetrics](#makedepthmetrics)
+  - [MergeSites](#mergesites)
+  - [MergeSummarizedCallsetCounts](#mergesummarizedcallsetcounts)
+  - [MergeTRs](#mergetrs)
+  - [MergeVEPAF](#mergevepaf)
+  - [NormalizeDuplicationOrigins](#normalizeduplicationorigins)
+  - [PALMERToVcf](#palmertovcf)
+  - [ParseSVFormatFields](#parsesvformatfields)
+  - [PopulateSVFormatFields](#populatesvformatfields)
+  - [PostProcessTRLociAoU](#postprocesstrlociaou)
+  - [PostProcessTRLociHPRCHGSVC](#postprocesstrlocihprchgsvc)
+  - [PreprocessGregorVcf](#preprocessgregorvcf)
+  - [RenameVcfInfoFields](#renamevcfinfofields)
+  - [ReplaceKanpigGT](#replacekanpiggt)
+  - [ReplaceSampleCalls](#replacesamplecalls)
+  - [SubsetTRGTToCatalog](#subsettrgttocatalog)
+  - [SubsetVcfToContigs](#subsetvcftocontigs)
+  - [SubsetVcfToPerSample](#subsetvcftopersample)
+  - [SubsetVcfToSamples](#subsetvcftosamples)
+  - [SummarizeMergedCallsets](#summarizemergedcallsets)
+  - [UpdateGenotypes](#updategenotypes)
+  - [ValidateTRGTWithCatalog](#validatetrgtwithcatalog)
+- [Tools](#tools)
+  - [CreateCramIndex](#createcramindex)
+  - [MergeWithAgglovar](#mergewithagglovar)
+  - [MergeWithTruvari](#mergewithtruvari)
+  - [PhaseCallsetCommon](#phasecallsetcommon)
+  - [PhaseCallsetWithBackbone](#phasecallsetwithbackbone)
+  - [PreprocessStatisticalPhasing](#preprocessstatisticalphasing)
+  - [TRGTMerge](#trgtmerge)
+  - [TransferMethylationTags](#transfermethylationtags)
+  - [VcfDist](#vcfdist)
+  - [VcfDistCohort](#vcfdistcohort)
+  - [Whatshap](#whatshap)
+
+
 ## Annotations
 
 
@@ -280,6 +343,22 @@ Inputs:
 Outputs:
 - `File biallelic_vcf`: Normalized, sorted biallelic VCF with streamlined variant IDs and `allele_length`/`allele_type` annotations.
 - `File biallelic_vcf_idx`: Index for the biallelic VCF.
+
+### [CreateCohortPedigreeAncestryFilesAoUPhase2](../wdl/annotation_utils/CreateCohortPedigreeAncestryFilesAoUPhase2.wdl)
+This utility builds the pedigree and two-column ancestry files consumed by `CreateCohortMetadata` from the All of Us Phase 2 ancestry-prediction table, keeping the `ancestry_pred` label for each requested sample. Every sample becomes a singleton PED row with unknown parents, sex and phenotype, since All of Us releases no pedigree or sex calls. The All of Us `eur` label is renamed to `nfe`, since that is the gnomAD label `compute_AFs.py` accepts; the remaining All of Us labels pass through unchanged. Samples the predictions do not cover are labelled `.`, the sentinel `compute_AFs.py` drops from its population list, so they contribute to the global `AC`/`AF`/`AN` but to no population-specific field. Both directions of mismatch between the cohort and the predictions are reported separately.
+
+Inputs:
+- `File ancestry_predictions`: All of Us Phase 2 ancestry predictions, keyed by `research_id`.
+- `Array[String] sample_ids`: Sample IDs making up the cohort.
+- `String prefix`: Prefix for output file names.
+- `String utils_docker`: Container image.
+- `RuntimeAttr? runtime_attr_*`: Optional per-task runtime overrides.
+
+Outputs:
+- `File ped`: Pedigree file covering every sample in `sample_ids`.
+- `File ancestry`: Two-column file of sample IDs and ancestry labels.
+- `File missing_samples`: Samples present in `ancestry_predictions` but not in `sample_ids`.
+- `File samples_missing_ancestry`: Samples present in `sample_ids` but not in `ancestry_predictions`.
 
 ### [CreateDepthProfile](../wdl/annotation_utils/CreateDepthProfile.wdl)
 This utility builds a read-depth profile across one genomic window. Each sample's mosdepth BED is queried for the window and the extracted depths are combined into a single matrix with one column per sample.

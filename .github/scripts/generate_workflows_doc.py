@@ -12,6 +12,9 @@ drift apart; the sub-workflows under `wdl/utils` are not registered, so their or
 grouping headings live in SUBWORKFLOW_GROUPS. `archive/docs/workflows.md` covers the
 retired workflows, which have no Dockstore entries and are listed alphabetically.
 
+Each document opens with a `Contents` section linking every heading, with anchors that follow
+GitHub's slug rules.
+
 Run with no arguments to write the file. Run with --check to verify the committed copy
 is current, or --dry-run to confirm the document can be built without writing it.
 
@@ -50,6 +53,7 @@ SECTIONS = [
     ("Tools", "Tools", "wdl/tools"),
 ]
 
+CONTENTS_TITLE = "Contents"
 SUBWORKFLOWS_TITLE = "Sub-workflows"
 SUBWORKFLOWS_INTRO = (
     "These workflows live in `wdl/utils/` and are building blocks rather than entry points. They are never "
@@ -127,6 +131,7 @@ SITES = {"active": ACTIVE_SITE, "archive": ARCHIVE_SITE}
 
 DOCKSTORE_GROUP_RE = re.compile(r"^#\s+(\w[\w ]*?)\s*$")
 DOCKSTORE_NAME_RE = re.compile(r"^\s*-?\s*name:\s*(\w+)\s*$")
+SLUG_STRIP_RE = re.compile(r"[^\w\- ]")
 QUOTED_RE = re.compile(r"""^(?P<quote>["'])(?P<value>.*)(?P=quote)$""")
 
 
@@ -242,7 +247,8 @@ def build(site):
         print(f"\n{len(problems)} problem(s). Run check_wdl_style.py for the full report.")
         sys.exit(2)
 
-    lines = [f"# {site.title}", site.intro, "", site.note]
+    lines = []
+    toc = []
     used = set()
     if site is ARCHIVE_SITE:
         for title, directory in ARCHIVE_SECTIONS:
@@ -254,17 +260,19 @@ def build(site):
             if not names:
                 continue
             lines.extend(["", "", f"## {title}"])
+            toc.append((0, title))
             for index, name in enumerate(names):
                 workflow, path = workflows[name]
                 lines.append("")
                 if index == 0:
                     lines.append("")
                 lines.extend(render_workflow(workflow, path, site))
+                toc.append((1, name))
                 used.add(name)
         missing = sorted(set(workflows) - used)
         if missing:
             sys.exit("generate_workflows_doc.py: not placed in any section: {}".format(", ".join(missing)))
-        return "\n".join(lines) + "\n"
+        return assemble(site, toc, lines)
 
     groups = dockstore_order()
     for title, group, directory in SECTIONS:
@@ -272,6 +280,7 @@ def build(site):
         if not names:
             sys.exit(f"generate_workflows_doc.py: no '{group}' block in .dockstore.yml")
         lines.extend(["", "", f"## {title}"])
+        toc.append((0, title))
         for index, name in enumerate(names):
             workflow, path = workflows[name]
             if Path(path).parent.as_posix() != (REPO_ROOT / directory).as_posix():
@@ -280,18 +289,22 @@ def build(site):
             if index == 0:
                 lines.append("")
             lines.extend(render_workflow(workflow, path, site))
+            toc.append((1, name))
             used.add(name)
 
     lines.extend(["", "", f"## {SUBWORKFLOWS_TITLE}", SUBWORKFLOWS_INTRO])
+    toc.append((0, SUBWORKFLOWS_TITLE))
     for group_index, (heading, intro, names) in enumerate(SUBWORKFLOW_GROUPS):
         lines.append("")
         if group_index == 0:
             lines.append("")
         lines.extend([f"### {heading}", intro])
+        toc.append((1, heading))
         for name in names:
             workflow, path = workflows[name]
             lines.append("")
             lines.extend(render_workflow(workflow, path, site))
+            toc.append((2, name))
             used.add(name)
 
     missing = sorted(set(workflows) - used)
@@ -300,7 +313,27 @@ def build(site):
             "generate_workflows_doc.py: not placed in any section: {}. Register it in .dockstore.yml "
             "or add it to SUBWORKFLOW_GROUPS.".format(", ".join(missing))
         )
-    return "\n".join(lines) + "\n"
+    return assemble(site, toc, lines)
+
+
+def anchor_slugs(headings):
+    """Map heading texts, in document order, to the anchors GitHub renders for them."""
+    seen = {}
+    slugs = []
+    for text in headings:
+        slug = SLUG_STRIP_RE.sub("", text.lower()).replace(" ", "-")
+        count = seen.get(slug, 0)
+        seen[slug] = count + 1
+        slugs.append(slug if count == 0 else f"{slug}-{count}")
+    return slugs
+
+
+def assemble(site, toc, body):
+    """Join the title, intro, note and table of contents with the rendered sections."""
+    slugs = anchor_slugs([site.title, CONTENTS_TITLE] + [text for _, text in toc])[2:]
+    contents = [f"{'  ' * depth}- [{text}](#{slug})" for (depth, text), slug in zip(toc, slugs)]
+    head = [f"# {site.title}", site.intro, "", site.note, "", "", f"## {CONTENTS_TITLE}"]
+    return "\n".join(head + contents + body) + "\n"
 
 
 def main():
