@@ -75,11 +75,10 @@ TOOL_URL_RE = re.compile(r"\(https?://[^\s()]+\)")
 SET_LINE_ALLOWLIST = set()
 
 # Tasks whose runtime memory is deliberately not the standard expression (W031), as (path, task).
-# The LRCNVs tasks size memory from the input; TRGTLPS is pending its own runtime rewrite.
+# The LRCNVs gCNV caller tasks hardcode memory because it sets the Java heap.
 MEMORY_ALLOWLIST = {
     ("wdl/utils/LRCNVs.wdl", "GermlineCNVCallerCohortMode"),
     ("wdl/utils/LRCNVs.wdl", "GermlineCNVCallerCaseMode"),
-    ("wdl/tools/TRGTLPS.wdl", "*"),
 }
 
 
@@ -452,7 +451,7 @@ class Checker:
             self.sections.append((section_match.group(1), line_no))
 
     def memory_allowed(self):
-        return (self.path, self.block_name) in MEMORY_ALLOWLIST or (self.path, "*") in MEMORY_ALLOWLIST
+        return (self.path, self.block_name) in MEMORY_ALLOWLIST
 
     def enter_command(self, index, line, open_match):
         line_no = index + 1

@@ -63,7 +63,7 @@ These rules apply to WDL, Python, R and Bash alike, including code embedded in a
 - The default `mem_gb`, `boot_disk_gb` and `cpu_cores` for a task should be explicitly defined rather than based on an input file - it should be set based on the intensity of compute needed by that task.
 - The default `preemptible_tries` for a task should always be 1.
 - The default `max_retries` for a task should always be 0. A literal in `default_attr` that differs is a style error; an identifier such as `default_max_retries` is allowed.
-- The `memory` of a task's `runtime` block should always be `select_first([runtime_attr.mem_gb, default_attr.mem_gb]) + " GiB"`, so every task's memory can be overridden. The only exceptions are the two `LRCNVs.wdl` gCNV caller tasks, which hardcode memory because it sets the Java heap, and `TRGTLPS.wdl` until it is migrated.
+- The `memory` of a task's `runtime` block should always be `select_first([runtime_attr.mem_gb, default_attr.mem_gb]) + " GiB"`, so every task's memory can be overridden. The only exceptions are the two `LRCNVs.wdl` gCNV caller tasks, which hardcode memory because it sets the Java heap.
 - Task names should be unique across all of `wdl/`, so a task can be referred to by name alone. Where two tasks diverge, name each for what makes it different - e.g. `ShardLongSVChromosome` beside `ShardChromosome`.
 - The names of workflows and tasks should never include a `_` character within them - rather, they should always be in Pascal case.
 - A task should not share its name with the workflow in the same file. Where a thin wrapper workflow and its task would collide, prefix the task with `Run` - e.g. workflow `TRGTLPS` with task `RunTRGTLPS`.
