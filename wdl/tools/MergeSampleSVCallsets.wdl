@@ -1,4 +1,7 @@
-# Derived from yuliamostovoy/lr_callset_integration, a fork of fabio-cunial/callset_integration_phase2:
+# Derived from yuliamostovoy/lr_callset_integration wdl/SV_Integration_WorkflowA_Intrasample_Scoring.wdl
+# Derived from yuliamostovoy/lr_callset_integration wdl/SV_Integration_Workpackage1_intrasample_merge.wdl
+# Derived from yuliamostovoy/lr_callset_integration wdl/SV_Integration_Workpackage2_Main_scoring.wdl
+# Fork of fabio-cunial/callset_integration_phase2
 # https://github.com/yuliamostovoy/lr_callset_integration/blob/main/wdl/SV_Integration_WorkflowA_Intrasample_Scoring.wdl
 # https://github.com/yuliamostovoy/lr_callset_integration/blob/main/wdl/SV_Integration_Workpackage1_intrasample_merge.wdl
 # https://github.com/yuliamostovoy/lr_callset_integration/blob/main/wdl/SV_Integration_Workpackage2_Main_scoring.wdl

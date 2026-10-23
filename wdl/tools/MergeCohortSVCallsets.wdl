@@ -1,4 +1,8 @@
-# Derived from yuliamostovoy/lr_callset_integration, a fork of fabio-cunial/callset_integration_phase2:
+# Derived from yuliamostovoy/lr_callset_integration wdl/SV_Integration_WorkflowB_Merge_Collapse.wdl
+# Derived from yuliamostovoy/lr_callset_integration wdl/SV_Integration_Workpackage4_Main_shard.wdl
+# Derived from yuliamostovoy/lr_callset_integration wdl/SV_Integration_Workpackage5_Main_truvari_collapse.wdl
+# Derived from yuliamostovoy/lr_callset_integration wdl/SV_Integration_Workpackage6_Main_concat_shards.wdl
+# Fork of fabio-cunial/callset_integration_phase2
 # https://github.com/yuliamostovoy/lr_callset_integration/blob/main/wdl/SV_Integration_WorkflowB_Merge_Collapse.wdl
 # https://github.com/yuliamostovoy/lr_callset_integration/blob/main/wdl/SV_Integration_Workpackage4_Main_shard.wdl
 # https://github.com/yuliamostovoy/lr_callset_integration/blob/main/wdl/SV_Integration_Workpackage5_Main_truvari_collapse.wdl

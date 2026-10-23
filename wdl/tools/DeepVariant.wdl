@@ -1,5 +1,5 @@
-# Derived from broadinstitute/long-read-pipelines:
-# https://github.com/broadinstitute/long-read-pipelines/blob/main/wdl/tasks/VariantCalling/DeepVariant.wdl [source branch: sh_update_wgs_callers_outliers]
+# Derived from broadinstitute/long-read-pipelines (branch sh_update_wgs_callers_outliers) wdl/tasks/VariantCalling/DeepVariant.wdl
+# https://github.com/broadinstitute/long-read-pipelines/blob/main/wdl/tasks/VariantCalling/DeepVariant.wdl
 
 version 1.0
 

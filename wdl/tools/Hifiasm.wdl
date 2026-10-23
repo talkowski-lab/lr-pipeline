@@ -1,4 +1,4 @@
-# Derived from broadinstitute/long-read-pipelines:
+# Derived from broadinstitute/long-read-pipelines wdl/tasks/Assembly/Hifiasm.wdl
 # https://github.com/broadinstitute/long-read-pipelines/blob/main/wdl/tasks/Assembly/Hifiasm.wdl
 
 version 1.0
