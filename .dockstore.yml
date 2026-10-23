@@ -13,6 +13,15 @@ workflows:
         - /.*/
 
   - subclass: WDL
+    name: AnnotateAF
+    primaryDescriptorPath: /wdl/annotation/AnnotateAF.wdl
+    filters:
+      branches:
+        - main
+      tags:
+        - /.*/
+
+  - subclass: WDL
     name: AnnotateCallsetOverlap
     primaryDescriptorPath: /wdl/annotation/AnnotateCallsetOverlap.wdl
     filters:
@@ -255,6 +264,15 @@ workflows:
   - subclass: WDL
     name: SummarizeAnnotations
     primaryDescriptorPath: /wdl/annotation_utils/SummarizeAnnotations.wdl
+    filters:
+      branches:
+        - main
+      tags:
+        - /.*/
+
+  - subclass: WDL
+    name: SummarizeAnnotationsGATKSV
+    primaryDescriptorPath: /wdl/annotation_utils/SummarizeAnnotationsGATKSV.wdl
     filters:
       branches:
         - main

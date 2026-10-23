@@ -2,11 +2,13 @@ version 1.0
 
 import "../utils/Helpers.wdl"
 import "../utils/Structs.wdl"
+import "../utils/CreateAnnotationPlots.wdl"
 
 workflow SummarizeAnnotations {
     meta {
         description: [
-            "This utility tallies annotation values across one or more VCFs to produce summary count tables, size-binned by allele class (SNV/DEL/INS/DUP/TRV). It always counts at the site level and can optionally count per sample, per allele, per functional gene consequence (from VEP/SVAnnotate `PREDICTED_*` fields), as raw per-variant value lists, and, when `create_plotting` is enabled, produce a separate set of AF-binned, region-aware Parquet tables for plotting (including a de novo transmission breakdown when a PED file is supplied and trios are found)."
+            "This utility tallies annotation values across one or more VCFs to produce summary count tables, size-binned by allele class (SNV/DEL/INS/DUP/TRV). It always counts at the site level and can optionally count per sample, per allele, per functional gene consequence (from VEP/SVAnnotate `PREDICTED_*` fields), as raw per-variant value lists, and, when `create_plotting` is enabled, produce a separate set of AF-binned, region-aware Parquet tables for plotting (including a de novo transmission breakdown when a PED file is supplied and trios are found).",
+            "With `create_plotting` enabled, the plotting tables are also drawn into summary figures by `CreateAnnotationPlots`, which splits the heavy per-variant plots across parallel tasks and returns them as one tarball."
         ]
     }
 
@@ -20,7 +22,7 @@ workflow SummarizeAnnotations {
         create_per_allele: "Whether to additionally produce per-allele counts."
         create_list: "Whether to additionally produce raw per-variant value-list tables."
         create_functional: "Whether to additionally produce per-gene functional counts."
-        create_plotting: "Whether to additionally produce AF-binned Parquet tables for plotting."
+        create_plotting: "Whether to additionally produce AF-binned Parquet tables for plotting, and draw the summary plots from them."
         use_ssd: "Whether to use SSD-backed local disks."
         split_by_region: "Whether to split each VCF by genomic region before counting."
         subset_vcf_string: "`bcftools view` arguments used to pre-subset the VCFs."
@@ -40,6 +42,7 @@ workflow SummarizeAnnotations {
         plotting_alleles_parquet: "Per-allele AF/size-binned counts, as Parquet (when `create_plotting`)."
         plotting_denovo_parquet: "Per-proband de novo transmission counts, as Parquet (when `create_plotting` and trios are found via `ped`)."
         plotting_variant_list_parquet: "Raw per-variant genotype-count list, as Parquet (when `create_plotting`)."
+        plots_tarball: "Tarball of the summary plots drawn from the plotting tables (when `create_plotting`)."
     }
 
     input {
@@ -75,6 +78,11 @@ workflow SummarizeAnnotations {
         RuntimeAttr? runtime_attr_merge
         RuntimeAttr? runtime_attr_convert
         RuntimeAttr? runtime_attr_find_trios
+        RuntimeAttr? runtime_attr_create_site_plots
+        RuntimeAttr? runtime_attr_create_genome_plots
+        RuntimeAttr? runtime_attr_create_inheritance_plots
+        RuntimeAttr? runtime_attr_create_variant_list_plots
+        RuntimeAttr? runtime_attr_archive_plots
     }
 
     Boolean sites_only = !(create_per_sample || create_per_allele || create_plotting)
@@ -326,6 +334,26 @@ workflow SummarizeAnnotations {
                 docker = utils_docker,
                 runtime_attr_override = runtime_attr_convert
         }
+
+        if (defined(ped)) {
+            File? plotting_denovo_parquet_for_plots = ConvertPlottingDenovo.parquet
+        }
+
+        call CreateAnnotationPlots.CreateAnnotationPlots {
+            input:
+                plotting_sites_parquet = select_first([ConvertPlottingSites.parquet]),
+                plotting_samples_parquet = ConvertPlottingSamples.parquet,
+                plotting_alleles_parquet = ConvertPlottingAlleles.parquet,
+                plotting_denovo_parquet = plotting_denovo_parquet_for_plots,
+                plotting_variant_list_parquet = ConvertPlottingVariantList.parquet,
+                prefix = prefix,
+                utils_docker = utils_docker,
+                runtime_attr_create_site_plots = runtime_attr_create_site_plots,
+                runtime_attr_create_genome_plots = runtime_attr_create_genome_plots,
+                runtime_attr_create_inheritance_plots = runtime_attr_create_inheritance_plots,
+                runtime_attr_create_variant_list_plots = runtime_attr_create_variant_list_plots,
+                runtime_attr_archive_plots = runtime_attr_archive_plots
+        }
     }
 
     output {
@@ -342,6 +370,7 @@ workflow SummarizeAnnotations {
         File? plotting_alleles_parquet = ConvertPlottingAlleles.parquet
         File? plotting_denovo_parquet = ConvertPlottingDenovo.parquet
         File? plotting_variant_list_parquet = ConvertPlottingVariantList.parquet
+        File? plots_tarball = CreateAnnotationPlots.plots_tarball
     }
 }
 

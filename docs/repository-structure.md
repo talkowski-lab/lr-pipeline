@@ -8,18 +8,19 @@ wdl/
   annotation/        # Main annotation workflows (prefix: Annotate*)
   annotation_utils/  # VCF manipulation and utility workflows
   tools/             # Individual bioinformatics tool wrappers
-  utils/             # Shared structs (Structs.wdl) and helper tasks (Helpers.wdl, AoUPhase2Helpers.wdl)
+  utils/             # Shared structs (Structs.wdl), task libraries (Helpers.wdl, AoUPhase2Helpers.wdl) and imported sub-workflows
 scripts/
   annotation/        # Standalone annotation scripts (e.g. genomic context)
   helper/            # Shared standalone utility scripts, including Hail helpers
   mei/               # MEI analysis scripts
   benchmark/         # Benchmarking scripts
+  qc/                # Callset summary plotting scripts, with the GATK-SV VCF QC scripts in qc/vcf_qc/
 dockerfiles/         # Dockerfile.<image-name> (lowercase) for each container, plus build_docker.sh, build_args.sh and versions.env
 tests/
   unit/              # pytest tests of scripts/ functions and the .github/scripts checkers
   wdl/               # miniwdl smoke tests of utils-image workflows
   data/              # Small open-access test inputs, e.g. an HPRC/HGSVC V10 chr22 VCF subset
-data/                # Local-only analysis inputs, outputs and scratch work; gitignored and never referenced by WDL
+data/                # Local-only analysis inputs, outputs and scratch work; gitignored, so not in the repository, and never referenced by WDL
 docs/                # Extended documentation (this file included)
 .github/
   workflows/         # Active GitHub Actions CI
@@ -31,6 +32,7 @@ docs/                # Extended documentation (this file included)
 archive/             # Retired workflows, scripts, Dockerfiles, notebooks and their reference docs
   docs/workflows.md  # Generated from the retired workflows, the counterpart to docs/workflows.md
   notebooks/         # Retired ad hoc Jupyter notebooks (Terra cost analysis via the API and BigQuery)
+  .github/           # Inactive Docker build-on-push workflow and its helper script
 .claude/
   settings.json      # Wires .github/hooks/ into Claude Code
 .codex/
@@ -41,6 +43,7 @@ pyproject.toml       # Project metadata, extras, and ruff and pytest configurati
 .hadolint.yaml       # hadolint configuration for dockerfiles/
 .worktreelinks       # Gitignored local-only paths (data, womtool.jar) each worktree symlinks from the main checkout
 .dockstore.yml       # Dockstore registration for every directly-run workflow
+LICENSE              # MIT license
 AGENTS.md            # Canonical agent instructions; .claude/CLAUDE.md and .github/copilot-instructions.md are symlinks to it
 CONTRIBUTING.md      # How to contribute; CODE_OF_CONDUCT.md, SECURITY.md and CITATION.cff sit beside it
 ```
@@ -51,7 +54,7 @@ Workflows are split by role:
 - **`wdl/annotation/`** - top-level annotation workflows, always prefixed `Annotate*`. Each characterizes one aspect of the callset (MEIs, functional consequence, external-database overlap, etc.) and typically outputs a TSV rather than a VCF.
 - **`wdl/annotation_utils/`** - VCF manipulation utilities used to glue the annotation workflows together (splitting, merging, applying TSV annotations back onto a VCF, post-processing).
 - **`wdl/tools/`** - thin wrappers around individual bioinformatics tools (PALMER, TRGT, HiPhase, mosdepth, etc.) that aren't annotation-specific.
-- **`wdl/utils/`** - not directly run. `Structs.wdl` defines the shared `RuntimeAttr` struct; `Helpers.wdl` is a task library holding reusable tasks (subsetting, concatenation, sharding, etc.) imported by the other three directories, with its tasks declared alphabetically. `AoUPhase2Helpers.wdl` is a second task library, holding tasks that are specific to the All of Us Phase 2 callset rather than reusable across cohorts. It also holds importable sub-workflows, which are never Dockstore-registered: `BedtoolsClosestSV.wdl`, `ExactMatch.wdl`, `ScatterVcf.wdl` and `TruvariMatch.wdl` are callset-matching and sharding building blocks, while `LRCNVs.wdl`, `DepthPreprocessing.wdl`, `DepthClustering.wdl` and `GenotypeDepth.wdl` form the depth-based CNV pipeline driven by `tools/LongReadCNVs.wdl`. All eight are described in [Sub-workflows](workflows.md#sub-workflows).
+- **`wdl/utils/`** - not directly run. `Structs.wdl` defines the shared `RuntimeAttr` struct; `Helpers.wdl` is a task library holding reusable tasks (subsetting, concatenation, sharding, etc.) imported by the other three directories, with its tasks declared alphabetically. `AoUPhase2Helpers.wdl` is a second task library, holding tasks that are specific to the All of Us Phase 2 callset rather than reusable across cohorts. It also holds importable sub-workflows, which are never Dockstore-registered: `BedtoolsClosestSV.wdl`, `ExactMatch.wdl`, `ScatterVcf.wdl` and `TruvariMatch.wdl` are callset-matching and sharding building blocks; `LRCNVs.wdl`, `DepthPreprocessing.wdl`, `DepthClustering.wdl` and `GenotypeDepth.wdl` form the depth-based CNV pipeline driven by `tools/LongReadCNVs.wdl`; `MergeCohortLongSVClass.wdl` merges one class of long SVs across the cohort for `tools/MergeCohortLongSVCallsets.wdl`; and `CreateAnnotationPlots.wdl` draws the summary plots for `annotation_utils/SummarizeAnnotations.wdl`. All ten are described in [Sub-workflows](workflows.md#sub-workflows).
 
 Every workflow directly run in the pipeline (i.e. everything in `annotation/`, `annotation_utils/` and `tools/`) has an entry in [`.dockstore.yml`](../.dockstore.yml) - see [Dockstore Registration](ci-cd.md#dockstore-registration) - and that file's ordering is also the section order of [Workflows](workflows.md). For the full WDL/task/input style convention, see [Conventions](conventions.md).
 
@@ -71,6 +74,7 @@ Scripts reach a running task baked into an image, never fetched by URL. The `uti
 |---|---|---|
 | `annotation/annotate_genomic_context.R` | AnnotateRegion | Assign genomic context labels to variants from breakpoint and CNV body coverage tables. |
 | `annotation/annotate_insilico_predictors.py` | AnnotateInSilicoPredictors | Annotate a VCF with gnomAD in-silico predictor scores (CADD, REVEL, phyloP, SpliceAI, Pangolin) from Hail tables. |
+| `annotation/compute_AFs.py` | AnnotateAF | Compute cohort-wide, sex-, population- and population-by-sex-stratified allele counts and frequencies, honoring PAR and hemizygous regions. Derived from GATK-SV; preserve its license header. |
 | `benchmark/R1.bedtools_closest_CNV.R` | BedtoolsClosestSV | Compare CNVs against their closest reference callset records. |
 | `benchmark/R2.bedtools_closest_INS.R` | BedtoolsClosestSV | Compare insertions against their closest reference callset records. |
 | `helper/estimatePloidy.R` | CreateCohortDepthFiles | Estimate per-sample ploidy from binned coverage. Vendored unmodified from GATK-SV `src/WGD/bin/`; preserve its license header. |
@@ -80,9 +84,20 @@ Scripts reach a running task baked into an image, never fetched by URL. The `uti
 | `helper/vep_annotate_hail.py` | AnnotateVEPHail | Run VEP over a VCF via Hail and emit the annotated result. |
 | `mei/PALMER_to_vcf.py` | Helpers.wdl | Convert raw PALMER mobile-element calls into a VCF. |
 | `mei/PALMER_transfer_annotations.py` | AnnotatePALMER | Transfer PALMER annotations onto matching callset records, using edit distance to resolve near-matches. |
+| `qc/plot_annotation_summaries.py` | CreateAnnotationPlots | Plot site, per-genome, inheritance and variant-list summaries from the SummarizeAnnotations parquet tables, one plot group per task. |
+| `qc/vcf_qc/collectQC.vcf_wide.sh` | SummarizeAnnotationsGATKSV | Collect per-site genotype counts and frequencies from a symbolic-allele VCF shard into the site statistics BED, via `vcf2bed.py` and `clean_vcf2bed_output.R`. |
+| `qc/vcf_qc/vcf2bed.py` | SummarizeAnnotationsGATKSV | Convert a VCF to a BED with its called samples and every INFO field; a pysam-only port of `svtk vcf2bed -i ALL`. |
+| `qc/vcf_qc/clean_vcf2bed_output.R` | SummarizeAnnotationsGATKSV | Join the BED and genotype counts into the site statistics table. |
+| `qc/vcf_qc/plot_sv_vcf_distribs.R` | SummarizeAnnotationsGATKSV | Plot site-level count, size, frequency and Hardy-Weinberg distributions by variant class. |
+| `qc/vcf_qc/plot_sv_perSample_distribs.R` | SummarizeAnnotationsGATKSV | Plot per-genome variant counts and genotype quality distributions. |
+| `qc/vcf_qc/cleanFamFile.sh` | SummarizeAnnotationsGATKSV | Restrict a PED to the samples analyzed. |
+| `qc/vcf_qc/analyze_fams.R` | SummarizeAnnotationsGATKSV | Plot per-family inheritance and de novo rates. |
+| `qc/vcf_qc/SV_colors.txt` | SummarizeAnnotationsGATKSV | Variant classes and their plot colors; also sets which classes are summarized. |
+
+Every script under `qc/vcf_qc/` is derived from the GATK-SV `kj_project_gnomad_lr` branch; preserve their license headers.
 
 Some workflows invoke scripts under `/opt/sv-pipeline/` or `/app/SVAN/`. Those belong to the GATK-SV and SVAN images respectively and are not part of this repository.
 
 
-## CI-CD
+## CI/CD
 Nine GitHub Actions workflows gate `main`, covering WDL syntax, WDL style, Markdown style, Python linting, unit and WDL smoke tests, shell and Dockerfile linting, Dockstore registration, agent-instruction sync and workflow-documentation generation. See [CI/CD](ci-cd.md) for the full table, the matching commands to run locally before pushing, and how Dockstore registration and image releases work.

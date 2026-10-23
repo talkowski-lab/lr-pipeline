@@ -14,6 +14,7 @@ RUN apt-get update && apt-get install -y \
     bedtools \
     tabix \
     r-base \
+    libnlopt-dev \
     git \
     wget \
     curl \
@@ -64,7 +65,12 @@ RUN python3 -m pip install --upgrade pip && \
         matplotlib
 
 # Install R packages
-RUN Rscript -e 'install.packages(c("beeswarm", "optparse"), repos="https://cloud.r-project.org")'
+RUN Rscript -e 'install.packages(c("beeswarm", "optparse", "RColorBrewer", "vioplot", "zoo"), repos="https://cloud.r-project.org")'
+
+# HardyWeinberg's current dependencies no longer build on R 4.1, so install it from a dated CRAN snapshot
+ARG HARDYWEINBERG_CRAN_SNAPSHOT
+RUN Rscript -e 'install.packages("HardyWeinberg", repos="https://packagemanager.posit.co/cran/'"${HARDYWEINBERG_CRAN_SNAPSHOT}"'")' \
+    && Rscript -e 'library(HardyWeinberg)'
 
 # Copy repository scripts so every image built from this one has them
 COPY ./scripts /opt/scripts

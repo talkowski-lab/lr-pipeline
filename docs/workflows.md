@@ -25,6 +25,29 @@ Inputs:
 Outputs:
 - `File annotations_tsv_age`: TSV of per-allele carrier counts across the age bins.
 
+### [AnnotateAF](../wdl/annotation/AnnotateAF.wdl)
+This workflow annotates each variant with allele counts, allele frequencies, no-call rates and genotype counts, computed from its genotypes. Frequencies are computed across the whole cohort and, when the matching inputs are given, per sex from a PED and per population from an ancestry table, together with the population with the highest allele frequency (grpmax) at biallelic sites. Variants on chrX and chrY outside the pseudoautosomal regions are counted as hemizygous in XY samples.
+
+At multiallelic sites, per-allele allele purity (`AP_allele`), motif count (`MC_allele`) and, when an LPS table is given, longest polymer sequence (`LPS_allele`) are taken from the first carrier of each allele. Each contig is sharded by record count, annotated in parallel and concatenated into one VCF.
+
+Inputs:
+- `File vcf`: VCF to annotate.
+- `File vcf_idx`: Index for VCF to annotate.
+- `Array[String] contigs`: Contigs to annotate within the input VCF.
+- `Int records_per_shard`: Number of variants to keep within a single shard during annotation.
+- `File? sample_pop_assignments`: Two-column TSV of sample ID and population label, used for per-population frequencies. Labels must be one of afr, ami, amr, asj, eas, fin, mid, nfe, sas or oth, and '.' leaves a sample unassigned.
+- `File? ped`: Cohort pedigree, used for per-sex frequencies and hemizygous counting.
+- `File? lps_tsv`: TSV of longest polymer sequence values per TR locus and sample, from `TRGTLPS`, with its header line first.
+- `Array[String]? strip_info_fields`: INFO fields to remove from each shard before annotation.
+- `File par_bed`: From references.
+- `String prefix`: Prefix for output file names.
+- `String utils_docker`: Container image.
+- `RuntimeAttr? runtime_attr_*`: Optional per-task runtime overrides (6).
+
+Outputs:
+- `File af_annotated_vcf`: VCF annotated with allele frequencies.
+- `File af_annotated_vcf_idx`: Index for `af_annotated_vcf`.
+
 ### [AnnotateCallsetOverlap](../wdl/annotation/AnnotateCallsetOverlap.wdl)
 This workflow ingests a callset VCF and two truth VCFs - one of SNVs & indels and one of SVs - and finds matching variants across them, annotating each matched callset variant with the truth callset's AC/AF/AN and genotype-count fields. This enables benchmarking annotations against an existing cohort (e.g. gnomAD) and surfacing variants that are outliers relative to it.
 
@@ -631,6 +654,8 @@ Outputs:
 ### [SummarizeAnnotations](../wdl/annotation_utils/SummarizeAnnotations.wdl)
 This utility tallies annotation values across one or more VCFs to produce summary count tables, size-binned by allele class (SNV/DEL/INS/DUP/TRV). It always counts at the site level and can optionally count per sample, per allele, per functional gene consequence (from VEP/SVAnnotate `PREDICTED_*` fields), as raw per-variant value lists, and, when `create_plotting` is enabled, produce a separate set of AF-binned, region-aware Parquet tables for plotting (including a de novo transmission breakdown when a PED file is supplied and trios are found).
 
+With `create_plotting` enabled, the plotting tables are also drawn into summary figures by `CreateAnnotationPlots`, which splits the heavy per-variant plots across parallel tasks and returns them as one tarball.
+
 Inputs:
 - `Array[File] vcfs`: VCFs whose annotations are counted.
 - `Array[File] vcf_idxs`: Indexes for `vcfs`.
@@ -641,7 +666,7 @@ Inputs:
 - `Boolean create_per_allele`: Whether to additionally produce per-allele counts. (default `false`)
 - `Boolean create_list`: Whether to additionally produce raw per-variant value-list tables. (default `false`)
 - `Boolean create_functional`: Whether to additionally produce per-gene functional counts. (default `false`)
-- `Boolean create_plotting`: Whether to additionally produce AF-binned Parquet tables for plotting. (default `false`)
+- `Boolean create_plotting`: Whether to additionally produce AF-binned Parquet tables for plotting, and draw the summary plots from them. (default `false`)
 - `Boolean use_ssd`: Whether to use SSD-backed local disks. (default `false`)
 - `Boolean split_by_region`: Whether to split each VCF by genomic region before counting. (default `false`)
 - `String subset_vcf_string`: `bcftools view` arguments used to pre-subset the VCFs. (default empty)
@@ -651,7 +676,7 @@ Inputs:
 - `Int? records_per_shard`: Number of variants to keep within a single shard.
 - `String prefix`: Prefix for output file names.
 - `String utils_docker`: Container image.
-- `RuntimeAttr? runtime_attr_*`: Optional per-task runtime overrides (7).
+- `RuntimeAttr? runtime_attr_*`: Optional per-task runtime overrides (12).
 
 Outputs:
 - `File summary_sites_tsv`: Site-level annotation counts.
@@ -666,6 +691,35 @@ Outputs:
 - `File? plotting_alleles_parquet`: Per-allele AF/size-binned counts, as Parquet (when `create_plotting`).
 - `File? plotting_denovo_parquet`: Per-proband de novo transmission counts, as Parquet (when `create_plotting` and trios are found via `ped`).
 - `File? plotting_variant_list_parquet`: Raw per-variant genotype-count list, as Parquet (when `create_plotting`).
+- `File? plots_tarball`: Tarball of the summary plots drawn from the plotting tables (when `create_plotting`).
+
+### [SummarizeAnnotationsGATKSV](../wdl/annotation_utils/SummarizeAnnotationsGATKSV.wdl)
+This utility draws the GATK-SV VCF QC plots for one or more VCFs: site-level count, size, frequency and Hardy-Weinberg distributions by variant class, and, when `run_per_sample` is enabled, per-genome variant counts and per-family inheritance and de novo rates from the PED. It covers the same ground as `SummarizeAnnotations`, but uses the GATK-SV QC scripts in place of the summary tables.
+
+Each VCF is sharded by record count. Every shard has its multiallelic records split and its alleles converted to symbolic classes (SNV, INS_SHORT/INS_SV, DEL_SHORT/DEL_SV, DUP_SHORT/DUP_SV at a 50 bp cutoff, and TR or VNTR for TRV alleles by shortest motif) before its site statistics are collected. Benchmarking against external callsets is not ported.
+
+Inputs:
+- `Array[File] vcfs`: VCFs to summarize.
+- `Array[File] vcf_idxs`: Indexes for `vcfs`.
+- `File ped`: Cohort pedigree, used for the per-family plots.
+- `File ref_fa`: From references.
+- `File ref_fai`: From references.
+- `Int records_per_shard`: Number of variants to keep within a single shard.
+- `Int samples_per_shard`: Number of samples per shard when collecting per-sample variant lists.
+- `Boolean create_variant_attributes`: Whether to derive `allele_type` and `allele_length` from REF and ALT, for VCFs that lack them. (default `false`)
+- `Boolean run_per_sample`: Whether to additionally draw the per-sample and per-family plots. (default `true`)
+- `Int? subset_sample_count`: Number of randomly chosen samples to restrict the per-sample and per-family plots to.
+- `String subset_vcf_string`: `bcftools view` arguments used to pre-subset each shard. (default empty)
+- `Int random_seed`: Seed for the random sample subset. (default `0`)
+- `Int max_gq`: Maximum GQ value on the per-sample and per-family GQ axes. (default `99`)
+- `Int? downsample_qc_per_sample`: Number of samples to downsample the per-sample plots to.
+- `String prefix`: Prefix for output file names.
+- `String utils_docker`: Container image.
+- `RuntimeAttr? runtime_attr_*`: Optional per-task runtime overrides (12).
+
+Outputs:
+- `File vcf_qc_tarball`: Tarball of the QC plots, the site statistics BED with its index, the samples analyzed and, when `run_per_sample` is enabled, the cleaned PED of trios.
+- `File vcf2bed_bed`: Every record of the preprocessed shards with its called samples and INFO fields, as a gzipped BED.
 
 ### [SummarizeTRVAllelesPerGenome](../wdl/annotation_utils/SummarizeTRVAllelesPerGenome.wdl)
 This utility counts the tandem repeat variant (INFO/allele_type='trv') ALT alleles carried per genome across one or more VCFs, how many of them fall within coding sequences and how many distinct genes those coding alleles hit, producing the sentence 'An average of X alternative alleles were observed per individual genome, including Y that reside within coding sequences of Z genes'.
@@ -2639,3 +2693,26 @@ Inputs:
 Outputs:
 - `String done`: Completion signal of the genome-wide concatenation.
 - `String cohort_dir`: GCS directory holding the class's cohort callset, 'truvari_collapsed.bcf'.
+
+### Annotation summary plotting
+`CreateAnnotationPlots` draws the summary plots from the parquet tables of `SummarizeAnnotations`, one plot group per task.
+
+### [CreateAnnotationPlots](../wdl/utils/CreateAnnotationPlots.wdl)
+This utility draws the callset summary figures from the plotting Parquet tables that `SummarizeAnnotations` produces with `create_plotting` enabled, and returns them as one tarball of PNGs. Site counts and short-read overlap are drawn from the site table, sites per genome from the sample and allele tables, and trio inheritance from the de novo table, each only when its table is given.
+
+The allele-frequency and size distributions and the Hardy-Weinberg plots (overall, and by variant type, size and genomic region) are drawn from the per-variant list, which can hold hundreds of millions of rows. Each of these runs as its own task that reads only the columns its plot needs, so no single VM holds the whole table for every plot, and its default memory scales with the size of the list.
+
+Inputs:
+- `File plotting_sites_parquet`: Site-level plotting table (`plotting_sites_parquet` from `SummarizeAnnotations`).
+- `File? plotting_samples_parquet`: Per-sample plotting table (`plotting_samples_parquet` from `SummarizeAnnotations`), for the sites-per-genome plot.
+- `File? plotting_alleles_parquet`: Per-allele plotting table (`plotting_alleles_parquet` from `SummarizeAnnotations`), adding allele counts to the sites-per-genome plot.
+- `File? plotting_denovo_parquet`: De novo transmission table (`plotting_denovo_parquet` from `SummarizeAnnotations`), for the trio inheritance plot. Leave unset when the cohort has no trios.
+- `File? plotting_variant_list_parquet`: Per-variant list (`plotting_variant_list_parquet` from `SummarizeAnnotations`), for the distribution and Hardy-Weinberg plots.
+- `Int random_seed`: Seed for every random subsample taken while plotting. (default `42`)
+- `Int hwe_subsample_count`: Maximum number of variants drawn per Hardy-Weinberg panel. (default `500000`)
+- `String prefix`: Prefix for output file names.
+- `String utils_docker`: Container image.
+- `RuntimeAttr? runtime_attr_*`: Optional per-task runtime overrides (5).
+
+Outputs:
+- `File plots_tarball`: Tarball of every plot drawn, one PNG per plot.

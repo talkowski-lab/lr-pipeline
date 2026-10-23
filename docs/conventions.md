@@ -1,5 +1,5 @@
 # Conventions
-This document defines the comment, WDL and Python style conventions to follow when writing or editing code in this repository.
+This document defines the conventions to follow when changing this repository - comment, WDL, Python and Markdown style, how inputs are supplied, and the branch workflow.
 
 
 ## Comments
@@ -130,8 +130,8 @@ These rules apply to WDL, Python, R and Bash alike, including code embedded in a
 
 
 ## Workspace
-- All reference files - i.e. those not specific to an input callset - should be passed in via workspace data.
-- All dockers should be passed in via workspace data.
+- All reference files - i.e. those not specific to an input callset - should be workflow inputs, supplied via workspace data on Terra, rather than hardcoded. They are listed in [References](references.md).
+- All Docker images should likewise be workflow inputs supplied via workspace data. They are listed in [Docker images](dockers.md).
 
 
 ## Branches

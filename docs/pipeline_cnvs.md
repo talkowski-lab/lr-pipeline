@@ -9,7 +9,9 @@ Everything below is cohort-specific and must be supplied per run. Reference file
 - **Aligned lrGS reads** - one aligned BAM and index per sample, plus the sample IDs, as produced by [MinimapReadAlignment](../wdl/tools/MinimapReadAlignment.wdl).
 - **PED** - six-column pedigree covering every sample, providing sex (`1` male, `2` female). Required by depth genotyping.
 - **Contigs** - `chr1` to `chr22`, `chrX` and `chrY`, in that order. `CreateCohortDepthFiles` estimates ploidy against this exact karyotype, so every step below uses the same list.
-- **Bin size** - the width, in bp, of the read-count bins gCNV calls over, e.g. 2000. `CreateSampleReadCounts` and `CreateDepthIntervals` must use the same value.
+- **Bin size** - the width, in bp, of the read-count bins gCNV calls over, e.g. 2000. `CreateSampleReadCounts` and `CreateDepthIntervals` must use the same value. This is separate from the `bin_size` of `CreateCohortDepthFiles`, which sets the resolution of the binned-coverage matrix used for genotyping and plotting, and defaults to 100.
+
+`LongReadCNVs` also takes two shared reference files, `contig_ploidy_priors` and `training_intervals`, listed in [References](references.md). Its `blacklist_intervals`, `mappability_track_bed` and `segmental_duplication_track_bed` inputs are optional and can be left unset.
 
 
 ## 1. Per-Sample Depth

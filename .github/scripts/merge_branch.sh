@@ -98,7 +98,7 @@ git worktree remove "$BRANCH_WORKTREE"
 git branch -d "$BRANCH"
 
 # Drop the branch-tagged images build_docker.sh pushed, last so that a gcloud failure leaves git state final
-REGISTRY="us-central1-docker.pkg.dev/talkowski-sv-gnomad/kj-dockers"
+REGISTRY="${DOCKER_REGISTRY:-us-central1-docker.pkg.dev/talkowski-sv-gnomad/kj-dockers}"
 for image in $(gcloud artifacts docker images list "$REGISTRY" --include-tags --format='value(package)' \
     --filter="tags:$BRANCH" 2>/dev/null | sort -u); do
     echo "Deleting $image:$BRANCH"

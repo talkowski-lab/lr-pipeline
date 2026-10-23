@@ -1,15 +1,17 @@
 # Annotations
 This document describes the FILTER values and INFO and FORMAT fields present in the annotated callset VCFs.
 
+Some names below depend on the inputs of the released callsets rather than being fixed by the pipeline. The `INFO/SOURCE` values are the `source_tags` passed to `PreprocessVcfs`, and its length filters are named after them as `SMALL_<source_tag>` and `LARGE_<source_tag>`, so a new cohort with different tags gets correspondingly different names. A few fields were set by workflows since retired to `archive/` and only appear in the released callsets - these are noted below, and [Trace](trace.md) records where each ran.
+
 
 ## FILTER Values
 - `ASSEMBLY_ONLY_SINGLETON`: Variant with `AC = 1` whose sole carrier has support exclusively from assembly-based callers (`dipcall` and/or `hapdiff`).
 - `HIGH_NCR`: Variant whose `INFO/NCR` is above the no-call rate cutoff for its allele type, length and `REGION` in the cutoff table passed to `FilterNCRCutoffs`.
-- `LARGE_SNV_INDEL`: Variant with `SOURCE = "DeepVariant"` that has `INFO/allele_length ≥ 50`.
+- `LARGE_SNV_INDEL`: Variant with `SOURCE = "DeepVariant"` that has `INFO/allele_length ≥ 50`. Set by `PreprocessVcfs`.
 - `LOW_COVERAGE_REGION`: Variant region determined to have low coverage relative to entire genome.
-- `MONOALLELIC`: Variant in a region with multiple variants that could not be unified into non-overlapping multi-allelic sites.
+- `MONOALLELIC`: Variant in a region with multiple variants that could not be unified into non-overlapping multi-allelic sites. Not set by any workflow in this repository; it arrives with the input SV callset.
 - `SINGLE_READ_SUPPORT`: Variant with `AC = 1` whose sole carrier has support from just a single read.
-- `SMALL_SV`: Variant with `SOURCE = "HPRC_SV_Integration"` that has `INFO/allele_length < 50`.
+- `SMALL_SV`: Variant with `SOURCE = "HPRC_SV_Integration"` that has `INFO/allele_length < 50`. Set by `PreprocessVcfs`.
 
 
 ## INFO Fields
@@ -82,7 +84,7 @@ This document describes the FILTER values and INFO and FORMAT fields present in 
   - `revel_max`: Maximum REVEL score at a site's MANE Select or canonical transcript. An ensemble score for predicting the pathogenicity of missense variants based on 13 other variant predictors. Scores range from 0 to 1, with higher scores predicted to be more likely to be deleterious.
   - `spliceai_ds_max`: Illumina's SpliceAI max delta score, interpreted as the probability of the variant being splice-altering.
 - `ORIGIN`: Origin of duplicated sequence for duplications and NUMTs.
-- `POSTHOC_BACKBONE_PHASED`: Flag on a replacement TRV for which one or more non-reference heterozygous genotypes were post-hoc phased by sequence agreement with base-VCF haplotypes.
+- `POSTHOC_BACKBONE_PHASED`: Flag on a replacement TRV for which one or more non-reference heterozygous genotypes were post-hoc phased by sequence agreement with base-VCF haplotypes. Set by the archived HPRC/HGSVC TR loci post-processing only.
 - SVAnnotate: Predicted functional effects for SVs on coding genes and noncoding regulatory elements, as annotated by GATK SVAnnotate.
   - `PREDICTED_LOF`: Gene(s) predicted to undergo complete loss of function due to a deletion, truncation, or disruption of coding sequence.
   - `PREDICTED_COPY_GAIN`: Gene(s) predicted to undergo copy gain from a duplication spanning the entire gene body.
@@ -150,8 +152,8 @@ Which fields a call carries depends on its `INFO/SOURCE`.
 - `RNC`: Reason for a no-call in `GT`, as one code per allele from GLnexus - e.g. `M` for missing data, `D` for insufficient depth or `.` when not applicable. The VCF header lists every code. Set on `DeepVariant` calls only.
 - SV Calls: Per-sample allele position and caller evidence for `HPRC_SV_Integration` calls.
   - `APOS`: Breakpoint position of the sample's SV allele, which can differ from the site `POS`.
-  - `BEV`: Representative caller for the sample call - `kanpig` if it appears in `EV`, otherwise the caller in `EV` whose `AD` gives the highest `GQ`. Added by `AnnotateSvCallerSupport`, for HPRC/HGSVC only.
-  - `EV`: Callers supporting the sample call, added by `AnnotateSvCallerSupport` for HPRC/HGSVC only, as a comma-separated list of `caller_(refAD_altAD)` - e.g. `pbsv_(18_13)`. The assembly-based callers `dipcall` and `hapdiff` carry no depths.
+  - `BEV`: Representative caller for the sample call - `kanpig` if it appears in `EV`, otherwise the caller in `EV` whose `AD` gives the highest `GQ`. Added by the archived `AnnotateSvCallerSupport`, for HPRC/HGSVC only.
+  - `EV`: Callers supporting the sample call, added by the archived `AnnotateSvCallerSupport` for HPRC/HGSVC only, as a comma-separated list of `caller_(refAD_altAD)` - e.g. `pbsv_(18_13)`. The assembly-based callers `dipcall` and `hapdiff` carry no depths.
 - Tandem Repeats: Per-allele TRGT measurements for tandem repeat calls (`TRExplorer` and `Vamos`).
   - `ALLR`: Length range of each allele.
   - `AM`: Mean methylation level of each allele.

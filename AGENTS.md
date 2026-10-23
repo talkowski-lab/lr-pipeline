@@ -1,7 +1,7 @@
 # Instructions
 <!-- Canonical project instructions for Claude Code, Codex, and GitHub Copilot. Edit this file only. -->
 
-- Repo annotates long-read variant callsets (SVs, MEIs, TRs, other complex variants) for HPRC/HGSVC/AoU — cohort/pipeline details in [docs/cohort.md](docs/cohort.md) and [docs/pipeline.md](docs/pipeline.md).
+- Repo takes long-read sequencing cohorts from raw reads to annotated cohort VCFs - alignment, variant calling and callset integration, phasing, then annotation of SNVs/indels, SVs, MEIs, TRs and other complex variants - and was used to build the HPRC/HGSVC and All of Us callsets. Pipeline steps: [docs/pipeline.md](docs/pipeline.md); cohorts: [docs/cohort.md](docs/cohort.md).
 - Stack: WDL 1.0 on Cromwell/Terra, Python 3.9+, Bash, Hail. GCP (`gs://` URIs). Reference genome GRCh38.
 - Repo layout, Dockerfile/image conventions, and CI wiring: [docs/repository-structure.md](docs/repository-structure.md).
 - WDL/Python style conventions: [docs/conventions.md](docs/conventions.md) — always follow when writing or editing WDL/Python. Match the dominant style of the surrounding file (4-space indent, no tabs, task section order `input` → `command` → `output` → `runtime`); never introduce a second style into a file.

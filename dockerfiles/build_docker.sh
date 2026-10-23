@@ -19,8 +19,9 @@ set -euo pipefail
 #
 # Usage: dockerfiles/build_docker.sh [--no-push] <image-name>
 # Example: dockerfiles/build_docker.sh utils
+# Set DOCKER_REGISTRY to push somewhere other than the lab registry
 
-REGISTRY="us-central1-docker.pkg.dev/talkowski-sv-gnomad/kj-dockers"
+REGISTRY="${DOCKER_REGISTRY:-us-central1-docker.pkg.dev/talkowski-sv-gnomad/kj-dockers}"
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 push=true

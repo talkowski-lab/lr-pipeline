@@ -10,7 +10,7 @@ Images are pushed to Artifact Registry at:
 us-central1-docker.pkg.dev/talkowski-sv-gnomad/kj-dockers/<image-name>
 ```
 
-This registry is private. To run the pipeline elsewhere, build the images you need from [`dockerfiles/`](../dockerfiles/), push them to a registry your Terra workspace can pull from, and point the workspace data at them.
+This registry is private. To run the pipeline elsewhere, build the images you need from [`dockerfiles/`](../dockerfiles/), push them to a registry your Terra workspace can pull from, and point the workspace data at them. Set `DOCKER_REGISTRY` to that registry - e.g. `DOCKER_REGISTRY=us-central1-docker.pkg.dev/<project>/<repository> dockerfiles/build_docker.sh utils` - and the script pushes there instead. Build `utils` first, then `trgt`, since the other repository images start `FROM` one of them; their `FROM` lines name this registry, so replace it with yours before building.
 
 Build and push an image with the helper script, which takes the image name as its only argument:
 ```bash
@@ -41,53 +41,56 @@ Two consequences worth knowing:
 
 
 ## Repository
-Built from [dockerfiles/](../dockerfiles/) in this repository.
+Built from [dockerfiles/](../dockerfiles/) in this repository and pushed to the registry above, so each image below is `us-central1-docker.pkg.dev/talkowski-sv-gnomad/kj-dockers/<image>:latest`.
 
 | Argument Name | Image | Dockerfile |
 |---|---|---|
-| `intact_mei_docker` | kj-dockers/intactmei:latest | `Dockerfile.intactmei` |
-| `palmer_docker` | kj-dockers/palmer:latest | `Dockerfile.palmer` |
-| `cpg_docker` | kj-dockers/cpgtools:latest | `Dockerfile.cpgtools` |
-| `vrs_docker` | kj-dockers/vrs:latest | `Dockerfile.vrs` |
-| `l1meaid_docker` | kj-dockers/l1meaid:latest | `Dockerfile.l1meaid` |
-| `vep_hail_docker` | kj-dockers/vephail:latest | `Dockerfile.vephail` |
-| `hail_docker` | kj-dockers/hail:latest | `Dockerfile.hail` |
-| `stranalysis_docker` | kj-dockers/stranalysis:latest | `Dockerfile.stranalysis` |
-| `utils_docker` | kj-dockers/utils:latest | `Dockerfile.utils` |
-| `pav_docker` | kj-dockers/pav:latest | `Dockerfile.pav` |
-| `vamos_docker` | kj-dockers/vamos:latest | `Dockerfile.vamos` |
-| `trgt_lps_docker` | kj-dockers/trgt-lps:latest | `Dockerfile.trgtlps` |
-| `trgt_docker` | kj-dockers/trgt:latest | `Dockerfile.trgt` |
-| `mosdepth_docker` | kj-dockers/mosdepth:latest | `Dockerfile.mosdepth` |
-| `mosdepthstream_docker` | kj-dockers/mosdepthstream:latest | `Dockerfile.mosdepthstream` |
-| `kanpig_docker` | kj-dockers/kanpig:latest | `Dockerfile.kanpig` |
-| `svan_docker` | kj-dockers/svan:latest | `Dockerfile.svan` |
-| `hificnv_docker` | kj-dockers/hificnv:latest | `Dockerfile.hificnv` |
-| `sawfish_docker` | kj-dockers/sawfish:latest | `Dockerfile.sawfish` |
-| `minimap2_docker` | kj-dockers/minimap2:latest | `Dockerfile.minimap2` |
-| `hifiasm_docker` | kj-dockers/hifiasm:latest | `Dockerfile.hifiasm` |
-| `pbsv_docker` | kj-dockers/pbsv:latest | `Dockerfile.pbsv` |
-| `sniffles_docker` | kj-dockers/sniffles:latest | `Dockerfile.sniffles` |
+| `cpg_docker` | `cpgtools` | [`Dockerfile.cpgtools`](../dockerfiles/Dockerfile.cpgtools) |
+| `hail_docker` | `hail` | [`Dockerfile.hail`](../dockerfiles/Dockerfile.hail) |
+| `hifiasm_docker` | `hifiasm` | [`Dockerfile.hifiasm`](../dockerfiles/Dockerfile.hifiasm) |
+| `hificnv_docker` | `hificnv` | [`Dockerfile.hificnv`](../dockerfiles/Dockerfile.hificnv) |
+| `intact_mei_docker` | `intactmei` | [`Dockerfile.intactmei`](../dockerfiles/Dockerfile.intactmei) |
+| `kanpig_docker` | `kanpig` | [`Dockerfile.kanpig`](../dockerfiles/Dockerfile.kanpig) |
+| `l1meaid_docker` | `l1meaid` | [`Dockerfile.l1meaid`](../dockerfiles/Dockerfile.l1meaid) |
+| `minimap2_docker` | `minimap2` | [`Dockerfile.minimap2`](../dockerfiles/Dockerfile.minimap2) |
+| `mosdepth_docker` | `mosdepth` | [`Dockerfile.mosdepth`](../dockerfiles/Dockerfile.mosdepth) |
+| `mosdepthstream_docker` | `mosdepthstream` | [`Dockerfile.mosdepthstream`](../dockerfiles/Dockerfile.mosdepthstream) |
+| `palmer_docker` | `palmer` | [`Dockerfile.palmer`](../dockerfiles/Dockerfile.palmer) |
+| `pav_docker` | `pav` | [`Dockerfile.pav`](../dockerfiles/Dockerfile.pav) |
+| `pbsv_docker` | `pbsv` | [`Dockerfile.pbsv`](../dockerfiles/Dockerfile.pbsv) |
+| `sawfish_docker` | `sawfish` | [`Dockerfile.sawfish`](../dockerfiles/Dockerfile.sawfish) |
+| `sniffles_docker` | `sniffles` | [`Dockerfile.sniffles`](../dockerfiles/Dockerfile.sniffles) |
+| `stranalysis_docker` | `stranalysis` | [`Dockerfile.stranalysis`](../dockerfiles/Dockerfile.stranalysis) |
+| `svan_docker` | `svan` | [`Dockerfile.svan`](../dockerfiles/Dockerfile.svan) |
+| `trgt_docker` | `trgt` | [`Dockerfile.trgt`](../dockerfiles/Dockerfile.trgt) |
+| `trgt_lps_docker` | `trgt-lps` | [`Dockerfile.trgtlps`](../dockerfiles/Dockerfile.trgtlps) |
+| `utils_docker` | `utils` | [`Dockerfile.utils`](../dockerfiles/Dockerfile.utils) |
+| `vamos_docker` | `vamos` | [`Dockerfile.vamos`](../dockerfiles/Dockerfile.vamos) |
+| `vep_hail_docker` | `vephail` | [`Dockerfile.vephail`](../dockerfiles/Dockerfile.vephail) |
+| `vrs_docker` | `vrs` | [`Dockerfile.vrs`](../dockerfiles/Dockerfile.vrs) |
 
 `Dockerfile.utils` is the base image for most other repo Dockerfiles. `Dockerfile.hail` is `hailgenetics/hail:0.2.122` plus the `scripts/` tree, and `Dockerfile.vephail` builds on the VEP image with Hail pinned through `HAIL_VERSION`; neither inherits from `utils`. Every Dockerfile in `dockerfiles/` maps to exactly one argument above; retired ones live in [`archive/dockerfiles/`](../archive/dockerfiles/) and are not built.
 
 
 ## Collaborators
-Built/maintained by collaborators.
+Built and maintained outside this repository.
 
 | Argument Name | Image | Source |
 |---|---|---|
-| `sv_base_mini_docker` | gatk-sv/sv-base-mini:2024-10-25-... | GATK-SV |
-| `sv_pipeline_docker` | gatk-sv/sv-pipeline:2025-10-02-... | GATK-SV |
-| `gatk_docker` | gatk-sv/gatk:mw-gatk-sv-672d85 | GATK-SV |
-| `gatk_sv_lr_docker` | kj-dockers/sv-pipeline:kj_V65 | `kj_project_gnomad_lr` branch of GATK-SV |
-| `hiphase_docker` | broad-dsp-lrma/hangsuunc/hiphase:v1.5.0 | Hang Su |
-| `hiphase_preprocess_docker` | hangsuunc/cleanvcf:v1 | Hang Su |
-| `remap_docker` | quay.io/ymostovoy/lr-remap | Yulia Mostovoy |
-| `sv_integration_docker` | broad-dsp-lrma/fcunial/callset_integration_phase2_workpackages | Fabio Cunial |
-| `xgb_scoring_docker` | broad-dsde-methods/broad-gatk-snapshots/gatk:sl_aou_lr_intrasample_filtering_xgb | GATK snapshot |
-| `minimap_docker` | eichlerlab/assembly_eval:0.2 | Eichler Lab |
-| `automop_docker` | broad-dsde-methods/automop:0.1 | Broad DSP |
+| `automop_docker` | `us.gcr.io/broad-dsde-methods/automop:0.1` | Broad Data Sciences Platform |
+| `deepvariant_docker` | `us.gcr.io/broad-dsp-lrma/lr-deepvariant:1.6.0` | [long-read-pipelines](https://github.com/broadinstitute/long-read-pipelines), the source of the `DeepVariant` workflow |
+| `deepvariant_gpu_docker` | `us.gcr.io/broad-dsp-lrma/lr-deepvariant:1.6.0-gpu` | [long-read-pipelines](https://github.com/broadinstitute/long-read-pipelines) |
+| `gatk_docker` | `us.gcr.io/broad-dsde-methods/gatk-sv/gatk:mw-gatk-sv-672d85` | [GATK-SV](https://github.com/broadinstitute/gatk-sv) |
+| `gatk_sv_lr_docker` | `us-central1-docker.pkg.dev/talkowski-sv-gnomad/kj-dockers/sv-pipeline:latest` | `sv-pipeline` image built from the `kj_project_gnomad_lr` branch of [GATK-SV](https://github.com/broadinstitute/gatk-sv/tree/kj_project_gnomad_lr) |
+| `hiphase_docker` | `us.gcr.io/broad-dsp-lrma/hangsuunc/hiphase:v1.5.0` | Hang Su |
+| `hiphase_preprocess_docker` | `hangsuunc/cleanvcf:v1` | Hang Su |
+| `minimap_docker` | `eichlerlab/assembly_eval:0.2` | Eichler Lab |
+| `remap_docker` | `quay.io/ymostovoy/lr-remap:latest` | Yulia Mostovoy |
+| `resource_visualization_docker` | `us.gcr.io/broad-dsp-lrma/lr-resource-visual:0.1.1` | [long-read-pipelines](https://github.com/broadinstitute/long-read-pipelines) |
+| `sv_base_mini_docker` | `us.gcr.io/broad-dsde-methods/gatk-sv/sv-base-mini:2024-10-25-v0.29-beta-5ea22a52` | [GATK-SV](https://github.com/broadinstitute/gatk-sv) |
+| `sv_integration_docker` | `broad-dsp-lrma/fcunial/callset_integration_phase2_workpackages` | Fabio Cunial |
+| `sv_pipeline_docker` | `us.gcr.io/broad-dsde-methods/gatk-sv/sv-pipeline:2025-10-02-v1.1-483973d6` | [GATK-SV](https://github.com/broadinstitute/gatk-sv) |
+| `xgb_scoring_docker` | `broad-dsde-methods/broad-gatk-snapshots/gatk:sl_aou_lr_intrasample_filtering_xgb` | GATK snapshot |
 
 
 ## Published
@@ -95,5 +98,5 @@ Public images.
 
 | Argument Name | Image | Source |
 |---|---|---|
-| `repeatmasker_docker` | dfam/tetools:1.8 | Dfam consortium |
-| `glnexus_docker` | ghcr.io/dnanexus-rnd/glnexus:v1.4.1 | DNAnexus |
+| `glnexus_docker` | `ghcr.io/dnanexus-rnd/glnexus:v1.4.1` | DNAnexus |
+| `repeatmasker_docker` | `dfam/tetools:1.8` | Dfam consortium |

@@ -1,5 +1,5 @@
 # Cohort
-This document describes the sample cohorts (HPRC, HGSVC, All of Us) used to build and validate the callset.
+This document describes the sample cohorts used to build and validate the released callsets - HPRC and HGSVC, combined into one callset, and All of Us Phase 1 - and where each cohort's sample list differs from its public metadata. How each callset was produced is recorded in [Trace](trace.md).
 
 
 ## HPRC/HGSVC
@@ -7,8 +7,8 @@ This document describes the sample cohorts (HPRC, HGSVC, All of Us) used to buil
   - 232 total samples.
   - [Metadata File](https://github.com/human-pangenomics/hprc_intermediate_assembly/blob/main/data_tables/sample/hprc_release2_sample_metadata.csv).
     - 234 total samples.
-    - Additionally includes GRC38 and CHM13.
-    - Fabio's table and the DeepVariant callset also include HG03492.
+    - Additionally includes the GRCh38 and CHM13 references.
+    - The SV integration sample table and the DeepVariant callset also include HG03492.
 - HGSVC.
   - 65 total samples.
   - [Metadata File](https://www.internationalgenome.org/data-portal/data-collection/hgsvc3).
@@ -16,7 +16,7 @@ This document describes the sample cohorts (HPRC, HGSVC, All of Us) used to buil
     - Renames NA21487 to GM21487.
     - Duplicates NA19129 (also includes GM19129) and NA20355 (also includes GM20355).
     - Additionally includes GM19320.
-    - Misses NA24385 (HG002 in our callset).
+    - Misses NA24385 (HG002 in this callset).
 - Combined.
   - 292 total samples.
   - Overlapping samples: HG002, HG00733, HG02818, NA19036, NA19240.

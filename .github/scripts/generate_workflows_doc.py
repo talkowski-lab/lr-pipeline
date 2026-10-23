@@ -76,6 +76,12 @@ SUBWORKFLOW_GROUPS = [
         "by `MergeCohortLongSVCallsets`.",
         ["MergeCohortLongSVClass"],
     ),
+    (
+        "Annotation summary plotting",
+        "`CreateAnnotationPlots` draws the summary plots from the parquet tables of `SummarizeAnnotations`, one plot "
+        "group per task.",
+        ["CreateAnnotationPlots"],
+    ),
 ]
 
 ARCHIVE_TITLE = "Long-Read Annotation"
