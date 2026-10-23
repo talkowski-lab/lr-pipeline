@@ -45,6 +45,7 @@ workflow DeepVariant {
         String utils_docker
         String resource_visualization_docker
 
+        RuntimeAttr? runtime_attr_collapse_zones
         RuntimeAttr? runtime_attr_subset_bam
         RuntimeAttr? runtime_attr_run_deepvariant
         RuntimeAttr? runtime_attr_run_deepvariant_gpu
@@ -60,7 +61,8 @@ workflow DeepVariant {
         input:
             values = gcp_zones,
             delimiter = " ",
-            docker = utils_docker
+            docker = utils_docker,
+            runtime_attr_override = runtime_attr_collapse_zones
     }
     String zones = CollapseZones.collapsed
 
@@ -393,6 +395,7 @@ task CollapseArrayOfStrings {
         Array[String] values
         String delimiter
         String docker
+        RuntimeAttr? runtime_attr_override
     }
 
     command <<<
@@ -405,8 +408,22 @@ task CollapseArrayOfStrings {
         String collapsed = read_string("result.txt")
     }
 
+    RuntimeAttr default_attr = object {
+        cpu_cores: 1,
+        mem_gb: 1,
+        disk_gb: 10,
+        boot_disk_gb: 10,
+        preemptible_tries: 1,
+        max_retries: 0
+    }
+    RuntimeAttr runtime_attr = select_first([runtime_attr_override, default_attr])
     runtime {
-        disks: "local-disk 10 HDD"
+        cpu: select_first([runtime_attr.cpu_cores, default_attr.cpu_cores])
+        memory: select_first([runtime_attr.mem_gb, default_attr.mem_gb]) + " GiB"
+        disks: "local-disk " + select_first([runtime_attr.disk_gb, default_attr.disk_gb]) + " HDD"
+        bootDiskSizeGb: select_first([runtime_attr.boot_disk_gb, default_attr.boot_disk_gb])
+        preemptible: select_first([runtime_attr.preemptible_tries, default_attr.preemptible_tries])
+        maxRetries: select_first([runtime_attr.max_retries, default_attr.max_retries])
         docker: docker
     }
 }
