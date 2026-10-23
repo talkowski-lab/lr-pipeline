@@ -22,7 +22,6 @@ EXEMPT = {
     "CreateCNVDepthPlots": "needs depth matrices for all 24 contigs and the plotting image",
     "CreateTRGTHistograms": "needs the stranalysis image",
     "SummarizeAnnotationsGATKSV": "needs SV_colors.txt in the utils image, absent until the file is committed",
-    "CreateCohortPedigreeAncestryFilesAoUPhase2": "archived",
 }
 
 
