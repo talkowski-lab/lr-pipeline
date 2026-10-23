@@ -2,11 +2,23 @@ FROM dfam/tetools:1.92
 
 MAINTAINER Karan Jaisingh
 
-RUN apt-get update && apt-get upgrade -y \
+RUN apt-get update \
     && apt-get install -y python3 python3-pip git \
     && ln -s /usr/bin/python3 /usr/bin/python
 
-RUN pip3 install matplotlib pandas pysam tqdm bio more_itertools --break-system-packages
+ARG MATPLOTLIB_VERSION
+ARG PANDAS_VERSION
+ARG PYSAM_VERSION
+ARG TQDM_VERSION
+ARG BIO_VERSION
+ARG MORE_ITERTOOLS_VERSION
+RUN pip3 install --break-system-packages \
+    "matplotlib==${MATPLOTLIB_VERSION}" \
+    "pandas==${PANDAS_VERSION}" \
+    "pysam==${PYSAM_VERSION}" \
+    "tqdm==${TQDM_VERSION}" \
+    "bio==${BIO_VERSION}" \
+    "more-itertools==${MORE_ITERTOOLS_VERSION}"
 
 RUN rm -rf /opt/RepeatMasker/Libraries/famdb/*
 

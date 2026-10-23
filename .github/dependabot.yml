@@ -25,6 +25,16 @@ updates:
     ignore:
       # Private base images
       - dependency-name: "us-central1-docker.pkg.dev/*"
+      # Major bumps change the OS or tool versions the pins and installs assume; bump these by hand
+      - dependency-name: "ubuntu"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "ensemblorg/ensembl-vep"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "hailgenetics/hail"
+        update-types: ["version-update:semver-major"]
+      # l1meaid depends on this image's RepeatMasker and Dfam releases
+      - dependency-name: "dfam/tetools"
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
     groups:
       docker-base-images:
         patterns:

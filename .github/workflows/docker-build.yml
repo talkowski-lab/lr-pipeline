@@ -1,0 +1,129 @@
+name: Docker build
+
+# Builds the changed Dockerfiles on top of a locally built utils image, to catch
+# broken pins and installs before an image is built for release. Never pushes.
+on:
+  push:
+    branches: main
+    paths:
+      - 'dockerfiles/**'
+      - '.github/workflows/docker-build.yml'
+  pull_request:
+    paths:
+      - 'dockerfiles/**'
+      - '.github/workflows/docker-build.yml'
+  workflow_dispatch:
+    inputs:
+      images:
+        description: 'Space-separated image names to build (the name in Dockerfile.<name>), or "all"'
+        default: all
+        required: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  build:
+    name: Build images
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    env:
+      BASE_REF: ${{ github.event.pull_request.base.sha || github.event.before }}
+      INPUT_IMAGES: ${{ inputs.images }}
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      with:
+        fetch-depth: 0
+
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+    - name: Select images to build
+      id: select
+      run: |
+        all=$(for f in dockerfiles/Dockerfile.*; do echo "${f#dockerfiles/Dockerfile.}"; done)
+        if [[ "${GITHUB_EVENT_NAME}" == "workflow_dispatch" ]]; then
+          if [[ "${INPUT_IMAGES:-all}" == "all" ]]; then
+            selected="${all}"
+          else
+            selected="${INPUT_IMAGES// /$'\n'}"
+          fi
+        else
+          # Dockerfiles changed since the base, plus images whose versions.env keys changed
+          changed=$(git diff --name-only "${BASE_REF}" HEAD -- dockerfiles | sed -nE 's#^dockerfiles/Dockerfile\.(.+)$#\1#p')
+          keyed=$(git diff -U0 "${BASE_REF}" HEAD -- dockerfiles/versions.env | sed -nE 's#^[+-]([a-z0-9-]+)__.*#\1#p')
+          selected=$(printf '%s\n%s\n' "${changed}" "${keyed}")
+          # A workflow-only change builds everything
+          if git diff --name-only "${BASE_REF}" HEAD | grep -qx '.github/workflows/docker-build.yml'; then
+            selected="${all}"
+          fi
+        fi
+        # Only images that still have a Dockerfile; utils is always built first
+        selected=$(printf '%s\n' "${selected}" | grep -vx '' | sort -u | while read -r image; do
+          [[ -f "dockerfiles/Dockerfile.${image}" ]] && echo "${image}"
+        done || true)
+        echo "Selected images: ${selected//$'\n'/ }"
+        {
+          echo "images<<EOF"
+          echo "${selected}"
+          echo "EOF"
+        } >> "$GITHUB_OUTPUT"
+
+    - name: Resolve utils image build arguments
+      id: utils_args
+      run: |
+        {
+          echo "args<<EOF"
+          dockerfiles/build_args.sh utils
+          echo "EOF"
+        } >> "$GITHUB_OUTPUT"
+
+    - name: Build utils image
+      uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+      with:
+        context: .
+        file: dockerfiles/Dockerfile.utils
+        load: true
+        tags: utils:ci
+        build-args: ${{ steps.utils_args.outputs.args }}
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
+
+    # The default builder is the daemon's own, the only one that can use the local utils:ci as a FROM image
+    - name: Build selected images
+      env:
+        IMAGES: ${{ steps.select.outputs.images }}
+      run: |
+        build() {
+          local image="$1" base="$2" args=()
+          while read -r arg; do
+            [[ -n "${arg}" ]] && args+=(--build-arg "${arg}")
+          done < <(dockerfiles/build_args.sh "${image}")
+          if grep -q '^ARG BASE_IMAGE=' "dockerfiles/Dockerfile.${image}"; then
+            args+=(--build-arg "BASE_IMAGE=${base}")
+          fi
+          echo "::group::Build ${image}"
+          docker buildx build --builder default --load "${args[@]}" -f "dockerfiles/Dockerfile.${image}" -t "${image}:ci" .
+          echo "::endgroup::"
+        }
+
+        for image in ${IMAGES}; do
+          [[ "${image}" == "utils" ]] && continue
+          base="utils:ci"
+          if [[ "${image}" == "trgtlps" ]]; then
+            [[ -n "$(docker images -q trgt:ci)" ]] || build trgt utils:ci
+            base="trgt:ci"
+          fi
+          build "${image}" "${base}"
+          # Free disk for the next build, but keep the utils and trgt bases
+          if [[ "${image}" != "trgt" ]]; then
+            docker rmi "${image}:ci"
+          fi
+          docker image prune -f
+          docker builder prune -af
+        done

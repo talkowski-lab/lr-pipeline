@@ -9,10 +9,10 @@ RUN apt-get update && apt-get install -y \
     python3 \
     python3-pip \
     python3-dev \
-    samtools \
-    bcftools \
-    bedtools \
-    tabix \
+    samtools=1.13-4 \
+    bcftools=1.13-1 \
+    bedtools=2.30.0+dfsg-2ubuntu0.1 \
+    tabix=1.13+ds-2build1 \
     r-base \
     libnlopt-dev \
     git \
@@ -27,7 +27,12 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Google Cloud SDK
-RUN curl -sSL https://sdk.cloud.google.com | bash -s -- --disable-prompts --install-dir=/usr/local/gcloud
+ARG GCLOUD_SDK_VERSION
+RUN wget -q https://dl.google.com/dl/cloudsdk/channels/rapid/downloads/google-cloud-sdk-${GCLOUD_SDK_VERSION}-linux-x86_64.tar.gz \
+    && mkdir -p /usr/local/gcloud \
+    && tar xzf google-cloud-sdk-${GCLOUD_SDK_VERSION}-linux-x86_64.tar.gz -C /usr/local/gcloud \
+    && rm google-cloud-sdk-${GCLOUD_SDK_VERSION}-linux-x86_64.tar.gz \
+    && /usr/local/gcloud/google-cloud-sdk/install.sh -q --path-update=false --command-completion=false --usage-reporting=false
 ENV PATH="/usr/local/gcloud/google-cloud-sdk/bin:${PATH}"
 
 # Install htslib
@@ -49,23 +54,33 @@ RUN wget -q https://github.com/shenwei356/seqkit/releases/download/v${SEQKIT_VER
     && mv seqkit /usr/local/bin/ \
     && rm seqkit_linux_amd64.tar.gz
 
-# Install AWS CLI
-RUN pip3 install awscli
-
 # Install python
+ARG SETUP_PIP_VERSION
+ARG AWSCLI_VERSION
 ARG TRUVARI_VERSION
-RUN python3 -m pip install --upgrade pip && \
+ARG PYSAM_VERSION
+ARG EDLIB_VERSION
+ARG SCIPY_VERSION
+ARG PANDAS_VERSION
+ARG PYARROW_VERSION
+ARG MATPLOTLIB_VERSION
+ARG NUMPY_VERSION
+RUN python3 -m pip install --no-cache-dir "pip==${SETUP_PIP_VERSION}" && \
     python3 -m pip install --no-cache-dir \
+        "awscli==${AWSCLI_VERSION}" \
         "truvari==${TRUVARI_VERSION}" \
-        pysam \
-        edlib \
-        scipy \
-        pandas \
-        pyarrow \
-        matplotlib
+        "pysam==${PYSAM_VERSION}" \
+        "edlib==${EDLIB_VERSION}" \
+        "scipy==${SCIPY_VERSION}" \
+        "pandas==${PANDAS_VERSION}" \
+        "pyarrow==${PYARROW_VERSION}" \
+        "matplotlib==${MATPLOTLIB_VERSION}" \
+        "numpy==${NUMPY_VERSION}"
 
-# Install R packages
-RUN Rscript -e 'install.packages(c("beeswarm", "optparse", "RColorBrewer", "vioplot", "zoo"), repos="https://cloud.r-project.org")'
+# Install R packages from a dated CRAN snapshot so versions are reproducible
+ARG CRAN_SNAPSHOT
+RUN Rscript -e 'install.packages(c("beeswarm", "optparse", "RColorBrewer", "vioplot", "zoo"), repos="https://packagemanager.posit.co/cran/'"${CRAN_SNAPSHOT}"'")' \
+    && Rscript -e 'for (p in c("beeswarm", "optparse", "RColorBrewer", "vioplot", "zoo")) library(p, character.only=TRUE)'
 
 # HardyWeinberg's current dependencies no longer build on R 4.1, so install it from a dated CRAN snapshot
 ARG HARDYWEINBERG_CRAN_SNAPSHOT

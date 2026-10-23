@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Builds, tags and pushes a gnomad-lr Docker image to Artifact Registry.
+# Builds, tags and pushes a lr-pipeline Docker image to Artifact Registry.
 # On main, tags the build <YYYYMMDD>-<short-sha> from the HEAD commit, so every
 # tag maps to exactly one commit, and also (re)tags/pushes it as :latest, so any
-# Dockerfile that inherits from it via "FROM .../<image>:latest" always picks up
+# Dockerfile that inherits from it (ARG BASE_IMAGE=.../<image>:latest) always picks up
 # this build without edits. A main build refuses a dirty tree for that reason.
 #
 # On a feature branch, the image is pushed as :<branch> only, so that branches
@@ -42,7 +42,7 @@ done <<< "${resolved_args}"
 
 branch="$(git -C "${REPO_ROOT}" symbolic-ref --short HEAD)"
 
-from_args=()
+base_args=()
 if [[ "${branch}" == "main" ]]; then
     if [[ "${push}" == true && -n "$(git -C "${REPO_ROOT}" status --porcelain)" ]]; then
         echo "Refusing to push a main build from a dirty tree, since its tag names the HEAD commit." >&2
@@ -55,17 +55,17 @@ else
     push_tags=("${new_tag}")
 
     # Inherit the branch's own base image, so a branch that changes what the base bakes in is testable
-    base_image=$(grep -m1 '^FROM ' "${dockerfile}" | sed -E "s#^FROM ${REGISTRY}/([^:]+):latest\$#\1#") || true
-    if [[ -n "${base_image}" && "${base_image}" != FROM* ]] \
+    base_image=$(grep -m1 '^ARG BASE_IMAGE=' "${dockerfile}" | sed -E "s#^ARG BASE_IMAGE=.*/([^/:]+):latest\$#\1#") || true
+    if [[ -n "${base_image}" && "${base_image}" != ARG* ]] \
         && gcloud artifacts docker tags list "${REGISTRY}/${base_image}" --format='value(tag)' 2>/dev/null \
             | grep -qxF "${branch}"; then
-        from_args=(--from "${REGISTRY}/${base_image}:${branch}")
+        base_args=(--build-arg "BASE_IMAGE=${REGISTRY}/${base_image}:${branch}")
         echo "Inheriting ${REGISTRY}/${base_image}:${branch} instead of :latest"
     fi
 fi
 
 echo "Building ${image_name}:${new_tag} from ${dockerfile_name}"
-podman build --platform linux/amd64 --network=host "${from_args[@]+"${from_args[@]}"}" "${build_args[@]+"${build_args[@]}"}" -f "${dockerfile}" -t "${image_name}:${new_tag}" "${REPO_ROOT}"
+podman build --platform linux/amd64 --network=host "${base_args[@]+"${base_args[@]}"}" "${build_args[@]+"${build_args[@]}"}" -f "${dockerfile}" -t "${image_name}:${new_tag}" "${REPO_ROOT}"
 
 if [[ "${push}" == false ]]; then
     echo "Built localhost/${image_name}:${new_tag} without pushing"

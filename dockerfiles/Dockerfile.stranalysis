@@ -1,4 +1,5 @@
-FROM us-central1-docker.pkg.dev/talkowski-sv-gnomad/kj-dockers/utils:latest
+ARG BASE_IMAGE=us-central1-docker.pkg.dev/talkowski-sv-gnomad/kj-dockers/utils:latest
+FROM ${BASE_IMAGE}
 
 MAINTAINER Karan Jaisingh
 
@@ -58,17 +59,20 @@ RUN wget https://github.com/arq5x/bedtools2/releases/download/v${BED_TOOLS_VERSI
     && mv bedtools.static /usr/bin/bedtools
 
 # Install TRF
-RUN wget -q https://github.com/Benson-Genomics-Lab/TRF/releases/download/v4.09.1/trf409.linux64 \
+ARG TRF_VERSION
+RUN wget -q https://github.com/Benson-Genomics-Lab/TRF/releases/download/v${TRF_VERSION}/trf409.linux64 \
     && chmod 755 trf409.linux64 \
     && mv trf409.linux64 /usr/bin/trf
 
 ARG TRVIZ_COMMIT
-RUN python3 -m pip install --no-cache-dir git+https://github.com/bw2/trviz@${TRVIZ_COMMIT} pyarrow
+ARG PYARROW_VERSION
+RUN python3 -m pip install --no-cache-dir git+https://github.com/bw2/trviz@${TRVIZ_COMMIT} "pyarrow==${PYARROW_VERSION}"
 
 ENV HTSLIB_CONFIGURE_OPTIONS="--enable-s3 --enable-gcs --enable-libcurl --with-libdeflate"
 ARG STR_ANALYSIS_COMMIT
+ARG CONFIGARGPARSE_VERSION
 RUN python3 -m pip install --upgrade --no-cache-dir \
-        configargparse \
+        "configargparse==${CONFIGARGPARSE_VERSION}" \
         git+https://github.com/broadinstitute/str-analysis@${STR_ANALYSIS_COMMIT}
 
 ENV PYTHONPATH=/:.:$PYTHONPATH

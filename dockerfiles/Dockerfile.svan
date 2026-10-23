@@ -1,4 +1,5 @@
-FROM us-central1-docker.pkg.dev/talkowski-sv-gnomad/kj-dockers/utils:latest
+ARG BASE_IMAGE=us-central1-docker.pkg.dev/talkowski-sv-gnomad/kj-dockers/utils:latest
+FROM ${BASE_IMAGE}
 
 MAINTAINER Karan Jaisingh
 
@@ -11,17 +12,27 @@ RUN apt-get update && apt-get install -y \
     libtool \
     && rm -rf /var/lib/apt/lists/*
 
-RUN pip3 install --no-cache-dir "setuptools<81" && \
-    pip3 install --no-cache-dir --no-build-isolation cigar && \
+ARG SETUPTOOLS_VERSION
+ARG CIGAR_VERSION
+ARG NUMPY_VERSION
+ARG PYSAM_VERSION
+ARG BIOPYTHON_VERSION
+ARG PANDAS_VERSION
+ARG SCIPY_VERSION
+ARG MAPPY_VERSION
+ARG PYBEDTOOLS_VERSION
+ARG SCIKIT_LEARN_VERSION
+RUN pip3 install --no-cache-dir "setuptools==${SETUPTOOLS_VERSION}" && \
+    pip3 install --no-cache-dir --no-build-isolation "cigar==${CIGAR_VERSION}" && \
     pip3 install --no-cache-dir \
-    "numpy>=1.19.5,<1.27.0" \
-    pysam \
-    biopython \
-    pandas \
-    scipy \
-    mappy \
-    pybedtools \
-    scikit-learn
+    "numpy==${NUMPY_VERSION}" \
+    "pysam==${PYSAM_VERSION}" \
+    "biopython==${BIOPYTHON_VERSION}" \
+    "pandas==${PANDAS_VERSION}" \
+    "scipy==${SCIPY_VERSION}" \
+    "mappy==${MAPPY_VERSION}" \
+    "pybedtools==${PYBEDTOOLS_VERSION}" \
+    "scikit-learn==${SCIKIT_LEARN_VERSION}"
 
 # Install BWA
 ARG BWA_COMMIT
