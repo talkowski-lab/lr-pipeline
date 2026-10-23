@@ -41,6 +41,9 @@ workflow FilterLowCoverageRegions {
         RuntimeAttr? runtime_attr_concat
     }
 
+    # Cromwell rejects an undefined optional entering a nested scatter, so these cross as one-element arrays
+    Array[RuntimeAttr?] runtime_attr_filter_wrapped = [runtime_attr_filter]
+
     Boolean single_contig = length(contigs) == 1
 
     scatter (contig in contigs) {
@@ -92,7 +95,7 @@ workflow FilterLowCoverageRegions {
                     min_region_coverage_cutoff = min_region_coverage_cutoff,
                     prefix = "~{prefix}.~{contig}.shard_~{s}.low_coverage_filtered",
                     docker = utils_docker,
-                    runtime_attr_override = runtime_attr_filter
+                    runtime_attr_override = runtime_attr_filter_wrapped[0]
             }
         }
 

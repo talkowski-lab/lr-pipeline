@@ -62,6 +62,12 @@ workflow PreprocessVcfs {
         RuntimeAttr? runtime_attr_rename_variants
     }
 
+    # Cromwell rejects an undefined optional entering a nested scatter, so these cross as one-element arrays
+    Array[RuntimeAttr?] runtime_attr_normalize_wrapped = [runtime_attr_normalize]
+    Array[RuntimeAttr?] runtime_attr_annotate_attributes_wrapped = [runtime_attr_annotate_attributes]
+    Array[RuntimeAttr?] runtime_attr_add_info_wrapped = [runtime_attr_add_info]
+    Array[RuntimeAttr?] runtime_attr_add_length_filters_wrapped = [runtime_attr_add_length_filters]
+
     call ValidatePreprocessVcfsInputs {
         input:
             vcfs = vcfs,
@@ -216,7 +222,7 @@ workflow PreprocessVcfs {
                                 ref_fai = ref_fai,
                                 prefix = "~{prefix}.vcf_~{vcf_index}.shard_~{shard_index}.normalized",
                                 docker = utils_docker,
-                                runtime_attr_override = runtime_attr_normalize
+                                runtime_attr_override = runtime_attr_normalize_wrapped[0]
                         }
                     }
 
@@ -235,7 +241,7 @@ workflow PreprocessVcfs {
                             vcf_idx = normalized_vcf_idx,
                             prefix = "~{prefix}.vcf_~{vcf_index}.shard_~{shard_index}.annotated",
                             docker = utils_docker,
-                            runtime_attr_override = runtime_attr_annotate_attributes
+                            runtime_attr_override = runtime_attr_annotate_attributes_wrapped[0]
                     }
 
                     if (length(source_tags) > 0) {
@@ -248,7 +254,7 @@ workflow PreprocessVcfs {
                                 tag_description = "Source of variant call",
                                 prefix = "~{prefix}.vcf_~{vcf_index}.shard_~{shard_index}.source",
                                 docker = utils_docker,
-                                runtime_attr_override = runtime_attr_add_info
+                                runtime_attr_override = runtime_attr_add_info_wrapped[0]
                         }
                     }
 
@@ -271,7 +277,7 @@ workflow PreprocessVcfs {
                                 max_length_cutoff = max_length_cutoffs[vcf_index],
                                 prefix = "~{prefix}.vcf_~{vcf_index}.shard_~{shard_index}.length_filtered",
                                 docker = utils_docker,
-                                runtime_attr_override = runtime_attr_add_length_filters
+                                runtime_attr_override = runtime_attr_add_length_filters_wrapped[0]
                         }
                     }
 
@@ -284,7 +290,7 @@ workflow PreprocessVcfs {
                                 min_length_cutoff = min_length_cutoffs[vcf_index],
                                 prefix = "~{prefix}.vcf_~{vcf_index}.shard_~{shard_index}.length_filtered",
                                 docker = utils_docker,
-                                runtime_attr_override = runtime_attr_add_length_filters
+                                runtime_attr_override = runtime_attr_add_length_filters_wrapped[0]
                         }
                     }
 
@@ -297,7 +303,7 @@ workflow PreprocessVcfs {
                                 max_length_cutoff = max_length_cutoffs[vcf_index],
                                 prefix = "~{prefix}.vcf_~{vcf_index}.shard_~{shard_index}.length_filtered",
                                 docker = utils_docker,
-                                runtime_attr_override = runtime_attr_add_length_filters
+                                runtime_attr_override = runtime_attr_add_length_filters_wrapped[0]
                         }
                     }
 

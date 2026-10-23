@@ -81,6 +81,19 @@ workflow AnnotateSVAN {
         RuntimeAttr? runtime_attr_concat_final
     }
 
+    # Cromwell rejects an undefined optional entering a nested scatter, so these cross as one-element arrays
+    Array[RuntimeAttr?] runtime_attr_reset_filters_ins_wrapped = [runtime_attr_reset_filters_ins]
+    Array[RuntimeAttr?] runtime_attr_reset_filters_del_wrapped = [runtime_attr_reset_filters_del]
+    Array[RuntimeAttr?] runtime_attr_generate_trf_ins_wrapped = [runtime_attr_generate_trf_ins]
+    Array[RuntimeAttr?] runtime_attr_generate_trf_del_wrapped = [runtime_attr_generate_trf_del]
+    Array[RuntimeAttr?] runtime_attr_annotate_ins_wrapped = [runtime_attr_annotate_ins]
+    Array[RuntimeAttr?] runtime_attr_annotate_del_wrapped = [runtime_attr_annotate_del]
+    Array[RuntimeAttr?] runtime_attr_strip_genotypes_ins_wrapped = [runtime_attr_strip_genotypes_ins]
+    Array[RuntimeAttr?] runtime_attr_strip_genotypes_del_wrapped = [runtime_attr_strip_genotypes_del]
+    Array[RuntimeAttr?] runtime_attr_reformat_dup_coord_ins_wrapped = [runtime_attr_reformat_dup_coord_ins]
+    Array[RuntimeAttr?] runtime_attr_extract_ins_wrapped = [runtime_attr_extract_ins]
+    Array[RuntimeAttr?] runtime_attr_extract_del_wrapped = [runtime_attr_extract_del]
+
     Boolean single_contig = length(contigs) == 1
 
     scatter (contig in contigs) {
@@ -134,7 +147,7 @@ workflow AnnotateSVAN {
                         vcf_idx = ins_vcf_idxs_to_process[i],
                         prefix = "~{prefix}.~{contig}.ins_shard_~{i}.reset_filters",
                         docker = utils_docker,
-                        runtime_attr_override = runtime_attr_reset_filters_ins
+                        runtime_attr_override = runtime_attr_reset_filters_ins_wrapped[0]
                 }
 
                 call GenerateTRF as GenerateTRFIns {
@@ -144,7 +157,7 @@ workflow AnnotateSVAN {
                         mode = "ins",
                         prefix = "~{prefix}.~{contig}.ins_shard_~{i}.trf",
                         docker = svan_docker,
-                        runtime_attr_override = runtime_attr_generate_trf_ins
+                        runtime_attr_override = runtime_attr_generate_trf_ins_wrapped[0]
                 }
 
                 call Helpers.StripGenotypes as StripGenotypesIns {
@@ -153,7 +166,7 @@ workflow AnnotateSVAN {
                         vcf_idx = ResetIns.reset_vcf_idx,
                         prefix = "~{prefix}.~{contig}.ins_shard_~{i}.strip_genotypes",
                         docker = utils_docker,
-                        runtime_attr_override = runtime_attr_strip_genotypes_ins
+                        runtime_attr_override = runtime_attr_strip_genotypes_ins_wrapped[0]
                 }
 
                 call RunSvanAnnotate as SvanAnnotateIns {
@@ -171,7 +184,7 @@ workflow AnnotateSVAN {
                         mode = "ins",
                         prefix = "~{prefix}.~{contig}.ins_shard_~{i}.svan",
                         docker = svan_docker,
-                        runtime_attr_override = runtime_attr_annotate_ins
+                        runtime_attr_override = runtime_attr_annotate_ins_wrapped[0]
                 }
 
                 call ReformatDupCoord {
@@ -180,7 +193,7 @@ workflow AnnotateSVAN {
                         vcf_idx = SvanAnnotateIns.annotated_vcf_idx,
                         prefix = "~{prefix}.~{contig}.ins_shard_~{i}.dup_coord_reformatted",
                         docker = utils_docker,
-                        runtime_attr_override = runtime_attr_reformat_dup_coord_ins
+                        runtime_attr_override = runtime_attr_reformat_dup_coord_ins_wrapped[0]
                 }
 
                 call Helpers.ExtractVcfAnnotations as ExtractIns {
@@ -192,7 +205,7 @@ workflow AnnotateSVAN {
                         prefix = "~{prefix}.~{contig}.ins_shard_~{i}.annotations",
                         add_header_row = true,
                         docker = utils_docker,
-                        runtime_attr_override = runtime_attr_extract_ins
+                        runtime_attr_override = runtime_attr_extract_ins_wrapped[0]
                 }
             }
 
@@ -245,7 +258,7 @@ workflow AnnotateSVAN {
                         vcf_idx = del_vcf_idxs_to_process[i],
                         prefix = "~{prefix}.~{contig}.del_shard_~{i}.reset_filters",
                         docker = utils_docker,
-                        runtime_attr_override = runtime_attr_reset_filters_del
+                        runtime_attr_override = runtime_attr_reset_filters_del_wrapped[0]
                 }
 
                 call GenerateTRF as GenerateTRFDel {
@@ -255,7 +268,7 @@ workflow AnnotateSVAN {
                         mode = "del",
                         prefix = "~{prefix}.~{contig}.del_shard_~{i}.trf",
                         docker = svan_docker,
-                        runtime_attr_override = runtime_attr_generate_trf_del
+                        runtime_attr_override = runtime_attr_generate_trf_del_wrapped[0]
                 }
 
                 call Helpers.StripGenotypes as StripGenotypesDel {
@@ -264,7 +277,7 @@ workflow AnnotateSVAN {
                         vcf_idx = ResetDel.reset_vcf_idx,
                         prefix = "~{prefix}.~{contig}.del_shard_~{i}.strip_genotypes",
                         docker = utils_docker,
-                        runtime_attr_override = runtime_attr_strip_genotypes_del
+                        runtime_attr_override = runtime_attr_strip_genotypes_del_wrapped[0]
                 }
 
                 call RunSvanAnnotate as SvanAnnotateDel {
@@ -282,7 +295,7 @@ workflow AnnotateSVAN {
                         mode = "del",
                         prefix = "~{prefix}.~{contig}.del_shard_~{i}.svan",
                         docker = svan_docker,
-                        runtime_attr_override = runtime_attr_annotate_del
+                        runtime_attr_override = runtime_attr_annotate_del_wrapped[0]
                 }
 
                 call Helpers.ExtractVcfAnnotations as ExtractDel {
@@ -294,7 +307,7 @@ workflow AnnotateSVAN {
                         prefix = "~{prefix}.~{contig}.del_shard_~{i}.annotations",
                         add_header_row = true,
                         docker = utils_docker,
-                        runtime_attr_override = runtime_attr_extract_del
+                        runtime_attr_override = runtime_attr_extract_del_wrapped[0]
                 }
             }
 

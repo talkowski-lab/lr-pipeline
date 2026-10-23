@@ -49,6 +49,9 @@ workflow AnnotateIndelTRs {
         RuntimeAttr? runtime_attr_concat
     }
 
+    # Cromwell rejects an undefined optional entering a nested scatter, so these cross as one-element arrays
+    Array[RuntimeAttr?] runtime_attr_filter_wrapped = [runtime_attr_filter]
+
     Boolean single_contig = length(contigs) == 1
 
     scatter (contig in contigs) {
@@ -89,7 +92,7 @@ workflow AnnotateIndelTRs {
                     min_repeats = min_repeats,
                     min_repeat_unit_length = min_repeat_unit_length,
                     docker = stranalysis_docker,
-                    runtime_attr_override = runtime_attr_filter
+                    runtime_attr_override = runtime_attr_filter_wrapped[0]
             }
         }
 

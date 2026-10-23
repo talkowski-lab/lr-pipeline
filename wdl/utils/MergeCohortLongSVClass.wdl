@@ -73,6 +73,9 @@ workflow MergeCohortLongSVClass {
         RuntimeAttr? runtime_attr_concat_chromosomes
     }
 
+    # Cromwell rejects an undefined optional entering a nested scatter, so these cross as one-element arrays
+    Array[RuntimeAttr?] runtime_attr_collapse_shards_wrapped = [runtime_attr_collapse_shards]
+
     String merge_dir = remote_outdir_suffix + "/12_merge"
     String shard_dir = remote_outdir_suffix + "/13_shard"
     String collapse_dir = remote_outdir_suffix + "/14_collapse"
@@ -135,7 +138,7 @@ workflow MergeCohortLongSVClass {
                     max_resolve = max_resolve,
                     use_bed = use_bed,
                     docker = sv_integration_docker,
-                    runtime_attr_override = runtime_attr_collapse_shards
+                    runtime_attr_override = runtime_attr_collapse_shards_wrapped[0]
             }
         }
 

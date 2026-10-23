@@ -42,6 +42,9 @@ workflow AnnotateRegion {
         RuntimeAttr? runtime_attr_concat_vcf
     }
 
+    # Cromwell rejects an undefined optional entering a nested scatter, so these cross as one-element arrays
+    Array[RuntimeAttr?] runtime_attr_annotate_region_wrapped = [runtime_attr_annotate_region]
+
     Boolean single_contig = length(contigs) == 1
 
     scatter (contig in contigs) {
@@ -85,7 +88,7 @@ workflow AnnotateRegion {
                     repeat_masked_bed = repeat_masked_bed,
                     prefix = "~{prefix}.~{contig}.region_annotated.shard_~{i}",
                     docker = utils_docker,
-                    runtime_attr_override = runtime_attr_annotate_region
+                    runtime_attr_override = runtime_attr_annotate_region_wrapped[0]
             }
         }
 

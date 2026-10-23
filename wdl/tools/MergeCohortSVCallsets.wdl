@@ -67,6 +67,9 @@ workflow MergeCohortSVCallsets {
         RuntimeAttr? runtime_attr_concat_chromosomes
     }
 
+    # Cromwell rejects an undefined optional entering a nested scatter, so these cross as one-element arrays
+    Array[RuntimeAttr?] runtime_attr_collapse_shards_wrapped = [runtime_attr_collapse_shards]
+
     String indir = sub(remote_indir, "/+$", "") + "/02_scoring"
     String outdir = sub(remote_outdir, "/+$", "")
     String merge_dir = outdir + "/03_merge"
@@ -140,7 +143,7 @@ workflow MergeCohortSVCallsets {
                     truvari_matching_parameters = truvari_matching_parameters,
                     use_bed = use_bed,
                     docker = sv_integration_docker,
-                    runtime_attr_override = runtime_attr_collapse_shards
+                    runtime_attr_override = runtime_attr_collapse_shards_wrapped[0]
             }
         }
 

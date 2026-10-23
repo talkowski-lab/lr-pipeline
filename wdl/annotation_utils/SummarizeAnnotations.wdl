@@ -85,6 +85,10 @@ workflow SummarizeAnnotations {
         RuntimeAttr? runtime_attr_archive_plots
     }
 
+    # Cromwell rejects an undefined optional entering a nested scatter, so these cross as one-element arrays
+    Array[RuntimeAttr?] runtime_attr_subset_wrapped = [runtime_attr_subset]
+    Array[RuntimeAttr?] runtime_attr_count_wrapped = [runtime_attr_count]
+
     Boolean sites_only = !(create_per_sample || create_per_allele || create_plotting)
 
     call Helpers.FindTrios {
@@ -136,7 +140,7 @@ workflow SummarizeAnnotations {
                     extra_args = subset_vcf_string,
                     prefix = "~{prefix}.input_~{i}.shard_~{j}.subset",
                     docker = utils_docker,
-                    runtime_attr_override = runtime_attr_subset
+                    runtime_attr_override = runtime_attr_subset_wrapped[0]
             }
 
             call CountAnnotationShard {
@@ -156,7 +160,7 @@ workflow SummarizeAnnotations {
                     min_length = min_length,
                     prefix = "~{prefix}.input_~{i}.shard_~{j}",
                     docker = utils_docker,
-                    runtime_attr_override = runtime_attr_count
+                    runtime_attr_override = runtime_attr_count_wrapped[0]
             }
         }
     }

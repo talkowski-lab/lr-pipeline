@@ -41,6 +41,11 @@ workflow ExtractSampleVcfs {
         RuntimeAttr? runtime_attr_concat_sv
     }
 
+    # Cromwell rejects an undefined optional entering a nested scatter, so these cross as one-element arrays
+    Array[RuntimeAttr?] runtime_attr_extract_sample_wrapped = [runtime_attr_extract_sample]
+    Array[RuntimeAttr?] runtime_attr_subset_snv_wrapped = [runtime_attr_subset_snv]
+    Array[RuntimeAttr?] runtime_attr_subset_sv_wrapped = [runtime_attr_subset_sv]
+
     Boolean single_contig = length(contigs) == 1
 
     scatter (contig in contigs) {
@@ -67,7 +72,7 @@ workflow ExtractSampleVcfs {
                     sample = sample_id,
                     prefix = "~{prefix}.~{sample_id}.~{contig}",
                     docker = utils_docker,
-                    runtime_attr_override = runtime_attr_extract_sample
+                    runtime_attr_override = runtime_attr_extract_sample_wrapped[0]
             }
 
             call Helpers.SubsetVcfByArgs as SubsetSnvIndel {
@@ -77,7 +82,7 @@ workflow ExtractSampleVcfs {
                     include_args = 'abs(INFO/allele_length) < ~{min_sv_length} && INFO/SOURCE = \"DeepVariant\"',
                     prefix = "~{prefix}.~{sample_id}.~{contig}.snv",
                     docker = utils_docker,
-                    runtime_attr_override = runtime_attr_subset_snv
+                    runtime_attr_override = runtime_attr_subset_snv_wrapped[0]
             }
 
             call Helpers.SubsetVcfByArgs as SubsetSv {
@@ -87,7 +92,7 @@ workflow ExtractSampleVcfs {
                     include_args = 'abs(INFO/allele_length) >= ~{min_sv_length} && INFO/SOURCE = \"HPRC_SV_Integration\"',
                     prefix = "~{prefix}.~{sample_id}.~{contig}.sv",
                     docker = utils_docker,
-                    runtime_attr_override = runtime_attr_subset_sv
+                    runtime_attr_override = runtime_attr_subset_sv_wrapped[0]
             }
         }
     }

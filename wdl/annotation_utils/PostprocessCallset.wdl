@@ -76,6 +76,12 @@ workflow PostprocessCallset {
         RuntimeAttr? runtime_attr_concat
     }
 
+    # Cromwell rejects an undefined optional entering a nested scatter, so these cross as one-element arrays
+    Array[File?] ped_wrapped = [ped]
+    Array[RuntimeAttr?] runtime_attr_subset_base_wrapped = [runtime_attr_subset_base]
+    Array[RuntimeAttr?] runtime_attr_subset_transfer_wrapped = [runtime_attr_subset_transfer]
+    Array[RuntimeAttr?] runtime_attr_post_process_wrapped = [runtime_attr_post_process]
+
     Boolean single_contig = length(contigs) == 1
     Boolean do_transfer_genotypes = run_transfer_genotypes && defined(transfer_vcf)
     Boolean do_unphase_samples = run_unphase_samples && length(unphase_samples) > 0
@@ -138,7 +144,7 @@ workflow PostprocessCallset {
                         region = shard_region,
                         prefix = "~{prefix}.~{contig}.shard_~{i}.base",
                         docker = utils_docker,
-                        runtime_attr_override = runtime_attr_subset_base
+                        runtime_attr_override = runtime_attr_subset_base_wrapped[0]
                 }
 
                 if (do_transfer_genotypes) {
@@ -149,7 +155,7 @@ workflow PostprocessCallset {
                             region = shard_region,
                             prefix = "~{prefix}.~{contig}.shard_~{i}.transfer",
                             docker = utils_docker,
-                            runtime_attr_override = runtime_attr_subset_transfer
+                            runtime_attr_override = runtime_attr_subset_transfer_wrapped[0]
                     }
                 }
 
@@ -159,7 +165,7 @@ workflow PostprocessCallset {
                         base_vcf_idx = SubsetBaseShard.subset_vcf_idx,
                         transfer_vcf = SubsetTransferShard.subset_vcf,
                         transfer_vcf_idx = SubsetTransferShard.subset_vcf_idx,
-                        ped = ped,
+                        ped = ped_wrapped[0],
                         unphase_samples = unphase_samples,
                         transfer_genotypes = do_transfer_genotypes,
                         unphase = do_unphase_samples,
@@ -177,7 +183,7 @@ workflow PostprocessCallset {
                         sort_records = run_sorting,
                         prefix = "~{prefix}.~{contig}.shard_~{i}.post_processed",
                         docker = utils_docker,
-                        runtime_attr_override = runtime_attr_post_process
+                        runtime_attr_override = runtime_attr_post_process_wrapped[0]
                 }
 
                 File shard_final_vcf = PostProcessShard.processed_vcf

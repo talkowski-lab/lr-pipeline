@@ -94,6 +94,9 @@ workflow AnnotatePALMER {
         RuntimeAttr? runtime_attr_concat
     }
 
+    # Cromwell rejects an undefined optional entering a nested scatter, so these cross as one-element arrays
+    Array[RuntimeAttr?] runtime_attr_filter_palmer_wrapped = [runtime_attr_filter_palmer]
+
     Boolean single_contig = length(contigs) == 1
 
     scatter (contig in contigs) {
@@ -156,7 +159,7 @@ workflow AnnotatePALMER {
                     ins_min_shared_samples_hervk = ins_min_shared_samples_hervk,
                     prefix = "~{prefix}.~{contig}.filtered.shard_~{i}",
                     docker = utils_docker,
-                    runtime_attr_override = runtime_attr_filter_palmer
+                    runtime_attr_override = runtime_attr_filter_palmer_wrapped[0]
             }
         }
 

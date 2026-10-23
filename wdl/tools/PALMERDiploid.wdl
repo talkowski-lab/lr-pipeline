@@ -53,6 +53,9 @@ workflow PALMERDiploid {
         RuntimeAttr? runtime_attr_concat
     }
 
+    # Cromwell rejects an undefined optional entering a nested scatter, so these cross as one-element arrays
+    Array[RuntimeAttr?] runtime_attr_run_palmer_wrapped = [runtime_attr_run_palmer]
+
     scatter (idx in range(length(mei_types))) {
         String mei_type = mei_types[idx]
 
@@ -77,7 +80,7 @@ workflow PALMERDiploid {
                         ref_fa = ref_fa,
                         prefix = "~{prefix}.shard_{i}",
                         docker = palmer_docker,
-                        runtime_attr_override = runtime_attr_run_palmer
+                        runtime_attr_override = runtime_attr_run_palmer_wrapped[0]
                 }
             }
 

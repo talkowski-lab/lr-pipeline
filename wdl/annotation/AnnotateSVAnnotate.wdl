@@ -48,6 +48,11 @@ workflow AnnotateSVAnnotate {
         RuntimeAttr? runtime_attr_revert_symbolic
     }
 
+    # Cromwell rejects an undefined optional entering a nested scatter, so these cross as one-element arrays
+    Array[RuntimeAttr?] runtime_attr_convert_symbolic_wrapped = [runtime_attr_convert_symbolic]
+    Array[RuntimeAttr?] runtime_attr_annotate_func_wrapped = [runtime_attr_annotate_func]
+    Array[RuntimeAttr?] runtime_attr_revert_symbolic_wrapped = [runtime_attr_revert_symbolic]
+
     Boolean single_contig = length(contigs) == 1
 
     scatter (contig in contigs) {
@@ -85,7 +90,7 @@ workflow AnnotateSVAnnotate {
                     move_dup_to_origin = true,
                     prefix = "~{prefix}.~{contig}.converted.shard_~{i}",
                     docker = utils_docker,
-                    runtime_attr_override = runtime_attr_convert_symbolic
+                    runtime_attr_override = runtime_attr_convert_symbolic_wrapped[0]
             }
 
             call AnnotateFunctionalConsequences {
@@ -96,7 +101,7 @@ workflow AnnotateSVAnnotate {
                     coding_gtf = coding_gtf,
                     prefix = "~{prefix}.~{contig}.functionally_annotated.shard_~{i}",
                     docker = gatk_docker,
-                    runtime_attr_override = runtime_attr_annotate_func
+                    runtime_attr_override = runtime_attr_annotate_func_wrapped[0]
             }
 
             call Helpers.RevertSymbolicAlleles {
@@ -107,7 +112,7 @@ workflow AnnotateSVAnnotate {
                     original_vcf_idx = vcf_idxs_to_process[i],
                     prefix = "~{prefix}.~{contig}.reverted.shard_~{i}",
                     docker = utils_docker,
-                    runtime_attr_override = runtime_attr_revert_symbolic
+                    runtime_attr_override = runtime_attr_revert_symbolic_wrapped[0]
             }
 
             call Helpers.ExtractVcfAnnotations {

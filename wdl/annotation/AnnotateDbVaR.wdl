@@ -66,6 +66,9 @@ workflow AnnotateDbVaR {
         RuntimeAttr? runtime_attr_concat
     }
 
+    # Cromwell rejects an undefined optional entering a nested scatter, so these cross as one-element arrays
+    Array[RuntimeAttr?] runtime_attr_annotate_wrapped = [runtime_attr_annotate]
+
     Boolean single_contig = length(contigs) == 1
 
     scatter (contig in contigs) {
@@ -142,7 +145,7 @@ workflow AnnotateDbVaR {
                     ins_size_similarity = ins_size_similarity,
                     prefix = "~{prefix}.~{contig}.shard_~{i}.dbvar_annotated",
                     docker = utils_docker,
-                    runtime_attr_override = runtime_attr_annotate
+                    runtime_attr_override = runtime_attr_annotate_wrapped[0]
             }
         }
 

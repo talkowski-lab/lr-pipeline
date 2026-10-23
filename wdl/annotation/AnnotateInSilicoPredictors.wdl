@@ -49,6 +49,9 @@ workflow AnnotateInSilicoPredictors {
         RuntimeAttr? runtime_attr_concat_vcf
     }
 
+    # Cromwell rejects an undefined optional entering a nested scatter, so these cross as one-element arrays
+    Array[RuntimeAttr?] runtime_attr_annotate_wrapped = [runtime_attr_annotate]
+
     Boolean single_contig = length(contigs) == 1
 
     scatter (contig in contigs) {
@@ -95,7 +98,7 @@ workflow AnnotateInSilicoPredictors {
                     genome_build = genome_build,
                     prefix = "~{prefix}.~{contig}.in_silico_predictors.shard_~{i}",
                     docker = hail_docker,
-                    runtime_attr_override = runtime_attr_annotate
+                    runtime_attr_override = runtime_attr_annotate_wrapped[0]
             }
         }
 

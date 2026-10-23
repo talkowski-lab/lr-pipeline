@@ -44,6 +44,10 @@ workflow CreateCohortMethylationFile {
         RuntimeAttr? runtime_attr_join_haplotype
     }
 
+    # Cromwell rejects an undefined optional entering a nested scatter, so these cross as one-element arrays
+    Array[RuntimeAttr?] runtime_attr_merge_combined_wrapped = [runtime_attr_merge_combined]
+    Array[RuntimeAttr?] runtime_attr_merge_haplotype_wrapped = [runtime_attr_merge_haplotype]
+
     Int num_samples = length(sample_ids)
 
     scatter (sample_id in sample_ids) {
@@ -99,7 +103,7 @@ workflow CreateCohortMethylationFile {
                         contig = contig,
                         prefix = "~{prefix}.~{contig}.shard_~{i}.combined",
                         docker = utils_docker,
-                        runtime_attr_override = runtime_attr_merge_combined
+                        runtime_attr_override = runtime_attr_merge_combined_wrapped[0]
                 }
 
                 call MergeMethylationShard as MergeHaplotypeShard {
@@ -110,7 +114,7 @@ workflow CreateCohortMethylationFile {
                         contig = contig,
                         prefix = "~{prefix}.~{contig}.shard_~{i}.haplotype",
                         docker = utils_docker,
-                        runtime_attr_override = runtime_attr_merge_haplotype
+                        runtime_attr_override = runtime_attr_merge_haplotype_wrapped[0]
                 }
             }
 

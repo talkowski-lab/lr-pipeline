@@ -41,6 +41,11 @@ workflow AnnotateVRS {
         RuntimeAttr? runtime_attr_concat
     }
 
+    # Cromwell rejects an undefined optional entering a nested scatter, so these cross as one-element arrays
+    Array[RuntimeAttr?] runtime_attr_drop_fields_wrapped = [runtime_attr_drop_fields]
+    Array[RuntimeAttr?] runtime_attr_annotate_vrs_wrapped = [runtime_attr_annotate_vrs]
+    Array[RuntimeAttr?] runtime_attr_extract_wrapped = [runtime_attr_extract]
+
     Boolean single_contig = length(contigs) == 1
 
     scatter (contig in contigs) {
@@ -82,7 +87,7 @@ workflow AnnotateVRS {
                     drop_fields = "INFO/VRS_Allele_IDs,INFO/VRS_Error,INFO/VRS_Starts,INFO/VRS_Ends,INFO/VRS_States,INFO/VRS_Lengths,INFO/VRS_RepeatSubunitLengths",
                     prefix = "~{prefix}.~{contig}.vrs_cleared.shard_~{i}",
                     docker = utils_docker,
-                    runtime_attr_override = runtime_attr_drop_fields
+                    runtime_attr_override = runtime_attr_drop_fields_wrapped[0]
             }
 
             call AnnotateVcfWithVRS {
@@ -92,7 +97,7 @@ workflow AnnotateVRS {
                     seqrepo_tar = seqrepo_tar,
                     prefix = "~{prefix}.~{contig}.vrs.shard_~{i}",
                     docker = vrs_docker,
-                    runtime_attr_override = runtime_attr_annotate_vrs
+                    runtime_attr_override = runtime_attr_annotate_vrs_wrapped[0]
             }
 
             call ExtractVRSAnnotations {
@@ -101,7 +106,7 @@ workflow AnnotateVRS {
                     vcf_idx = AnnotateVcfWithVRS.annotated_vcf_idx,
                     prefix = "~{prefix}.~{contig}.vrs_annotations.shard_~{i}",
                     docker = utils_docker,
-                    runtime_attr_override = runtime_attr_extract
+                    runtime_attr_override = runtime_attr_extract_wrapped[0]
             }
         }
 

@@ -49,6 +49,16 @@ RETIRED_NAME_PARTS = [
     (re.compile(r"(^|_)tbi(_|$)"), "use '_idx' instead of '_tbi' for an index"),
 ]
 DOCKER_INPUT_NAME_RE = re.compile(r"^[a-z0-9_]+_docker$")
+# Workflow-body statements that W034 tracks while walking scatter and if blocks
+WORKFLOW_SECTION_RE = re.compile(r"^ {4}(input|output|meta|parameter_meta)\s*\{")
+BODY_DECL_RE = re.compile(r"^\s*((?:Array|Map|Pair)\[.*\]|[A-Z]\w*)([?+]*)\s+(\w+)\s*(=)?")
+BODY_CALL_RE = re.compile(r"^\s*call\s+([\w.]+)(?:\s+as\s+(\w+))?")
+SCATTER_RE = re.compile(r"^\s*scatter\s*\(\s*(\w+)\s+in\s+(.*)\)\s*\{")
+IF_RE = re.compile(r"^\s*if\s*\((.*)\)\s*\{")
+STRING_RE = re.compile(r'"[^"]*"')
+INTERPOLATION_RE = re.compile(r"~\{([^}]*)\}")
+ASSIGN_RE = re.compile(r"(?<![=!<>])=(?!=)")
+IDENT_RE = re.compile(r"(?<![\w.])([A-Za-z_]\w*)")
 
 # Markdown that docs/workflows.md is generated from, so descriptions must not carry it
 MARKDOWN_LINK_RE = re.compile(r"\]\(")
@@ -129,6 +139,7 @@ class Checker:
         self.check_unused_runtime_attrs()
         if workflows:
             self.check_workflow_meta()
+            self.check_nested_scatter_optionals()
         else:
             self.check_alphabetical_tasks()
 
@@ -225,6 +236,78 @@ class Checker:
             uses = len(re.findall(r"\b" + re.escape(name) + r"\b", self.text))
             if uses < 2:
                 self.error(index + 1, "W016", "nothing passes RuntimeAttr? input '{}' to a call".format(name))
+
+    def check_nested_scatter_optionals(self):
+        """Cromwell fails a scatter nested in another scatter when an undefined optional enters it (W034)."""
+        for line_no, name in self.nested_scatter_optionals():
+            self.error(
+                line_no,
+                "W034",
+                "possibly undefined '{0}' enters a nested scatter, which Cromwell rejects; "
+                "use '{0}_wrapped[0]' with a top-level '{0}_wrapped = [{0}]' array".format(name),
+            )
+
+    def nested_scatter_optionals(self):
+        """Yield (line_no, name) for each possibly undefined value referenced inside a nested scatter."""
+        values = {}  # name -> (optional type, enclosing if ids, enclosing scatter and if ids)
+        stack = None
+        next_id = 0
+        reported = set()
+        for index, line in enumerate(self.lines):
+            if stack is None:
+                match = BLOCK_RE.match(line)
+                if match and match.group(1) == "workflow":
+                    stack = []
+                continue
+            code = STRING_RE.sub(lambda m: " ".join(INTERPOLATION_RE.findall(m.group(0))), line).split("#")[0]
+            kinds = [kind for kind, _ in stack]
+            ifs = [block_id for kind, block_id in stack if kind == "if"]
+            blocks = [block_id for kind, block_id in stack if kind in ("scatter", "if")]
+            scatters = [block_id for kind, block_id in stack if kind == "scatter"]
+            section = next((kind for kind in kinds if kind in ("input", "output", "meta", "parameter_meta")), None)
+
+            kind, expr = None, None
+            scatter_match, if_match, call_match = SCATTER_RE.match(code), IF_RE.match(code), BODY_CALL_RE.match(code)
+            decl_match = BODY_DECL_RE.match(code) if "call" not in kinds else None
+            assign = ASSIGN_RE.search(code)
+            if not stack and WORKFLOW_SECTION_RE.match(code):
+                kind = WORKFLOW_SECTION_RE.match(code).group(1)
+            elif scatter_match:
+                kind, expr = "scatter", scatter_match.group(2)
+            elif if_match:
+                kind, expr = "if", if_match.group(1)
+            elif call_match:
+                kind = "call"
+                values[call_match.group(2) or call_match.group(1).split(".")[-1]] = (False, set(ifs), set(blocks))
+            elif section == "input" and decl_match:
+                values[decl_match.group(3)] = ("?" in decl_match.group(2) and not decl_match.group(4), set(), set())
+            elif not section and decl_match:
+                values[decl_match.group(3)] = ("?" in decl_match.group(2), set(ifs), set(blocks))
+            if expr is None and not section:
+                expr = code[assign.end() :] if assign else code
+
+            if not section and len(scatters) >= 2 and expr:
+                for name in IDENT_RE.findall(expr):
+                    if name not in values or (index, name) in reported:
+                        continue
+                    optional, decl_ifs, decl_blocks = values[name]
+                    undefined = optional or not decl_ifs <= set(ifs)
+                    if undefined and scatters[-1] not in decl_blocks:
+                        reported.add((index, name))
+                        yield index + 1, name
+
+            opens, closes = code.count("{"), code.count("}")
+            if kind and opens:
+                next_id += 1
+                stack.append((kind, next_id))
+                if kind == "scatter":
+                    values[scatter_match.group(1)] = (False, set(ifs), set(blocks) | {next_id})
+                opens -= 1
+            stack.extend([("other", None)] * opens)
+            for _ in range(closes):
+                if not stack:
+                    return
+                stack.pop()
 
     def check_workflow_meta(self):
         """Enforce the meta and parameter_meta rules that docs/workflows.md is generated from."""

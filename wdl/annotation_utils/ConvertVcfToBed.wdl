@@ -60,6 +60,9 @@ workflow ConvertVcfToBed {
         RuntimeAttr? runtime_attr_rename
     }
 
+    # Cromwell rejects an undefined optional entering a nested scatter, so these cross as one-element arrays
+    Array[RuntimeAttr?] runtime_attr_vcf2bed_wrapped = [runtime_attr_vcf2bed]
+
     scatter (i in range(length(contigs))) {
         if (defined(min_length)) {
             call Helpers.SubsetVcfByLength {
@@ -118,7 +121,7 @@ workflow ConvertVcfToBed {
                     split_cpx = split_cpx,
                     prefix = "~{prefix}.~{contigs[i]}.shard_~{j}",
                     docker = gatk_sv_lr_docker,
-                    runtime_attr_override = runtime_attr_vcf2bed
+                    runtime_attr_override = runtime_attr_vcf2bed_wrapped[0]
             }
         }
     }

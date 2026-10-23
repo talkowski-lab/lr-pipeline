@@ -258,3 +258,53 @@ def test_repository_wdl_passes_style_check(repo_root):
         errors.extend(style.Checker(rel, text).run())
     errors.extend(style.duplicate_task_errors(sources))
     assert errors == []
+
+
+NESTED_WORKFLOW = """\
+version 1.0
+
+workflow Nested {
+    input {
+        Array[String] contigs
+        Int records = 10
+        RuntimeAttr? runtime_attr_inner
+    }
+
+    Array[RuntimeAttr?] runtime_attr_inner_wrapped = [runtime_attr_inner]
+
+    scatter (contig in contigs) {
+        if (records > 0) {
+            call Shard { input: n = records }
+        }
+        INNER
+    }
+}
+"""
+
+
+def nested_hits(inner):
+    text = NESTED_WORKFLOW.replace("INNER", inner)
+    return [name for _, name in style.Checker("wdl/annotation/Nested.wdl", text).nested_scatter_optionals()]
+
+
+@pytest.mark.parametrize(
+    "inner,expected",
+    [
+        ("scatter (i in range(2)) {\n call Inner { input: attr = runtime_attr_inner }\n }", ["runtime_attr_inner"]),
+        ('scatter (i in range(2)) {\n call Inner { input: s = "~{runtime_attr_inner}" }\n }', ["runtime_attr_inner"]),
+        ("scatter (i in range(2)) {\n call Inner { input: s = Shard.out }\n }", ["Shard"]),
+        ("scatter (i in range(2)) {\n call Inner { input: attr = runtime_attr_inner_wrapped[0] }\n }", []),
+        ("scatter (i in range(2)) {\n call Inner { input: n = records, s = contig, i = i }\n }", []),
+        ("call Inner { input: attr = runtime_attr_inner }", []),
+    ],
+)
+def test_undefined_optionals_entering_nested_scatters_are_reported(inner, expected):
+    assert nested_hits(inner) == expected
+
+
+def test_conditional_call_used_inside_its_own_if_passes():
+    inner = (
+        "if (records > 0) {\n call Shard2 { input: n = 1 }\n"
+        " scatter (i in Shard2.out) {\n call Inner { input: s = Shard2.out }\n }\n }"
+    )
+    assert nested_hits(inner) == []
