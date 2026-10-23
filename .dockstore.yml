@@ -20,6 +20,7 @@ workflows:
     filters:
       branches:
         - main
+        - kj-wdl-conventions
       tags:
         - /.*/
 
@@ -130,6 +131,7 @@ workflows:
     filters:
       branches:
         - main
+        - kj-wdl-conventions
       tags:
         - /.*/
 
@@ -160,6 +162,7 @@ workflows:
     filters:
       branches:
         - main
+        - kj-wdl-conventions
       tags:
         - /.*/
 
@@ -190,6 +193,7 @@ workflows:
     filters:
       branches:
         - main
+        - kj-wdl-conventions
       tags:
         - /.*/
 
