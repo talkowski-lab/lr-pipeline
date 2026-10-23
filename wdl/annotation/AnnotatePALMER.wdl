@@ -298,7 +298,7 @@ task FilterPALMER {
                 -b PALMER_calls.bed \
                 > intersection.bed
 
-            python /opt/scripts/mei/PALMER_transfer_annotations.py \
+            python3 /opt/scripts/mei/PALMER_transfer_annotations.py \
                 --intersection intersection.bed \
                 --target-vcf ~{vcf} \
                 --me-type ${ME_type} \

@@ -1320,7 +1320,7 @@ task ConvertPALMERToVcf {
     command <<<
         set -euo pipefail
 
-        python /opt/scripts/mei/PALMER_to_vcf.py \
+        python3 /opt/scripts/mei/PALMER_to_vcf.py \
             --palmer_calls ~{palmer_calls} \
             --palmer_tsd_reads ~{palmer_tsd_reads} \
             --mei_type ~{mei_type} \
