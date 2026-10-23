@@ -419,8 +419,8 @@ This workflow leverages PALMER (https://github.com/WeichenZhou/PALMER) in order 
 Inputs:
 - `File vcf`: VCF to annotate.
 - `File vcf_idx`: Index for VCF to annotate.
-- `File PALMER_vcf`: VCF of PALMER MEI calls to match against.
-- `File PALMER_vcf_idx`: Index for `PALMER_vcf`.
+- `File palmer_vcf`: VCF of PALMER MEI calls to match against.
+- `File palmer_vcf_idx`: Index for `palmer_vcf`.
 - `Array[String] contigs`: Contigs to annotate within the input VCF.
 - `Int? records_per_shard`: Number of variants to keep within a single shard during annotation.
 - `Array[String] mei_types`: MEI types to run on - must be a subset of [`ALU`, `SVA`, `LINE` or `HERVK`].
@@ -507,9 +507,9 @@ Inputs:
 - `File exons_bed`: From references.
 - `File repeats_bed`: From references.
 - `File ref_fa`: From references.
-- `Array[File] ref_fa_idx`: From references.
+- `Array[File] ref_bwa_idx`: BWA indices for `ref_fa`, from references.
 - `File mei_fa`: From references.
-- `Array[File] mei_fa_idx`: From references.
+- `Array[File] mei_bwa_idx`: BWA indices for `mei_fa`.
 - `String prefix`: Prefix for output file names.
 - `String svan_docker`, `String utils_docker`: Container images.
 - `RuntimeAttr? runtime_attr_*`: Optional per-task runtime overrides (19).
@@ -1128,7 +1128,7 @@ Inputs:
 - `Int bin_size`: Fixed genomic bin size in bp.
 - `Float median_coverage_cutoff`: Fraction of the floored sample median coverage defining the inclusive regular low-coverage cutoff. The operational cutoff is also rounded down: `floor(floor(median_coverage) * median_coverage_cutoff)`. For example, `0.2` gives a `12x` cutoff for a sample with median coverage `60x`. (default `0.2`)
 - `Float sample_proportion_cutoff`: Inclusive minimum proportion of eligible samples with low coverage required to fail a cohort bin. (default `0.5`)
-- `Float chrY_coverage_cutoff`: Fraction of a sample's autosomal median coverage that its chrY median coverage must reach for the sample to be inferred male. (default `0.2`)
+- `Float chry_coverage_cutoff`: Fraction of a sample's autosomal median coverage that its chrY median coverage must reach for the sample to be inferred male. (default `0.2`)
 - `String prefix`: Prefix for output file names.
 - `String utils_docker`: Container image.
 - `RuntimeAttr? runtime_attr_*`: Optional per-task runtime overrides (2).
@@ -1634,7 +1634,7 @@ Inputs:
 - `File? swap_samples_base`: Sample-ID swap map applied to the base VCFs.
 - `Boolean allow_unphased_match_phase`: Whether to allow unphased genotypes to set the phase orientation. (default `false`)
 - `String prefix`: Prefix for output file names.
-- `String docker`: Container image.
+- `String utils_docker`: Container image.
 - `RuntimeAttr? runtime_attr_*`: Optional per-task runtime overrides (6).
 
 Outputs:
@@ -1655,7 +1655,7 @@ Inputs:
 - `Array[String] gcp_zones`: Placement zones. (default `["us-central1-a", "us-central1-b", "us-central1-c", "us-central1-f"]`)
 - `String prefix`: Prefix for output file names.
 - `String deepvariant_docker`, `String deepvariant_gpu_docker`, `String utils_docker`, `String resource_visualization_docker`: Container images.
-- `RuntimeAttr? runtime_attr_*`: Optional per-task runtime overrides (6).
+- `RuntimeAttr? runtime_attr_*`: Optional per-task runtime overrides (7).
 
 Outputs:
 - `File gvcf`: Merged gVCF.
@@ -1810,7 +1810,7 @@ Inputs:
 - `File? bed`: Restrict calling to these regions.
 - `String config`: GLnexus preset configuration. (default `DeepVariantWGS`)
 - `File? config_file`: Custom GLnexus configuration, used in place of `config`.
-- `Boolean more_PL`: Emit additional PL values. (default `false`)
+- `Boolean more_pl`: Emit additional PL values. (default `false`)
 - `Boolean squeeze`: Squeeze the output representation. (default `false`)
 - `Boolean trim_uncalled_alleles`: Remove alleles that no sample carries. (default `false`)
 - `Int? num_cpus`: CPU count for the calling task; derived from the input count when unset.
@@ -2002,7 +2002,7 @@ Inputs:
 - `String minimap_flags`: Parameters to use when running Minimap2. (default `-a -x asm20 --cs --eqx`)
 - `Int minimap_threads`: Number of alignment threads. (default `32`)
 - `String prefix`: Prefix for output file names.
-- `String minimap_docker`: Container image.
+- `String minimap2_docker`: Container image.
 - `RuntimeAttr? runtime_attr_*`: Optional per-task runtime overrides.
 
 Outputs:
@@ -2252,7 +2252,7 @@ This tool merges each sample's PAV, pbsv and Sniffles calls into one scored VCF 
 
 Each sample is then scored with an XGBoost model trained on those records, through GATK ScoreVariantAnnotations, and split into the chunks of the interval CSV for the cohort merge. Samples are processed in batches, one batch per VM.
 
-Nothing is returned as a workflow output. The per-sample merged, longer-SV and breakend calls are written under '01_intrasample' in 'remote_outdir', which MergeCohortLongSVCallsets reads, and the scored chunks with one marker file per sample are written under '02_scoring', which MergeCohortSVCallsets reads. A sample whose outputs already exist is skipped, so a resubmission only reruns the samples that failed.
+Nothing is returned as a workflow output. The per-sample merged, longer-SV and breakend calls are written under '01_intrasample' in 'remote_outdir', which MergeCohortLongSVCallsets reads, and the scored chunks with one marker file per sample are written under '02_scoring', which MergeCohortSVCallsets reads. A sample whose outputs already exist is skipped, so a resubmission only reruns the samples that failed. These outputs are named by sample, so 'prefix' only names the local batch-completion signal files.
 
 Inputs:
 - `Array[String] sample_ids`: Samples to process, aligned by index with every other per-sample array.
@@ -2291,17 +2291,18 @@ Inputs:
 - `File scoring_python_script`: Python script GATK ScoreVariantAnnotations runs to score with the XGBoost model.
 - `File hyperparameters_json`: XGBoost hyperparameters.
 - `Int batch_size`: Number of samples processed one after another on each VM. (default `20`)
+- `String prefix`: Prefix for output file names.
 - `String sv_integration_docker`, `String xgb_scoring_docker`: Container images.
 - `RuntimeAttr? runtime_attr_*`: Optional per-task runtime overrides (3).
 
 ### [MergeCohortSVCallsets](../wdl/tools/MergeCohortSVCallsets.wdl)
 This tool merges the scored per-sample SV calls written by MergeSampleSVCallsets into one cohort SV callset. Each chunk of the interval CSV is merged across samples with bcftools merge, each chromosome is resharded into truvari-collapse shards, matching sites within each shard are collapsed with Truvari (https://github.com/ACEnglish/truvari) collapse, and the collapsed shards are concatenated per chromosome and then genome-wide.
 
-Nothing is returned as a workflow output. Each stage writes under 'remote_outdir', and the cohort callset is '06_concat/truvari_collapsed.bcf' there, which RegenotypeFamilySVCallsets reads.
+Nothing is returned as a workflow output. Each stage writes under 'remote_outdir', and the cohort callset is '06_concat/' followed by 'prefix' and '.bcf' there, which RegenotypeFamilySVCallsets reads with the same 'prefix'.
 
 Inputs:
 - `String remote_indir`: The 'remote_outdir' of MergeSampleSVCallsets, whose '02_scoring' subdirectory is read.
-- `String remote_outdir`: GCS directory the merge, shard, collapse and concatenation stages are written under, without a trailing slash.
+- `String remote_outdir`: GCS directory the merge, shard, collapse and concatenation stages are written under, without a trailing slash. The cohort callset is written as '06_concat/<prefix>.bcf'; RegenotypeFamilySVCallsets must be given the same prefix.
 - `File? sample_ids_file`: Samples to merge, one per line, in the column order of the merged VCF. Derived from the per-sample marker files in 'remote_indir' when omitted.
 - `Array[String] chromosomes`: Chromosomes to process, in output order. (default `["chr1", "chr2", "chr3", "chr4", "chr5", "chr6", "chr7", "chr8", "chr9", "chr10", "chr11", "chr12", "chr13", "chr14", "chr15", "chr16", "chr17", "chr18", "chr19", "chr20", "chr21", "chr22", "chrX", "chrY"]`)
 - `Int merge_mode`: How bcftools merge matches records: 1 by CHROM, POS, REF and ALT, or 2 by ID. (default `1`)
@@ -2313,17 +2314,18 @@ Inputs:
 - `Int chunk_ids_per_file`: Number of truvari-collapse shards processed on each VM. (default `100`)
 - `Int concat_all_naive`: Whether the genome-wide concatenation uses bcftools concat --naive: 1 for yes, 0 for no. (default `1`)
 - `File split_for_bcftools_merge_csv`: The interval CSV MergeSampleSVCallsets split the scored calls into.
+- `String prefix`: Prefix for output file names.
 - `String sv_integration_docker`: Container image.
 - `RuntimeAttr? runtime_attr_*`: Optional per-task runtime overrides (8).
 
 ### [MergeCohortLongSVCallsets](../wdl/tools/MergeCohortLongSVCallsets.wdl)
 This tool merges the per-sample SVs longer than the MergeSampleSVCallsets length range, and the per-sample breakends, into one cohort callset for each class. Each class runs through the same bcftools merge, truvari-collapse sharding, Truvari (https://github.com/ACEnglish/truvari) collapse and concatenation stages as MergeCohortSVCallsets, without scoring or regenotyping.
 
-Nothing is returned as a workflow output. Each class writes under its own subdirectory of 'remote_outdir', named after the class, and that class's cohort callset is '15_concat/truvari_collapsed.bcf' there.
+Nothing is returned as a workflow output. Each class writes under its own subdirectory of 'remote_outdir', named after the class, and that class's cohort callset is '15_concat/' followed by 'prefix' and '.bcf' there.
 
 Inputs:
 - `String remote_indir`: The 'remote_outdir' of MergeSampleSVCallsets.
-- `String remote_outdir`: GCS directory each class's stages are written under, without a trailing slash.
+- `String remote_outdir`: GCS directory each class's stages are written under, without a trailing slash. Each class's cohort callset is written as '<class>/15_concat/<prefix>.bcf'.
 - `Array[String] suffixes`: Classes to merge: 'ultralong' for the longer SVs and 'bnd' for the breakends. (default `["ultralong", "bnd"]`)
 - `String intrasample_subdir`: Subdirectory of 'remote_indir' holding the per-sample calls of each class. Leave empty to read them from 'remote_indir' itself. (default `01_intrasample`)
 - `Array[String] chromosomes`: Chromosomes to process, in output order. (default `["chr1", "chr2", "chr3", "chr4", "chr5", "chr6", "chr7", "chr8", "chr9", "chr10", "chr11", "chr12", "chr13", "chr14", "chr15", "chr16", "chr17", "chr18", "chr19", "chr20", "chr21", "chr22", "chrX", "chrY"]`)
@@ -2338,6 +2340,7 @@ Inputs:
 - `Int concat_all_naive`: Whether the genome-wide concatenation uses bcftools concat --naive: 1 for yes, 0 for no. (default `1`)
 - `File ref_fa`: From references.
 - `File ref_fai`: From references.
+- `String prefix`: Prefix for output file names.
 - `String sv_integration_docker`: Container image.
 - `RuntimeAttr? runtime_attr_*`: Optional per-task runtime overrides (7).
 
@@ -2353,7 +2356,7 @@ Inputs:
 - `Array[String] aligned_bams`: GCS paths to each member's aligned reads.
 - `Array[String] aligned_bais`: GCS paths to the indexes for 'aligned_bams'.
 - `File ped`: Six-column pedigree defining each family's members.
-- `String remote_indir`: The 'remote_outdir' of MergeCohortSVCallsets, whose '06_concat' subdirectory holds the cohort callset.
+- `String remote_indir`: The 'remote_outdir' of MergeCohortSVCallsets, whose '06_concat' subdirectory holds the cohort callset as '<prefix>.bcf'. The workflow 'prefix' must match the one given to MergeCohortSVCallsets.
 - `String remote_outdir`: GCS directory shared by every family's run, which the per-sample regenotyped chunks are written under, without a trailing slash.
 - `String requester_pays_project`: Project billed for reads from requester-pays buckets. Leave empty when none are read. (default empty)
 - `String kanpig_params_cohort`: Kanpig arguments for regenotyping against the cohort callset. (default `--neighdist 500 --gpenalty 0.04 --hapsim 0.97`)
@@ -2363,20 +2366,22 @@ Inputs:
 - `File ploidy_bed_female`: From references.
 - `File ploidy_bed_male`: From references.
 - `File autosomes_bed`: Autosomes, used to report each member's heterozygous-call rate.
+- `String prefix`: Prefix for output file names.
 - `String sv_integration_docker`: Container image.
 - `RuntimeAttr? runtime_attr_*`: Optional per-task runtime overrides (2).
 
 ### [MergeRegenotypedSVCallsets](../wdl/tools/MergeRegenotypedSVCallsets.wdl)
 This tool merges the per-family regenotyped SV calls written by RegenotypeFamilySVCallsets into one regenotyped cohort SV callset. Each chunk of the interval CSV is merged across every sample of every family with bcftools merge, matching records by ID and dropping records that are REF in every sample, and the merged chunks are concatenated in genome order.
 
-Nothing is returned as a workflow output. The merged chunks are written under 'merge' in 'remote_outdir', and the regenotyped cohort callset is 'concat/merged.bcf' there.
+Nothing is returned as a workflow output. The merged chunks are written under 'merge' in 'remote_outdir', and the regenotyped cohort callset is 'concat/' followed by 'prefix' and '.bcf' there.
 
 Inputs:
 - `String remote_indir`: The 'remote_outdir' shared by every RegenotypeFamilySVCallsets run.
-- `String remote_outdir`: GCS directory the merged chunks and the concatenated callset are written under, without a trailing slash.
+- `String remote_outdir`: GCS directory the merged chunks and the concatenated callset are written under, without a trailing slash. The concatenated callset is written as 'concat/<prefix>.bcf'.
 - `File? sample_ids_file`: Samples to merge, one per line, in the column order of the merged VCF. Derived from the per-sample marker files in 'remote_indir' when omitted.
 - `Int merge_mode`: How bcftools merge matches records: 1 by CHROM, POS, REF and ALT, or 2 by ID. Regenotyped calls share the cohort IDs, so 2 is correct here. (default `2`)
 - `File split_for_bcftools_merge_csv`: The interval CSV RegenotypeFamilySVCallsets split the regenotyped calls into.
+- `String prefix`: Prefix for output file names.
 - `String sv_integration_docker`: Container image.
 - `RuntimeAttr? runtime_attr_*`: Optional per-task runtime overrides (4).
 
@@ -2788,12 +2793,13 @@ Inputs:
 - `Int concat_all_naive`: Whether the genome-wide concatenation uses bcftools concat --naive: 1 for yes, 0 for no. (default `1`)
 - `File ref_fa`: From references.
 - `File ref_fai`: From references.
+- `String prefix`: Prefix for output file names.
 - `String sv_integration_docker`: Container image.
 - `RuntimeAttr? runtime_attr_*`: Optional per-task runtime overrides (7).
 
 Outputs:
 - `String done`: Completion signal of the genome-wide concatenation.
-- `String cohort_dir`: GCS directory holding the class's cohort callset, 'truvari_collapsed.bcf'.
+- `String cohort_dir`: GCS directory holding the class's cohort callset, '<prefix>.bcf'.
 
 ### Annotation summary plotting
 `CreateAnnotationPlots` draws the summary plots from the parquet tables of `SummarizeAnnotations`, one plot group per task.
