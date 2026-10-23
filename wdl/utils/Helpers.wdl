@@ -579,7 +579,7 @@ task BcftoolsMergeChunk {
 
             # Step 2
             ls list_*.bcf | sort -V > list.txt
-            # --force-single lets the merge proceed when there is only one file (small cohorts / single-family regenotyping produce a single batch).
+            # --force-single lets the merge proceed when there is only one file (small cohorts produce a single batch).
             ${TIME_COMMAND} bcftools merge --threads ${N_THREADS} --force-samples --force-single --merge ${MERGE_FLAG} --file-list list.txt --output-type b --output ~{chunk_id}_merged.bcf
             ${TIME_COMMAND} bcftools index --threads ${N_THREADS} -f ~{chunk_id}_merged.bcf
             df -h 1>&2

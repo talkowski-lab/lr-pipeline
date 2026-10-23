@@ -10,17 +10,17 @@ import "../utils/Structs.wdl"
 workflow MergeRegenotypedSVCallsets {
     meta {
         description: [
-            "This tool merges the per-family regenotyped SV calls written by RegenotypeFamilySVCallsets into one regenotyped cohort SV callset. Each chunk of the interval CSV is merged across every sample of every family with bcftools merge, matching records by ID and dropping records that are REF in every sample, and the merged chunks are concatenated in genome order.",
+            "This tool merges the per-sample regenotyped SV calls written by RegenotypeSVCallsets into one regenotyped cohort SV callset. Each chunk of the interval CSV is merged across every sample with bcftools merge, matching records by ID and dropping records that are REF in every sample, and the merged chunks are concatenated in genome order.",
             "Nothing is returned as a workflow output. The merged chunks are written under 'merge' in 'remote_outdir', and the regenotyped cohort callset is 'concat/merged.bcf' there."
         ]
     }
 
     parameter_meta {
-        remote_indir: "The 'remote_outdir' shared by every RegenotypeFamilySVCallsets run."
+        remote_indir: "The 'remote_outdir' of RegenotypeSVCallsets."
         remote_outdir: "GCS directory the merged chunks and the concatenated callset are written under, without a trailing slash."
         sample_ids_file: "Samples to merge, one per line, in the column order of the merged VCF. Derived from the per-sample marker files in 'remote_indir' when omitted."
         merge_mode: "How bcftools merge matches records: 1 by CHROM, POS, REF and ALT, or 2 by ID. Regenotyped calls share the cohort IDs, so 2 is correct here."
-        split_for_bcftools_merge_csv: "The interval CSV RegenotypeFamilySVCallsets split the regenotyped calls into."
+        split_for_bcftools_merge_csv: "The interval CSV RegenotypeSVCallsets split the regenotyped calls into."
     }
 
     input {

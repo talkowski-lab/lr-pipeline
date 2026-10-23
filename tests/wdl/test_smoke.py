@@ -182,8 +182,8 @@ def test_concatenate_vcfs_across_contigs_rejects_duplicate_contigs(run_workflow,
         )
 
 
-def test_extract_sample_vcfs_routes_carried_variants_by_length_and_source(run_workflow, vcf_inputs, source):
-    samples_to_extract = ["HG00096", "HG00126"]
+@pytest.mark.parametrize("sample", ["HG00096", "HG00126"])
+def test_extract_sample_vcfs_routes_carried_variants_by_length_and_source(run_workflow, vcf_inputs, source, sample):
     min_sv_length = 50
     outputs = run_workflow(
         f"{UTILS}/ExtractSampleVcfs.wdl",
@@ -191,33 +191,32 @@ def test_extract_sample_vcfs_routes_carried_variants_by_length_and_source(run_wo
             "cohort_vcf": vcf_inputs["vcf"],
             "cohort_vcf_idx": vcf_inputs["vcf_idx"],
             "contigs": [CONTIG],
-            "prefix": "per_sample",
-            "sample_ids": samples_to_extract,
+            "prefix": sample,
+            "sample_id": sample,
             "min_sv_length": min_sv_length,
             "utils_docker": vcf_inputs["utils_docker"],
         },
     )
 
-    for i, sample in enumerate(samples_to_extract):
-        carried = [r for r in source[1] if is_carrier(r, sample)]
-        # Records without allele_length, such as tandem repeats, satisfy neither bcftools expression
-        sized = [r for r in carried if "allele_length" in r["info"]]
-        expected_snv = [
-            site_key(r) for r in sized if abs(r["info"]["allele_length"]) < min_sv_length and r["info"]["SOURCE"] == "DeepVariant"
-        ]
-        expected_sv = [
-            site_key(r)
-            for r in sized
-            if abs(r["info"]["allele_length"]) >= min_sv_length and r["info"]["SOURCE"] == "HPRC_SV_Integration"
-        ]
+    carried = [r for r in source[1] if is_carrier(r, sample)]
+    # Records without allele_length, such as tandem repeats, satisfy neither bcftools expression
+    sized = [r for r in carried if "allele_length" in r["info"]]
+    expected_snv = [
+        site_key(r) for r in sized if abs(r["info"]["allele_length"]) < min_sv_length and r["info"]["SOURCE"] == "DeepVariant"
+    ]
+    expected_sv = [
+        site_key(r)
+        for r in sized
+        if abs(r["info"]["allele_length"]) >= min_sv_length and r["info"]["SOURCE"] == "HPRC_SV_Integration"
+    ]
 
-        snv_samples, snv_records = load_records(outputs["ExtractSampleVcfs.snv_indel_vcfs"][i])
-        sv_samples, sv_records = load_records(outputs["ExtractSampleVcfs.sv_vcfs"][i])
-        assert snv_samples == sv_samples == [sample]
-        assert [site_key(r) for r in snv_records] == expected_snv
-        assert [site_key(r) for r in sv_records] == expected_sv
-        assert expected_snv and expected_sv
-        assert all(is_carrier(r, sample) for r in snv_records + sv_records)
+    snv_samples, snv_records = load_records(outputs["ExtractSampleVcfs.snv_indel_vcf"])
+    sv_samples, sv_records = load_records(outputs["ExtractSampleVcfs.sv_vcf"])
+    assert snv_samples == sv_samples == [sample]
+    assert [site_key(r) for r in snv_records] == expected_snv
+    assert [site_key(r) for r in sv_records] == expected_sv
+    assert expected_snv and expected_sv
+    assert all(is_carrier(r, sample) for r in snv_records + sv_records)
 
 
 def test_annotate_tr_end_tags_sets_end_from_ref_length(run_workflow, vcf_inputs, source):

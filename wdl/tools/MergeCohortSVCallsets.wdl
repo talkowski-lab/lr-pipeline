@@ -13,7 +13,7 @@ workflow MergeCohortSVCallsets {
     meta {
         description: [
             "This tool merges the scored per-sample SV calls written by MergeSampleSVCallsets into one cohort SV callset. Each chunk of the interval CSV is merged across samples with bcftools merge, each chromosome is resharded into truvari-collapse shards, matching sites within each shard are collapsed with Truvari (https://github.com/ACEnglish/truvari) collapse, and the collapsed shards are concatenated per chromosome and then genome-wide.",
-            "Nothing is returned as a workflow output. Each stage writes under 'remote_outdir', and the cohort callset is '06_concat/truvari_collapsed.bcf' there, which RegenotypeFamilySVCallsets reads."
+            "Nothing is returned as a workflow output. Each stage writes under 'remote_outdir', and the cohort callset is '06_concat/truvari_collapsed.bcf' there, which RegenotypeSVCallsets reads."
         ]
     }
 

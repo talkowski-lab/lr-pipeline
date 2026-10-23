@@ -1,7 +1,7 @@
 # Pipeline
 This document describes how to run the pipeline end-to-end on a new cohort, starting from raw unaligned lrGS reads and finishing with an annotated cohort VCF. It is organized into three steps: generating the cohort callsets, phasing them, and annotating them. Depth-based CNV calling is a separate path, covered in [CNV Pipeline](pipeline_cnvs.md).
 
-Each workflow below is run on its own and passes its outputs to the next as inputs; on Terra, outputs are written to the data table and the next workflow's inputs point at those columns. Numbered lists are sequential; bulleted lists run in parallel. For the specific sequence of steps used to build the existing HPRC/HGSVC and All of Us callsets, including the ad-hoc reruns and one-off fixes those callsets required, see [Trace](trace.md).
+Each workflow below is run on its own and passes its outputs to the next as inputs; on Terra, outputs are written to the data table and the next workflow's inputs point at those columns. Numbered lists are sequential; bulleted lists run in parallel. [Run Order](#run-order) flattens the whole pipeline into numbered steps, where every workflow sharing a number can run at the same time. For the specific sequence of steps used to build the existing HPRC/HGSVC and All of Us callsets, including the ad-hoc reruns and one-off fixes those callsets required, see [Trace](trace.md).
 
 ![Pipeline overview](images/combined.png)
 
@@ -11,11 +11,46 @@ The overview is a schematic of the stages. Where it names a tool that differs fr
 ## Inputs
 Everything below is cohort-specific and must be supplied per run. Reference files, repeat catalogs and Docker images are shared across cohorts and supplied separately - see [References](references.md) and [Docker images](dockers.md).
 - **Unaligned lrGS reads** - one unaligned BAM per sample, plus the sample IDs.
-- **PED** - six-column pedigree covering every sample, providing sex (`1` male, `2` female) and any family structure. Required by the coverage, post-processing and allele frequency steps.
+- **PED** - six-column pedigree covering every sample, providing each sample's sex (`1` male, `2` female). Every sample is treated as unrelated, so the family and parent columns are not used. Required by the coverage, post-processing and allele frequency steps.
 - **Ancestry** - per-sample genetic similarity group assignments, used for allele frequency annotation.
 - **Cohort metadata TSV** - PED and ancestry combined into the single table the TR histograms consume. [CreateCohortMetadata](../wdl/annotation_utils/CreateCohortMetadata.wdl) builds it if you only have the two files separately.
 - **Phased truth base VCFs** _(optional)_ - haplotype-resolved VCFs covering the cohort's samples. Supplying these enables backbone phasing in step 2.
 - **Sample age data** _(optional)_ - per-sample ages. Supplying this enables age-bin carrier annotation in step 3.
+
+
+## Run Order
+Every workflow below, in dependency order. Workflows that share a step number need nothing from each other, so they can all be launched once the previous step finishes. On Terra the method configs are prefixed with these numbers. Per-sample workflows run once for each sample, and per-cohort workflows run once over the whole cohort. Optional workflows (backbone phasing, age metrics and the [Optional Analyses](#optional-analyses)) are left out.
+
+| Step | Per sample | Per cohort |
+| --- | --- | --- |
+| 01 | MinimapReadAlignment, Hifiasm | CreateCohortMetadata |
+| 02 | DeepVariant, PBSV, Sniffles, TRGT (once per catalog), MosDepth, PALMERDiploid, MinimapAlignment, PAV | - |
+| 03 | CombineTRs, ConcatenateMosDepth, PALMERAssembly | GLNexus, MergeSampleSVCallsets |
+| 04 | AnnotateTREndTags | MergeCohortSVCallsets, MergeCohortLongSVCallsets, CreateCohortCoverageSummary, IdentifyLowCoverageRegions, MergePALMERCallsets |
+| 05 | - | RegenotypeSVCallsets |
+| 06 | - | MergeRegenotypedSVCallsets |
+| 07 | - | PreprocessVcfs |
+| 08 | ExtractSampleVcfs | - |
+| 09 | HiPhase | - |
+| 10 | MethylationProfiling | MergeHiPhaseCallsets |
+| 11 | - | FillPhasedGenotypes, TRGTLPS, CreateCohortMethylationFile |
+| 12 | - | IntegrateTRs, CreateTRGTHistograms |
+| 13 | - | RepeatMasker, AnnotateL1MEAID, AnnotateSVAN, AnnotateMEDs, AnnotateIndelTRs, AnnotateRegion, AnnotateInSilicoPredictors, AnnotateGnomADSTR, AnnotateDbSNP, AnnotateVRS |
+| 14 | - | AnnotatePALMER, SubsetTsvToColumns |
+| 15 | - | AnnotateMEIs |
+| 16 | - | AnnotateAlleleType |
+| 17 | - | AnnotateVEPHail, AnnotateSVAnnotate, AnnotateCallsetOverlap, AnnotateDbVaR |
+| 18 | - | AnnotateVcf |
+| 19 | - | PostprocessCallset |
+| 20 | - | ResolveHaplotypeOverlaps |
+| 21 | - | FilterLowCoverageRegions |
+| 22 | - | FilterLowCoverageGenotypes |
+| 23 | - | AnnotateSQMetrics, AnnotateGQMetrics |
+| 24 | - | AnnotateVcf |
+| 25 | - | AnnotateAF |
+| 26 | - | NormalizeAlleleTypes |
+| 27 | - | FilterNCRCutoffs |
+| 28 | - | StripGenotypes |
 
 
 ## 1. Preprocessing
@@ -34,7 +69,7 @@ Alignment and assembly are independent and run concurrently; only the assembly b
 2. **[GLNexus](../wdl/tools/GLNexus.wdl)** - joint-genotype the per-sample gVCFs into a cohort SNV/indel VCF.
 
 ### SV Callset
-Several callers are run per sample and merged within each sample, the per-sample calls are merged across the cohort, and the cohort sites are then regenotyped per family with Kanpig. Calls are split by size during the per-sample merge: SVs of 20bp to 2kb go through scoring and regenotyping, while longer SVs and breakends are integrated separately.
+Several callers are run per sample and merged within each sample, the per-sample calls are merged across the cohort, and every sample is then regenotyped at every cohort site with Kanpig. Calls are split by size during the per-sample merge: SVs of 20bp to 2kb go through scoring and regenotyping, while longer SVs and breakends are integrated separately.
 1. Callers run in parallel:
    - **[PBSV](../wdl/tools/PBSV.wdl)** - read-based calls from the aligned reads.
    - **[Sniffles](../wdl/tools/Sniffles.wdl)** - read-based calls from the aligned reads.
@@ -43,8 +78,8 @@ Several callers are run per sample and merged within each sample, the per-sample
 3. Cohort integration, in parallel:
    - **[MergeCohortSVCallsets](../wdl/tools/MergeCohortSVCallsets.wdl)** - merge the scored 20bp to 2kb SVs across the cohort with `bcftools merge`, then collapse matching sites with `truvari collapse`, into a cohort SV VCF.
    - **[MergeCohortLongSVCallsets](../wdl/tools/MergeCohortLongSVCallsets.wdl)** - merge and collapse the longer SVs and breakends across the cohort the same way, without scoring or regenotyping.
-4. **[RegenotypeFamilySVCallsets](../wdl/tools/RegenotypeFamilySVCallsets.wdl)** - regenotype the cohort SV VCF jointly within each family with Kanpig, against each member's reads. Runs once per family - on Terra, as one sample set per family.
-5. **[MergeRegenotypedSVCallsets](../wdl/tools/MergeRegenotypedSVCallsets.wdl)** - merge every family's regenotyped calls by variant ID and concatenate them into the regenotyped cohort SV VCF.
+4. **[RegenotypeSVCallsets](../wdl/tools/RegenotypeSVCallsets.wdl)** - regenotype every sample at every site of the cohort SV VCF with Kanpig, against its reads.
+5. **[MergeRegenotypedSVCallsets](../wdl/tools/MergeRegenotypedSVCallsets.wdl)** - merge every sample's regenotyped calls by variant ID, dropping sites no sample carries, and concatenate them into the regenotyped cohort SV VCF.
 
 The SV callset is the regenotyped cohort SV VCF from step 5 together with the longer SV and breakend VCF from step 3.
 
@@ -77,7 +112,7 @@ The cohort integrated VCF is split back per sample and physically phased with Hi
 
 
 ### Physical Phasing
-1. **[ExtractSampleVcfs](../wdl/annotation_utils/ExtractSampleVcfs.wdl)** - split the cohort integrated VCF into per-sample SNV/indel and SV VCFs.
+1. **[ExtractSampleVcfs](../wdl/annotation_utils/ExtractSampleVcfs.wdl)** - extract each sample's SNV/indel and SV VCFs from the cohort integrated VCF. Runs once per sample.
 2. **[HiPhase](../wdl/tools/HiPhase.wdl)** - jointly phase each sample's SNV/indel, SV and TR VCFs against its aligned reads. Set `run_haplotagging = true` so the haplotagged BAM is available for methylation. Run twice per sample, with and without the TR VCF; the no-TRGT run is needed to recover phase during backbone merging.
 3. **[MergeHiPhaseCallsets](../wdl/tools/MergeHiPhaseCallsets.wdl)** - merge the per-sample phased VCFs across the cohort. TR calls are merged separately with `trgt merge`, so this yields both a cohort integrated phased VCF and a cohort TRGT VCF.
 4. **[FillPhasedGenotypes](../wdl/annotation_utils/FillPhasedGenotypes.wdl)** - restore the `0/0` genotypes dropped by the per-sample split, pulling them from the pre-phasing cohort integrated VCF. Run on both the TRGT and no-TRGT merges.
@@ -108,13 +143,11 @@ Annotation has two halves. Characterization runs a suite of workflows that read 
 
 ### Variant Characterization
 The VCF advances only at stage 4. Stages 1 to 3 read the cohort phased VCF from step 2; stage 5 reads the allele-type-annotated VCF that stage 4 produces.
-1. **[RepeatMasker](../wdl/tools/RepeatMasker.wdl)** - extract insertion sequences from the cohort phased VCF and identify their repeat content, giving the sequence and repeat files the MEI callers need.
-2. MEI and duplication callers, in parallel on the cohort phased VCF. These depend on stage 1:
-   - **[AnnotateL1MEAID](../wdl/annotation/AnnotateL1MEAID.wdl)** - identify MEIs with L1ME-AID from the RepeatMasker sequences and output.
-   - **[AnnotatePALMER](../wdl/annotation/AnnotatePALMER.wdl)** - match the cohort PALMER VCF from step 1 against the callset insertions, using the RepeatMasker output.
+1. In parallel on the cohort phased VCF, as soon as step 2 finishes. Site and genotype quality metrics are not computed here; they run in Integration and Release once the genotypes are final:
+   - **[RepeatMasker](../wdl/tools/RepeatMasker.wdl)** - extract insertion sequences from the cohort phased VCF and identify their repeat content, giving the repeat file `AnnotatePALMER` needs.
+   - **[AnnotateL1MEAID](../wdl/annotation/AnnotateL1MEAID.wdl)** - identify MEIs with L1ME-AID, running its own RepeatMasker pass over the insertion sequences.
    - **[AnnotateSVAN](../wdl/annotation/AnnotateSVAN.wdl)** - identify MEIs, MEDs, tandem duplications, dispersed duplications and NUMTs with SVAN.
    - **[AnnotateMEDs](../wdl/annotation/AnnotateMEDs.wdl)** - identify mobile element deletions by intersecting deletions against the MEI catalog.
-3. Independent characterization, in parallel on the cohort phased VCF. These need nothing from stages 1 and 2, so they can start as soon as step 2 finishes. Site and genotype quality metrics are not computed here; they run in Integration and Release once the genotypes are final:
    - **[AnnotateIndelTRs](../wdl/annotation/AnnotateIndelTRs.wdl)** - flag short indels that represent tandem repeats.
    - **[AnnotateRegion](../wdl/annotation/AnnotateRegion.wdl)** - assign each variant a genomic region class (SR, SD, RM or US).
    - **[AnnotateInSilicoPredictors](../wdl/annotation/AnnotateInSilicoPredictors.wdl)** - look up CADD, Pangolin, PhyloP, REVEL and SpliceAI scores.
@@ -122,10 +155,11 @@ The VCF advances only at stage 4. Stages 1 to 3 read the cohort phased VCF from 
    - **[AnnotateDbSNP](../wdl/annotation/AnnotateDbSNP.wdl)** - assign dbSNP rsIDs to matched SNVs and indels.
    - **[AnnotateVRS](../wdl/annotation/AnnotateVRS.wdl)** - annotate each variant with GA4GH VRS identifiers.
    - **[AnnotateAgeMetrics](../wdl/annotation/AnnotateAgeMetrics.wdl)** - age-bin carrier distributions per variant. Only run when sample age data was supplied.
-4. Consolidate the stage 2 evidence and settle `allele_type`, in order:
-   1. **[AnnotateMEIs](../wdl/annotation/AnnotateMEIs.wdl)** - compare the L1MEAID, PALMER and SVAN evidence and synthesize one harmonized MEI TSV.
-   2. **[SubsetTsvToColumns](../wdl/annotation_utils/SubsetTsvToColumns.wdl)** - extract the duplications of interest from the SVAN output.
-   3. **[AnnotateAlleleType](../wdl/annotation_utils/AnnotateAlleleType.wdl)** - rewrite the `allele_type` INFO field from the MED, MEI and duplication TSVs, and record each duplication's source coordinates in `ORIGIN`, producing the allele-type-annotated VCF.
+2. In parallel on the cohort phased VCF, from the stage 1 outputs:
+   - **[AnnotatePALMER](../wdl/annotation/AnnotatePALMER.wdl)** - match the cohort PALMER VCF from step 1 against the callset insertions, using the RepeatMasker output.
+   - **[SubsetTsvToColumns](../wdl/annotation_utils/SubsetTsvToColumns.wdl)** - extract the duplications of interest from the SVAN output.
+3. **[AnnotateMEIs](../wdl/annotation/AnnotateMEIs.wdl)** - compare the L1MEAID, PALMER and SVAN evidence and synthesize one harmonized MEI TSV.
+4. **[AnnotateAlleleType](../wdl/annotation_utils/AnnotateAlleleType.wdl)** - rewrite the `allele_type` INFO field from the MED, MEI and duplication TSVs, and record each duplication's source coordinates in `ORIGIN`, producing the allele-type-annotated VCF.
 5. Functional and overlap annotation, in parallel on the allele-type-annotated VCF. These run after stage 4 because their predictions depend on the final `allele_type`:
    - **[AnnotateVEPHail](../wdl/annotation/AnnotateVEPHail.wdl)** - predict functional effects with VEP via Hail.
    - **[AnnotateSVAnnotate](../wdl/annotation/AnnotateSVAnnotate.wdl)** - predict functional effects for SVs with GATK SVAnnotate.
@@ -136,7 +170,7 @@ The VCF advances only at stage 4. Stages 1 to 3 read the cohort phased VCF from 
 Each step takes the previous step's VCF, starting from the allele-type-annotated VCF.
 1. **[AnnotateVcf](../wdl/annotation_utils/AnnotateVcf.wdl)** - write every annotation TSV produced by the characterization stages into the allele-type-annotated VCF as INFO fields.
 2. **[PostprocessCallset](../wdl/annotation_utils/PostprocessCallset.wdl)** - normalize ploidy, recompute `AC` and `AN` from the resulting genotypes, prune MEIs, flag homopolymer TRs, drop working FILTER values and filter singletons, switched on by `run_normalize_ploidy`, `run_compute_allele_counts`, `run_prune_meis`, `run_flag_homopolymer_trvs`, `run_drop_filters`, `run_filter_assembly_only_singletons` and `run_filter_single_read_singletons`. The singleton filters read `AC`, which is why the counts are recomputed here rather than waiting for `AnnotateAF`.
-3. **[ResolveHaplotypeOverlaps](../wdl/annotation_utils/ResolveHaplotypeOverlaps.wdl)** - resolve calls that overlap on the same haplotype. Runs per contig, so reassemble with `ConcatenateVcfsAcrossContigs`.
+3. **[ResolveHaplotypeOverlaps](../wdl/annotation_utils/ResolveHaplotypeOverlaps.wdl)** - resolve calls that overlap on the same haplotype.
 4. **[FilterLowCoverageRegions](../wdl/annotation_utils/FilterLowCoverageRegions.wdl)** - filter variants falling in the recurrently low-coverage bins identified in step 1.
 5. **[FilterLowCoverageGenotypes](../wdl/annotation_utils/FilterLowCoverageGenotypes.wdl)** - no-call genotypes falling below each sample's coverage cutoff from step 1.
 6. Quality metrics on the final genotypes, in order. These run after steps 2, 3 and 5 because those change genotypes:
@@ -146,9 +180,8 @@ Each step takes the previous step's VCF, starting from the allele-type-annotated
    2. **[AnnotateVcf](../wdl/annotation_utils/AnnotateVcf.wdl)** - write the two metric TSVs into the VCF.
 7. **[AnnotateAF](../wdl/annotation/AnnotateAF.wdl)** - annotate allele frequencies, including `INFO/NCR`, from the cohort ancestry and PED files, the PAR BED reference and the TRGT LPS TSV, overwriting the interim `AC` and `AN` from step 2. Runs after the last genotype-changing step so that the frequencies reflect the filtered genotypes.
 8. **[NormalizeAlleleTypes](../wdl/annotation_utils/NormalizeAlleleTypes.wdl)** - demote non-tandem duplications, MEIs and NUMTs to plain insertions and deletions, recording the original class in `allele_subtype`. Tandemness is tested against the duplication source in `ORIGIN`, which `AnnotateAlleleType` set in characterization stage 4. Runs after every step that needs the detailed classes, and before the no-call rate steps so their cutoffs are stratified by the released classes; it changes only INFO fields.
-9. **[EvaluateNCRCutoffs](../wdl/annotation_utils/EvaluateNCRCutoffs.wdl)** - sweep `INFO/NCR` cutoffs per contig and report precision, from trio transmission, and recall for each allele type, size bin and genomic region, so that a no-call rate cutoff can be chosen per stratum. Precision needs trios in the PED.
-10. **[FilterNCRCutoffs](../wdl/annotation_utils/FilterNCRCutoffs.wdl)** - flag sites above the chosen cutoffs as `HIGH_NCR`, from a cutoff table built off step 9, and optionally remove sites left without any alternate allele.
-11. **[StripGenotypes](../wdl/annotation_utils/StripGenotypes.wdl)** _(optional)_ - drop genotypes to produce a sites-only VCF alongside the full release.
+9. **[FilterNCRCutoffs](../wdl/annotation_utils/FilterNCRCutoffs.wdl)** - flag sites above chosen `INFO/NCR` cutoffs as `HIGH_NCR` when a cutoff table is supplied, and optionally remove sites left without any alternate allele.
+10. **[StripGenotypes](../wdl/annotation_utils/StripGenotypes.wdl)** _(optional)_ - drop genotypes to produce a sites-only VCF alongside the full release.
 
 Step 3 ends with the annotated, filtered, allele-frequency-annotated cohort VCF, with normalized allele types, for release. [Annotations](annotations.md) defines every FILTER value and INFO and FORMAT field it carries.
 

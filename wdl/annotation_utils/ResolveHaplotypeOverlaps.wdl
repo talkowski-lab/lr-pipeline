@@ -6,15 +6,14 @@ import "../utils/Structs.wdl"
 workflow ResolveHaplotypeOverlaps {
     meta {
         description: [
-            "This utility detects and resolves haplotype-level overlaps among non-TR, non-TR-enveloped variants in a phased cohort VCF. For each sample, it extracts the sample's non-ref calls (excluding `allele_type='trv'` and `INFO/TR_ENVELOPED` variants), then sweeps each haplotype's variant intervals to find all overlapping pairs. Overlapping pairs are resolved by keeping the variant that spans more reference sequence (larger `len(REF)`) - which always favors DELs over INS or SNVs. When two variants span the same reference length, the higher-GQ call wins; remaining ties are broken by `INFO/allele_length`, then type rank (DEL > INS > SNV), then QUAL, then input-file order. The loser's FORMAT fields (`GT`, `GQ`, `DP`, `EV`, `BEV`, `AD`, `PL`) are cleared in the output VCF. The workflow scatters per-sample detection across all samples, then applies the collected clears to the given contig (with optional record-count sharding) to produce the resolved VCF."
+            "This utility detects and resolves haplotype-level overlaps among non-TR, non-TR-enveloped variants in a phased cohort VCF. For each sample, it extracts the sample's non-ref calls (excluding `allele_type='trv'` and `INFO/TR_ENVELOPED` variants), then sweeps each haplotype's variant intervals to find all overlapping pairs. Overlapping pairs are resolved by keeping the variant that spans more reference sequence (larger `len(REF)`) - which always favors DELs over INS or SNVs. When two variants span the same reference length, the higher-GQ call wins; remaining ties are broken by `INFO/allele_length`, then type rank (DEL > INS > SNV), then QUAL, then input-file order. The loser's FORMAT fields (`GT`, `GQ`, `DP`, `EV`, `BEV`, `AD`, `PL`) are cleared in the output VCF. The workflow scatters per-sample detection across all samples, then applies the collected clears to the whole VCF (with optional record-count sharding) to produce the resolved VCF."
         ]
     }
 
     parameter_meta {
         vcf: "Phased cohort VCF to resolve."
         vcf_idx: "Index for `vcf`."
-        contig: "Contig to process."
-        records_per_shard: "When set, shards the contig into chunks of this many records for the clearing step."
+        records_per_shard: "When set, shards the VCF into chunks of this many records for the clearing step."
         overlap_resolved_vcf: "VCF with overlapping loser genotypes cleared."
         overlap_resolved_vcf_idx: "Index for `overlap_resolved_vcf`."
         overlap_tsv: "TSV of all detected overlap pairs, with columns `sample`, `haplotype`, `variant_id_retained`, `var_type_retained`, `size_bin_retained`, `variant_id_cleared`, `var_type_cleared`, `size_bin_cleared`."
@@ -23,7 +22,6 @@ workflow ResolveHaplotypeOverlaps {
     input {
         File vcf
         File vcf_idx
-        String contig
         String prefix
 
         Int? records_per_shard
@@ -96,7 +94,7 @@ workflow ResolveHaplotypeOverlaps {
                 vcf = vcf,
                 vcf_idx = vcf_idx,
                 records_per_shard = select_first([records_per_shard]),
-                prefix = "~{prefix}.~{contig}",
+                prefix = prefix,
                 docker = utils_docker,
                 runtime_attr_override = runtime_attr_shard_vcf
         }
@@ -107,7 +105,7 @@ workflow ResolveHaplotypeOverlaps {
                     vcf = shard_pair.left,
                     vcf_idx = shard_pair.right,
                     cleared_calls_tsv = ConcatClearedTsvs.concatenated_tsv,
-                    prefix = "~{prefix}.~{contig}.shard.cleared",
+                    prefix = "~{prefix}.shard.cleared",
                     docker = utils_docker,
                     runtime_attr_override = runtime_attr_clear_overlaps
             }
@@ -119,7 +117,7 @@ workflow ResolveHaplotypeOverlaps {
                 vcf_idxs = ClearShard.output_vcf_idx,
                 allow_overlaps = false,
                 naive = true,
-                prefix = "~{prefix}.~{contig}.cleared",
+                prefix = "~{prefix}.cleared",
                 docker = utils_docker,
                 runtime_attr_override = runtime_attr_concat_shards
         }
@@ -131,7 +129,7 @@ workflow ResolveHaplotypeOverlaps {
                 vcf = vcf,
                 vcf_idx = vcf_idx,
                 cleared_calls_tsv = ConcatClearedTsvs.concatenated_tsv,
-                prefix = "~{prefix}.~{contig}.cleared",
+                prefix = "~{prefix}.cleared",
                 docker = utils_docker,
                 runtime_attr_override = runtime_attr_clear_overlaps
         }
