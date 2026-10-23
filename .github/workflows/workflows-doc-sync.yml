@@ -9,6 +9,7 @@ on:
       - '.dockstore.yml'
       - '.github/scripts/wdl_meta.py'
       - '.github/scripts/generate_workflows_doc.py'
+      - '.github/workflows/workflows-doc-sync.yml'
   pull_request:
     branches: [ main ]
     paths:
@@ -17,6 +18,7 @@ on:
       - '.dockstore.yml'
       - '.github/scripts/wdl_meta.py'
       - '.github/scripts/generate_workflows_doc.py'
+      - '.github/workflows/workflows-doc-sync.yml'
 
 permissions:
   contents: read
@@ -29,6 +31,7 @@ jobs:
   check:
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     name: Check Workflow Documentation
     steps:
       - name: Checkout code
@@ -55,6 +58,7 @@ jobs:
   generate:
     if: github.event_name == 'push'
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     name: Generate Workflow Documentation
     steps:
       # The write deploy key is the ruleset's bypass actor for the pull-request rule on main

@@ -5,10 +5,13 @@ on:
     branches: [ main ]
     paths:
       - 'wdl/**'
+      - '.github/workflows/wdl-validation.yml'
   pull_request:
     branches: [ main ]
     paths:
       - 'wdl/**'
+      - '.github/workflows/wdl-validation.yml'
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -20,6 +23,7 @@ concurrency:
 jobs:
   womtool_syntax_check:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     name: Womtool Syntax Check
     steps:
       - name: Checkout code

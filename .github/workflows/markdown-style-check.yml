@@ -6,11 +6,13 @@ on:
     paths:
       - '**.md'
       - '.github/scripts/check_markdown_style.py'
+      - '.github/workflows/markdown-style-check.yml'
   pull_request:
     branches: [ main ]
     paths:
       - '**.md'
       - '.github/scripts/check_markdown_style.py'
+      - '.github/workflows/markdown-style-check.yml'
 
 permissions:
   contents: read
@@ -22,6 +24,7 @@ concurrency:
 jobs:
   markdown_style_check:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     name: Markdown Style Check
     steps:
       - name: Checkout code

@@ -28,6 +28,7 @@ concurrency:
 jobs:
   shellcheck:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     name: ShellCheck
     steps:
       - name: Checkout code
@@ -39,6 +40,7 @@ jobs:
 
   hadolint:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     name: Hadolint
     steps:
       - name: Checkout code

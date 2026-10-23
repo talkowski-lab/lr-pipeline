@@ -7,12 +7,14 @@ on:
       - 'AGENTS.md'
       - '.claude/CLAUDE.md'
       - '.github/copilot-instructions.md'
+      - '.github/workflows/agents-sync-check.yml'
   pull_request:
     branches: [ main ]
     paths:
       - 'AGENTS.md'
       - '.claude/CLAUDE.md'
       - '.github/copilot-instructions.md'
+      - '.github/workflows/agents-sync-check.yml'
 
 permissions:
   contents: read
@@ -24,6 +26,7 @@ concurrency:
 jobs:
   agents_sync_check:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     name: Agents Sync Check
     steps:
       - name: Checkout code

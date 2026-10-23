@@ -6,11 +6,13 @@ on:
     paths:
       - 'wdl/**'
       - '.dockstore.yml'
+      - '.github/workflows/dockstore-sync.yml'
   pull_request:
     branches: [ main ]
     paths:
       - 'wdl/**'
       - '.dockstore.yml'
+      - '.github/workflows/dockstore-sync.yml'
 
 permissions:
   contents: read
@@ -22,6 +24,7 @@ concurrency:
 jobs:
   dockstore_sync_check:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     name: Dockstore Sync Check
     steps:
       - name: Checkout code

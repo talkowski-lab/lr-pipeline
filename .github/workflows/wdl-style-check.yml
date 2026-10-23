@@ -7,12 +7,14 @@ on:
       - 'wdl/**'
       - '.github/scripts/check_wdl_style.py'
       - '.github/scripts/wdl_meta.py'
+      - '.github/workflows/wdl-style-check.yml'
   pull_request:
     branches: [ main ]
     paths:
       - 'wdl/**'
       - '.github/scripts/check_wdl_style.py'
       - '.github/scripts/wdl_meta.py'
+      - '.github/workflows/wdl-style-check.yml'
 
 permissions:
   contents: read
@@ -24,6 +26,7 @@ concurrency:
 jobs:
   wdl_style_check:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     name: WDL Style Check
     steps:
       - name: Checkout code
