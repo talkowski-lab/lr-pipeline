@@ -6,6 +6,9 @@
 # modification, are permitted provided that the conditions in GATK-SV's
 # BSD 3-Clause license are met. See:
 # https://github.com/broadinstitute/gatk-sv/blob/main/LICENSE.TXT
+#
+# Derived from broadinstitute/gatk-sv src/sv-pipeline/pre_SVCalling_and_QC/estimated_CN_denoising.py
+# https://github.com/broadinstitute/gatk-sv/blob/main/src/sv-pipeline/pre_SVCalling_and_QC/estimated_CN_denoising.py
 
 import argparse
 

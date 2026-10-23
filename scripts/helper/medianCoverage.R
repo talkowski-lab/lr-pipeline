@@ -1,5 +1,10 @@
 #!/usr/bin/env Rscript
 
+# Derived from broadinstitute/gatk-sv src/WGD/bin/medianCoverage.R
+# https://github.com/broadinstitute/gatk-sv/blob/main/src/WGD/bin/medianCoverage.R
+# Distributed under GATK-SV's BSD 3-Clause license. See:
+# https://github.com/broadinstitute/gatk-sv/blob/main/LICENSE.TXT
+
 # Calculate median bin coverage per sample for all samples in a bincov matrix
 # Loads the entire matrix into memory, so split the input by contig for large matrices or small-memory machines
 

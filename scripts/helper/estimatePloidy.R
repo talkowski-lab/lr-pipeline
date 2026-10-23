@@ -1,6 +1,7 @@
 #!/usr/bin/env Rscript
 
-# Vendored unmodified from github.com/broadinstitute/gatk-sv, src/WGD/bin/estimatePloidy.R.
+# Vendored unmodified from broadinstitute/gatk-sv src/WGD/bin/estimatePloidy.R
+# https://github.com/broadinstitute/gatk-sv/blob/main/src/WGD/bin/estimatePloidy.R
 #
 # Copyright (c) 2009-2026, Broad Institute, Inc. All rights reserved.
 #

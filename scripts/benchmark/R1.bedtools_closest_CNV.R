@@ -1,5 +1,10 @@
 #!/usr/bin/env Rscript
 
+# Derived from broadinstitute/gatk-sv src/sv-pipeline/05_annotation/scripts/R1.bedtools_closest_CNV.R
+# https://github.com/broadinstitute/gatk-sv/blob/main/src/sv-pipeline/05_annotation/scripts/R1.bedtools_closest_CNV.R
+# Distributed under GATK-SV's BSD 3-Clause license. See:
+# https://github.com/broadinstitute/gatk-sv/blob/main/LICENSE.TXT
+
 # Compare CNVs against their closest reference callset records
 library("optparse")
 
