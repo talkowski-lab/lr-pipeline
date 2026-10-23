@@ -11,13 +11,13 @@ workflow MergeRegenotypedSVCallsets {
     meta {
         description: [
             "This tool merges the per-family regenotyped SV calls written by RegenotypeFamilySVCallsets into one regenotyped cohort SV callset. Each chunk of the interval CSV is merged across every sample of every family with bcftools merge, matching records by ID and dropping records that are REF in every sample, and the merged chunks are concatenated in genome order.",
-            "Nothing is returned as a workflow output. The merged chunks are written under 'merge' in 'remote_outdir', and the regenotyped cohort callset is 'concat/merged.bcf' there."
+            "Nothing is returned as a workflow output. The merged chunks are written under 'merge' in 'remote_outdir', and the regenotyped cohort callset is 'concat/' followed by 'prefix' and '.bcf' there."
         ]
     }
 
     parameter_meta {
         remote_indir: "The 'remote_outdir' shared by every RegenotypeFamilySVCallsets run."
-        remote_outdir: "GCS directory the merged chunks and the concatenated callset are written under, without a trailing slash."
+        remote_outdir: "GCS directory the merged chunks and the concatenated callset are written under, without a trailing slash. The concatenated callset is written as 'concat/<prefix>.bcf'."
         sample_ids_file: "Samples to merge, one per line, in the column order of the merged VCF. Derived from the per-sample marker files in 'remote_indir' when omitted."
         merge_mode: "How bcftools merge matches records: 1 by CHROM, POS, REF and ALT, or 2 by ID. Regenotyped calls share the cohort IDs, so 2 is correct here."
         split_for_bcftools_merge_csv: "The interval CSV RegenotypeFamilySVCallsets split the regenotyped calls into."
@@ -26,6 +26,7 @@ workflow MergeRegenotypedSVCallsets {
     input {
         String remote_indir
         String remote_outdir
+        String prefix
         File? sample_ids_file
 
         Int merge_mode = 2
@@ -82,6 +83,7 @@ workflow MergeRegenotypedSVCallsets {
             chunk_ids = MakeChunkIdsCsv.csv,
             remote_indir = merge_dir,
             remote_outdir = concat_dir,
+            prefix = prefix,
             upstream_signal = MergeChunk.done,
             docker = sv_integration_docker,
             runtime_attr_override = runtime_attr_concat_regenotyped_chunks
@@ -178,6 +180,7 @@ task ConcatRegenotypedChunks {
 
         String remote_indir
         String remote_outdir
+        String prefix
 
         Array[String]? upstream_signal
         String docker
@@ -208,12 +211,12 @@ task ConcatRegenotypedChunks {
         df -h 1>&2
 
         # Concatenating
-        ${TIME_COMMAND} bcftools concat --threads ${N_THREADS} --naive --file-list file_list.txt --output-type b --output merged.bcf
-        ${TIME_COMMAND} bcftools index --threads ${N_THREADS} -f merged.bcf
+        ${TIME_COMMAND} bcftools concat --threads ${N_THREADS} --naive --file-list file_list.txt --output-type b --output ~{prefix}.bcf
+        ${TIME_COMMAND} bcftools index --threads ${N_THREADS} -f ~{prefix}.bcf
         df -h 1>&2
 
         # Uploading
-        gcloud storage mv merged.'bcf*' ~{remote_outdir}/
+        gcloud storage mv ~{prefix}.'bcf*' ~{remote_outdir}/
     >>>
 
     output {

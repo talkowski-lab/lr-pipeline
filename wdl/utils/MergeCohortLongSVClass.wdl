@@ -33,11 +33,12 @@ workflow MergeCohortLongSVClass {
         ref_fa: "From references."
         ref_fai: "From references."
         done: "Completion signal of the genome-wide concatenation."
-        cohort_dir: "GCS directory holding the class's cohort callset, 'truvari_collapsed.bcf'."
+        cohort_dir: "GCS directory holding the class's cohort callset, '<prefix>.bcf'."
     }
 
     input {
         String suffix
+        String prefix
         String remote_indir
         String remote_outdir_suffix
         Array[String] chromosomes
@@ -148,6 +149,7 @@ workflow MergeCohortLongSVClass {
             chromosomes = chromosomes,
             out_txt = ConcatChromosomeShards.out_txt,
             remote_outdir = concat_dir,
+            prefix = prefix,
             naive = concat_all_naive,
             docker = sv_integration_docker,
             runtime_attr_override = runtime_attr_concat_chromosomes
@@ -749,6 +751,7 @@ task ConcatChromosomes {
         Array[String] chromosomes
         Array[File] out_txt
         String remote_outdir
+        String prefix
         Int naive
         String docker
 
@@ -787,11 +790,11 @@ task ConcatChromosomes {
         else
             CONCAT_FLAGS=" "
         fi
-        ${TIME_COMMAND} bcftools concat --threads ${N_THREADS} ${CONCAT_FLAGS} --file-list file_list.txt --output-type b --output truvari_collapsed.bcf
-        ${TIME_COMMAND} bcftools index --threads ${N_THREADS} -f truvari_collapsed.bcf
+        ${TIME_COMMAND} bcftools concat --threads ${N_THREADS} ${CONCAT_FLAGS} --file-list file_list.txt --output-type b --output ~{prefix}.bcf
+        ${TIME_COMMAND} bcftools index --threads ${N_THREADS} -f ~{prefix}.bcf
 
         # Uploading
-        gcloud storage mv truvari_collapsed.'bcf*' ~{remote_outdir}/
+        gcloud storage mv ~{prefix}.'bcf*' ~{remote_outdir}/
 
         # Completion signal for orchestrator ordering. Ignored standalone.
         echo "done" > allchr.signal

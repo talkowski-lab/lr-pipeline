@@ -21,7 +21,7 @@ workflow RegenotypeFamilySVCallsets {
         aligned_bams: "GCS paths to each member's aligned reads."
         aligned_bais: "GCS paths to the indexes for 'aligned_bams'."
         ped: "Six-column pedigree defining each family's members."
-        remote_indir: "The 'remote_outdir' of MergeCohortSVCallsets, whose '06_concat' subdirectory holds the cohort callset."
+        remote_indir: "The 'remote_outdir' of MergeCohortSVCallsets, whose '06_concat' subdirectory holds the cohort callset as '<prefix>.bcf'. The workflow 'prefix' must match the one given to MergeCohortSVCallsets."
         remote_outdir: "GCS directory shared by every family's run, which the per-sample regenotyped chunks are written under, without a trailing slash."
         requester_pays_project: "Project billed for reads from requester-pays buckets. Leave empty when none are read."
         kanpig_params_cohort: "Kanpig arguments for regenotyping against the cohort callset."
@@ -42,6 +42,7 @@ workflow RegenotypeFamilySVCallsets {
         File ped
         String remote_indir
         String remote_outdir
+        String prefix
 
         String requester_pays_project = ""
         String kanpig_params_cohort = "--neighdist 500 --gpenalty 0.04 --hapsim 0.97"
@@ -82,6 +83,7 @@ workflow RegenotypeFamilySVCallsets {
             split_for_bcftools_merge_csv = split_for_bcftools_merge_csv,
             remote_indir = cohort_indir,
             remote_outdir = regenotyped_dir,
+            prefix = prefix,
             requester_pays_project = requester_pays_project,
             ref_fa = ref_fa,
             ref_fai = ref_fai,
@@ -175,6 +177,7 @@ task JointGenotypeFamily {
 
         String remote_indir
         String remote_outdir
+        String prefix
         String requester_pays_project
 
         File ref_fa
@@ -375,9 +378,8 @@ EOF_FAMILY_IDS
         paste sample_ids.txt sample_sexes.txt aligned_bais.txt aligned_bams.txt > sample_metadata.tsv
 
         # Localizing the WP6 cohort VCF.
-        ${TIME_COMMAND} gcloud storage cp ~{remote_indir}/truvari_collapsed.'bcf*' .
-        mv truvari_collapsed.bcf cohort.bcf
-        mv truvari_collapsed.bcf.csi cohort.bcf.csi
+        ${TIME_COMMAND} gcloud storage cp ~{remote_indir}/~{prefix}.bcf cohort.bcf
+        gcloud storage cp ~{remote_indir}/~{prefix}.bcf.csi cohort.bcf.csi
 
         while read -u 3 FAMILY_ID; do
             if [ -z "${FAMILY_ID}" ] || [[ "${FAMILY_ID}" == \#* ]]; then

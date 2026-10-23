@@ -46,6 +46,8 @@ Several callers are run per sample and merged within each sample, the per-sample
 4. **[RegenotypeFamilySVCallsets](../wdl/tools/RegenotypeFamilySVCallsets.wdl)** - regenotype the cohort SV VCF jointly within each family with Kanpig, against each member's reads. Runs once per family - on Terra, as one sample set per family.
 5. **[MergeRegenotypedSVCallsets](../wdl/tools/MergeRegenotypedSVCallsets.wdl)** - merge every family's regenotyped calls by variant ID and concatenate them into the regenotyped cohort SV VCF.
 
+The stages hand files over through `remote_outdir` and `remote_indir`. Each cohort-level stage writes its final BCF as `<prefix>.bcf`: `06_concat` for `MergeCohortSVCallsets`, `15_concat` under each class for `MergeCohortLongSVCallsets`, and `concat` for `MergeRegenotypedSVCallsets`. `RegenotypeFamilySVCallsets` reads the `MergeCohortSVCallsets` BCF, so it must be given that stage's `prefix`.
+
 The SV callset is the regenotyped cohort SV VCF from step 5 together with the longer SV and breakend VCF from step 3.
 
 ### TRGT Callset
