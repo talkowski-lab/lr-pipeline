@@ -82,3 +82,21 @@ with pysam.VariantFile(dst, "w", header=header) as out:
 
 ## GRCh38.chr22.fa.fai
 A one-line FASTA index for chr22 (`chr22`, 50,818,468 bp). Workflows that read only the contig lengths take it in place of the reference.
+
+
+## chr22.windows.fa
+A 60 kb FASTA of 60 reference windows of 1,000 bp, joined into one contig named `chr22`, with its `.fai`. It lets `PreprocessVcfs` and `MergeVcfs` normalize and check REF alleles without a full reference. Window `i` holds the reference around the `i`-th record chosen by `window_records()` in `tests/conftest.py`, with the record's REF starting at the 401st base. The `window_vcf` fixture moves those records to position `i * 1000 + 401`, so their REF alleles match the FASTA.
+
+
+### Regeneration
+Run from `tests/`, with `SRC` set to an uppercase or soft-masked GRCh38 FASTA that has an index:
+
+```bash
+python - <<'PY'
+import conftest as c
+_, records = c.load_records(c.SUBSET_VCF)
+c.write_window_fasta("$SRC", c.WINDOW_FASTA, records)
+PY
+```
+
+Index the output with `samtools faidx chr22.windows.fa`.
