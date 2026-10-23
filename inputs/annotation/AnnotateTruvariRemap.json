@@ -3,7 +3,11 @@
     "AnnotateTruvariRemap.vcf_idx": "gs://<cohort-bucket>/cohort.vcf.gz.tbi",
     "AnnotateTruvariRemap.ref_fa": "gs://<references-bucket>/hg38.no_alt.fa",
     "AnnotateTruvariRemap.ref_bwa_idx": [
-        "gs://<references-bucket>/hg38.no_alt"
+        "gs://<references-bucket>/hg38.no_alt.fa.amb",
+        "gs://<references-bucket>/hg38.no_alt.fa.ann",
+        "gs://<references-bucket>/hg38.no_alt.fa.bwt",
+        "gs://<references-bucket>/hg38.no_alt.fa.pac",
+        "gs://<references-bucket>/hg38.no_alt.fa.sa"
     ],
     "AnnotateTruvariRemap.contigs": [
         "chr1",

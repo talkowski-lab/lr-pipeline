@@ -51,11 +51,14 @@ NAMED = {
 EXTRA_REFERENCES = {
     "autosomes_bed", "standard_chromosomes_bed", "exclude_bed", "expected_cn_female", "expected_cn_male",
     "ref_agp", "ref_map_file", "ref_bundle_json_file", "training_resource_bed", "training_resource_vcf",
-    "mei_bwa_idx", "ref_bwa_idx", "intervals",
+    "intervals",
 }  # fmt: skip
 
 # Extension of a File input is taken from its name suffix, e.g. `annotations_tsv` -> annotations.tsv
 SUFFIX_EXT = {"_tsv": ".tsv", "_bed": ".bed", "_json": ".json", "_csv": ".csv", "_gtf": ".gtf", "_script": ".py", "_agp": ".agp"}
+
+# A `<x>_bwa_idx` input lists the BWA index files built beside the `<x>_fa` FASTA
+BWA_INDEX_EXTS = [".amb", ".ann", ".bwt", ".pac", ".sa"]
 
 # Array inputs whose placeholder list has two elements; the rest get one
 TWO_ELEMENTS = re.compile(r"(vcfs|vcf_idxs|bams|bais)$")
@@ -139,6 +142,8 @@ def value(name, type_name, plural=True):
     type_name = type_name.rstrip("?+")
     if name in NAMED and type_name.startswith("Array"):
         return NAMED[name]
+    if name.endswith("_bwa_idx"):
+        return [file_value(name[: -len("_bwa_idx")] + "_fa") + ext for ext in BWA_INDEX_EXTS]
     if type_name.startswith("Array["):
         inner = type_name[len("Array[") : -1]
         element = value(singular(name) if plural else name, inner, plural=False)

@@ -34,11 +34,19 @@
     "AnnotateSVAN.repeats_bed": "gs://<references-bucket>/REPEATS_hg38.bed",
     "AnnotateSVAN.ref_fa": "gs://<references-bucket>/hg38.no_alt.fa",
     "AnnotateSVAN.ref_bwa_idx": [
-        "gs://<references-bucket>/hg38.no_alt"
+        "gs://<references-bucket>/hg38.no_alt.fa.amb",
+        "gs://<references-bucket>/hg38.no_alt.fa.ann",
+        "gs://<references-bucket>/hg38.no_alt.fa.bwt",
+        "gs://<references-bucket>/hg38.no_alt.fa.pac",
+        "gs://<references-bucket>/hg38.no_alt.fa.sa"
     ],
     "AnnotateSVAN.mei_fa": "gs://<references-bucket>/CONSENSUS.fa",
     "AnnotateSVAN.mei_bwa_idx": [
-        "gs://<references-bucket>/mei_bwa_idx"
+        "gs://<references-bucket>/CONSENSUS.fa.amb",
+        "gs://<references-bucket>/CONSENSUS.fa.ann",
+        "gs://<references-bucket>/CONSENSUS.fa.bwt",
+        "gs://<references-bucket>/CONSENSUS.fa.pac",
+        "gs://<references-bucket>/CONSENSUS.fa.sa"
     ],
     "AnnotateSVAN.svan_docker": "us-central1-docker.pkg.dev/talkowski-sv-gnomad/kj-dockers/svan:latest",
     "AnnotateSVAN.utils_docker": "us-central1-docker.pkg.dev/talkowski-sv-gnomad/kj-dockers/utils:latest"
