@@ -824,6 +824,7 @@ workflows:
     filters:
       branches:
         - main
+        - kj-platinum-template
       tags:
         - /.*/
 
@@ -834,6 +835,7 @@ workflows:
     filters:
       branches:
         - main
+        - kj-platinum-template
       tags:
         - /.*/
 
