@@ -6,7 +6,7 @@ import "../utils/Structs.wdl"
 workflow AnnotateVcf {
     meta {
         description: [
-            "This utility applies a list of annotation TSVs to a VCF as new INFO fields, adding the specified field names, descriptions, types and numbers for each TSV in turn. Each annotation source can optionally have its TSV sorted, the VCF pre-subset and its TSV rows filtered beforehand. It outputs the annotated VCF."
+            "This utility applies a list of annotation TSVs to a VCF as new INFO fields, adding the specified field names, descriptions, types and numbers for each TSV in turn. Each annotation source can optionally have its TSV sorted, its annotations restricted to records matching an expression and its TSV rows filtered beforehand. It outputs the annotated VCF."
         ]
     }
 
@@ -17,9 +17,9 @@ workflow AnnotateVcf {
         contigs: "Contigs to annotate within the input VCF."
         records_per_shard: "Number of variants to keep within a single shard during annotation. When set, each contig VCF is sharded by record count, annotated in parallel and concatenated."
         sort_tsvs: "Per-TSV flag indicating whether to sort the TSV before annotation."
-        strip_info_fields_per_tsv: "Per-TSV flags selecting which annotations have their pre-existing INFO fields stripped before the annotation is written. Must be the same length as the annotation TSV list, and takes precedence over `strip_info_fields_by_name`."
+        strip_info_fields_per_tsv: "Per-TSV flags selecting which annotations have their pre-existing INFO fields stripped before the annotation is written. Must be the same length as the annotation TSV list, and takes precedence over `strip_info_fields_by_name`. The strip applies to the whole VCF, so records excluded by `include_expressions` lose the stripped fields and do not get them back."
         strip_info_fields_by_name: "Names of INFO fields to strip from the input VCF before annotation. Ignored when `strip_info_fields_per_tsv` is set."
-        subset_vcf_strings: "Per-TSV `bcftools view` arguments used to pre-subset the VCF."
+        include_expressions: "Per-TSV bcftools filter expression selecting the records that receive that TSV's annotations; records it excludes pass through unchanged. An empty string annotates every record."
         awk_tsv_conditions: "Per-TSV `awk` condition used to filter the TSV rows applied."
         subset_tsv_columns: "Per-TSV 1-based column indices (beyond the always-kept CHROM/POS/REF/ALT/ID columns 1-5) to keep from the TSV before annotation; an empty list for a TSV keeps all columns."
         info_names: "INFO field names added by each annotation TSV."
@@ -42,7 +42,7 @@ workflow AnnotateVcf {
         Array[Boolean] sort_tsvs = []
         Array[Boolean] strip_info_fields_per_tsv = []
         Array[String] strip_info_fields_by_name = []
-        Array[String] subset_vcf_strings = []
+        Array[String] include_expressions = []
         Array[String] awk_tsv_conditions = []
         Array[Array[Int]] subset_tsv_columns = []
 
@@ -138,7 +138,7 @@ workflow AnnotateVcf {
                     vcf = shard_vcfs[s],
                     vcf_idx = shard_vcf_idxs[s],
                     annotations_tsvs = contig_tsvs,
-                    subset_vcf_strings = subset_vcf_strings,
+                    include_expressions = include_expressions,
                     awk_tsv_conditions = awk_tsv_conditions,
                     subset_tsv_columns = subset_tsv_columns,
                     strip_info_fields_per_tsv = strip_info_fields_per_tsv,
@@ -193,7 +193,7 @@ task AnnotateSequentially {
         File vcf
         File vcf_idx
         Array[File] annotations_tsvs
-        Array[String] subset_vcf_strings = []
+        Array[String] include_expressions = []
         Array[String] awk_tsv_conditions = []
         Array[Array[Int]] subset_tsv_columns = []
         Array[Boolean] strip_info_fields_per_tsv = []
@@ -256,7 +256,7 @@ with open("num_tsvs.txt", "w") as f:
 EOF
 
         current_vcf="~{vcf}"
-        SUBSET_FILE="~{write_lines(subset_vcf_strings)}"
+        INCLUDE_FILE="~{write_lines(include_expressions)}"
         AWK_COND_FILE="~{write_lines(awk_tsv_conditions)}"
         i=0
         for tsv_file in ~{sep=' ' annotations_tsvs}; do
@@ -287,16 +287,22 @@ EOF
 
             COLUMN_SPEC=$(cat "columns_${i}.txt")
 
-            SUBSET_ARG=""
-            if [ -s "$SUBSET_FILE" ]; then
-                SUBSET_ARG=$(sed -n "$((i + 1))p" "$SUBSET_FILE")
+            INCLUDE_EXPR=""
+            if [ -s "$INCLUDE_FILE" ]; then
+                INCLUDE_EXPR=$(sed -n "$((i + 1))p" "$INCLUDE_FILE")
+            fi
+
+            # Keep the records the expression excludes, because -i alone drops them from the output
+            INCLUDE_ARGS=()
+            if [ -n "$INCLUDE_EXPR" ]; then
+                INCLUDE_ARGS=(-i "$INCLUDE_EXPR" -k)
             fi
 
             bcftools annotate \
                 -a "annotations_${i}.tsv.gz" \
                 -h "header_${i}.txt" \
                 -c "$COLUMN_SPEC" \
-                $SUBSET_ARG \
+                "${INCLUDE_ARGS[@]}" \
                 -Oz -o "temp_${i}.vcf.gz" \
                 "$current_vcf"
             current_vcf="temp_${i}.vcf.gz"

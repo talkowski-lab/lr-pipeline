@@ -22,76 +22,130 @@ from conftest import (
 pytestmark = pytest.mark.wdl
 
 
-def test_annotate_callset_overlap_exact_matches_biallelic_records_and_carries_truth_fields(
-    run_workflow, run_dir, subset_vcf, utils_docker, source
-):
+def build_overlap_case(run_dir, subset_vcf):
     counter = itertools.count()
     # Truth lacks every fourth record and holds every seventh remaining one three bases away, so neither matches exactly
     shifted = itertools.count()
+    shifted_sites = set()
 
     def shift(record):
         if next(shifted) % 7 == 0:
+            shifted_sites.add((record.contig, record.pos, record.ref, record.alts))
             record.pos += 3
 
     kept = write_vcf(subset_vcf, run_dir / "kept.vcf.gz", lambda r: next(counter) % 4 != 0)
     truth = rewrite_vcf(kept, run_dir / "truth.vcf.gz", [], shift)
-    truth_records = load_records(truth)[1]
+    return truth, load_records(truth)[1], shifted_sites
 
-    outputs = run_workflow(
-        f"{ANNOTATION}/AnnotateCallsetOverlap.wdl",
-        {
-            "vcf": str(subset_vcf),
-            "vcf_idx": f"{subset_vcf}.tbi",
-            "truth_snv_indel_vcf": str(truth),
-            "truth_snv_indel_vcf_idx": f"{truth}.tbi",
-            "truth_sv_vcf": str(truth),
-            "truth_sv_vcf_idx": f"{truth}.tbi",
-            "contig": CONTIG,
-            "prefix": "overlap",
-            "run_exact_matching": True,
-            "run_truvari_matching": False,
-            "run_bedtools_closest_matching": False,
-            "min_sv_length_truvari_vcf": 50,
-            "min_sv_length_truvari_truth_snv_indel_vcf": 50,
-            "min_sv_length_bedtools_closest_vcf": 50,
-            "min_sv_length_bedtools_closest_truth_vcf": 50,
-            "convert_symbolic_truth_sv_vcf": False,
-            "move_dup_to_origin": False,
-            "subset_contig_truth_sv_vcf": False,
-            "shard_bin_size_exact_match": 15000000,
-            "args_string_vcf": "N_ALT==1",
-            "args_string_truth_snv_indel_vcf": "N_ALT==1",
-            "gatk_sv_lr_docker": utils_docker,
-            "utils_docker": utils_docker,
-        },
+
+def overlap_inputs(subset_vcf, truth, utils_docker, **overrides):
+    return {
+        "vcf": str(subset_vcf),
+        "vcf_idx": f"{subset_vcf}.tbi",
+        "truth_snv_indel_vcf": str(truth),
+        "truth_snv_indel_vcf_idx": f"{truth}.tbi",
+        "truth_sv_vcf": str(truth),
+        "truth_sv_vcf_idx": f"{truth}.tbi",
+        "contig": CONTIG,
+        "prefix": "overlap",
+        "run_exact_matching": True,
+        "run_truvari_matching": False,
+        "run_bedtools_closest_matching": False,
+        "min_sv_length_truvari_vcf": 50,
+        "min_sv_length_truvari_truth_snv_indel_vcf": 50,
+        "min_sv_length_bedtools_closest_vcf": 50,
+        "min_sv_length_bedtools_closest_truth_vcf": 50,
+        "convert_symbolic_truth_sv_vcf": False,
+        "move_dup_to_origin": False,
+        "subset_contig_truth_sv_vcf": False,
+        "shard_bin_size_exact_match": 15000000,
+        "args_string_vcf": "N_ALT==1",
+        "args_string_truth_snv_indel_vcf": "N_ALT==1",
+        "gatk_sv_lr_docker": utils_docker,
+        "utils_docker": utils_docker,
+        **overrides,
+    }
+
+
+def overlap_rows(outputs):
+    header = [line[0] for line in read_table(outputs["AnnotateCallsetOverlap.annotations_header_benchmark"])]
+    assert header[:4] == ["match_type", "truth_ID", "source_tag", "filter"]
+    assert header[-3:] == ["N_HOMREF", "N_HET", "N_HOMALT"]
+    return [
+        dict(zip(["CHROM", "POS", "REF", "ALT", "ID"] + header, row))
+        for row in read_table(outputs["AnnotateCallsetOverlap.annotations_tsv_benchmark"])
+    ]
+
+
+def row_site(row):
+    return (row["CHROM"], int(row["POS"]), row["REF"], (row["ALT"],))
+
+
+def assert_truth_fields(row, record, match_type):
+    assert row["match_type"] == match_type
+    assert row["source_tag"] == "SNV_indel"
+    assert row["truth_ID"] == record["id"]
+    # Genotype counts are derived from the truth's INFO allele counts: het = AC - 2 * nhomalt, homref = AN / 2 - het - nhomalt
+    info = record["info"]
+    het = info["AC"][0] - 2 * info["nhomalt"]
+    assert (int(row["N_HOMREF"]), int(row["N_HET"]), int(row["N_HOMALT"])) == (
+        int(info["AN"] / 2 - info["nhomalt"] - het),
+        het,
+        info["nhomalt"],
     )
+    assert int(row["AC"]) == info["AC"][0]
+
+
+def test_annotate_callset_overlap_exact_matches_biallelic_records_and_carries_truth_fields(
+    run_workflow, run_dir, subset_vcf, utils_docker, source
+):
+    truth, truth_records, _ = build_overlap_case(run_dir, subset_vcf)
+    outputs = run_workflow(f"{ANNOTATION}/AnnotateCallsetOverlap.wdl", overlap_inputs(subset_vcf, truth, utils_docker))
 
     truth_by_site = {site_key(r): r for r in truth_records}
     expected = {site_key(r): r for r in source[1] if len(r["alts"]) == 1 and site_key(r) in truth_by_site}
     assert 0 < len(expected) < sum(len(r["alts"]) == 1 for r in source[1])
 
-    header = [line[0] for line in read_table(outputs["AnnotateCallsetOverlap.annotations_header_benchmark"])]
-    assert header[:4] == ["match_type", "truth_ID", "source_tag", "filter"]
-    assert header[-3:] == ["N_HOMREF", "N_HET", "N_HOMALT"]
-    rows = [
-        dict(zip(["CHROM", "POS", "REF", "ALT", "ID"] + header, row))
-        for row in read_table(outputs["AnnotateCallsetOverlap.annotations_tsv_benchmark"])
-    ]
-    assert {(r["CHROM"], int(r["POS"]), r["REF"], (r["ALT"],)) for r in rows} == set(expected)
+    rows = overlap_rows(outputs)
+    assert {row_site(r) for r in rows} == set(expected)
     for row in rows:
-        record = truth_by_site[(row["CHROM"], int(row["POS"]), row["REF"], (row["ALT"],))]
-        assert row["match_type"] == "EXACT"
-        assert row["source_tag"] == "SNV_indel"
-        assert row["truth_ID"] == record["id"]
-        # Genotype counts are derived from the truth's INFO allele counts: het = AC - 2 * nhomalt, homref = AN / 2 - het - nhomalt
-        info = record["info"]
-        het = info["AC"][0] - 2 * info["nhomalt"]
-        assert (int(row["N_HOMREF"]), int(row["N_HET"]), int(row["N_HOMALT"])) == (
-            int(info["AN"] / 2 - info["nhomalt"] - het),
-            het,
-            info["nhomalt"],
-        )
-        assert int(row["AC"]) == record["info"]["AC"][0]
+        assert_truth_fields(row, truth_by_site[row_site(row)], "EXACT")
+
+
+def test_annotate_callset_overlap_truvari_matches_shifted_svs_across_record_shards(
+    run_workflow, run_dir, subset_vcf, utils_docker, source
+):
+    truth, truth_records, shifted_sites = build_overlap_case(run_dir, subset_vcf)
+    outputs = run_workflow(
+        f"{ANNOTATION}/AnnotateCallsetOverlap.wdl",
+        overlap_inputs(subset_vcf, truth, utils_docker, run_truvari_matching=True, shard_records_truvari_match=10),
+    )
+
+    truth_by_site = {site_key(r): r for r in truth_records}
+    exact = {site_key(r) for r in source[1] if len(r["alts"]) == 1 and site_key(r) in truth_by_site}
+    shifted_svs = {
+        site_key(r)
+        for r in source[1]
+        if len(r["alts"]) == 1 and abs(r["info"].get("allele_length") or 0) >= 50 and site_key(r) in shifted_sites
+    }
+    assert shifted_svs
+    rows = overlap_rows(outputs)
+    by_site = {row_site(r): r for r in rows}
+    assert exact <= set(by_site)
+    for site in exact:
+        assert by_site[site]["match_type"] == "EXACT"
+        assert_truth_fields(by_site[site], truth_by_site[site], "EXACT")
+
+    # Each shifted SV matches its own truth record through Truvari, whichever record shard held it
+    source_by_site = {site_key(r): r for r in source[1]}
+    id_to_truth = {r["id"]: r for r in truth_records}
+    for site in shifted_svs:
+        record = source_by_site[site]
+        assert site in by_site
+        assert_truth_fields(by_site[site], id_to_truth[record["id"]], "TRUVARI_0.9")
+    for site, row in by_site.items():
+        if site not in exact:
+            assert row["match_type"].startswith("TRUVARI_")
 
 
 POPS = {"HG00096": "nfe", "HG00097": "nfe", "HG00099": "afr", "HG00126": "eas", "HG00128": "afr"}

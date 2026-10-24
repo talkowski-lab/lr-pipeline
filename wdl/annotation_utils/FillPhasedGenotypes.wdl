@@ -171,6 +171,10 @@ task FillGenotypes {
     command <<<
         set -euo pipefail
 
+        if [[ "~{unphased_vcf_idx}" != "~{unphased_vcf}.tbi" ]]; then
+            ln -sf "~{unphased_vcf_idx}" "~{unphased_vcf}.tbi"
+        fi
+
         python3 <<CODE
 import pysam
 
@@ -192,6 +196,14 @@ def alleles_key(rec):
     alts = tuple(a.upper() for a in rec.alts) if rec.alts else ()
     return (rec.chrom, rec.pos, ref, alts)
 
+def copy_format(src, dst, key):
+    value = src[key]
+    header_format = phased_in.header.formats[key]
+    # pysam splits a comma-joined Number=1 String such as AL into a tuple it then refuses to write back
+    if isinstance(value, tuple) and header_format.number == 1 and header_format.type == "String":
+        value = ",".join("." if v is None else str(v) for v in value)
+    dst[key] = value
+
 for record in phased_in:
     match = None
     rec_key = alleles_key(record)
@@ -205,23 +217,14 @@ for record in phased_in:
             for fmt_key in record.samples[sample].keys():
                 if fmt_key == "GT":
                     if record.samples[sample]['GT'] in NULL_GT:
-                        try:
-                            record.samples[sample]['GT'] = match.samples[sample]['GT']
-                        except Exception:
-                            pass
+                        record.samples[sample]['GT'] = match.samples[sample]['GT']
                 else:
                     if fmt_key in match.samples[sample]:
-                        try:
-                            record.samples[sample][fmt_key] = match.samples[sample][fmt_key]
-                        except Exception:
-                            pass
+                        copy_format(match.samples[sample], record.samples[sample], fmt_key)
 
             for fmt_key in extra_fmt_keys:
                 if fmt_key in match.samples[sample]:
-                    try:
-                        record.samples[sample][fmt_key] = match.samples[sample][fmt_key]
-                    except Exception:
-                        pass
+                    copy_format(match.samples[sample], record.samples[sample], fmt_key)
     out.write(record)
 
 out.close()

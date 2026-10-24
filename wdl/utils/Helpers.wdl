@@ -936,14 +936,23 @@ task ConcatVcfs {
     command <<<
         set -euo pipefail
 
-        VCFS_FILE="~{write_lines(vcfs)}"
+        # Link each index beside a uniquely named link to its VCF, because Cromwell and miniwdl localize the index elsewhere
+        mkdir inputs
+        paste "~{write_lines(vcfs)}" "~{write_lines(vcf_idxs)}" > vcf_pairs.tsv
+        i=0
+        while IFS=$'\t' read -r vcf vcf_idx; do
+            ln -s "$vcf" "inputs/vcf_${i}.vcf.gz"
+            ln -s "$vcf_idx" "inputs/vcf_${i}.vcf.gz.tbi"
+            echo "inputs/vcf_${i}.vcf.gz" >> vcfs.list
+            i=$((i + 1))
+        done < vcf_pairs.tsv
 
         if [[ "~{sort_output}" == "true" ]]; then
             # Give bcftools sort its memory limit in megabytes because a bare --max-mem value is read as bytes
             bcftools concat \
                 ~{if no_version then "--no-version" else ""} \
                 ~{if allow_overlaps then "--allow-overlaps" else ""} \
-                --file-list ${VCFS_FILE} \
+                --file-list vcfs.list \
                 -Ou \
                 | bcftools sort \
                     ~{if defined(sort_mem_mb) then "--max-mem " + select_first([sort_mem_mb]) + "M" else ""} \
@@ -954,7 +963,7 @@ task ConcatVcfs {
                 ~{if no_version then "--no-version" else ""} \
                 ~{if allow_overlaps then "--allow-overlaps" else ""} \
                 ~{if naive then "--naive" else ""} \
-                --file-list ${VCFS_FILE} \
+                --file-list vcfs.list \
                 -Oz -o "~{prefix}.vcf.gz"
         fi
 
@@ -1000,9 +1009,20 @@ task ConcatVcfsLR {
     command <<<
         set -euo pipefail
 
+        # Link each index beside a uniquely named link to its VCF, because Cromwell and miniwdl localize the index elsewhere
+        mkdir inputs
+        paste "~{write_lines(vcfs)}" "~{write_lines(vcf_idxs)}" > vcf_pairs.tsv
+        i=0
+        while IFS=$'\t' read -r vcf vcf_idx; do
+            ln -s "$vcf" "inputs/vcf_${i}.vcf.gz"
+            ln -s "$vcf_idx" "inputs/vcf_${i}.vcf.gz.tbi"
+            echo "inputs/vcf_${i}.vcf.gz" >> vcfs.list
+            i=$((i + 1))
+        done < vcf_pairs.tsv
+
         bcftools concat \
             --allow-overlaps \
-            --file-list ~{write_lines(vcfs)} \
+            --file-list vcfs.list \
             -Oz -o merged.tmp.vcf.gz
 
         tabix -p vcf merged.tmp.vcf.gz
@@ -2911,11 +2931,22 @@ task MergeVcfs {
     command <<<
         set -euo pipefail
 
+        # Link each index beside a uniquely named link to its VCF, because Cromwell and miniwdl localize the index elsewhere
+        mkdir inputs
+        paste "~{write_lines(vcfs)}" "~{write_lines(vcf_idxs)}" > vcf_pairs.tsv
+        i=0
+        while IFS=$'\t' read -r vcf vcf_idx; do
+            ln -s "$vcf" "inputs/vcf_${i}.vcf.gz"
+            ln -s "$vcf_idx" "inputs/vcf_${i}.vcf.gz.tbi"
+            echo "inputs/vcf_${i}.vcf.gz" >> vcfs.list
+            i=$((i + 1))
+        done < vcf_pairs.tsv
+
         bcftools merge \
             -Oz -o ~{prefix}.vcf.gz \
             ~{if defined(contig) then "-r " + contig else ""} \
             ~{if defined(extra_args) then extra_args else ""} \
-            -l ~{write_lines(vcfs)}
+            -l vcfs.list
 
         tabix -p vcf ~{prefix}.vcf.gz
     >>>

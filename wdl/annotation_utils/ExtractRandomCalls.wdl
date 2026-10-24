@@ -316,7 +316,18 @@ task MergeRandomCalls {
     command <<<
         set -euo pipefail
 
-        bcftools concat -a ~{sep=" " candidate_vcfs} \
+        # Link each index beside a uniquely named link to its VCF, because Cromwell and miniwdl localize the index elsewhere
+        mkdir inputs
+        paste "~{write_lines(candidate_vcfs)}" "~{write_lines(candidate_vcf_idxs)}" > vcf_pairs.tsv
+        i=0
+        while IFS=$'\t' read -r vcf vcf_idx; do
+            ln -s "$vcf" "inputs/vcf_${i}.vcf.gz"
+            ln -s "$vcf_idx" "inputs/vcf_${i}.vcf.gz.tbi"
+            echo "inputs/vcf_${i}.vcf.gz" >> vcfs.list
+            i=$((i + 1))
+        done < vcf_pairs.tsv
+
+        bcftools concat -a --file-list vcfs.list \
             | bcftools sort -Oz -o pooled.vcf.gz -
         tabix -p vcf pooled.vcf.gz
 

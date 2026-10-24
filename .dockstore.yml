@@ -30,6 +30,7 @@ workflows:
     filters:
       branches:
         - main
+        - kj-fix-b4-bugs
       tags:
         - /.*/
 
@@ -244,6 +245,7 @@ workflows:
     filters:
       branches:
         - main
+        - kj-fix-b4-bugs
       tags:
         - /.*/
 
@@ -506,6 +508,7 @@ workflows:
     filters:
       branches:
         - main
+        - kj-fix-b4-bugs
       tags:
         - /.*/
 

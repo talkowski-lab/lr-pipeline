@@ -679,7 +679,7 @@ Outputs:
 - `File allele_type_annotated_vcf_idx`: Index for the annotated VCF.
 
 ### [AnnotateVcf](../wdl/annotation_utils/AnnotateVcf.wdl)
-This utility applies a list of annotation TSVs to a VCF as new INFO fields, adding the specified field names, descriptions, types and numbers for each TSV in turn. Each annotation source can optionally have its TSV sorted, the VCF pre-subset and its TSV rows filtered beforehand. It outputs the annotated VCF.
+This utility applies a list of annotation TSVs to a VCF as new INFO fields, adding the specified field names, descriptions, types and numbers for each TSV in turn. Each annotation source can optionally have its TSV sorted, its annotations restricted to records matching an expression and its TSV rows filtered beforehand. It outputs the annotated VCF.
 
 Inputs:
 - `File vcf`: VCF to annotate.
@@ -688,9 +688,9 @@ Inputs:
 - `Array[String] contigs`: Contigs to annotate within the input VCF.
 - `Int? records_per_shard`: Number of variants to keep within a single shard during annotation. When set, each contig VCF is sharded by record count, annotated in parallel and concatenated.
 - `Array[Boolean] sort_tsvs`: Per-TSV flag indicating whether to sort the TSV before annotation. (default `[]`)
-- `Array[Boolean] strip_info_fields_per_tsv`: Per-TSV flags selecting which annotations have their pre-existing INFO fields stripped before the annotation is written. Must be the same length as the annotation TSV list, and takes precedence over `strip_info_fields_by_name`. (default `[]`)
+- `Array[Boolean] strip_info_fields_per_tsv`: Per-TSV flags selecting which annotations have their pre-existing INFO fields stripped before the annotation is written. Must be the same length as the annotation TSV list, and takes precedence over `strip_info_fields_by_name`. The strip applies to the whole VCF, so records excluded by `include_expressions` lose the stripped fields and do not get them back. (default `[]`)
 - `Array[String] strip_info_fields_by_name`: Names of INFO fields to strip from the input VCF before annotation. Ignored when `strip_info_fields_per_tsv` is set. (default `[]`)
-- `Array[String] subset_vcf_strings`: Per-TSV `bcftools view` arguments used to pre-subset the VCF. (default `[]`)
+- `Array[String] include_expressions`: Per-TSV bcftools filter expression selecting the records that receive that TSV's annotations; records it excludes pass through unchanged. An empty string annotates every record. (default `[]`)
 - `Array[String] awk_tsv_conditions`: Per-TSV `awk` condition used to filter the TSV rows applied. (default `[]`)
 - `Array[Array[Int]] subset_tsv_columns`: Per-TSV 1-based column indices (beyond the always-kept CHROM/POS/REF/ALT/ID columns 1-5) to keep from the TSV before annotation; an empty list for a TSV keeps all columns. (default `[]`)
 - `Array[Array[String]] info_names`: INFO field names added by each annotation TSV.

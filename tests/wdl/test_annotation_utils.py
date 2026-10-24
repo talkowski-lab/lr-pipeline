@@ -166,7 +166,7 @@ def test_annotate_vcf_applies_filtered_and_column_subset_tsvs_in_order(run_workf
             "sort_tsvs": [True, False],
             "subset_tsv_columns": [[6, 7], []],
             "awk_tsv_conditions": ["", "$2 % 2 == 0"],
-            "subset_vcf_strings": ["", '-i INFO/allele_type="snv"'],
+            "include_expressions": ["", 'INFO/allele_type="snv"'],
             "strip_info_fields_per_tsv": [False, True],
             "info_names": [["SCORE", "LABEL"], ["phylop"]],
             "info_descriptions": [["Score", "Label"], ["Replaced phylop"]],
@@ -175,20 +175,20 @@ def test_annotate_vcf_applies_filtered_and_column_subset_tsvs_in_order(run_workf
         },
     )
 
-    # The second table's pre-subset keeps only SNVs, and the stripped field is restored only where its table has a row
-    snvs = [r for r in records if r["info"]["allele_type"] == "snv"]
+    # The second table annotates only SNVs, and the stripped field is restored only where an SNV has a row
     _, got = load_records(outputs["AnnotateVcf.annotated_vcf"])
-    assert [site_key(r) for r in got] == [site_key(r) for r in snvs]
-    for new, old in zip(got, snvs):
+    assert [site_key(r) for r in got] == [site_key(r) for r in records]
+    for new, old in zip(got, records):
         assert new["info"]["SCORE"] == old["pos"] % 100
         assert new["info"]["LABEL"] == f"label_{old['pos']}"
         assert "unused" not in new["info"]
-        if old["pos"] % 2 == 0:
+        if old["info"]["allele_type"] == "snv" and old["pos"] % 2 == 0:
             assert new["info"]["phylop"] == pytest.approx(old["pos"] % 7 + 0.5)
         else:
             assert "phylop" not in new["info"]
         assert new["gts"] == old["gts"]
     assert any("phylop" in r["info"] for r in got) and any("phylop" not in r["info"] for r in got)
+    assert any(r["info"]["allele_type"] != "snv" for r in got)
 
 
 def trv_records(records, source_name):
@@ -674,6 +674,8 @@ def test_fill_phased_genotypes_restores_missing_genotypes_and_format_fields_from
     def degrade(record):
         record.samples[blanked]["GT"] = (None, None)
         record.samples[depth_reset]["DP"] = 1
+        if record.samples[depth_reset].get("AL") is not None:
+            record.samples[depth_reset]["AL"] = "0"
 
     phased = rewrite_vcf(subset_vcf, run_dir / "phased.vcf.gz", [], degrade)
     counter = itertools.count()
@@ -702,10 +704,12 @@ def test_fill_phased_genotypes_restores_missing_genotypes_and_format_fields_from
         if site_key(old) in missing:
             assert new["gts"][blanked] == (None, None)
             assert new["format"][depth_reset].get("DP") == 1
+            assert new["format"][depth_reset].get("AL") == ("0" if old["format"][depth_reset].get("AL") is not None else None)
         else:
             assert new["gts"][blanked] == old["gts"][blanked]
-            if old["format"][depth_reset].get("DP") is not None:
-                assert new["format"][depth_reset]["DP"] == old["format"][depth_reset]["DP"]
+            # DP is compared only where the unphased VCF has one to restore
+            without_dp = lambda fmt: {k: v for k, v in fmt.items() if k != "DP"}  # noqa: E731
+            assert without_dp(new["format"][depth_reset]) == without_dp(old["format"][depth_reset])
         assert new["gts"]["HG00099"] == old["gts"]["HG00099"]
 
 
@@ -1769,6 +1773,46 @@ def test_preprocess_vcfs_splits_multiallelics_types_alleles_filters_by_length_an
     assert len(kept) > 20
     for old, new in kept:
         assert new["gts"]["SWAPPED"] == old["gts"]["HG00096"] and new["gts"]["HG00128"] == old["gts"]["HG00128"]
+
+
+def test_preprocess_vcfs_concatenates_record_shards_of_several_vcfs_with_source_tags(
+    run_workflow, run_dir, window_vcf, utils_docker
+):
+    stripped = rewrite_vcf(
+        window_vcf, run_dir / "input.vcf.gz", ["allele_type", "allele_length", "allele_subtype", "SOURCE"], lambda r: None
+    )
+    counter = itertools.count()
+    first = write_vcf(stripped, run_dir / "first.vcf.gz", lambda r: next(counter) % 2 == 0)
+    counter = itertools.count()
+    second = write_vcf(stripped, run_dir / "second.vcf.gz", lambda r: next(counter) % 2 != 0)
+
+    outputs = run_workflow(
+        f"{UTILS}/PreprocessVcfs.wdl",
+        {
+            "vcfs": [str(first), str(second)],
+            "vcf_idxs": [f"{first}.tbi", f"{second}.tbi"],
+            "prefix": "pre",
+            "normalize_vcfs": [True, True],
+            "convert_aou_phase2_symbolic_alleles": [False, False],
+            "source_tags": ["A", "B"],
+            "swap_sample_lists": [],
+            "min_length_cutoffs": [],
+            "max_length_cutoffs": [],
+            "records_per_shard": 20,
+            "sample_ids": [],
+            "ref_fa": str(WINDOW_FASTA),
+            "ref_fai": f"{WINDOW_FASTA}.fai",
+            "utils_docker": utils_docker,
+        },
+    )
+
+    halves = {"A": load_records(first), "B": load_records(second)}
+    got_samples, got = load_records(outputs["PreprocessVcfs.preprocessed_vcf"])
+    expected = {tag: sum(len(r["alts"]) for r in records) for tag, (_, records) in halves.items()}
+    assert all(expected.values())
+    assert len(got) == sum(expected.values())
+    assert collections.Counter(r["info"]["SOURCE"] for r in got) == collections.Counter(expected)
+    assert sorted(got_samples) == sorted(halves["A"][0]) == sorted(halves["B"][0])
 
 
 def test_merge_vcfs_merges_overlapping_callsets_over_disjoint_samples_and_records_provenance(
