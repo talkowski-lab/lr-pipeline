@@ -69,6 +69,8 @@ ARG MATPLOTLIB_VERSION
 ARG MATPLOTLIB_VENN_VERSION
 ARG PANDAS_VERSION
 ARG PYSAM_VERSION
+# pav3 calls APIs removed in polars 2.0 (pl.count(), Expr.flatten) but leaves polars unbounded
+ARG POLARS_VERSION
 RUN python3 -m pip install --no-cache-dir \
     "pav3==${PAV_VERSION}" \
     "snakemake==${SNAKEMAKE_VERSION}" \
@@ -78,4 +80,5 @@ RUN python3 -m pip install --no-cache-dir \
     "matplotlib==${MATPLOTLIB_VERSION}" \
     "matplotlib-venn==${MATPLOTLIB_VENN_VERSION}" \
     "pandas==${PANDAS_VERSION}" \
-    "pysam==${PYSAM_VERSION}"
+    "pysam==${PYSAM_VERSION}" \
+    "polars==${POLARS_VERSION}"
