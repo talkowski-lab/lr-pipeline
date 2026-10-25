@@ -771,7 +771,6 @@ workflows:
     filters:
       branches:
         - main
-        - kj-cnv-empty-sample-beds
       tags:
         - /.*/
 
