@@ -61,7 +61,6 @@ def overlap_inputs(subset_vcf, truth, utils_docker, **overrides):
         "shard_bin_size_exact_match": 15000000,
         "args_string_vcf": "N_ALT==1",
         "args_string_truth_snv_indel_vcf": "N_ALT==1",
-        "gatk_sv_lr_docker": utils_docker,
         "utils_docker": utils_docker,
         **overrides,
     }

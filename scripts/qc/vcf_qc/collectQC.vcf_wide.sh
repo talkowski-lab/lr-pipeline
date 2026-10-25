@@ -164,7 +164,7 @@ if [ ${QUIET} == 0 ]; then
   echo -e "$( date ) - VCF QC STATUS: Processing VCF"
 fi
 #Run vcf2bed with all info fields (also exposed for downstream reuse)
-python3 ${BIN}/vcf2bed.py \
+python3 ${BIN}/vcf2bed.py --info ALL \
 ${QCTMP}/input.vcf ${QCTMP}/vcf2bed_unsorted_unfiltered.bed
 cp ${QCTMP}/vcf2bed_unsorted_unfiltered.bed ${OUTDIR}/vcf2bed_raw.bed
 

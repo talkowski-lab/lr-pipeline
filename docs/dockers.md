@@ -83,7 +83,6 @@ Built and maintained outside this repository. The Digest column records the mani
 | `deepvariant_docker` | `us.gcr.io/broad-dsp-lrma/lr-deepvariant:1.6.0` | [long-read-pipelines](https://github.com/broadinstitute/long-read-pipelines), the source of the `DeepVariant` workflow | |
 | `deepvariant_gpu_docker` | `us.gcr.io/broad-dsp-lrma/lr-deepvariant:1.6.0-gpu` | [long-read-pipelines](https://github.com/broadinstitute/long-read-pipelines) | |
 | `gatk_docker` | `us.gcr.io/broad-dsde-methods/gatk-sv/gatk:mw-gatk-sv-672d85` | [GATK-SV](https://github.com/broadinstitute/gatk-sv) | |
-| `gatk_sv_lr_docker` | `us-central1-docker.pkg.dev/talkowski-sv-gnomad/kj-dockers/sv-pipeline:latest` | `sv-pipeline` image built from the `kj_project_gnomad_lr` branch of [GATK-SV](https://github.com/broadinstitute/gatk-sv/tree/kj_project_gnomad_lr) | `:kj_V65` `sha256:876a70cce0aed98655f4ac5b82b4f8fd59e4541dff2dafd39091f0e3d441e1bb`, the image the released callsets used; `:latest` is `:kj_V67`, `sha256:3366303221c131b6e2bbff3e2aadfef6cd56c474e9c2284b0b7d8f5b2c39fcff` |
 | `hiphase_docker` | `us.gcr.io/broad-dsp-lrma/hangsuunc/hiphase:v1.5.0` | Hang Su | `sha256:a7cca48696f6134ea8ba32ba5ddb0bbc0e55013357071f915ca937993c23a23c` |
 | `hiphase_preprocess_docker` | `hangsuunc/cleanvcf:v1` | Hang Su | `sha256:73fd5d2f982f95e97e67286783646f3c5c9d5c85cf2b43e8d2cd717bbf8f98ae` |
 | `remap_docker` | `quay.io/ymostovoy/lr-remap:latest` | Yulia Mostovoy | `sha256:3410df5da3631e9eab42e6e7cb750a0a91d1e9b94a523bd632586a1c565a6e6d` |

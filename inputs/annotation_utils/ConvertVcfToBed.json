@@ -35,6 +35,5 @@
     ],
     "ConvertVcfToBed.prefix": "cohort",
     "ConvertVcfToBed.records_per_shard": 10000,
-    "ConvertVcfToBed.gatk_sv_lr_docker": "us-central1-docker.pkg.dev/talkowski-sv-gnomad/kj-dockers/sv-pipeline:latest",
     "ConvertVcfToBed.utils_docker": "us-central1-docker.pkg.dev/talkowski-sv-gnomad/kj-dockers/utils:latest"
 }

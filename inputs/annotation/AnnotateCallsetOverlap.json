@@ -17,6 +17,5 @@
     "AnnotateCallsetOverlap.convert_symbolic_truth_sv_vcf": false,
     "AnnotateCallsetOverlap.move_dup_to_origin": false,
     "AnnotateCallsetOverlap.subset_contig_truth_sv_vcf": false,
-    "AnnotateCallsetOverlap.gatk_sv_lr_docker": "us-central1-docker.pkg.dev/talkowski-sv-gnomad/kj-dockers/sv-pipeline:latest",
     "AnnotateCallsetOverlap.utils_docker": "us-central1-docker.pkg.dev/talkowski-sv-gnomad/kj-dockers/utils:latest"
 }

@@ -17,7 +17,6 @@ EXEMPT = {
     "AnnotateTruvariRemap": "needs the remap and bwa images with a reference index",
     "AnnotateVRS": "needs the VRS image and a SeqRepo database",
     "AnnotatePALMER": "needs PALMER output VCFs from the palmer image",
-    "ConvertVcfToBed": "needs svtk from the gatk_sv_lr image",
     "CreateCohortDepthFiles": "needs mosdepth-sized inputs for all 24 contigs",
     "CreateCNVDepthPlots": "needs depth matrices for all 24 contigs and the plotting image",
     "CreateTRGTHistograms": "needs the stranalysis image",

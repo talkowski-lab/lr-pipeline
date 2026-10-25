@@ -228,7 +228,7 @@ Inputs:
 - `File? ref_fa`: From references. Only needed when either VCF represents alleles symbolically, since Truvari uses it solely to resolve those alleles to sequence.
 - `File? ref_fai`: From references.
 - `String prefix`: Prefix for output file names.
-- `String gatk_sv_lr_docker`, `String utils_docker`: Container images.
+- `String utils_docker`: Container image.
 - `RuntimeAttr? runtime_attr_*`: Optional per-task runtime overrides (36).
 
 Outputs:
@@ -1519,7 +1519,7 @@ Outputs:
 - `File subset_tsv`: Column-subset TSV.
 
 ### [ConvertVcfToBed](../wdl/annotation_utils/ConvertVcfToBed.wdl)
-This utility converts per-contig VCFs to one BED-like table with `svtk vcf2bed`. It can filter by variant length, rewrite selected INFO fields, convert records to insertion/deletion classes, shard large inputs, and control INFO, sample, filter, BND, CPX, compression, and output-extension behavior.
+This utility converts per-contig VCFs to one BED-like table with the repository's port of `svtk vcf2bed`. It can filter by variant length, rewrite selected INFO fields, convert records to insertion/deletion classes, shard large inputs, and control INFO, sample, filter, BND, CPX, compression, and output-extension behavior.
 
 Inputs:
 - `Array[File] vcfs`: Per-contig VCFs to convert.
@@ -1538,7 +1538,7 @@ Inputs:
 - `Boolean output_gz`: Whether to gzip output. (default `false`)
 - `Boolean output_bed`: Whether to use a `.bed` extension instead of `.tsv`. (default `false`)
 - `String prefix`: Prefix for output file names.
-- `String gatk_sv_lr_docker`, `String utils_docker`: Container images.
+- `String utils_docker`: Container image.
 - `RuntimeAttr? runtime_attr_*`: Optional per-task runtime overrides (6).
 
 Outputs:
@@ -2745,7 +2745,7 @@ Inputs:
 - `Boolean move_dup_to_origin`: Whether canonical DUPs are repositioned onto their `INFO/ORIGIN` interval before the DUP-vs-DUP reciprocal-overlap comparison. When false each DUP instead spans its own coordinates, from POS over its allele length, and `INFO/ORIGIN` is not required. (default `true`)
 - `String source_tag`: Tag identifying the truth callset in the annotations. (default `SV`)
 - `String prefix`: Prefix for output file names.
-- `String gatk_sv_lr_docker`, `String utils_docker`: Container images.
+- `String utils_docker`: Container image.
 - `RuntimeAttr? runtime_attr_*`: Optional per-task runtime overrides (6).
 
 Outputs:

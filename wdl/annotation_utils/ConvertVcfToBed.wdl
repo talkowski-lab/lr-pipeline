@@ -6,7 +6,7 @@ import "../utils/Structs.wdl"
 workflow ConvertVcfToBed {
     meta {
         description: [
-            "This utility converts per-contig VCFs to one BED-like table with `svtk vcf2bed`. It can filter by variant length, rewrite selected INFO fields, convert records to insertion/deletion classes, shard large inputs, and control INFO, sample, filter, BND, CPX, compression, and output-extension behavior."
+            "This utility converts per-contig VCFs to one BED-like table with the repository's port of `svtk vcf2bed`. It can filter by variant length, rewrite selected INFO fields, convert records to insertion/deletion classes, shard large inputs, and control INFO, sample, filter, BND, CPX, compression, and output-extension behavior."
         ]
     }
 
@@ -49,7 +49,6 @@ workflow ConvertVcfToBed {
         Boolean output_gz = false
         Boolean output_bed = false
 
-        String gatk_sv_lr_docker
         String utils_docker
 
         RuntimeAttr? runtime_attr_subset_length
@@ -111,7 +110,7 @@ workflow ConvertVcfToBed {
         Array[File] shard_vcfs = select_first([ShardVcfByRecords.shards, [processed_vcf]])
 
         scatter (j in range(length(shard_vcfs))) {
-            call SvtkVcfToBed {
+            call VcfToBed {
                 input:
                     vcf = shard_vcfs[j],
                     info_columns = info_columns,
@@ -120,7 +119,7 @@ workflow ConvertVcfToBed {
                     split_bnd = split_bnd,
                     split_cpx = split_cpx,
                     prefix = "~{prefix}.~{contigs[i]}.shard_~{j}",
-                    docker = gatk_sv_lr_docker,
+                    docker = utils_docker,
                     runtime_attr_override = runtime_attr_vcf2bed_wrapped[0]
             }
         }
@@ -128,7 +127,7 @@ workflow ConvertVcfToBed {
 
     call Helpers.ConcatTsvs as ConcatBedShards {
         input:
-            tsvs = flatten(SvtkVcfToBed.bed),
+            tsvs = flatten(VcfToBed.bed),
             sort_output = false,
             preserve_header = true,
             compressed_output = false,
@@ -152,7 +151,7 @@ workflow ConvertVcfToBed {
     }
 }
 
-task SvtkVcfToBed {
+task VcfToBed {
     input {
         File vcf
         Array[String] info_columns
@@ -168,7 +167,7 @@ task SvtkVcfToBed {
     command <<<
         set -euo pipefail
 
-        svtk vcf2bed \
+        python3 /opt/scripts/qc/vcf_qc/vcf2bed.py \
             ~{sep=" " prefix("--info ", info_columns)} \
             ~{if include_samples then "" else "--no-samples"} \
             ~{if include_filters then "--include-filters" else ""} \
@@ -217,7 +216,7 @@ task RenameOutput {
     command <<<
         set -euo pipefail
 
-        mv ~{bed} ~{prefix}.~{base_ext}
+        cp ~{bed} ~{prefix}.~{base_ext}
 
         if [ "~{output_gz}" == "true" ]; then
             gzip -1 ~{prefix}.~{base_ext}

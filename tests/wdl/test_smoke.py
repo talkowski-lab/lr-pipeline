@@ -1,6 +1,8 @@
 import collections
 import csv
 import gzip
+import subprocess
+import sys
 
 import pysam
 import pytest
@@ -422,6 +424,38 @@ def test_extract_random_calls_is_reproducible_and_respects_allele_type_filter(ru
     first = open(outputs["ExtractRandomCalls.variant_sample_pairs"]).read()
     again = run_workflow(f"{UTILS}/ExtractRandomCalls.wdl", inputs)
     assert open(again["ExtractRandomCalls.variant_sample_pairs"]).read() == first
+
+
+def test_convert_vcf_to_bed_concatenates_shards_under_one_header(run_workflow, run_dir, vcf_inputs):
+    info_columns = ["allele_type", "allele_length"]
+    inputs = {
+        "vcfs": [vcf_inputs["vcf"]],
+        "vcf_idxs": [vcf_inputs["vcf_idx"]],
+        "contigs": [CONTIG],
+        "prefix": "converted",
+        "records_per_shard": 100,
+        "info_columns": info_columns,
+        "utils_docker": vcf_inputs["utils_docker"],
+    }
+    outputs = run_workflow(f"{UTILS}/ConvertVcfToBed.wdl", inputs)
+
+    expected = run_dir / "expected.bed"
+    info_args = [arg for column in info_columns for arg in ("--info", column)]
+    subprocess.run(
+        [
+            sys.executable,
+            REPO_ROOT / "scripts/qc/vcf_qc/vcf2bed.py",
+            *info_args,
+            "--include-filters",
+            vcf_inputs["vcf"],
+            expected,
+        ],
+        check=True,
+    )
+    lines = open(outputs["ConvertVcfToBed.bed"]).read().splitlines()
+    assert lines == expected.read_text().splitlines()
+    assert lines[0] == "#chrom\tstart\tend\tname\tsvtype\tsamples\tallele_type\tallele_length\tFILTER"
+    assert len(lines) == 386
 
 
 def test_extract_random_calls_keeps_records_sharing_a_span(run_workflow, vcf_inputs, source):

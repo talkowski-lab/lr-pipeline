@@ -87,7 +87,7 @@ Scripts reach a running task baked into an image, never fetched by URL. The `uti
 | `mei/PALMER_transfer_annotations.py` | AnnotatePALMER | Transfer PALMER annotations onto matching callset records, using edit distance to resolve near-matches. |
 | `qc/plot_annotation_summaries.py` | CreateAnnotationPlots | Plot site, per-genome, inheritance and variant-list summaries from the SummarizeAnnotations parquet tables, one plot group per task. |
 | `qc/vcf_qc/collectQC.vcf_wide.sh` | SummarizeAnnotationsGATKSV | Collect per-site genotype counts and frequencies from a symbolic-allele VCF shard into the site statistics BED, via `vcf2bed.py` and `clean_vcf2bed_output.R`. |
-| `qc/vcf_qc/vcf2bed.py` | SummarizeAnnotationsGATKSV | Convert a VCF to a BED with its called samples and every INFO field; a pysam-only port of `svtk vcf2bed -i ALL`. |
+| `qc/vcf_qc/vcf2bed.py` | SummarizeAnnotationsGATKSV, ConvertVcfToBed, AnnotateCallsetOverlap | Convert a VCF to a BED with its called samples and chosen INFO fields; a pysam-only port of `svtk vcf2bed`. |
 | `qc/vcf_qc/clean_vcf2bed_output.R` | SummarizeAnnotationsGATKSV | Join the BED and genotype counts into the site statistics table. |
 | `qc/vcf_qc/plot_sv_vcf_distribs.R` | SummarizeAnnotationsGATKSV | Plot site-level count, size, frequency and Hardy-Weinberg distributions by variant class. |
 | `qc/vcf_qc/plot_sv_perSample_distribs.R` | SummarizeAnnotationsGATKSV | Plot per-genome variant counts and genotype quality distributions. |

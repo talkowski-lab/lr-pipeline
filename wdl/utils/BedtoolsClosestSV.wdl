@@ -34,7 +34,6 @@ workflow BedtoolsClosestSV {
         Boolean move_dup_to_origin = true
         String source_tag = "SV"
 
-        String gatk_sv_lr_docker
         String utils_docker
 
         RuntimeAttr? runtime_attr_convert_to_symbolic
@@ -64,7 +63,7 @@ workflow BedtoolsClosestSV {
             vcf_idx = ConvertEvalUnmoved.processed_vcf_idx,
             split_cpx = false,
             prefix = "~{prefix}.eval.unmoved",
-            docker = gatk_sv_lr_docker,
+            docker = utils_docker,
             runtime_attr_override = runtime_attr_split_vcf
     }
 
@@ -88,7 +87,7 @@ workflow BedtoolsClosestSV {
                 vcf_idx = ConvertEvalMoved.processed_vcf_idx,
                 split_cpx = false,
                 prefix = "~{prefix}.eval.moved",
-                docker = gatk_sv_lr_docker,
+                docker = utils_docker,
                 runtime_attr_override = runtime_attr_split_vcf
         }
     }
@@ -102,7 +101,7 @@ workflow BedtoolsClosestSV {
             vcf_idx = truth_sv_vcf_idx,
             split_cpx = true,
             prefix = "~{prefix}.truth",
-            docker = gatk_sv_lr_docker,
+            docker = utils_docker,
             runtime_attr_override = runtime_attr_split_truth
     }
 
@@ -254,7 +253,7 @@ task SplitVcf {
     command <<<
         set -euo pipefail
 
-        svtk vcf2bed \
+        python3 /opt/scripts/qc/vcf_qc/vcf2bed.py \
             -i SVTYPE \
             -i SVLEN \
             ~{if split_cpx then "--split-cpx" else ""} \
