@@ -1,5 +1,4 @@
-# Derived from yuliamostovoy/lr_callset_integration wdl/SV_Integration_WorkflowD_Ultralong_Bnd.wdl
-# Fork of fabio-cunial/callset_integration_phase2
+# Derived from wdl/SV_Integration_WorkflowD_Ultralong_Bnd.wdl of yuliamostovoy/lr_callset_integration
 # https://github.com/yuliamostovoy/lr_callset_integration/blob/main/wdl/SV_Integration_WorkflowD_Ultralong_Bnd.wdl
 
 version 1.0

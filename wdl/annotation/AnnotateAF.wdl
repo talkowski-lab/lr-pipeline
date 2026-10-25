@@ -1,5 +1,7 @@
-# Derived from broadinstitute/gatk-sv (branch kj_project_gnomad_lr) wdl/AnnotateAF.wdl
-# Derived from broadinstitute/gatk-sv (branch kj_project_gnomad_lr) wdl/ShardedAnnotateVcf.wdl
+# Derived from wdl/AnnotateAF.wdl of broadinstitute/gatk-sv (branch kj_project_gnomad_lr)
+# https://github.com/broadinstitute/gatk-sv/blob/kj_project_gnomad_lr/wdl/AnnotateAF.wdl
+# Derived from wdl/ShardedAnnotateVcf.wdl of broadinstitute/gatk-sv (branch kj_project_gnomad_lr)
+# https://github.com/broadinstitute/gatk-sv/blob/main/wdl/ShardedAnnotateVcf.wdl
 
 version 1.0
 

@@ -1,6 +1,9 @@
-# Derived from broadinstitute/gatk-sv (branch kj_project_gnomad_lr) wdl/QcAnnotations.wdl
-# Derived from broadinstitute/gatk-sv (branch kj_project_gnomad_lr) wdl/CollectQcVcfWide.wdl
-# Derived from broadinstitute/gatk-sv (branch kj_project_gnomad_lr) wdl/CollectQcPerSample.wdl
+# Derived from wdl/QcAnnotations.wdl of broadinstitute/gatk-sv (branch kj_project_gnomad_lr)
+# https://github.com/broadinstitute/gatk-sv/blob/kj_project_gnomad_lr/wdl/QcAnnotations.wdl
+# Derived from wdl/CollectQcVcfWide.wdl of broadinstitute/gatk-sv (branch kj_project_gnomad_lr)
+# https://github.com/broadinstitute/gatk-sv/blob/main/wdl/CollectQcVcfWide.wdl
+# Derived from wdl/CollectQcPerSample.wdl of broadinstitute/gatk-sv (branch kj_project_gnomad_lr)
+# https://github.com/broadinstitute/gatk-sv/blob/main/wdl/CollectQcPerSample.wdl
 
 version 1.0
 

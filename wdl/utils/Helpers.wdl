@@ -399,7 +399,7 @@ EOF
     }
 }
 
-# Derived from yuliamostovoy/lr_callset_integration wdl/SV_Integration_Workpackage3_Main_bcftools_merge.wdl
+# Derived from wdl/SV_Integration_Workpackage3_Main_bcftools_merge.wdl of yuliamostovoy/lr_callset_integration
 task BcftoolsMergeChunk {
     input {
         Int chunk_id
@@ -1381,7 +1381,7 @@ task ConvertPALMERToVcf {
     }
 }
 
-# Derived from broadinstitute/long-read-pipelines ConvertToHailMT.wdl
+# Derived from wdl/tasks/Utility/Hail.wdl of broadinstitute/long-read-pipelines
 task ConvertToHailMT {
     meta {
         description: "Convert a .vcf.bgz file to a Hail MatrixTable."

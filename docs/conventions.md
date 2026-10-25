@@ -13,7 +13,7 @@ These rules apply to WDL, Python, R and Bash alike, including code embedded in a
 - Comments should be placed on their own line directly above the code they describe, never trailing at the end of a line of code. The exception is a machine-read directive such as `# noqa: E302`.
 - Commented-out code should be deleted rather than left in place.
 - Comments inside a WDL `command` block must never contain `~{`, `${` or backticks. Cromwell and Bash expand these even within a comment.
-- License, copyright and upstream-provenance headers are exempt from all of the above and must be preserved verbatim. A provenance header is one `# Derived from <org/repo>[ (branch X)] <path>` line per upstream file, followed by an optional `# Fork of ...` line and the file's URLs, then a blank line and `version 1.0` - a single `# Derived from` line directly above a task is allowed for a task copied into a library. Add one only where the lineage is known.
+- License, copyright and upstream-provenance headers are exempt from all of the above and must be preserved verbatim. A provenance header is, per upstream file, a `# Derived from <path> of <owner>/<repo>[ (branch X)]` line directly followed by its `# https://github.com/<owner>/<repo>/blob/<ref>/<path>` URL; in a WDL file the header ends with a blank line and `version 1.0`. A single `# Derived from` line without a URL is allowed directly above a task copied into a library. Add one only where the lineage is known; `check_wdl_style.py` (W035) and `tests/unit/test_check_wdl_style.py` enforce the form.
 - Terminology should be used consistently: `gVCF` (not `GVCF`), `contig` (not `chr` or `chrom`), `locus`/`loci` and `FORMAT`/`INFO` field names in uppercase.
 
 

@@ -7,7 +7,7 @@
 # BSD 3-Clause license are met. See:
 # https://github.com/broadinstitute/gatk-sv/blob/main/LICENSE.TXT
 #
-# Derived from broadinstitute/gatk-sv src/sv-pipeline/pre_SVCalling_and_QC/estimated_CN_denoising.py
+# Derived from src/sv-pipeline/pre_SVCalling_and_QC/estimated_CN_denoising.py of broadinstitute/gatk-sv
 # https://github.com/broadinstitute/gatk-sv/blob/main/src/sv-pipeline/pre_SVCalling_and_QC/estimated_CN_denoising.py
 
 import argparse

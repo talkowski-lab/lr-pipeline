@@ -1,5 +1,5 @@
 import pytest
-from conftest import load_script
+from conftest import REPO_ROOT, load_script
 
 style = load_script(".github/scripts/check_wdl_style.py")
 
@@ -124,8 +124,43 @@ def test_unused_runtime_attr_is_reported():
     assert "W016" in codes(text, "wdl/annotation_utils/Example.wdl")
 
 
+PROVENANCE = "# Derived from wdl/Path.wdl of owner/repo (branch dev)\n# https://github.com/owner/repo/blob/main/wdl/Path.wdl\n"
+
+
 def test_provenance_header_before_version_is_allowed():
-    assert codes("# Derived from upstream/repo path.wdl\n\n" + GOOD_TASK) == []
+    assert codes(PROVENANCE + "\n" + GOOD_TASK) == []
+    assert codes(PROVENANCE * 2 + "\n" + GOOD_TASK) == []
+
+
+def test_single_provenance_line_above_a_library_task_is_allowed():
+    library = GOOD_TASK.replace("task AlphaTask", "# Derived from wdl/Path.wdl of owner/repo\ntask AlphaTask")
+    assert codes(library) == []
+
+
+@pytest.mark.parametrize(
+    "header",
+    [
+        "# Derived from owner/repo (branch dev) wdl/Path.wdl\n# https://github.com/owner/repo/blob/main/wdl/Path.wdl\n",
+        "# Derived from wdl/Path.wdl of owner/repo\n",
+        PROVENANCE + "# Fork of other/repo\n",
+    ],
+)
+def test_malformed_provenance_header_is_reported(header):
+    assert "W035" in codes(header + "\n" + GOOD_TASK)
+
+
+def test_script_provenance_lines_follow_the_standard_form():
+    bad = []
+    for path in sorted((REPO_ROOT / "scripts").rglob("*")):
+        if not path.is_file() or path.suffix not in {".py", ".R", ".sh"}:
+            continue
+        lines = path.read_text().splitlines()
+        for index, line in enumerate(lines):
+            if style.PROVENANCE_PREFIX_RE.match(line) and not (
+                style.PROVENANCE_RE.match(line) and index + 1 < len(lines) and style.PROVENANCE_URL_RE.match(lines[index + 1])
+            ):
+                bad.append(f"{path.relative_to(REPO_ROOT)}:{index + 1}")
+    assert bad == []
 
 
 def test_multi_line_comment_inside_file_is_reported():

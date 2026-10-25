@@ -7,7 +7,8 @@
 # BSD 3-Clause license are met. See:
 # https://github.com/broadinstitute/gatk-sv/blob/main/LICENSE.TXT
 #
-# Derived from broadinstitute/gatk-sv (branch kj_project_gnomad_lr) src/sv-pipeline/scripts/vcf_qc/analyze_fams.R
+# Derived from src/sv-pipeline/scripts/vcf_qc/analyze_fams.R of broadinstitute/gatk-sv (branch kj_project_gnomad_lr)
+# https://github.com/broadinstitute/gatk-sv/blob/main/src/sv-pipeline/scripts/vcf_qc/analyze_fams.R
 
 # Helper script to perform family-based VCF QC & plot results
 

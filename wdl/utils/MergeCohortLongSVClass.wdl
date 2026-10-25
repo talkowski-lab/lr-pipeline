@@ -1,13 +1,12 @@
-# Derived from yuliamostovoy/lr_callset_integration wdl/SV_Integration_WorkflowD_PerSuffix.wdl
-# Derived from yuliamostovoy/lr_callset_integration wdl/SV_Integration_Workpackage12.wdl
-# Derived from yuliamostovoy/lr_callset_integration wdl/SV_Integration_Workpackage13.wdl
-# Derived from yuliamostovoy/lr_callset_integration wdl/SV_Integration_Workpackage14.wdl
-# Derived from yuliamostovoy/lr_callset_integration wdl/SV_Integration_Workpackage15.wdl
-# Fork of fabio-cunial/callset_integration_phase2
+# Derived from wdl/SV_Integration_WorkflowD_PerSuffix.wdl of yuliamostovoy/lr_callset_integration
 # https://github.com/yuliamostovoy/lr_callset_integration/blob/main/wdl/SV_Integration_WorkflowD_PerSuffix.wdl
+# Derived from wdl/SV_Integration_Workpackage12.wdl of yuliamostovoy/lr_callset_integration
 # https://github.com/yuliamostovoy/lr_callset_integration/blob/main/wdl/SV_Integration_Workpackage12.wdl
+# Derived from wdl/SV_Integration_Workpackage13.wdl of yuliamostovoy/lr_callset_integration
 # https://github.com/yuliamostovoy/lr_callset_integration/blob/main/wdl/SV_Integration_Workpackage13.wdl
+# Derived from wdl/SV_Integration_Workpackage14.wdl of yuliamostovoy/lr_callset_integration
 # https://github.com/yuliamostovoy/lr_callset_integration/blob/main/wdl/SV_Integration_Workpackage14.wdl
+# Derived from wdl/SV_Integration_Workpackage15.wdl of yuliamostovoy/lr_callset_integration
 # https://github.com/yuliamostovoy/lr_callset_integration/blob/main/wdl/SV_Integration_Workpackage15.wdl
 
 version 1.0

@@ -7,11 +7,15 @@
 # BSD 3-Clause license are met. See:
 # https://github.com/broadinstitute/gatk-sv/blob/main/LICENSE.TXT
 #
-# Derived from broadinstitute/gatk-sv (branch kj_project_gnomad_lr) src/svtk/svtk/cli/utils.py and
-# src/svtk/svtk/utils/utils.py, a pysam-only port of `svtk vcf2bed` covering the options this repository uses
+# Derived from src/svtk/svtk/cli/utils.py of broadinstitute/gatk-sv (branch kj_project_gnomad_lr)
+# https://github.com/broadinstitute/gatk-sv/blob/main/src/svtk/svtk/cli/utils.py
+# Derived from src/svtk/svtk/utils/utils.py of broadinstitute/gatk-sv (branch kj_project_gnomad_lr)
+# https://github.com/broadinstitute/gatk-sv/blob/main/src/svtk/svtk/utils/utils.py
 
 """
 Convert a VCF to a BED, optionally with called samples, INFO fields and FILTER as columns.
+
+A pysam-only port of `svtk vcf2bed` covering the options this repository uses.
 """
 
 import argparse

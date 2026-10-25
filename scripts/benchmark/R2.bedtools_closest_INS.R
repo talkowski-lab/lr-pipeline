@@ -1,6 +1,6 @@
 #!/usr/bin/env Rscript
 
-# Derived from broadinstitute/gatk-sv src/sv-pipeline/05_annotation/scripts/R2.bedtools_closest_INS.R
+# Derived from src/sv-pipeline/05_annotation/scripts/R2.bedtools_closest_INS.R of broadinstitute/gatk-sv
 # https://github.com/broadinstitute/gatk-sv/blob/main/src/sv-pipeline/05_annotation/scripts/R2.bedtools_closest_INS.R
 # Distributed under GATK-SV's BSD 3-Clause license. See:
 # https://github.com/broadinstitute/gatk-sv/blob/main/LICENSE.TXT

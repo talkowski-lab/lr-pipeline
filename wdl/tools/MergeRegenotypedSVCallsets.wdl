@@ -1,7 +1,6 @@
-# Derived from yuliamostovoy/lr_callset_integration wdl/SV_Integration_WorkflowE_Regenotype_Merge.wdl
-# Derived from yuliamostovoy/lr_callset_integration wdl/SV_Integration_Workpackage8_Main_concat_regenotyped_shards.wdl
-# Fork of fabio-cunial/callset_integration_phase2
+# Derived from wdl/SV_Integration_WorkflowE_Regenotype_Merge.wdl of yuliamostovoy/lr_callset_integration
 # https://github.com/yuliamostovoy/lr_callset_integration/blob/main/wdl/SV_Integration_WorkflowE_Regenotype_Merge.wdl
+# Derived from wdl/SV_Integration_Workpackage8_Main_concat_regenotyped_shards.wdl of yuliamostovoy/lr_callset_integration
 # https://github.com/yuliamostovoy/lr_callset_integration/blob/main/wdl/SV_Integration_Workpackage8_Main_concat_regenotyped_shards.wdl
 
 version 1.0

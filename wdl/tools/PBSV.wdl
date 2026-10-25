@@ -1,4 +1,4 @@
-# Derived from broadinstitute/long-read-pipelines wdl/tasks/VariantCalling/PBSV.wdl
+# Derived from wdl/tasks/VariantCalling/PBSV.wdl of broadinstitute/long-read-pipelines
 # https://github.com/broadinstitute/long-read-pipelines/blob/main/wdl/tasks/VariantCalling/PBSV.wdl
 
 version 1.0

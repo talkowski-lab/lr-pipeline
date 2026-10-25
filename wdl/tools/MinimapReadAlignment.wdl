@@ -1,4 +1,4 @@
-# Derived from broadinstitute/long-read-pipelines wdl/tasks/Alignment/AlignReads.wdl
+# Derived from wdl/tasks/Alignment/AlignReads.wdl of broadinstitute/long-read-pipelines
 # https://github.com/broadinstitute/long-read-pipelines/blob/main/wdl/tasks/Alignment/AlignReads.wdl
 
 version 1.0

@@ -1,6 +1,6 @@
 #!/usr/bin/env Rscript
 
-# Derived from broadinstitute/gatk-sv src/WGD/bin/medianCoverage.R
+# Derived from src/WGD/bin/medianCoverage.R of broadinstitute/gatk-sv
 # https://github.com/broadinstitute/gatk-sv/blob/main/src/WGD/bin/medianCoverage.R
 # Distributed under GATK-SV's BSD 3-Clause license. See:
 # https://github.com/broadinstitute/gatk-sv/blob/main/LICENSE.TXT

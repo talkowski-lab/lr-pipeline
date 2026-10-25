@@ -7,7 +7,8 @@
 # BSD 3-Clause license are met. See:
 # https://github.com/broadinstitute/gatk-sv/blob/main/LICENSE.TXT
 #
-# Derived from broadinstitute/gatk-sv (branch kj_project_gnomad_lr) src/sv-pipeline/05_annotation/scripts/compute_AFs.py
+# Derived from src/sv-pipeline/05_annotation/scripts/compute_AFs.py of broadinstitute/gatk-sv (branch kj_project_gnomad_lr)
+# https://github.com/broadinstitute/gatk-sv/blob/main/src/sv-pipeline/05_annotation/scripts/compute_AFs.py
 
 """
 Compute allele frequencies for sex & population combinations given an SV VCF

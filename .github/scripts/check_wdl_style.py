@@ -31,6 +31,9 @@ COMMAND_BRACE_RE = re.compile(r"^\s*command\s*\{")
 SECTION_RE = re.compile(r"^ {4}(input|output|runtime)\s*\{")
 IMPORT_AS_RE = re.compile(r"^import\s+.* as ")
 BLANK_COMMENT_RE = re.compile(r"^\s*#{2,}\s*$")
+PROVENANCE_PREFIX_RE = re.compile(r"^#\s*(Derived from|Fork of|Vendored)\b")
+PROVENANCE_RE = re.compile(r"^# Derived from \S+ of [\w.-]+/[\w.-]+( \(branch [\w./-]+\))?$")
+PROVENANCE_URL_RE = re.compile(r"^# https://github\.com/\S+$")
 PASCAL_CASE_RE = re.compile(r"^[A-Z][A-Za-z0-9]*$")
 CALL_ALIAS_RE = re.compile(r"^\s*call\s+[\w.]+\s+as\s+(\w+)")
 RUNTIME_ATTR_INPUT_RE = re.compile(r"^ {8}RuntimeAttr\?\s+(\w+)\s*$")
@@ -134,6 +137,7 @@ class Checker:
                 self.error(1, "W013", "workflow '{}' must match the file name '{}.wdl'".format(name, stem))
 
         self.check_comment_runs()
+        self.check_provenance()
         self.check_declaration_names()
         self.check_unused_runtime_attrs()
         if workflows:
@@ -198,6 +202,15 @@ class Checker:
                     "comment spans {} lines; a comment must be a single line".format(index - start),
                 )
             start = None
+
+    def check_provenance(self):
+        """A provenance line names its upstream path, repo and branch; one in the file header is followed by its URL."""
+        for index, line in enumerate(self.lines):
+            if PROVENANCE_PREFIX_RE.match(line) and not PROVENANCE_RE.match(line):
+                self.error(index + 1, "W035", "provenance must read '# Derived from <path> of <owner>/<repo>[ (branch X)]'")
+            elif PROVENANCE_RE.match(line) and index + 1 < len(self.lines) and not self.lines[index + 1].startswith("task "):
+                if not PROVENANCE_URL_RE.match(self.lines[index + 1]):
+                    self.error(index + 2, "W035", "a header provenance line must be followed by its '# https://github.com/' URL")
 
     def check_alphabetical_tasks(self):
         """In a task library - a file with no workflow - tasks must be declared alphabetically."""

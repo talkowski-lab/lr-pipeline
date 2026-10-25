@@ -1,4 +1,4 @@
-# Derived from broadinstitute/long-read-pipelines wdl/pipelines/TechAgnostic/VariantCalling/LRJointCallGVCFs.wdl
+# Derived from wdl/pipelines/TechAgnostic/VariantCalling/LRJointCallGVCFs.wdl of broadinstitute/long-read-pipelines
 # https://github.com/broadinstitute/long-read-pipelines/blob/main/wdl/pipelines/TechAgnostic/VariantCalling/LRJointCallGVCFs.wdl
 
 version 1.0

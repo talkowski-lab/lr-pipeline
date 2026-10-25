@@ -88,7 +88,6 @@ Built and maintained outside this repository. The Digest column records the mani
 | `remap_docker` | `quay.io/ymostovoy/lr-remap:latest` | Yulia Mostovoy | `sha256:3410df5da3631e9eab42e6e7cb750a0a91d1e9b94a523bd632586a1c565a6e6d` |
 | `resource_visualization_docker` | `us.gcr.io/broad-dsp-lrma/lr-resource-visual:0.1.1` | [long-read-pipelines](https://github.com/broadinstitute/long-read-pipelines) | |
 | `sv_integration_docker` | `us.gcr.io/broad-dsp-lrma/fcunial/callset_integration_phase2_workpackages` | Fabio Cunial | untagged, `:latest` moves; `sha256:ad7202bbeb8eff86df592e334026ff262ec66b0057c3f7e5fa256e7761f1e9e9` |
-| `sv_pipeline_docker` | `us.gcr.io/broad-dsde-methods/gatk-sv/sv-pipeline:2025-10-02-v1.1-483973d6` | [GATK-SV](https://github.com/broadinstitute/gatk-sv) | |
 | `xgb_scoring_docker` | `us.gcr.io/broad-dsde-methods/broad-gatk-snapshots/gatk:sl_aou_lr_intrasample_filtering_xgb` | GATK snapshot | `sha256:a35a80cf67bd366fdc6a34a5b99e2632a607cebd7f007bb607de2ce3f1de8e8b` |
 
 
@@ -99,3 +98,5 @@ Public images.
 |---|---|---|
 | `glnexus_docker` | `ghcr.io/dnanexus-rnd/glnexus:v1.4.1` | DNAnexus |
 | `repeatmasker_docker` | `dfam/tetools:1.8` | Dfam consortium |
+| `sv_base_mini_docker` | `us.gcr.io/broad-dsde-methods/gatk-sv/sv-base-mini:2024-10-25-v0.29-beta-5ea22a52` | [GATK-SV](https://github.com/broadinstitute/gatk-sv) |
+| `sv_pipeline_docker` | `us.gcr.io/broad-dsde-methods/gatk-sv/sv-pipeline:2025-10-02-v1.1-483973d6` | [GATK-SV](https://github.com/broadinstitute/gatk-sv) |
