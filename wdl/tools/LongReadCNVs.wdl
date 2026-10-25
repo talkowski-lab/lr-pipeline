@@ -178,7 +178,7 @@ workflow LongReadCNVs {
         String chr_y = "chrY"
 
         String gatk_docker
-        String sv_base_mini_docker
+        String utils_docker
         String sv_pipeline_docker
 
         File? gatk4_jar_override
@@ -318,7 +318,7 @@ workflow LongReadCNVs {
                 input:
                     read_counts = depth_profiles[i],
                     prefix = sample_ids[i] + ".sorted_counts",
-                    docker = sv_base_mini_docker,
+                    docker = utils_docker,
                     runtime_attr_override = runtime_attr_sort_depth_profiles
             }
         }
@@ -444,7 +444,7 @@ workflow LongReadCNVs {
         input:
             interval_list = LRCNVs.filtered_intervals,
             prefix = prefix,
-            docker = sv_base_mini_docker,
+            docker = utils_docker,
             runtime_attr_override = runtime_attr_get_contigs_from_interval_list
     }
 
@@ -463,7 +463,7 @@ workflow LongReadCNVs {
             chr_y = chr_y,
             gcnv_qs_cutoff = gcnv_qs_cutoff,
             defragment_max_dist = defragment_max_dist,
-            sv_base_mini_docker = sv_base_mini_docker,
+            utils_docker = utils_docker,
             sv_pipeline_docker = sv_pipeline_docker,
             runtime_attr_gcnv_vcf_to_bed = runtime_attr_gcnv_vcf_to_bed,
             runtime_attr_merge_sample = runtime_attr_merge_sample,
@@ -486,7 +486,7 @@ workflow LongReadCNVs {
             ref_fai = ref_fai,
             ref_dict = ref_dict,
             gatk_docker = gatk_docker,
-            sv_base_mini_docker = sv_base_mini_docker,
+            utils_docker = utils_docker,
             sv_pipeline_docker = sv_pipeline_docker,
             runtime_attr_sv_cluster = runtime_attr_sv_cluster,
             runtime_attr_exclude_intervals = runtime_attr_exclude_intervals,
@@ -525,7 +525,7 @@ workflow LongReadCNVs {
             chr_x = chr_x,
             chr_y = chr_y,
             gatk_docker = gatk_docker,
-            sv_base_mini_docker = sv_base_mini_docker,
+            utils_docker = utils_docker,
             runtime_attr_train_sv_genotyping = runtime_attr_train_sv_genotyping,
             runtime_attr_genotype_svs = runtime_attr_genotype_svs,
             runtime_attr_concat_vcfs = runtime_attr_concat_genotyped_vcfs

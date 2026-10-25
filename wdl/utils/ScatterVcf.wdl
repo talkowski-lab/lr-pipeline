@@ -38,7 +38,7 @@ workflow ScatterVcf {
         Boolean has_index
 
         String hail_docker
-        String sv_base_mini_docker
+        String utils_docker
 
         RuntimeAttr? runtime_attr_split_by_chr
         RuntimeAttr? runtime_attr_split_into_shards
@@ -51,7 +51,7 @@ workflow ScatterVcf {
                     input:
                         vcf_file = file,
                         has_index = select_first([has_index]),
-                        docker = sv_base_mini_docker
+                        docker = utils_docker
                 }
             }
         }
@@ -69,7 +69,7 @@ workflow ScatterVcf {
                         vcf_file = file,
                         chromosome = chromosome,
                         prefix = prefix,
-                        docker = sv_base_mini_docker,
+                        docker = utils_docker,
                         runtime_attr_override = runtime_attr_split_by_chr
                 }
             }
@@ -83,7 +83,7 @@ workflow ScatterVcf {
                         chromosome = chromosome,
                         prefix = prefix,
                         input_size = remote_input_size,
-                        docker = sv_base_mini_docker,
+                        docker = utils_docker,
                         runtime_attr_override = runtime_attr_split_by_chr
                 }
             }
@@ -178,7 +178,7 @@ task GetChromosomeSizes {
             HTS_AUTH_LOCATION=/tmp/token_fifo tabix --verbosity 3 ~{vcf_file}
         fi;
 
-        export GCS_OAUTH_TOKEN=`/google-cloud-sdk/bin/gcloud auth application-default print-access-token`
+        export GCS_OAUTH_TOKEN=`gcloud auth application-default print-access-token`
 
         bcftools index -s ~{vcf_file} | cut -f1,3 > contig_lengths.txt
         bcftools query -l ~{vcf_file} | wc -l > n_samples.txt

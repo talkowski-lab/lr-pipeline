@@ -45,7 +45,7 @@ workflow GenotypeDepth {
         String chr_y = "chrY"
 
         String gatk_docker
-        String sv_base_mini_docker
+        String utils_docker
 
         RuntimeAttr? runtime_attr_train_sv_genotyping
         RuntimeAttr? runtime_attr_genotype_svs
@@ -106,7 +106,7 @@ workflow GenotypeDepth {
             no_version = true,
             no_address = true,
             prefix = prefix + ".genotype_batch",
-            docker = sv_base_mini_docker,
+            docker = utils_docker,
             runtime_attr_override = concat_attr
     }
 

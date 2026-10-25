@@ -561,7 +561,7 @@ Inputs:
 - `Boolean split_by_chromosome`: Whether to scatter the VCF by chromosome. (default `false`)
 - `Boolean split_into_shards`: Whether to scatter the VCF into fixed-size shards. (default `false`)
 - `String prefix`: Prefix for output file names.
-- `String hail_docker`, `String sv_base_mini_docker`, `String utils_docker`, `String vep_hail_docker`: Container images.
+- `String hail_docker`, `String utils_docker`, `String vep_hail_docker`: Container images.
 - `RuntimeAttr? runtime_attr_*`: Optional per-task runtime overrides (11).
 
 Outputs:
@@ -1959,7 +1959,7 @@ Inputs:
 - `File? gatk_to_svtk_script`: Override for the GATK-to-svtk conversion script.
 - `Boolean svtk_set_pass`: Set FILTER to PASS during conversion. (default `false`)
 - `String prefix`: Prefix for output file names.
-- `String gatk_docker`, `String sv_base_mini_docker`, `String sv_pipeline_docker`: Container images.
+- `String gatk_docker`, `String utils_docker`, `String sv_pipeline_docker`: Container images.
 - `RuntimeAttr? runtime_attr_*`: Optional per-task runtime overrides (25).
 
 Outputs:
@@ -2590,7 +2590,7 @@ Inputs:
 - `Int gcnv_qs_cutoff`: Minimum gCNV quality score for a segment to be kept.
 - `Float? defragment_max_dist`: Maximum gap, as a fraction of call length, across which adjacent calls are defragmented.
 - `String prefix`: Prefix for output file names.
-- `String sv_base_mini_docker`, `String sv_pipeline_docker`: Container images.
+- `String utils_docker`, `String sv_pipeline_docker`: Container images.
 - `RuntimeAttr? runtime_attr_*`: Optional per-task runtime overrides (6).
 
 Outputs:
@@ -2632,7 +2632,7 @@ Inputs:
 - `File? gatk_to_svtk_script`: Override for the GATK-to-svtk conversion script.
 - `Boolean svtk_set_pass`: Set FILTER to PASS during conversion. (default `false`)
 - `String prefix`: Prefix for output file names.
-- `String gatk_docker`, `String sv_base_mini_docker`, `String sv_pipeline_docker`: Container images.
+- `String gatk_docker`, `String utils_docker`, `String sv_pipeline_docker`: Container images.
 - `RuntimeAttr? runtime_attr_*`: Optional per-task runtime overrides (4).
 
 Outputs:
@@ -2655,7 +2655,7 @@ Inputs:
 - `String chr_x`: Allosome contig names (defaults `chrX` and `chrY`). (default `chrX`)
 - `String chr_y`: Allosome contig names (defaults `chrX` and `chrY`). (default `chrY`)
 - `String prefix`: Prefix for output file names.
-- `String gatk_docker`, `String sv_base_mini_docker`: Container images.
+- `String gatk_docker`, `String utils_docker`: Container images.
 - `RuntimeAttr? runtime_attr_*`: Optional per-task runtime overrides (3).
 
 Outputs:
@@ -2765,7 +2765,7 @@ Inputs:
 - `Boolean split_into_shards`: Split into record-count shards.
 - `Boolean has_index`: Whether the remote input already has an index.
 - `String prefix`: Prefix for output file names.
-- `String hail_docker`, `String sv_base_mini_docker`: Container images.
+- `String hail_docker`, `String utils_docker`: Container images.
 - `RuntimeAttr? runtime_attr_*`: Optional per-task runtime overrides (2).
 
 Outputs:

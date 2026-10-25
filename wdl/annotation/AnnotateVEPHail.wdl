@@ -54,7 +54,6 @@ workflow AnnotateVEPHail {
         Boolean split_into_shards = false
 
         String hail_docker
-        String sv_base_mini_docker
         String utils_docker
         String vep_hail_docker
 
@@ -103,7 +102,7 @@ workflow AnnotateVEPHail {
             split_into_shards = split_into_shards,
             has_index = has_index,
             hail_docker = hail_docker,
-            sv_base_mini_docker = sv_base_mini_docker,
+            utils_docker = utils_docker,
             runtime_attr_split_by_chr = runtime_attr_split_by_chr,
             runtime_attr_split_into_shards = runtime_attr_split_into_shards
     }

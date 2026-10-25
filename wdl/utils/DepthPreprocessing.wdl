@@ -50,7 +50,7 @@ workflow DepthPreprocessing {
         Int gcnv_qs_cutoff
         Float? defragment_max_dist
 
-        String sv_base_mini_docker
+        String utils_docker
         String sv_pipeline_docker
 
         RuntimeAttr? runtime_attr_gcnv_vcf_to_bed
@@ -104,7 +104,7 @@ workflow DepthPreprocessing {
             svtype = "DEL",
             batch_id = batch_id,
             prefix = prefix + ".del",
-            docker = sv_base_mini_docker,
+            docker = utils_docker,
             runtime_attr_override = runtime_attr_merge_set
     }
 
@@ -114,7 +114,7 @@ workflow DepthPreprocessing {
             svtype = "DUP",
             batch_id = batch_id,
             prefix = prefix + ".dup",
-            docker = sv_base_mini_docker,
+            docker = utils_docker,
             runtime_attr_override = runtime_attr_merge_set
     }
 
@@ -178,7 +178,7 @@ workflow DepthPreprocessing {
             no_address = true,
             sort_mem_mb = concat_sort_mem_mb,
             prefix = prefix + ".raw_depth_cnvs",
-            docker = sv_base_mini_docker,
+            docker = utils_docker,
             runtime_attr_override = concat_attr
     }
 

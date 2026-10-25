@@ -55,7 +55,7 @@ workflow DepthClustering {
         File ref_dict
 
         String gatk_docker
-        String sv_base_mini_docker
+        String utils_docker
         String sv_pipeline_docker
 
         # SVCluster
@@ -123,7 +123,7 @@ workflow DepthClustering {
                     ref_fai = ref_fai,
                     prefix = "~{prefix}-~{contig}-depth-intervals_excluded",
                     intervals = select_first([exclude_intervals]),
-                    docker = sv_base_mini_docker,
+                    docker = utils_docker,
                     runtime_attr_override = runtime_attr_exclude_intervals
             }
         }
@@ -160,7 +160,7 @@ workflow DepthClustering {
             no_version = true,
             no_address = true,
             prefix = "~{prefix}-depth",
-            docker = sv_base_mini_docker,
+            docker = utils_docker,
             runtime_attr_override = concat_attr
     }
 
