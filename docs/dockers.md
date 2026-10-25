@@ -85,11 +85,11 @@ Built and maintained outside this repository. The Digest column records the mani
 | `gatk_docker` | `us.gcr.io/broad-dsde-methods/gatk-sv/gatk:mw-gatk-sv-672d85` | [GATK-SV](https://github.com/broadinstitute/gatk-sv) development build, kept over a GATK release because it carries `TrainSVGenotyping` and `GenotypeSVs`, which no release includes | |
 | `hiphase_docker` | `us.gcr.io/broad-dsp-lrma/hangsuunc/hiphase:v1.5.0` | Hang Su | `sha256:a7cca48696f6134ea8ba32ba5ddb0bbc0e55013357071f915ca937993c23a23c` |
 | `hiphase_preprocess_docker` | `hangsuunc/cleanvcf:v1` | Hang Su | `sha256:73fd5d2f982f95e97e67286783646f3c5c9d5c85cf2b43e8d2cd717bbf8f98ae` |
-| `remap_docker` | `quay.io/ymostovoy/lr-remap:latest` | Yulia Mostovoy | `sha256:3410df5da3631e9eab42e6e7cb750a0a91d1e9b94a523bd632586a1c565a6e6d` |
+| `remap_docker` | `quay.io/ymostovoy/lr-remap:latest` | Yulia Mostovoy; a modified Truvari whose `anno remap` takes `--mm2-threshold` and `--cov-threshold`, which no Truvari release has | `sha256:3410df5da3631e9eab42e6e7cb750a0a91d1e9b94a523bd632586a1c565a6e6d` |
 | `resource_visualization_docker` | `us.gcr.io/broad-dsp-lrma/lr-resource-visual:0.1.1` | [long-read-pipelines](https://github.com/broadinstitute/long-read-pipelines) | |
 | `sv_base_mini_docker` | `us.gcr.io/broad-dsde-methods/gatk-sv/sv-base-mini:2024-10-25-v0.29-beta-5ea22a52` | [GATK-SV](https://github.com/broadinstitute/gatk-sv) | |
-| `sv_integration_docker` | `us.gcr.io/broad-dsp-lrma/fcunial/callset_integration_phase2_workpackages` | Fabio Cunial | untagged, `:latest` moves; `sha256:ad7202bbeb8eff86df592e334026ff262ec66b0057c3f7e5fa256e7761f1e9e9` |
-| `xgb_scoring_docker` | `us.gcr.io/broad-dsde-methods/broad-gatk-snapshots/gatk:sl_aou_lr_intrasample_filtering_xgb` | GATK snapshot | `sha256:a35a80cf67bd366fdc6a34a5b99e2632a607cebd7f007bb607de2ce3f1de8e8b` |
+| `sv_integration_docker` | `us.gcr.io/broad-dsp-lrma/fcunial/callset_integration_phase2_workpackages` | Fabio Cunial; bundles the compiled Java and scripts of [callset_integration_phase2](https://github.com/fabio-cunial/callset_integration_phase2) | untagged, `:latest` moves; `sha256:ad7202bbeb8eff86df592e334026ff262ec66b0057c3f7e5fa256e7761f1e9e9` |
+| `xgb_scoring_docker` | `us.gcr.io/broad-dsde-methods/broad-gatk-snapshots/gatk:sl_aou_lr_intrasample_filtering_xgb` | GATK snapshot from the `sl_aou_lr_intrasample_filtering_xgb` branch, running the XGBoost scoring of `MergeSampleSVCallsets` | `sha256:a35a80cf67bd366fdc6a34a5b99e2632a607cebd7f007bb607de2ce3f1de8e8b` |
 
 
 ## Published
