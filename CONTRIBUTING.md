@@ -16,7 +16,7 @@ Install the Python tooling with `pip install -e ".[dev]"`, and run the checks th
 
 | Changed | Command |
 |---|---|
-| `wdl/` | `find wdl -type f -name '*.wdl' -print0 \| xargs -0 -n1 java -jar womtool.jar validate` |
+| `wdl/` | `find wdl -type f -name '*.wdl' -print0 \| xargs -0 -n1 java -jar "${WOMTOOL_JAR:-womtool.jar}" validate` |
 | `wdl/` | `python .github/scripts/check_wdl_style.py` |
 | `scripts/`, `.github/scripts/`, `tests/` | `ruff check scripts .github/scripts tests` and `ruff format --check scripts .github/scripts tests` |
 | `scripts/`, `.github/scripts/`, `tests/` | `pytest tests/unit` |
@@ -26,7 +26,7 @@ Install the Python tooling with `pip install -e ".[dev]"`, and run the checks th
 | `.dockstore.yml` or a directly-run workflow | `python .github/scripts/check_dockstore_sync.py` |
 | `AGENTS.md` | `python .github/scripts/check_agents_sync.py` |
 
-Womtool is a single jar; fetch it once with `curl -fsSL -o womtool.jar https://github.com/broadinstitute/cromwell/releases/download/87/womtool-87.jar`. It is gitignored.
+Womtool is a single jar: set `WOMTOOL_JAR` to its path, or fetch it into the repository root with `curl -fsSL -o womtool.jar https://github.com/broadinstitute/cromwell/releases/download/87/womtool-87.jar`. It is gitignored.
 
 
 ## Adding a Workflow

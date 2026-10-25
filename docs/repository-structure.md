@@ -42,7 +42,7 @@ archive/             # Retired workflows, scripts, Dockerfiles, notebooks and th
   pre-commit         # Tool-agnostic backstop refusing commits in the main checkout
 pyproject.toml       # Project metadata, extras, and ruff and pytest configuration
 .hadolint.yaml       # hadolint configuration for dockerfiles/
-.worktreelinks       # Gitignored local-only paths (data, womtool.jar) each worktree symlinks from the main checkout
+.worktreelinks       # Gitignored local-only paths (currently data) each worktree symlinks from the main checkout
 .dockstore.yml       # Dockstore registration for every directly-run workflow
 LICENSE              # MIT license
 AGENTS.md            # Canonical agent instructions; .claude/CLAUDE.md and .github/copilot-instructions.md are symlinks to it
