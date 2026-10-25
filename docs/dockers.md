@@ -82,7 +82,7 @@ Built and maintained outside this repository. The Digest column records the mani
 | `automop_docker` | `us.gcr.io/broad-dsde-methods/automop:0.1` | Broad Data Sciences Platform | |
 | `deepvariant_docker` | `us.gcr.io/broad-dsp-lrma/lr-deepvariant:1.6.0` | [long-read-pipelines](https://github.com/broadinstitute/long-read-pipelines), the source of the `DeepVariant` workflow | |
 | `deepvariant_gpu_docker` | `us.gcr.io/broad-dsp-lrma/lr-deepvariant:1.6.0-gpu` | [long-read-pipelines](https://github.com/broadinstitute/long-read-pipelines) | |
-| `gatk_docker` | `us.gcr.io/broad-dsde-methods/gatk-sv/gatk:mw-gatk-sv-672d85` | [GATK-SV](https://github.com/broadinstitute/gatk-sv) | |
+| `gatk_docker` | `us.gcr.io/broad-dsde-methods/gatk-sv/gatk:mw-gatk-sv-672d85` | [GATK-SV](https://github.com/broadinstitute/gatk-sv) development build, kept over a GATK release because it carries `TrainSVGenotyping` and `GenotypeSVs`, which no release includes | |
 | `hiphase_docker` | `us.gcr.io/broad-dsp-lrma/hangsuunc/hiphase:v1.5.0` | Hang Su | `sha256:a7cca48696f6134ea8ba32ba5ddb0bbc0e55013357071f915ca937993c23a23c` |
 | `hiphase_preprocess_docker` | `hangsuunc/cleanvcf:v1` | Hang Su | `sha256:73fd5d2f982f95e97e67286783646f3c5c9d5c85cf2b43e8d2cd717bbf8f98ae` |
 | `remap_docker` | `quay.io/ymostovoy/lr-remap:latest` | Yulia Mostovoy | `sha256:3410df5da3631e9eab42e6e7cb750a0a91d1e9b94a523bd632586a1c565a6e6d` |
