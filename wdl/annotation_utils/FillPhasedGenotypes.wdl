@@ -202,9 +202,6 @@ def copy_format(src, dst, key):
     if value is None or (isinstance(value, tuple) and all(v is None for v in value)):
         return
     header_format = phased_in.header.formats[key]
-    # a diploid call's PL doesn't fit the haploid genotype the phased VCF gives males on chrX and chrY
-    if header_format.number == "G" and len(dst.get("GT") or ()) != len(src.get("GT") or ()):
-        return
     # pysam splits a comma-joined Number=1 String such as AL into a tuple it then refuses to write back
     if isinstance(value, tuple) and header_format.number == 1 and header_format.type == "String":
         value = ",".join("." if v is None else str(v) for v in value)
@@ -219,7 +216,8 @@ for record in phased_in:
     match = None
     rec_key = alleles_key(record)
     for cand in unphased_in.fetch(record.chrom, record.start, record.stop):
-        if alleles_key(cand) == rec_key:
+        # DeepVariant and the SV callset can each call the same alleles, as separate records told apart only by ID
+        if cand.id == record.id and alleles_key(cand) == rec_key:
             match = cand
             break
 

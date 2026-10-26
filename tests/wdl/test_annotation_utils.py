@@ -716,7 +716,7 @@ def test_fill_phased_genotypes_restores_missing_genotypes_and_format_fields_from
         assert new["gts"]["HG00099"] == old["gts"]["HG00099"]
 
 
-def test_fill_phased_genotypes_copies_deepvariant_quirks_and_skips_values_that_do_not_fit(run_workflow, run_dir, utils_docker):
+def test_fill_phased_genotypes_copies_from_the_same_id_and_handles_deepvariant_quirks(run_workflow, run_dir, utils_docker):
     header = [
         "##fileformat=VCFv4.2",
         f"##contig=<ID={CONTIG},length={CONTIG_LENGTH}>",
@@ -735,15 +735,16 @@ def test_fill_phased_genotypes_copies_deepvariant_quirks_and_skips_values_that_d
         pysam.tabix_index(str(plain), preset="vcf", force=True)
         return Path(f"{plain}.gz")
 
-    # DeepVariant writes RNC without the comma its Number=2 calls for, AD as a lone missing value, and a diploid PL
-    # where the phased VCF has a haploid genotype
+    # DeepVariant writes RNC without the comma its Number=2 calls for and AD as a lone missing value; at 200 it and the
+    # SV callset call the same alleles as two records, the SV one with haploid genotypes, told apart only by ID
     phased = write(
         "phased.vcf",
         header
         + [
             columns,
-            f"{CONTIG}\t100\t.\tA\tC\t.\tPASS\t.\tGT:RNC\t./.:..\t0|1:..",
-            f"{CONTIG}\t200\t.\tG\tT\t.\tPASS\t.\tGT:RNC\t1:..\t./.:..",
+            f"{CONTIG}\t100\tsnv\tA\tC\t.\tPASS\t.\tGT:RNC\t./.:..\t0|1:..",
+            f"{CONTIG}\t200\tins_1\tG\tGT\t.\tPASS\t.\tGT:RNC\t1|1:..\t./.:..",
+            f"{CONTIG}\t200\tins_2\tG\tGT\t.\tPASS\t.\tGT\t1\t.",
         ],
     )
     unphased = write(
@@ -752,8 +753,9 @@ def test_fill_phased_genotypes_copies_deepvariant_quirks_and_skips_values_that_d
         + extra
         + [
             columns,
-            f"{CONTIG}\t100\t.\tA\tC\t.\tPASS\t.\tGT:AD:PL:RNC\t1/1:3,4:40,9,0:II\t0/1:.:9,0,30:..",
-            f"{CONTIG}\t200\t.\tG\tT\t.\tPASS\t.\tGT:AD:PL:RNC\t1/1:0,5:51,99,0:..\t0/1:2,3:20,0,20:..",
+            f"{CONTIG}\t100\tsnv\tA\tC\t.\tPASS\t.\tGT:AD:PL:RNC\t1/1:3,4:40,9,0:II\t0/1:.:9,0,30:..",
+            f"{CONTIG}\t200\tins_1\tG\tGT\t.\tPASS\t.\tGT:AD:PL:RNC\t1/1:0,5:60,30,0:..\t0/1:2,3:20,0,20:..",
+            f"{CONTIG}\t200\tins_2\tG\tGT\t.\tPASS\t.\tGT:AD:PL\t1:0,6:30,0\t0:4,0:0,25",
         ],
     )
 
@@ -772,13 +774,16 @@ def test_fill_phased_genotypes_copies_deepvariant_quirks_and_skips_values_that_d
     )
 
     with pysam.VariantFile(outputs["FillPhasedGenotypes.hiphase_phased_vcf"]) as vcf:
-        diploid, haploid = list(vcf)
-    a, b = diploid.samples["a"], diploid.samples["b"]
+        snv, dv, sv = list(vcf)
+    a, b = snv.samples["a"], snv.samples["b"]
     assert (a["GT"], a["AD"], a["PL"], a["RNC"]) == ((1, 1), (3, 4), (40, 9, 0), ("I", "I"))
     assert (b["GT"], b.phased, b["AD"], b["PL"], b["RNC"]) == ((0, 1), True, (None, None), (9, 0, 30), (".", "."))
-    a, b = haploid.samples["a"], haploid.samples["b"]
-    assert (a["GT"], a["AD"]) == ((1,), (0, 5)) and all(v is None for v in a["PL"])
-    assert (b["GT"], b["PL"]) == ((0, 1), (20, 0, 20))
+    a, b = dv.samples["a"], dv.samples["b"]
+    assert (a["GT"], a["AD"], a["PL"]) == ((1, 1), (0, 5), (60, 30, 0))
+    assert (b["GT"], b["AD"], b["PL"]) == ((0, 1), (2, 3), (20, 0, 20))
+    a, b = sv.samples["a"], sv.samples["b"]
+    assert (a["GT"][0], a["AD"], a["PL"][:2]) == (1, (0, 6), (30, 0))
+    assert (b["GT"][0], b["AD"], b["PL"][:2]) == (0, (4, 0), (0, 25))
 
 
 def test_fill_backbone_phased_genotypes_pulls_phase_only_for_unphased_hets(
