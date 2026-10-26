@@ -268,15 +268,17 @@ task PrepareAccuracyTruthVcf {
     command <<<
         set -euo pipefail
 
-        # Split and left-align so alleles match the callset exactly, warning on placeholder N REFs; -s puts samples in the callset's order for concat
+        # Split and left-align so alleles match the callset exactly, warning on placeholder N REFs; -s puts samples in the callset's order for concat, and sort fixes records left-aligned past their neighbours
         bcftools view -r ~{contig} -s ~{sep=',' samples} -Ou ~{snv_indel_vcf} \
             | bcftools annotate -x INFO/AC,INFO/AN,INFO/AF -Ou \
             | bcftools norm -m- -f ~{ref_fa} -c w -Ou \
-            | bcftools view --min-ac 1 ~{if defined(restrict_bed) then "-T " + restrict_bed else ""} -Oz -o snv_indel.vcf.gz
+            | bcftools view --min-ac 1 ~{if defined(restrict_bed) then "-T " + restrict_bed else ""} -Ou \
+            | bcftools sort -T sort_tmp -Oz -o snv_indel.vcf.gz
         bcftools view -r ~{contig} -s ~{sep=',' samples} -Ou ~{sv_vcf} \
             | bcftools annotate -x INFO/AC,INFO/AN,INFO/AF -Ou \
             | bcftools norm -m- -f ~{ref_fa} -c w -Ou \
-            | bcftools view --min-ac 1 -Oz -o sv.vcf.gz
+            | bcftools view --min-ac 1 -Ou \
+            | bcftools sort -T sort_tmp -Oz -o sv.vcf.gz
         tabix -p vcf snv_indel.vcf.gz
         tabix -p vcf sv.vcf.gz
 
