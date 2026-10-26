@@ -1335,7 +1335,7 @@ def trio_outcome(record, child, parents):
     return "skipped" if any(None in record["gts"][p] for p in parents) else "uninherited"
 
 
-def test_evaluate_callset_accuracy_counts_site_and_call_matches_against_deduplicated_combined_truth(
+def test_evaluate_callset_accuracy_counts_site_and_call_matches_against_deduplicated_combined_truth_by_region(
     run_workflow, run_dir, window_vcf, utils_docker
 ):
     callset = write_vcf(window_vcf, run_dir / "callset.vcf.gz", lambda r: len(r.alts) == 1 and r.info["allele_type"] != "trv")
@@ -1357,6 +1357,11 @@ def test_evaluate_callset_accuracy_counts_site_and_call_matches_against_deduplic
     truth = rewrite_vcf(kept, run_dir / "truth.vcf.gz", ["SVTYPE", "SVLEN"], swap_carrier)
     sv_truth = write_vcf(truth, run_dir / "sv_truth.vcf.gz", lambda r: abs(r.info["allele_length"]) >= 50)
 
+    # Region panels around the left breakpoints of a spread of callset records, so both region groups are populated
+    starts = [r["pos"] - 1 for r in load_records(callset)[1]]
+    sr, sd, rm = ([(CONTIG, max(x - 5, 0), x + 5) for x in starts[i::step]] for i, step in ((0, 7), (1, 3), (2, 2)))
+    beds = {name: write_table(run_dir / f"{name}.bed", sorted(rows)) for name, rows in (("sr", sr), ("sd", sd), ("rm", rm))}
+
     outputs = run_workflow(
         f"{UTILS}/EvaluateCallsetAccuracy.wdl",
         {
@@ -1370,6 +1375,9 @@ def test_evaluate_callset_accuracy_counts_site_and_call_matches_against_deduplic
             "prefix": "accuracy",
             "ref_fa": str(WINDOW_FASTA),
             "ref_fai": f"{WINDOW_FASTA}.fai",
+            "simple_repeats_bed": str(beds["sr"]),
+            "seg_dup_bed": str(beds["sd"]),
+            "repeat_masked_bed": str(beds["rm"]),
             "utils_docker": utils_docker,
         },
     )
@@ -1399,8 +1407,8 @@ def test_evaluate_callset_accuracy_counts_site_and_call_matches_against_deduplic
         (row,) = [
             r
             for r in rows
-            if (r["level"], r["sample"], r["allele_type"], r["length_bin"], r["match_stage"])
-            == (level, "all", "all", "all", stage)
+            if (r["level"], r["sample"], r["allele_type"], r["length_bin"], r["region"], r["match_stage"])
+            == (level, "all", "all", "all", "all", stage)
         ]
         return tuple(int(row[c]) for c in ("tp_eval", "fp", "tp_truth", "fn"))
 
@@ -1409,6 +1417,17 @@ def test_evaluate_callset_accuracy_counts_site_and_call_matches_against_deduplic
         # Truvari can only add matches, so the callset and truth totals stay the same
         tp_eval, fp, tp_truth, fn = total_row(level, "truvari")
         assert (tp_eval + fp, tp_truth + fn) == (counts[0] + counts[1], counts[2] + counts[3])
+
+    # Every record falls in exactly one region group, so the two groups sum to the region marginal
+    by_region = collections.defaultdict(collections.Counter)
+    for r in rows:
+        key = (r["level"], r["sample"], r["allele_type"], r["length_bin"], r["match_stage"])
+        for c in ("tp_eval", "fp", "tp_truth", "fn"):
+            by_region[key][(r["region"], c)] += int(r[c])
+    assert {r["region"] for r in rows} == {"US/RM", "SD/SR", "all"}
+    for groups in by_region.values():
+        for c in ("tp_eval", "fp", "tp_truth", "fn"):
+            assert groups[("US/RM", c)] + groups[("SD/SR", c)] == groups[("all", c)]
 
 
 def test_evaluate_ncr_cutoffs_tabulates_trio_transmission_cumulatively_by_ncr_cutoff(run_workflow, run_dir, vcf_inputs, source):

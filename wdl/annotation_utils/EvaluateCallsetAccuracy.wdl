@@ -1,5 +1,6 @@
 version 1.0
 
+import "../annotation/AnnotateRegion.wdl"
 import "../utils/ExactMatch.wdl"
 import "../utils/Structs.wdl"
 import "../utils/TruvariMatch.wdl"
@@ -10,6 +11,7 @@ workflow EvaluateCallsetAccuracy {
             "This utility benchmarks one contig of a cohort VCF against a truth set combined from an SNV & indel truth VCF and an SV truth VCF, reporting precision and recall at the site and call level. Each truth VCF is cut to the callset's samples and contig, split into biallelic records and left-aligned, and the SNV & indel truth is restricted to `truth_snv_indel_bed` when given. SV truth records identical in CHROM, POS, REF and ALT to an SNV & indel truth record are dropped before the two are combined, so each variant is counted once. The BED also restricts callset records shorter than `sv_min_length`, matching the truth records it bounds; longer callset records are kept genome-wide like the SV truth. Only records with at least one non-reference call are kept on either side.",
             "Matching reuses the first round of `AnnotateCallsetOverlap`, an exact match on CHROM, POS, REF and ALT, followed by a single Truvari pass at 0.5 sequence similarity, size similarity and overlap on the records left unmatched on both sides, admitting callset records with `abs(INFO/allele_length)` of at least `min_sv_length_truvari_vcf` and truth records of at least `min_sv_length_truvari_truth_vcf`. Every record is therefore paired at most once. Truvari skips records longer than 50 kb, so those count only through the exact match.",
             "A site is one record and a call is one sample's non-reference genotype at it, with phasing and zygosity ignored. A callset site is a true positive when it matched a truth record and a callset call when that sample is also non-reference in the matched truth record; a truth site or call is recovered the same way from the other side. Precision counts callset sites and calls, stratified by `INFO/allele_type` and `abs(INFO/allele_length)`, and recall counts truth sites and calls, stratified by the type and length of the truth record - `SVTYPE` and `SVLEN` when present, otherwise REF and ALT. A matched pair can therefore fall in different strata on the two sides. Truth records that are not an SNV, insertion or deletion, such as multi-nucleotide variants and inversions, are left out of recall.",
+            "Each record is also assigned the genomic region of `AnnotateRegion` - simple repeat, segmental duplication, RepeatMasker or unique sequence - and rows are stratified into `US/RM` and `SD/SR`, by the callset record's region for precision and the truth record's for recall.",
             "Every row is reported at both matching stages, cumulatively, so the `truvari` rows give the totals. All count columns sum across contigs."
         ]
     }
@@ -29,9 +31,13 @@ workflow EvaluateCallsetAccuracy {
         min_sv_length_truvari_truth_vcf: "Minimum absolute length for an unmatched truth record to enter the Truvari pass."
         length_bins: "Size-bin edges stratifying records by absolute length."
         shard_bin_size_exact_match: "Width in base pairs of the regions the exact-match round is sharded into."
+        records_per_shard_region: "Number of records per shard when assigning genomic regions."
         ref_fa: "From references."
         ref_fai: "From references."
-        accuracy_tsv: "One row per level (`site` or `call`), sample, allele type, length bin and cumulative matching stage (`exact` or `truvari`), with `tp_eval`, `fp`, `tp_truth`, `fn`, precision, recall and F1; strata with no records on either side are left out. Site rows use sample `all`; type and length bin each have an `all` marginal."
+        simple_repeats_bed: "From references."
+        seg_dup_bed: "From references."
+        repeat_masked_bed: "From references."
+        accuracy_tsv: "One row per level (`site` or `call`), sample, allele type, length bin, region (`US/RM` or `SD/SR`) and cumulative matching stage (`exact` or `truvari`), with `tp_eval`, `fp`, `tp_truth`, `fn`, precision, recall and F1; strata with no records on either side are left out. Site rows use sample `all`; type, length bin and region each have an `all` marginal."
     }
 
     input {
@@ -52,9 +58,13 @@ workflow EvaluateCallsetAccuracy {
         Array[Int] length_bins = [0, 1, 50, 500]
 
         Int shard_bin_size_exact_match = 5000000
+        Int records_per_shard_region = 10000
 
         File ref_fa
         File ref_fai
+        File simple_repeats_bed
+        File seg_dup_bed
+        File repeat_masked_bed
 
         String utils_docker
 
@@ -73,6 +83,9 @@ workflow EvaluateCallsetAccuracy {
         RuntimeAttr? runtime_attr_concat_exact_annotations
         RuntimeAttr? runtime_attr_concat_exact_unmatched
         RuntimeAttr? runtime_attr_concat_exact_truth
+        RuntimeAttr? runtime_attr_region_shard
+        RuntimeAttr? runtime_attr_annotate_region
+        RuntimeAttr? runtime_attr_concat_region_shards
     }
 
     call PrepareAccuracyEvalVcf {
@@ -164,12 +177,46 @@ workflow EvaluateCallsetAccuracy {
             runtime_attr_override = runtime_attr_run_truvari
     }
 
+    call AnnotateRegion.AnnotateRegion as AnnotateEvalRegion {
+        input:
+            vcf = PrepareAccuracyEvalVcf.eval_vcf,
+            vcf_idx = PrepareAccuracyEvalVcf.eval_vcf_idx,
+            contigs = [contig],
+            prefix = "~{prefix}.~{contig}.eval",
+            records_per_shard = records_per_shard_region,
+            simple_repeats_bed = simple_repeats_bed,
+            seg_dup_bed = seg_dup_bed,
+            repeat_masked_bed = repeat_masked_bed,
+            utils_docker = utils_docker,
+            runtime_attr_shard = runtime_attr_region_shard,
+            runtime_attr_annotate_region = runtime_attr_annotate_region,
+            runtime_attr_concat_shards = runtime_attr_concat_region_shards
+    }
+
+    call AnnotateRegion.AnnotateRegion as AnnotateTruthRegion {
+        input:
+            vcf = PrepareAccuracyTruthVcf.truth_vcf,
+            vcf_idx = PrepareAccuracyTruthVcf.truth_vcf_idx,
+            contigs = [contig],
+            prefix = "~{prefix}.~{contig}.truth",
+            records_per_shard = records_per_shard_region,
+            simple_repeats_bed = simple_repeats_bed,
+            seg_dup_bed = seg_dup_bed,
+            repeat_masked_bed = repeat_masked_bed,
+            utils_docker = utils_docker,
+            runtime_attr_shard = runtime_attr_region_shard,
+            runtime_attr_annotate_region = runtime_attr_annotate_region,
+            runtime_attr_concat_shards = runtime_attr_concat_region_shards
+    }
+
     call CountCallsetAccuracy {
         input:
             eval_vcf = PrepareAccuracyEvalVcf.eval_vcf,
             eval_vcf_idx = PrepareAccuracyEvalVcf.eval_vcf_idx,
             truth_vcf = PrepareAccuracyTruthVcf.truth_vcf,
             truth_vcf_idx = PrepareAccuracyTruthVcf.truth_vcf_idx,
+            eval_region_tsv = AnnotateEvalRegion.annotations_tsv_region,
+            truth_region_tsv = AnnotateTruthRegion.annotations_tsv_region,
             match_tsvs = select_all([ExactMatch.annotated_tsv, RunTruvari.annotation_tsv]),
             length_bins = length_bins,
             prefix = "~{prefix}.~{contig}.callset_accuracy",
@@ -396,6 +443,8 @@ task CountCallsetAccuracy {
         File eval_vcf_idx
         File truth_vcf
         File truth_vcf_idx
+        File eval_region_tsv
+        File truth_region_tsv
         Array[File] match_tsvs
         Array[Int] length_bins
         String prefix
@@ -419,6 +468,8 @@ SIZE_LABELS.append(f'{LENGTH_BINS[-1]}+')
 # Matching stages in the order they run, as tagged by ExactMatch and RunTruvari
 STAGES = ['EXACT', 'TRUVARI']
 TYPES = ['snv', 'ins', 'del']
+REGION_GROUPS = {'US': 'US/RM', 'RM': 'US/RM', 'SD': 'SD/SR', 'SR': 'SD/SR'}
+REGIONS = ['US/RM', 'SD/SR']
 COUNT_COLUMNS = ['tp_eval', 'fp', 'tp_truth', 'fn']
 
 def size_bin(length):
@@ -432,18 +483,22 @@ def first(value):
 def carriers(record):
     return frozenset(name for name, sample in record.samples.items() if any(a not in (None, 0) for a in sample['GT'] or ()))
 
-def load(path):
+def load(path, region_path):
+    with open(region_path) as handle:
+        regions = {fields[4]: REGION_GROUPS[fields[5]] for fields in (line.rstrip('\n').split('\t') for line in handle)}
     with pysam.VariantFile(path) as vcf:
-        records = {
-            record.id: (str(first(record.info['allele_type'])).lower(), size_bin(abs(int(first(record.info['allele_length'])))), carriers(record))
-            for record in vcf
-        }
+        records = {}
+        for record in vcf:
+            if record.id not in regions:
+                sys.exit(f'Record {record.id} has no genomic region')
+            allele_type = str(first(record.info['allele_type'])).lower()
+            records[record.id] = (allele_type, size_bin(abs(int(first(record.info['allele_length'])))), regions[record.id], carriers(record))
         return list(vcf.header.samples), records
 
-samples, evals = load("~{eval_vcf}")
-_, truths = load("~{truth_vcf}")
+samples, evals = load("~{eval_vcf}", "~{eval_region_tsv}")
+_, truths = load("~{truth_vcf}", "~{truth_region_tsv}")
 skipped = defaultdict(int)
-for allele_type, _, _ in truths.values():
+for allele_type, _, _, _ in truths.values():
     if allele_type not in TYPES:
         skipped[allele_type] += 1
 
@@ -462,33 +517,34 @@ for path in "~{sep=',' match_tsvs}".split(','):
 
 counts = defaultdict(lambda: [0] * len(COUNT_COLUMNS))
 
-def add(stage, level, sample, allele_type, size, column):
+def add(stage, level, sample, allele_type, size, region, column):
     for type_key in (allele_type, 'all'):
         for size_key in (size, 'all'):
-            counts[(stage, level, sample, type_key, size_key)][COUNT_COLUMNS.index(column)] += 1
+            for region_key in (region, 'all'):
+                counts[(stage, level, sample, type_key, size_key, region_key)][COUNT_COLUMNS.index(column)] += 1
 
 for stage_index, stage in enumerate(STAGES):
     recovered = defaultdict(set)
-    for eval_id, (allele_type, size, eval_carriers) in evals.items():
+    for eval_id, (allele_type, size, region, eval_carriers) in evals.items():
         match = matches.get(eval_id)
         truth_id = match[1] if match is not None and match[0] <= stage_index else None
-        matched_carriers = truths[truth_id][2] if truth_id is not None else frozenset()
+        matched_carriers = truths[truth_id][3] if truth_id is not None else frozenset()
         if truth_id is not None:
             recovered[truth_id] |= eval_carriers
-        add(stage, 'site', 'all', allele_type, size, 'tp_eval' if truth_id is not None else 'fp')
+        add(stage, 'site', 'all', allele_type, size, region, 'tp_eval' if truth_id is not None else 'fp')
         for sample in eval_carriers:
             column = 'tp_eval' if sample in matched_carriers else 'fp'
-            add(stage, 'call', sample, allele_type, size, column)
-            add(stage, 'call', 'all', allele_type, size, column)
-    for truth_id, (allele_type, size, truth_carriers) in truths.items():
+            add(stage, 'call', sample, allele_type, size, region, column)
+            add(stage, 'call', 'all', allele_type, size, region, column)
+    for truth_id, (allele_type, size, region, truth_carriers) in truths.items():
         if allele_type not in TYPES:
             continue
         found = recovered.get(truth_id)
-        add(stage, 'site', 'all', allele_type, size, 'tp_truth' if found is not None else 'fn')
+        add(stage, 'site', 'all', allele_type, size, region, 'tp_truth' if found is not None else 'fn')
         for sample in truth_carriers:
             column = 'tp_truth' if found is not None and sample in found else 'fn'
-            add(stage, 'call', sample, allele_type, size, column)
-            add(stage, 'call', 'all', allele_type, size, column)
+            add(stage, 'call', sample, allele_type, size, region, column)
+            add(stage, 'call', 'all', allele_type, size, region, column)
 
 def ratio(numerator, denominator):
     return numerator / denominator if denominator else None
@@ -496,24 +552,25 @@ def ratio(numerator, denominator):
 def fmt(value):
     return '.' if value is None else f'{value:.4f}'
 
-types = TYPES + sorted({allele_type for allele_type, _, _ in evals.values()} - set(TYPES)) + ['all']
+types = TYPES + sorted({allele_type for allele_type, _, _, _ in evals.values()} - set(TYPES)) + ['all']
 with open("~{prefix}.tsv", 'w', newline='') as handle:
     writer = csv.writer(handle, delimiter='\t', lineterminator='\n')
-    writer.writerow(['level', 'sample', 'allele_type', 'length_bin', 'match_stage'] + COUNT_COLUMNS + ['precision', 'recall', 'f1'])
+    writer.writerow(['level', 'sample', 'allele_type', 'length_bin', 'region', 'match_stage'] + COUNT_COLUMNS + ['precision', 'recall', 'f1'])
     for stage in STAGES:
         for level, level_samples in (('site', ['all']), ('call', samples + ['all'])):
             for sample in level_samples:
                 for allele_type in types:
                     for size in SIZE_LABELS + ['all']:
-                        tp_eval, fp, tp_truth, fn = counts[(stage, level, sample, allele_type, size)]
-                        # A stratum empty at one stage is empty at every stage, such as SNVs above 0 bp
-                        if tp_eval + fp + tp_truth + fn == 0:
-                            continue
-                        precision = ratio(tp_eval, tp_eval + fp)
-                        recall = ratio(tp_truth, tp_truth + fn)
-                        f1 = ratio(2 * precision * recall, precision + recall) if precision is not None and recall is not None else None
-                        writer.writerow([level, sample, allele_type, size, stage.lower(),
-                                         tp_eval, fp, tp_truth, fn, fmt(precision), fmt(recall), fmt(f1)])
+                        for region in REGIONS + ['all']:
+                            tp_eval, fp, tp_truth, fn = counts[(stage, level, sample, allele_type, size, region)]
+                            # A stratum empty at one stage is empty at every stage, such as SNVs above 0 bp
+                            if tp_eval + fp + tp_truth + fn == 0:
+                                continue
+                            precision = ratio(tp_eval, tp_eval + fp)
+                            recall = ratio(tp_truth, tp_truth + fn)
+                            f1 = ratio(2 * precision * recall, precision + recall) if precision is not None and recall is not None else None
+                            writer.writerow([level, sample, allele_type, size, region, stage.lower(),
+                                             tp_eval, fp, tp_truth, fn, fmt(precision), fmt(recall), fmt(f1)])
 
 print(f'{len(evals)} callset and {len(truths)} truth records, {len(matches)} matched; truth left out of recall: {dict(skipped)}')
 CODE
@@ -526,7 +583,7 @@ CODE
     RuntimeAttr default_attr = object {
         cpu_cores: 1,
         mem_gb: 8,
-        disk_gb: ceil(size(eval_vcf, "GB") + size(truth_vcf, "GB") + size(match_tsvs, "GB")) + 10,
+        disk_gb: ceil(size(eval_vcf, "GB") + size(truth_vcf, "GB") + size([eval_region_tsv, truth_region_tsv], "GB") + size(match_tsvs, "GB")) + 10,
         boot_disk_gb: 10,
         preemptible_tries: 1,
         max_retries: 0

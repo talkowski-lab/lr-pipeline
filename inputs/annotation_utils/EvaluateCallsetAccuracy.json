@@ -9,5 +9,8 @@
     "EvaluateCallsetAccuracy.prefix": "cohort",
     "EvaluateCallsetAccuracy.ref_fa": "gs://<references-bucket>/hg38.no_alt.fa",
     "EvaluateCallsetAccuracy.ref_fai": "gs://<references-bucket>/hg38.no_alt.fa.fai",
+    "EvaluateCallsetAccuracy.simple_repeats_bed": "gs://<references-bucket>/hg38.SimpRep.sorted.merged.bed",
+    "EvaluateCallsetAccuracy.seg_dup_bed": "gs://<references-bucket>/hg38.SegDup.sorted.merged.bed",
+    "EvaluateCallsetAccuracy.repeat_masked_bed": "gs://<references-bucket>/hg38.RM.sorted.merged.bed",
     "EvaluateCallsetAccuracy.utils_docker": "us-central1-docker.pkg.dev/talkowski-sv-gnomad/kj-dockers/utils:latest"
 }

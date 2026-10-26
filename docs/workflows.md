@@ -1411,6 +1411,8 @@ Matching reuses the first round of `AnnotateCallsetOverlap`, an exact match on C
 
 A site is one record and a call is one sample's non-reference genotype at it, with phasing and zygosity ignored. A callset site is a true positive when it matched a truth record and a callset call when that sample is also non-reference in the matched truth record; a truth site or call is recovered the same way from the other side. Precision counts callset sites and calls, stratified by `INFO/allele_type` and `abs(INFO/allele_length)`, and recall counts truth sites and calls, stratified by the type and length of the truth record - `SVTYPE` and `SVLEN` when present, otherwise REF and ALT. A matched pair can therefore fall in different strata on the two sides. Truth records that are not an SNV, insertion or deletion, such as multi-nucleotide variants and inversions, are left out of recall.
 
+Each record is also assigned the genomic region of `AnnotateRegion` - simple repeat, segmental duplication, RepeatMasker or unique sequence - and rows are stratified into `US/RM` and `SD/SR`, by the callset record's region for precision and the truth record's for recall.
+
 Every row is reported at both matching stages, cumulatively, so the `truvari` rows give the totals. All count columns sum across contigs.
 
 Inputs:
@@ -1428,14 +1430,18 @@ Inputs:
 - `Int min_sv_length_truvari_truth_vcf`: Minimum absolute length for an unmatched truth record to enter the Truvari pass. (default `10`)
 - `Array[Int] length_bins`: Size-bin edges stratifying records by absolute length. (default `[0, 1, 50, 500]`)
 - `Int shard_bin_size_exact_match`: Width in base pairs of the regions the exact-match round is sharded into. (default `5000000`)
+- `Int records_per_shard_region`: Number of records per shard when assigning genomic regions. (default `10000`)
 - `File ref_fa`: From references.
 - `File ref_fai`: From references.
+- `File simple_repeats_bed`: From references.
+- `File seg_dup_bed`: From references.
+- `File repeat_masked_bed`: From references.
 - `String prefix`: Prefix for output file names.
 - `String utils_docker`: Container image.
-- `RuntimeAttr? runtime_attr_*`: Optional per-task runtime overrides (15).
+- `RuntimeAttr? runtime_attr_*`: Optional per-task runtime overrides (18).
 
 Outputs:
-- `File accuracy_tsv`: One row per level (`site` or `call`), sample, allele type, length bin and cumulative matching stage (`exact` or `truvari`), with `tp_eval`, `fp`, `tp_truth`, `fn`, precision, recall and F1; strata with no records on either side are left out. Site rows use sample `all`; type and length bin each have an `all` marginal.
+- `File accuracy_tsv`: One row per level (`site` or `call`), sample, allele type, length bin, region (`US/RM` or `SD/SR`) and cumulative matching stage (`exact` or `truvari`), with `tp_eval`, `fp`, `tp_truth`, `fn`, precision, recall and F1; strata with no records on either side are left out. Site rows use sample `all`; type, length bin and region each have an `all` marginal.
 
 ### [EvaluateOverlappingTRLoci](../wdl/annotation_utils/EvaluateOverlappingTRLoci.wdl)
 This utility evaluates how consistently TRGT genotypes the same reference bases when the repeat catalog defines overlapping loci. It takes a single-sample TRGT VCF, pairs every two records whose `POS`-to-`INFO/END` reference spans intersect and, for each pair, projects both haplotype sequences onto the shared reference interval and scores their agreement. Only pairs where at least one locus carries a non-reference call are evaluated, since two reference calls agree on the shared bases by construction. Each TRGT record is a full-locus replacement - `REF` is the reference sequence spanning the locus and each `ALT` is a complete haplotype sequence - so no reference FASTA or prior `bcftools norm` is needed. The projection aligns each haplotype to its own `REF` with `edlib` and assigns inserted bases to the reference base they follow, which means the projected sequence of a haplotype carrying a length change inherits the aligner's placement of that change; when a length change is placed at the edge of the shared interval its whole length is charged to that interval, so `max_similarity` can fall below `0`. Genotypes are unphased, so both haplotype assignments are scored and the one with the lower summed edit distance is reported. Haploid records are scored on their single haplotype and report `.` for the absent haplotype, and records with a missing genotype are skipped.
