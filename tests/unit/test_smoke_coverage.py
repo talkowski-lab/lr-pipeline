@@ -37,6 +37,7 @@ EXEMPT = {
     "PAV": "needs the PAV image and phased haplotype assemblies",
     "PBSV": "needs the pbsv image and an aligned BAM",
     "RepeatMasker": "needs the multi-GB Dfam TE Tools image",
+    "ResetAlignedReads": "needs the minimap2 image for samtools reset and an aligned BAM",
     "Sawfish": "needs the sawfish image and aligned BAMs",
     "Sniffles": "needs the Sniffles image and an aligned BAM",
     "TRGT": "needs the TRGT image and an aligned BAM",

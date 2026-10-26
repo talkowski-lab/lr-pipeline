@@ -875,6 +875,17 @@ workflows:
         - /.*/
 
   - subclass: WDL
+    name: ResetAlignedReads
+    primaryDescriptorPath: /wdl/tools/ResetAlignedReads.wdl
+    publish: true
+    filters:
+      branches:
+        - main
+        - kj-reset-aligned-reads
+      tags:
+        - /.*/
+
+  - subclass: WDL
     name: Sawfish
     primaryDescriptorPath: /wdl/tools/Sawfish.wdl
     publish: true

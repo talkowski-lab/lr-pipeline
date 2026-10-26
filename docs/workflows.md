@@ -94,6 +94,7 @@ This file is generated from the `meta` and `parameter_meta` blocks of each workf
   - [PAV](#pav)
   - [PBSV](#pbsv)
   - [RepeatMasker](#repeatmasker)
+  - [ResetAlignedReads](#resetalignedreads)
   - [Sawfish](#sawfish)
   - [Sniffles](#sniffles)
   - [MergeSampleSVCallsets](#mergesamplesvcallsets)
@@ -2193,6 +2194,25 @@ Inputs:
 Outputs:
 - `File rm_out`: RepeatMasker output table.
 - `File rm_fa`: FASTA of the masked insertion sequences.
+
+### [ResetAlignedReads](../wdl/tools/ResetAlignedReads.wdl)
+This tool turns a sample's aligned long-read BAM back into an unaligned BAM downsampled to a target coverage, for cohorts whose reads are only available aligned. `samtools reset` strips the alignment and the aligner and haplotagging tags and drops secondary and supplementary records, and `samtools view --subsample` keeps a random fraction of read names in the same stream, so the full-depth unaligned BAM is never written. A sample already at or below the target coverage is kept whole.
+
+Coverage is the sequenced bases of primary mapped reads divided by the summed contig lengths in the BAM header. Unlike a mosdepth mean depth it counts soft-clipped and inserted bases and skips deletions, so it can run a few percent higher. Read kinetics, `MM`/`ML` methylation tags and read groups are kept. It runs in the minimap2 image, since `samtools reset` needs samtools 1.17 or later.
+
+Inputs:
+- `File bam`: Aligned reads for the sample.
+- `Float target_coverage`: Coverage to downsample to. (default `30`)
+- `Int subsample_seed`: Seed for the read-name subsampling. (default `42`)
+- `Array[String] tags_to_remove`: Read tags to strip, besides the alignment itself. (default `["MD", "NM", "AS", "SA", "XA", "PC", "PS", "HP", "cg", "cm", "cs", "de", "dv", "ms", "nn", "rl", "s1", "s2", "tp", "ts", "mc", "mg", "mi", "rm"]`)
+- `String prefix`: Prefix for output file names.
+- `String minimap2_docker`: Container image.
+- `RuntimeAttr? runtime_attr_*`: Optional per-task runtime overrides.
+
+Outputs:
+- `File unaligned_bam`: Unaligned reads downsampled to `target_coverage`.
+- `Float coverage`: Coverage of `bam` before downsampling.
+- `Float subsample_fraction`: Fraction of reads kept.
 
 ### [Sawfish](../wdl/tools/Sawfish.wdl)
 This tool calls structural variants and copy-number variants from aligned long reads with sawfish. It runs the per-sample discover step in a scatter, then joint-calls across the cohort, using per-sample sex to select the expected copy-number track.

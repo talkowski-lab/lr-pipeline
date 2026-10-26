@@ -1,0 +1,5 @@
+{
+    "ResetAlignedReads.bam": "gs://<cohort-bucket>/sample.bam",
+    "ResetAlignedReads.prefix": "cohort",
+    "ResetAlignedReads.minimap2_docker": "us-central1-docker.pkg.dev/talkowski-sv-gnomad/kj-dockers/minimap2:latest"
+}
