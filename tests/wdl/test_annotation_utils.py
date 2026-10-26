@@ -1791,6 +1791,43 @@ def test_preprocess_vcfs_splits_multiallelics_types_alleles_filters_by_length_an
         assert new["gts"]["SWAPPED"] == old["gts"]["HG00096"] and new["gts"]["HG00128"] == old["gts"]["HG00128"]
 
 
+def test_preprocess_vcfs_drops_out_of_range_lengths_when_asked(run_workflow, run_dir, window_vcf, utils_docker):
+    snv_ins_del = write_vcf(
+        window_vcf, run_dir / "snv_ins_del.vcf.gz", lambda r: all(is_snv_ins_or_del(r.ref, a) for a in r.alts)
+    )
+    stripped = rewrite_vcf(
+        snv_ins_del, run_dir / "input.vcf.gz", ["allele_type", "allele_length", "allele_subtype", "SOURCE"], lambda r: None
+    )
+
+    outputs = run_workflow(
+        f"{UTILS}/PreprocessVcfs.wdl",
+        {
+            "vcfs": [str(stripped)],
+            "vcf_idxs": [f"{stripped}.tbi"],
+            "prefix": "pre",
+            "normalize_vcfs": [True],
+            "convert_aou_phase2_symbolic_alleles": [False],
+            "source_tags": ["HPRC"],
+            "swap_sample_lists": [],
+            "min_length_cutoffs": [5],
+            "max_length_cutoffs": [100],
+            "drop_out_of_range_lengths": True,
+            "sample_ids": [],
+            "ref_fa": str(WINDOW_FASTA),
+            "ref_fai": f"{WINDOW_FASTA}.fai",
+            "utils_docker": utils_docker,
+        },
+    )
+
+    _, original = load_records(stripped)
+    _, got = load_records(outputs["PreprocessVcfs.preprocessed_vcf"])
+    in_range = [a for r in original for a in r["alts"] if 5 <= abs(len(a) - len(r["ref"])) <= 100]
+    assert in_range and len(got) == len(in_range)
+    for r in got:
+        assert 5 <= abs(r["info"]["allele_length"]) <= 100
+        assert not {"SMALL_HPRC", "LARGE_HPRC"} & set(r["filter"])
+
+
 def write_window_type_vcf(path, rows, sv_info=True):
     """Write one-sample (pos, ref, alt, info text, GT) rows on the window FASTA contig, bgzipped and tabix-indexed."""
     with pysam.FastaFile(str(WINDOW_FASTA)) as fasta:

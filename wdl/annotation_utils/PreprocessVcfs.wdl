@@ -6,7 +6,7 @@ import "../utils/Helpers.wdl"
 workflow PreprocessVcfs {
     meta {
         description: [
-            "This utility preprocesses and integrates one or more cohort VCFs into a single VCF. It first optionally converts the symbolic `<DEL>` and `<DUP>` alleles of an All of Us Phase 2 VCF to sequence alleles and drops its remaining symbolic records, then applies any per-VCF sample-ID swaps, optionally subsets every VCF to the requested samples, and validates that the resulting sample sets are identical. Each VCF is then optionally normalized and reduced to its SNV, insertion and deletion records: symbolic, breakend, spanning-deletion (`*`) and `SVTYPE=INV` records are dropped, and any other record whose trimmed REF and ALT have the same multi-base length fails the run. Kept alleles are uppercased, since normalizing against a soft-masked reference writes lowercase bases. The remaining records are annotated with core variant attributes and an optional source label, and length-filtered. Per-VCF controls are required arrays: an empty array disables that control for every VCF; a non-empty array must align with `vcfs`."
+            "This utility preprocesses and integrates one or more cohort VCFs into a single VCF. It first optionally converts the symbolic `<DEL>` and `<DUP>` alleles of an All of Us Phase 2 VCF to sequence alleles and drops its remaining symbolic records, then applies any per-VCF sample-ID swaps, optionally subsets every VCF to the requested samples, and validates that the resulting sample sets are identical. Each VCF is then optionally normalized and reduced to its SNV, insertion and deletion records: symbolic, breakend, spanning-deletion (`*`) and `SVTYPE=INV` records are dropped, and any other record whose trimmed REF and ALT have the same multi-base length fails the run. Kept alleles are uppercased, since normalizing against a soft-masked reference writes lowercase bases. The remaining records are annotated with core variant attributes and an optional source label, and length-filtered: records outside a VCF's length cutoffs are flagged, or dropped when `drop_out_of_range_lengths` is set, so that several callsets can each keep only their own length range. Per-VCF controls are required arrays: an empty array disables that control for every VCF; a non-empty array must align with `vcfs`."
         ]
     }
 
@@ -17,8 +17,9 @@ workflow PreprocessVcfs {
         convert_aou_phase2_symbolic_alleles: "Per-VCF symbolic-allele conversion settings for VCFs that carry symbolic `<DEL>` and `<DUP>` alleles, such as All of Us Phase 2 VCFs and the cohort long-SV VCF from MergeCohortLongSVCallsets, whose symbolic records carry `REF=N`. `[]` disables conversion; otherwise aligned with `vcfs`. Non-symbolic records pass through untouched. For enabled VCFs, `<DEL>` becomes a reference-anchored deletion whose `REF` is the deleted reference sequence and whose `ALT` is the anchor base, and `<DUP>` becomes a reference-anchored insertion whose `REF` is the anchor base and whose `ALT` is the anchor plus the duplicated reference sequence, using `SVLEN` or `END` as a fallback to determine the duplicated length. Converted records keep their `SVTYPE`, `SVLEN`, `CIPOS`, `CIEND`, `IMPRECISE` and `STRANDS` values, so a converted `<DUP>` reports `SVTYPE=DUP` even though its alleles are now an insertion; `END` is dropped once the ALT is no longer symbolic, and `INFO/allele_length` and `INFO/allele_type` are left to `AnnotateVariantAttributes`. Every other angle-bracket symbolic ALT, including `<INS>` and `<INV>`, is dropped, so that no symbolic record reaches `AnnotateVariantAttributes`, which derives both fields from the `REF` and `ALT` lengths and would read a symbolic ALT as a short insertion."
         source_tags: "Per-VCF `SOURCE` values. `[]` disables source tagging; otherwise aligned with `vcfs`. Required when at least one length cutoff is enabled."
         swap_sample_lists: "Per-VCF sample-ID swap maps, applied before sample subsetting. `[]` disables swapping; otherwise aligned with `vcfs`. A zero-byte map means no swap for that VCF."
-        min_length_cutoffs: "Per-VCF minimum absolute allele lengths. `[]` disables minimum-length filtering; otherwise aligned with `vcfs`. A value of `-1` disables this filter for that VCF. Calls with `abs(allele_length)` strictly below an enabled cutoff receive `SMALL_{source_tags[i]}`."
-        max_length_cutoffs: "Per-VCF maximum absolute allele lengths. `[]` disables maximum-length filtering; otherwise aligned with `vcfs`. A value of `-1` disables this filter for that VCF. Calls with `abs(allele_length)` strictly above an enabled cutoff receive `LARGE_{source_tags[i]}`."
+        min_length_cutoffs: "Per-VCF minimum absolute allele lengths. `[]` disables minimum-length filtering; otherwise aligned with `vcfs`. A value of `-1` disables this filter for that VCF. Calls with `abs(allele_length)` strictly below an enabled cutoff receive `SMALL_{source_tags[i]}`, or are dropped when `drop_out_of_range_lengths` is set."
+        max_length_cutoffs: "Per-VCF maximum absolute allele lengths. `[]` disables maximum-length filtering; otherwise aligned with `vcfs`. A value of `-1` disables this filter for that VCF. Calls with `abs(allele_length)` strictly above an enabled cutoff receive `LARGE_{source_tags[i]}`, or are dropped when `drop_out_of_range_lengths` is set."
+        drop_out_of_range_lengths: "Whether calls outside an enabled length cutoff are dropped rather than flagged."
         records_per_shard: "Number of variants to keep within a single shard during processing."
         sample_ids: "Samples to retain in every VCF. `[]` skips sample subsetting. After swaps and any subsetting, all input VCFs must contain identical sample sets."
         ref_fa: "From references."
@@ -38,6 +39,7 @@ workflow PreprocessVcfs {
         Array[File] swap_sample_lists
         Array[Int] min_length_cutoffs
         Array[Int] max_length_cutoffs
+        Boolean drop_out_of_range_lengths = false
         Int? records_per_shard
         Array[String] sample_ids
 
@@ -284,6 +286,7 @@ workflow PreprocessVcfs {
                                 vcf = source_annotated_vcf,
                                 vcf_idx = source_annotated_vcf_idx,
                                 source_tag = source_tags[vcf_index],
+                                drop = drop_out_of_range_lengths,
                                 min_length_cutoff = min_length_cutoffs[vcf_index],
                                 max_length_cutoff = max_length_cutoffs[vcf_index],
                                 prefix = "~{prefix}.vcf_~{vcf_index}.shard_~{shard_index}.length_filtered",
@@ -298,6 +301,7 @@ workflow PreprocessVcfs {
                                 vcf = source_annotated_vcf,
                                 vcf_idx = source_annotated_vcf_idx,
                                 source_tag = source_tags[vcf_index],
+                                drop = drop_out_of_range_lengths,
                                 min_length_cutoff = min_length_cutoffs[vcf_index],
                                 prefix = "~{prefix}.vcf_~{vcf_index}.shard_~{shard_index}.length_filtered",
                                 docker = utils_docker,
@@ -311,6 +315,7 @@ workflow PreprocessVcfs {
                                 vcf = source_annotated_vcf,
                                 vcf_idx = source_annotated_vcf_idx,
                                 source_tag = source_tags[vcf_index],
+                                drop = drop_out_of_range_lengths,
                                 max_length_cutoff = max_length_cutoffs[vcf_index],
                                 prefix = "~{prefix}.vcf_~{vcf_index}.shard_~{shard_index}.length_filtered",
                                 docker = utils_docker,
@@ -607,10 +612,14 @@ task AddLengthFilters {
         String source_tag
         Int? min_length_cutoff
         Int? max_length_cutoff
+        Boolean drop
         String prefix
         String docker
         RuntimeAttr? runtime_attr_override
     }
+
+    String min_action = if drop then "view" else "filter --mode + -s SMALL_~{source_tag}"
+    String max_action = if drop then "view" else "filter --mode + -s LARGE_~{source_tag}"
 
     command <<<
         set -euo pipefail
@@ -618,12 +627,12 @@ task AddLengthFilters {
         input_vcf=~{vcf}
 
         if [ "~{defined(min_length_cutoff)}" = "true" ]; then
-            bcftools filter --mode + -s SMALL_~{source_tag} -e 'abs(INFO/allele_length) < ~{select_first([min_length_cutoff, 0])}' -Oz -o min_filtered.vcf.gz "$input_vcf"
+            bcftools ~{min_action} -e 'abs(INFO/allele_length) < ~{select_first([min_length_cutoff, 0])}' -Oz -o min_filtered.vcf.gz "$input_vcf"
             input_vcf=min_filtered.vcf.gz
         fi
 
         if [ "~{defined(max_length_cutoff)}" = "true" ]; then
-            bcftools filter --mode + -s LARGE_~{source_tag} -e 'abs(INFO/allele_length) > ~{select_first([max_length_cutoff, 0])}' -Oz -o max_filtered.vcf.gz "$input_vcf"
+            bcftools ~{max_action} -e 'abs(INFO/allele_length) > ~{select_first([max_length_cutoff, 0])}' -Oz -o max_filtered.vcf.gz "$input_vcf"
             input_vcf=max_filtered.vcf.gz
         fi
 
