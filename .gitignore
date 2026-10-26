@@ -2,6 +2,8 @@
 **/__pycache__/
 .pytest_cache/
 .ruff_cache/
+# Written by pip install -e .
+*.egg-info/
 
 /data
 /docs/scratch.md
@@ -16,6 +18,11 @@
 *.bam*
 *.cram*
 *.fa*
+# Code named after a format it handles, such as collectQC.vcf_wide.sh, is not data
+!*.sh
+!*.py
+!*.R
+!*.wdl
 
 # Test fixtures are tracked despite the genomic-file patterns above; miniwdl run directories are not
 !/tests/data/*
