@@ -294,15 +294,25 @@ task TRGTMergeContig {
     command <<<
         set -euo pipefail
 
-        echo "~{sep='\n' vcfs}" > vcf_list.txt
+        # trgt merge rejects the comma-joined TRID TRGT writes for a variation cluster, so commas become pipes around the merge
+        i=0
+        while IFS= read -r vcf; do
+            i=$((i + 1))
+            bcftools view -r ~{contig} "$vcf" \
+                | sed -E '/^#/!{:a;s/([\t;]TRID=[^;\t]*),/\1|/;ta}' \
+                | bgzip -c > "input_$i.vcf.gz"
+            tabix -p vcf "input_$i.vcf.gz"
+            echo "input_$i.vcf.gz" >> vcf_list.txt
+        done < ~{write_lines(vcfs)}
 
         trgt merge \
             --vcf-list vcf_list.txt \
             --contig ~{contig} \
             --genome ~{ref_fa} \
-            --output-type z \
-            --output ~{prefix}.vcf.gz
+            --output-type v \
+            --output merged.vcf
 
+        sed -E '/^#/!{:a;s/([\t;]TRID=[^;\t]*)\|/\1,/;ta}' merged.vcf | bgzip -c > ~{prefix}.vcf.gz
         tabix -p vcf ~{prefix}.vcf.gz
     >>>
 

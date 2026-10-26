@@ -741,6 +741,7 @@ workflows:
     filters:
       branches:
         - main
+        - kj-trgt-merge-cluster-trids
       tags:
         - /.*/
 
