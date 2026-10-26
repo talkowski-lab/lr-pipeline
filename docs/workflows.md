@@ -63,6 +63,7 @@ This file is generated from the `meta` and `parameter_meta` blocks of each workf
   - [PreprocessVcfs](#preprocessvcfs)
   - [FillBackbonePhasedGenotypes](#fillbackbonephasedgenotypes)
   - [EvaluateBackbonePhasing](#evaluatebackbonephasing)
+  - [EvaluateCallsetAccuracy](#evaluatecallsetaccuracy)
   - [EvaluateOverlappingTRLoci](#evaluateoverlappingtrloci)
   - [EvaluateNCRCutoffs](#evaluatencrcutoffs)
   - [PostprocessCallset](#postprocesscallset)
@@ -1402,6 +1403,39 @@ Outputs:
 - `File trv_table`: Phasing-accuracy table for tandem-repeat variants.
 - `File missing_samples`: Samples with no matching base VCF.
 - `Array[File] vcf_tables`: Per-VCF variant-status tables.
+
+### [EvaluateCallsetAccuracy](../wdl/annotation_utils/EvaluateCallsetAccuracy.wdl)
+This utility benchmarks one contig of a cohort VCF against a truth set combined from an SNV & indel truth VCF and an SV truth VCF, reporting precision and recall at the site and call level. Each truth VCF is cut to the callset's samples and contig, split into biallelic records and left-aligned, and the SNV & indel truth is restricted to `truth_snv_indel_bed` when given. SV truth records identical in CHROM, POS, REF and ALT to an SNV & indel truth record are dropped before the two are combined, so each variant is counted once. The BED also restricts callset records shorter than `sv_min_length`, matching the truth records it bounds; longer callset records are kept genome-wide like the SV truth. Only records with at least one non-reference call are kept on either side.
+
+Matching reuses the first round of `AnnotateCallsetOverlap`, an exact match on CHROM, POS, REF and ALT, followed by a single Truvari pass at 0.5 sequence similarity, size similarity and overlap on the records left unmatched on both sides, admitting callset records with `abs(INFO/allele_length)` of at least `min_sv_length_truvari_vcf` and truth records of at least `min_sv_length_truvari_truth_vcf`. Every record is therefore paired at most once. Truvari skips records longer than 50 kb, so those count only through the exact match.
+
+A site is one record and a call is one sample's non-reference genotype at it, with phasing and zygosity ignored. A callset site is a true positive when it matched a truth record and a callset call when that sample is also non-reference in the matched truth record; a truth site or call is recovered the same way from the other side. Precision counts callset sites and calls, stratified by `INFO/allele_type` and `abs(INFO/allele_length)`, and recall counts truth sites and calls, stratified by the type and length of the truth record - `SVTYPE` and `SVLEN` when present, otherwise REF and ALT. A matched pair can therefore fall in different strata on the two sides. Truth records that are not an SNV, insertion or deletion, such as multi-nucleotide variants and inversions, are left out of recall.
+
+Every row is reported at both matching stages, cumulatively, so the `truvari` rows give the totals. All count columns sum across contigs.
+
+Inputs:
+- `File vcf`: Callset VCF to benchmark, carrying `INFO/allele_type` and `INFO/allele_length`.
+- `File vcf_idx`: Index for `vcf`.
+- `File truth_snv_indel_vcf`: Truth VCF of SNVs and indels, holding every callset sample.
+- `File truth_snv_indel_vcf_idx`: Index for `truth_snv_indel_vcf`.
+- `File truth_sv_vcf`: Truth VCF of SVs, holding every callset sample.
+- `File truth_sv_vcf_idx`: Index for `truth_sv_vcf`.
+- `File? truth_snv_indel_bed`: Confident regions of `truth_snv_indel_vcf`, restricting it and the callset records shorter than `sv_min_length`.
+- `String contig`: Contig to evaluate.
+- `String args_string_vcf`: `bcftools view` include expression selecting the callset records to benchmark. (default `INFO/allele_type!="trv"`)
+- `Int sv_min_length`: Callset `abs(INFO/allele_length)` from which records are kept outside `truth_snv_indel_bed`. (default `50`)
+- `Int min_sv_length_truvari_vcf`: Minimum `abs(INFO/allele_length)` for an unmatched callset record to enter the Truvari pass. (default `5`)
+- `Int min_sv_length_truvari_truth_vcf`: Minimum absolute length for an unmatched truth record to enter the Truvari pass. (default `10`)
+- `Array[Int] length_bins`: Size-bin edges stratifying records by absolute length. (default `[0, 1, 50, 500]`)
+- `Int shard_bin_size_exact_match`: Width in base pairs of the regions the exact-match round is sharded into. (default `5000000`)
+- `File ref_fa`: From references.
+- `File ref_fai`: From references.
+- `String prefix`: Prefix for output file names.
+- `String utils_docker`: Container image.
+- `RuntimeAttr? runtime_attr_*`: Optional per-task runtime overrides (15).
+
+Outputs:
+- `File accuracy_tsv`: One row per level (`site` or `call`), sample, allele type, length bin and cumulative matching stage (`exact` or `truvari`), with `tp_eval`, `fp`, `tp_truth`, `fn`, precision, recall and F1; strata with no records on either side are left out. Site rows use sample `all`; type and length bin each have an `all` marginal.
 
 ### [EvaluateOverlappingTRLoci](../wdl/annotation_utils/EvaluateOverlappingTRLoci.wdl)
 This utility evaluates how consistently TRGT genotypes the same reference bases when the repeat catalog defines overlapping loci. It takes a single-sample TRGT VCF, pairs every two records whose `POS`-to-`INFO/END` reference spans intersect and, for each pair, projects both haplotype sequences onto the shared reference interval and scores their agreement. Only pairs where at least one locus carries a non-reference call are evaluated, since two reference calls agree on the shared bases by construction. Each TRGT record is a full-locus replacement - `REF` is the reference sequence spanning the locus and each `ALT` is a complete haplotype sequence - so no reference FASTA or prior `bcftools norm` is needed. The projection aligns each haplotype to its own `REF` with `edlib` and assigns inserted bases to the reference base they follow, which means the projected sequence of a haplotype carrying a length change inherits the aligner's placement of that change; when a length change is placed at the edge of the shared interval its whole length is charged to that interval, so `max_similarity` can fall below `0`. Genotypes are unphased, so both haplotype assignments are scored and the one with the lower summed edit distance is reported. Haploid records are scored on their single haplotype and report `.` for the absent haplotype, and records with a missing genotype are skipped.

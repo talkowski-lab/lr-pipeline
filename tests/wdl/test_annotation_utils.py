@@ -1335,6 +1335,82 @@ def trio_outcome(record, child, parents):
     return "skipped" if any(None in record["gts"][p] for p in parents) else "uninherited"
 
 
+def test_evaluate_callset_accuracy_counts_site_and_call_matches_against_deduplicated_combined_truth(
+    run_workflow, run_dir, window_vcf, utils_docker
+):
+    callset = write_vcf(window_vcf, run_dir / "callset.vcf.gz", lambda r: len(r.alts) == 1 and r.info["allele_type"] != "trv")
+    counter = itertools.count()
+
+    # Every fifth truth record trades a callset carrier for a non-carrier, giving one false-positive and one missed call
+    def swap_carrier(record):
+        if next(counter) % 5 == 0:
+            gts = [record.samples[s]["GT"] for s in record.samples]
+            carrier = next(i for i, gt in enumerate(gts) if any(a not in (None, 0) for a in gt))
+            missing = next((i for i, gt in enumerate(gts) if not any(a not in (None, 0) for a in gt)), None)
+            if missing is not None:
+                record.samples[carrier]["GT"] = (0, 0)
+                record.samples[missing]["GT"] = (0, 1)
+
+    dropped = itertools.count()
+    kept = write_vcf(callset, run_dir / "kept.vcf.gz", lambda r: next(dropped) % 4 != 0)
+    # The SNV & indel truth holds every truth record and the SV truth repeats the long ones, which must count once
+    truth = rewrite_vcf(kept, run_dir / "truth.vcf.gz", ["SVTYPE", "SVLEN"], swap_carrier)
+    sv_truth = write_vcf(truth, run_dir / "sv_truth.vcf.gz", lambda r: abs(r.info["allele_length"]) >= 50)
+
+    outputs = run_workflow(
+        f"{UTILS}/EvaluateCallsetAccuracy.wdl",
+        {
+            "vcf": str(callset),
+            "vcf_idx": f"{callset}.tbi",
+            "truth_snv_indel_vcf": str(truth),
+            "truth_snv_indel_vcf_idx": f"{truth}.tbi",
+            "truth_sv_vcf": str(sv_truth),
+            "truth_sv_vcf_idx": f"{sv_truth}.tbi",
+            "contig": CONTIG,
+            "prefix": "accuracy",
+            "ref_fa": str(WINDOW_FASTA),
+            "ref_fai": f"{WINDOW_FASTA}.fai",
+            "utils_docker": utils_docker,
+        },
+    )
+
+    def carriers(record):
+        return {s for s in record["gts"] if is_carrier(record, s)}
+
+    evals = [r for r in load_records(callset)[1] if carriers(r)]
+    truths = {site_key(r): carriers(r) for r in load_records(truth)[1] if carriers(r)}
+    assert any(abs(len(k[3][0]) - len(k[2])) >= 50 for k in truths)
+    matched = [r for r in evals if site_key(r) in truths]
+    shared_calls = sum(len(carriers(r) & truths[site_key(r)]) for r in matched)
+    expected = {
+        "site": (len(matched), len(evals) - len(matched), len(matched), len(truths) - len(matched)),
+        "call": (
+            shared_calls,
+            sum(len(carriers(r) - truths.get(site_key(r), set())) for r in evals),
+            shared_calls,
+            sum(len(v) for v in truths.values()) - shared_calls,
+        ),
+    }
+    assert expected["site"][0] > 0 and expected["call"][1] > 0
+
+    rows = read_dicts(outputs["EvaluateCallsetAccuracy.accuracy_tsv"])
+
+    def total_row(level, stage):
+        (row,) = [
+            r
+            for r in rows
+            if (r["level"], r["sample"], r["allele_type"], r["length_bin"], r["match_stage"])
+            == (level, "all", "all", "all", stage)
+        ]
+        return tuple(int(row[c]) for c in ("tp_eval", "fp", "tp_truth", "fn"))
+
+    for level, counts in expected.items():
+        assert total_row(level, "exact") == counts
+        # Truvari can only add matches, so the callset and truth totals stay the same
+        tp_eval, fp, tp_truth, fn = total_row(level, "truvari")
+        assert (tp_eval + fp, tp_truth + fn) == (counts[0] + counts[1], counts[2] + counts[3])
+
+
 def test_evaluate_ncr_cutoffs_tabulates_trio_transmission_cumulatively_by_ncr_cutoff(run_workflow, run_dir, vcf_inputs, source):
     trios = [("HG00096", "HG00097", "HG00099"), ("HG00126", "HG00128", "HG00097")]
     ped = write_table(

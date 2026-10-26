@@ -570,6 +570,17 @@ workflows:
         - /.*/
 
   - subclass: WDL
+    name: EvaluateCallsetAccuracy
+    primaryDescriptorPath: /wdl/annotation_utils/EvaluateCallsetAccuracy.wdl
+    publish: true
+    filters:
+      branches:
+        - main
+        - kj-evaluate-callset-accuracy
+      tags:
+        - /.*/
+
+  - subclass: WDL
     name: EvaluateOverlappingTRLoci
     primaryDescriptorPath: /wdl/annotation_utils/EvaluateOverlappingTRLoci.wdl
     publish: true

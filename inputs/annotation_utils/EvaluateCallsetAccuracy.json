@@ -1,0 +1,13 @@
+{
+    "EvaluateCallsetAccuracy.vcf": "gs://<cohort-bucket>/cohort.vcf.gz",
+    "EvaluateCallsetAccuracy.vcf_idx": "gs://<cohort-bucket>/cohort.vcf.gz.tbi",
+    "EvaluateCallsetAccuracy.truth_snv_indel_vcf": "gs://<cohort-bucket>/truth_snv_indel.vcf.gz",
+    "EvaluateCallsetAccuracy.truth_snv_indel_vcf_idx": "gs://<cohort-bucket>/truth_snv_indel.vcf.gz.tbi",
+    "EvaluateCallsetAccuracy.truth_sv_vcf": "gs://<cohort-bucket>/truth_sv.vcf.gz",
+    "EvaluateCallsetAccuracy.truth_sv_vcf_idx": "gs://<cohort-bucket>/truth_sv.vcf.gz.tbi",
+    "EvaluateCallsetAccuracy.contig": "chr22",
+    "EvaluateCallsetAccuracy.prefix": "cohort",
+    "EvaluateCallsetAccuracy.ref_fa": "gs://<references-bucket>/hg38.no_alt.fa",
+    "EvaluateCallsetAccuracy.ref_fai": "gs://<references-bucket>/hg38.no_alt.fa.fai",
+    "EvaluateCallsetAccuracy.utils_docker": "us-central1-docker.pkg.dev/talkowski-sv-gnomad/kj-dockers/utils:latest"
+}
