@@ -716,6 +716,50 @@ def test_fill_phased_genotypes_restores_missing_genotypes_and_format_fields_from
         assert new["gts"]["HG00099"] == old["gts"]["HG00099"]
 
 
+def test_fill_phased_genotypes_copies_deepvariant_comma_less_rnc_and_skips_lone_missing_ad(run_workflow, run_dir, utils_docker):
+    header = [
+        "##fileformat=VCFv4.2",
+        f"##contig=<ID={CONTIG},length={CONTIG_LENGTH}>",
+        '##FORMAT=<ID=GT,Number=1,Type=String,Description="Genotype">',
+        '##FORMAT=<ID=RNC,Number=2,Type=Character,Description="Reason no call">',
+    ]
+    ad = '##FORMAT=<ID=AD,Number=R,Type=Integer,Description="Allelic depths">'
+    columns = "#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT\ta\tb"
+
+    def write(name, lines):
+        plain = run_dir / name
+        plain.write_text("\n".join(lines) + "\n")
+        pysam.tabix_index(str(plain), preset="vcf", force=True)
+        return Path(f"{plain}.gz")
+
+    # DeepVariant writes RNC without the comma its Number=2 calls for, and AD as a lone missing value
+    phased = write("phased.vcf", header + [columns, f"{CONTIG}\t100\t.\tA\tC\t.\tPASS\t.\tGT:RNC\t./.:..\t0|1:.."])
+    unphased = write(
+        "unphased.vcf",
+        header + [ad, columns, f"{CONTIG}\t100\t.\tA\tC\t.\tPASS\t.\tGT:AD:RNC\t1/1:3,4:II\t0/1:.:.."],
+    )
+
+    outputs = run_workflow(
+        f"{UTILS}/FillPhasedGenotypes.wdl",
+        {
+            "phased_vcf": str(phased),
+            "phased_vcf_idx": f"{phased}.tbi",
+            "unphased_vcf": str(unphased),
+            "unphased_vcf_idx": f"{unphased}.tbi",
+            "contigs": [CONTIG],
+            "prefix": "filled",
+            "shard_bin_size": 20000000,
+            "utils_docker": utils_docker,
+        },
+    )
+
+    with pysam.VariantFile(outputs["FillPhasedGenotypes.hiphase_phased_vcf"]) as vcf:
+        (record,) = list(vcf)
+    a, b = record.samples["a"], record.samples["b"]
+    assert (a["GT"], a["AD"], a["RNC"]) == ((1, 1), (3, 4), ("I", "I"))
+    assert (b["GT"], b.phased, b["AD"], b["RNC"]) == ((0, 1), True, (None, None), (".", "."))
+
+
 def test_fill_backbone_phased_genotypes_pulls_phase_only_for_unphased_hets(
     run_workflow, run_dir, subset_vcf, utils_docker, source
 ):

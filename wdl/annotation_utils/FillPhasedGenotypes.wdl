@@ -198,10 +198,18 @@ def alleles_key(rec):
 
 def copy_format(src, dst, key):
     value = src[key]
+    # a lone missing value such as AD=. reads as (None,), which pysam won't write to a sized field
+    if value is None or (isinstance(value, tuple) and all(v is None for v in value)):
+        return
     header_format = phased_in.header.formats[key]
     # pysam splits a comma-joined Number=1 String such as AL into a tuple it then refuses to write back
     if isinstance(value, tuple) and header_format.number == 1 and header_format.type == "String":
         value = ",".join("." if v is None else str(v) for v in value)
+    # DeepVariant writes its Number=2 Character RNC without a comma (RNC=..), which pysam reads as one string
+    if isinstance(value, tuple) and len(value) == 1 and isinstance(value[0], str) \
+            and isinstance(header_format.number, int) and header_format.number > 1 \
+            and len(value[0]) == header_format.number:
+        value = tuple(value[0])
     dst[key] = value
 
 for record in phased_in:

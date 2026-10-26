@@ -506,6 +506,7 @@ workflows:
     filters:
       branches:
         - main
+        - kj-fill-fixed-length-format
       tags:
         - /.*/
 
