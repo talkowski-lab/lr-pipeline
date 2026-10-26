@@ -36,6 +36,7 @@ This file is generated from the `meta` and `parameter_meta` blocks of each workf
   - [MergeSummarizedCallsetCounts](#mergesummarizedcallsetcounts)
   - [MergeTRs](#mergetrs)
   - [MergeVEPAF](#mergevepaf)
+  - [NormalizeAlleleTypes](#normalizealleletypes)
   - [NormalizeDuplicationOrigins](#normalizeduplicationorigins)
   - [PALMERToVcf](#palmertovcf)
   - [ParseSVFormatFields](#parsesvformatfields)
@@ -46,6 +47,7 @@ This file is generated from the `meta` and `parameter_meta` blocks of each workf
   - [RenameVcfInfoFields](#renamevcfinfofields)
   - [ReplaceKanpigGT](#replacekanpiggt)
   - [ReplaceSampleCalls](#replacesamplecalls)
+  - [ResolveHaplotypeOverlaps](#resolvehaplotypeoverlaps)
   - [SubsetTRGTToCatalog](#subsettrgttocatalog)
   - [SubsetVcfToContigs](#subsetvcftocontigs)
   - [SubsetVcfToPerSample](#subsetvcftopersample)
@@ -680,6 +682,24 @@ Outputs:
 - `File merged_vcf`: VCF carrying both annotation sets.
 - `File merged_vcf_idx`: Index for `merged_vcf`.
 
+### [NormalizeAlleleTypes](../wdl/annotation_utils/NormalizeAlleleTypes.wdl)
+This utility reclassifies `allele_type` values and records the original type in a new `allele_subtype` field. Variants with `allele_type=dup` are tested for tandemness against their duplication source (from `INFO/ORIGIN`) using two criteria: size similarity between the insertion length and the ORIGIN region length must meet the `dup_size_similarity` threshold, and the insertion POS must fall within the ORIGIN region or within `dup_breakpoint_window` bases of its breakpoints. All get `allele_subtype=tandem_dup`; those passing keep `allele_type=dup`, while those failing are set to `allele_type=ins`. Variants with `allele_type` of `complex_dup`, `dup_interspersed`, `inv_dup`, `alu_ins`, `line_ins`, `sva_ins` or `numt` are set to `allele_type=ins`, and those with `alu_del`, `line_del` or `sva_del` are set to `allele_type=del`, each recording the original value in `allele_subtype`. REF/ALT/POS are never modified. Records with other `allele_type` values are passed through unchanged. Supports optional record-count sharding.
+
+Inputs:
+- `File vcf`: VCF to transform.
+- `File vcf_idx`: Index for `vcf`.
+- `Int? records_per_shard`: Number of records per shard for parallel processing.
+- `Int dup_breakpoint_window`: Maximum distance (bp) between insertion POS and ORIGIN breakpoints to pass the breakpoint check. (default `10`)
+- `Float dup_size_similarity`: Minimum size similarity ratio (relative to the larger of the two lengths) between insertion and ORIGIN lengths. (default `0.9`)
+- `Int min_dup_size`: Minimum insertion size (bp) to consider for the tandem check. (default `50`)
+- `String prefix`: Prefix for output file names.
+- `String utils_docker`: Container image.
+- `RuntimeAttr? runtime_attr_*`: Optional per-task runtime overrides (3).
+
+Outputs:
+- `File transformed_vcf`: VCF with revised `allele_type`/`allele_subtype`.
+- `File transformed_vcf_idx`: Index for `transformed_vcf`.
+
 ### [NormalizeDuplicationOrigins](../wdl/annotation_utils/NormalizeDuplicationOrigins.wdl)
 This utility resolves the relative `ORIGIN` coordinates of duplications and NUMTs into absolute genomic coordinates and annotates them back onto the VCF. `ORIGIN` values prefixed with `flank_` encode coordinates relative to a flanking window and are converted to genome-absolute positions; values already in absolute form are kept as-is. When multiple comma-separated `ORIGIN` values are present - whether flank-relative, absolute, or mixed - each is processed individually and the resulting absolute values are written back in their original order. It outputs the VCF with absolute-origin annotations.
 
@@ -933,6 +953,22 @@ Inputs:
 Outputs:
 - `File replaced_vcf`: Cohort VCF with replaced sample calls.
 - `File replaced_vcf_idx`: Index for the updated VCF.
+
+### [ResolveHaplotypeOverlaps](../wdl/annotation_utils/ResolveHaplotypeOverlaps.wdl)
+This utility detects and resolves haplotype-level overlaps among non-TR, non-TR-enveloped variants in a phased cohort VCF. For each sample, it extracts the sample's non-ref calls (excluding `allele_type='trv'` and `INFO/TR_ENVELOPED` variants), then sweeps each haplotype's variant intervals to find all overlapping pairs. Overlapping pairs are resolved by keeping the variant that spans more reference sequence (larger `len(REF)`) - which always favors DELs over INS or SNVs. When two variants span the same reference length, the higher-GQ call wins; remaining ties are broken by `INFO/allele_length`, then type rank (DEL > INS > SNV), then QUAL, then input-file order. The loser's FORMAT fields (`GT`, `GQ`, `DP`, `EV`, `BEV`, `AD`, `PL`) are cleared in the output VCF. The workflow scatters per-sample detection across all samples, then applies the collected clears to the whole VCF (with optional record-count sharding) to produce the resolved VCF.
+
+Inputs:
+- `File vcf`: Phased cohort VCF to resolve.
+- `File vcf_idx`: Index for `vcf`.
+- `Int? records_per_shard`: When set, shards the VCF into chunks of this many records for the clearing step.
+- `String prefix`: Prefix for output file names.
+- `String utils_docker`: Container image.
+- `RuntimeAttr? runtime_attr_*`: Optional per-task runtime overrides (7).
+
+Outputs:
+- `File overlap_resolved_vcf`: VCF with overlapping loser genotypes cleared.
+- `File overlap_resolved_vcf_idx`: Index for `overlap_resolved_vcf`.
+- `File overlap_tsv`: TSV of all detected overlap pairs, with columns `sample`, `haplotype`, `variant_id_retained`, `var_type_retained`, `size_bin_retained`, `variant_id_cleared`, `var_type_cleared`, `size_bin_cleared`.
 
 ### [SubsetTRGTToCatalog](../wdl/annotation_utils/SubsetTRGTToCatalog.wdl)
 This utility subsets a merged TRGT VCF down to the loci present in a given TRGT catalog BED, per contig. It outputs the catalog-restricted TRGT VCF.

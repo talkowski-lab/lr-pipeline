@@ -67,8 +67,6 @@ This file is generated from the `meta` and `parameter_meta` blocks of each workf
   - [EvaluateOverlappingTRLoci](#evaluateoverlappingtrloci)
   - [EvaluateNCRCutoffs](#evaluatencrcutoffs)
   - [PostprocessCallset](#postprocesscallset)
-  - [NormalizeAlleleTypes](#normalizealleletypes)
-  - [ResolveHaplotypeOverlaps](#resolvehaplotypeoverlaps)
   - [SubsetTsvToColumns](#subsettsvtocolumns)
   - [ConvertVcfToBed](#convertvcftobed)
   - [ExtractRandomCalls](#extractrandomcalls)
@@ -1482,7 +1480,7 @@ Outputs:
 - `File ncr_cutoffs_tsv`: One row per `allele_type`, `size_bin`, `filter`, `region` and `cutoff`, plus a `missing` cutoff row per stratum for sites without `INFO/NCR`, with proband call counts `prec_numerator` (inherited), `prec_denominator` (inherited and uninherited) and `prec_skipped` (skipped), all-sample call counts `rec_numerator` (calls in the row) and `rec_denominator` (calls at sites with `INFO/NCR`, or the row's own calls in the `missing` row), and site counts `sites_passing` (sites in the row) and `sites_total` (sites with `INFO/NCR`, or the row's own sites in the `missing` row).
 
 ### [PostprocessCallset](../wdl/annotation_utils/PostprocessCallset.wdl)
-This utility bundles every genotype-update and post-processing step applied to a near-final callset into one workflow, with a required `run_` Boolean guarding each step so that the input VCF is left untouched when all are set to `false`. The per-record steps are applied in a single pass over the VCF: each variant is first matched against `transfer_vcf` and has its genotypes transferred (when `run_transfer_genotypes` is set) using its unmodified properties, after which the remaining steps - unphasing, ploidy normalization, allele-count recomputation, TR-ID decrementing, MEI pruning, homopolymer flagging, singleton filtering and same-coordinate sorting - run in order. Some steps require an accompanying field - `run_transfer_genotypes` needs `transfer_vcf`, `run_unphase_samples` needs `unphase_samples`, and `run_normalize_ploidy` needs `ped`. Setting `run_compute_allele_counts` writes `INFO/AC` and `INFO/AN` from the genotypes as they stand after ploidy normalization, which the two singleton filters read, so they can run before `AnnotateAF`. The per-record pass can optionally be region-sharded via `shard_bin_size`.
+This utility bundles every genotype-update and post-processing step applied to a near-final callset into one workflow, with a required `run_` Boolean guarding each step so that the input VCF is left untouched when all are set to `false`. The per-record steps are applied in a single pass over the VCF: each variant is first matched against `transfer_vcf` and has its genotypes transferred (when `run_transfer_genotypes` is set) using its unmodified properties, after which the remaining steps - unphasing, ploidy normalization, allele-count recomputation, TR-ID decrementing, MEI pruning, homopolymer flagging, singleton filtering and same-coordinate sorting - run in order. Some steps require an accompanying field - `run_transfer_genotypes` needs `transfer_vcf`, `run_unphase_samples` needs `unphase_samples`, and `run_normalize_ploidy` needs `ped`. Setting `run_compute_allele_counts` writes `INFO/AC` and `INFO/AN` from the genotypes as they stand after ploidy normalization, which the two singleton filters read, so they can run before `AnnotateAF`. The per-record pass can optionally be region-sharded via `shard_bin_size`. Two contig-wide steps then follow on the post-processed genotypes, in order. `run_resolve_haplotype_overlaps` scatters per sample over the sample's non-ref calls (excluding `allele_type='trv'` and `INFO/TR_ENVELOPED` variants), sweeps each haplotype for overlapping pairs and keeps the variant spanning more reference sequence (larger `len(REF)`), breaking ties by GQ, then `INFO/allele_length`, then type rank (DEL > INS > SNV), then QUAL, then input-file order; the loser's `GT`, `GQ`, `EV`, `BEV`, `AD` and `PL` are cleared and every pair is reported in `overlap_tsv`. `run_normalize_allele_types` then reclassifies `allele_type` and records the original type in a new `allele_subtype` field: `allele_type=dup` variants all get `allele_subtype=tandem_dup` and keep `allele_type=dup` only when tandem against their `INFO/ORIGIN` source - the insertion and ORIGIN lengths must meet `dup_size_similarity` and POS must fall within ORIGIN or within `dup_breakpoint_window` bases of its breakpoints - and otherwise become `ins`; `complex_dup`, `dup_interspersed`, `inv_dup`, `alu_ins`, `line_ins`, `sva_ins` and `numt` become `ins`, and `alu_del`, `line_del` and `sva_del` become `del`. REF/ALT/POS are never modified, and other `allele_type` values pass through unchanged.
 
 Inputs:
 - `File vcf`: VCF to post-process.
@@ -1496,9 +1494,11 @@ Inputs:
 - `Boolean run_filter_assembly_only_singletons`: Whether to apply the `ASSEMBLY_ONLY_SINGLETON` filter and emit a matching TSV.
 - `Boolean run_filter_single_read_singletons`: Whether to apply the `SINGLE_READ_SUPPORT` filter to singleton calls.
 - `Boolean run_flag_homopolymer_trvs`: Whether to flag tandem repeats with a length-1 shortest motif as `HOMOPOLYMER_TRV`.
+- `Boolean run_normalize_allele_types`: Whether to reclassify `allele_type` values, recording the original type in `allele_subtype`; runs last.
 - `Boolean run_normalize_ploidy`: Whether to normalize ploidy by sex - clearing chrY female calls, making chrX/chrY male calls hemizygous, enforcing diploidy and right-aligning unphased calls (requires `ped`).
 - `Boolean run_prune_meis`: Whether to reclassify mobile elements whose length falls outside the expected bounds back to plain insertions/deletions.
 - `Boolean run_reassign_suffixes`: Whether to run the variant-ID suffix reassignment step.
+- `Boolean run_resolve_haplotype_overlaps`: Whether to clear the losing call of each pair of non-TR variants overlapping on the same haplotype, after the per-record pass.
 - `Boolean run_sorting`: Whether to sort records sharing a coordinate by absolute allele length and variant ID.
 - `Boolean run_transfer_genotypes`: Whether to transfer genotypes from `transfer_vcf` onto heterozygous calls (run first; requires `transfer_vcf`).
 - `Boolean run_unphase_samples`: Whether to unphase the samples in `unphase_samples` (requires `unphase_samples`).
@@ -1507,48 +1507,18 @@ Inputs:
 - `File? transfer_vcf`: VCF whose genotypes are transferred when `run_transfer_genotypes` is set.
 - `File? transfer_vcf_idx`: Index for `transfer_vcf`.
 - `File? ped`: Cohort pedigree file, used for ploidy normalization when `run_normalize_ploidy` is set.
-- `String prefix`: Prefix for output file names.
-- `String utils_docker`: Container image.
-- `RuntimeAttr? runtime_attr_*`: Optional per-task runtime overrides (6).
-
-Outputs:
-- `File post_processed_vcf`: Post-processed VCF.
-- `File post_processed_vcf_idx`: Index for the post-processed VCF.
-- `File? assembly_only_singletons_tsv`: Optional TSV containing one row per assembly-only singleton ALT allele; present only when `run_filter_assembly_only_singletons` is true.
-
-### [NormalizeAlleleTypes](../wdl/annotation_utils/NormalizeAlleleTypes.wdl)
-This utility reclassifies `allele_type` values and records the original type in a new `allele_subtype` field. Variants with `allele_type=dup` are tested for tandemness against their duplication source (from `INFO/ORIGIN`) using two criteria: size similarity between the insertion length and the ORIGIN region length must meet the `dup_size_similarity` threshold, and the insertion POS must fall within the ORIGIN region or within `dup_breakpoint_window` bases of its breakpoints. All get `allele_subtype=tandem_dup`; those passing keep `allele_type=dup`, while those failing are set to `allele_type=ins`. Variants with `allele_type` of `complex_dup`, `dup_interspersed`, `inv_dup`, `alu_ins`, `line_ins`, `sva_ins` or `numt` are set to `allele_type=ins`, and those with `alu_del`, `line_del` or `sva_del` are set to `allele_type=del`, each recording the original value in `allele_subtype`. REF/ALT/POS are never modified. Records with other `allele_type` values are passed through unchanged. Supports optional record-count sharding.
-
-Inputs:
-- `File vcf`: VCF to transform.
-- `File vcf_idx`: Index for `vcf`.
-- `Int? records_per_shard`: Number of records per shard for parallel processing.
 - `Int dup_breakpoint_window`: Maximum distance (bp) between insertion POS and ORIGIN breakpoints to pass the breakpoint check. (default `10`)
 - `Float dup_size_similarity`: Minimum size similarity ratio (relative to the larger of the two lengths) between insertion and ORIGIN lengths. (default `0.9`)
 - `Int min_dup_size`: Minimum insertion size (bp) to consider for the tandem check. (default `50`)
 - `String prefix`: Prefix for output file names.
 - `String utils_docker`: Container image.
-- `RuntimeAttr? runtime_attr_*`: Optional per-task runtime overrides (3).
+- `RuntimeAttr? runtime_attr_*`: Optional per-task runtime overrides (11).
 
 Outputs:
-- `File transformed_vcf`: VCF with revised `allele_type`/`allele_subtype`.
-- `File transformed_vcf_idx`: Index for `transformed_vcf`.
-
-### [ResolveHaplotypeOverlaps](../wdl/annotation_utils/ResolveHaplotypeOverlaps.wdl)
-This utility detects and resolves haplotype-level overlaps among non-TR, non-TR-enveloped variants in a phased cohort VCF. For each sample, it extracts the sample's non-ref calls (excluding `allele_type='trv'` and `INFO/TR_ENVELOPED` variants), then sweeps each haplotype's variant intervals to find all overlapping pairs. Overlapping pairs are resolved by keeping the variant that spans more reference sequence (larger `len(REF)`) - which always favors DELs over INS or SNVs. When two variants span the same reference length, the higher-GQ call wins; remaining ties are broken by `INFO/allele_length`, then type rank (DEL > INS > SNV), then QUAL, then input-file order. The loser's FORMAT fields (`GT`, `GQ`, `DP`, `EV`, `BEV`, `AD`, `PL`) are cleared in the output VCF. The workflow scatters per-sample detection across all samples, then applies the collected clears to the whole VCF (with optional record-count sharding) to produce the resolved VCF.
-
-Inputs:
-- `File vcf`: Phased cohort VCF to resolve.
-- `File vcf_idx`: Index for `vcf`.
-- `Int? records_per_shard`: When set, shards the VCF into chunks of this many records for the clearing step.
-- `String prefix`: Prefix for output file names.
-- `String utils_docker`: Container image.
-- `RuntimeAttr? runtime_attr_*`: Optional per-task runtime overrides (7).
-
-Outputs:
-- `File overlap_resolved_vcf`: VCF with overlapping loser genotypes cleared.
-- `File overlap_resolved_vcf_idx`: Index for `overlap_resolved_vcf`.
-- `File overlap_tsv`: TSV of all detected overlap pairs, with columns `sample`, `haplotype`, `variant_id_retained`, `var_type_retained`, `size_bin_retained`, `variant_id_cleared`, `var_type_cleared`, `size_bin_cleared`.
+- `File post_processed_vcf`: Post-processed VCF.
+- `File post_processed_vcf_idx`: Index for the post-processed VCF.
+- `File? assembly_only_singletons_tsv`: Optional TSV containing one row per assembly-only singleton ALT allele; present only when `run_filter_assembly_only_singletons` is true.
+- `File? overlap_tsv`: Optional TSV of all detected overlap pairs, with columns `sample`, `haplotype`, `variant_id_retained`, `var_type_retained`, `size_bin_retained`, `variant_id_cleared`, `var_type_cleared`, `size_bin_cleared`; present only when `run_resolve_haplotype_overlaps` is true.
 
 ### [SubsetTsvToColumns](../wdl/annotation_utils/SubsetTsvToColumns.wdl)
 This utility subsets an annotation TSV to a chosen set of columns, optionally filtering rows to those whose columns match specified values. It outputs the subset TSV.

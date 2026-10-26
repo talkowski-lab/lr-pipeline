@@ -1,7 +1,0 @@
-{
-    "NormalizeAlleleTypes.vcf": "gs://<cohort-bucket>/cohort.vcf.gz",
-    "NormalizeAlleleTypes.vcf_idx": "gs://<cohort-bucket>/cohort.vcf.gz.tbi",
-    "NormalizeAlleleTypes.prefix": "cohort",
-    "NormalizeAlleleTypes.records_per_shard": 10000,
-    "NormalizeAlleleTypes.utils_docker": "us-central1-docker.pkg.dev/talkowski-sv-gnomad/kj-dockers/utils:latest"
-}

@@ -592,8 +592,29 @@ def test_summarize_singleton_calls_counts_genotypes_by_stratum(run_workflow, vcf
         assert {k: v for k, v in got.items() if v} == expected
 
 
-def test_resolve_haplotype_overlaps_clears_the_losing_call_of_each_overlapping_pair(
-    run_workflow, run_dir, subset_vcf, utils_docker
+# Every run_ Boolean PostprocessCallset requires, so a test can switch off all but the steps it checks
+POSTPROCESS_RUN_FLAGS = [
+    "clean_vcf_header",
+    "compute_allele_counts",
+    "decrement_trv_ids",
+    "drop_filters",
+    "filter_assembly_only_singletons",
+    "filter_single_read_singletons",
+    "flag_homopolymer_trvs",
+    "normalize_allele_types",
+    "normalize_ploidy",
+    "prune_meis",
+    "reassign_suffixes",
+    "resolve_haplotype_overlaps",
+    "sorting",
+    "transfer_genotypes",
+    "unphase_samples",
+]
+
+
+@pytest.mark.parametrize("shard_bin_size", [None, 20000000])
+def test_postprocess_callset_resolves_overlaps_by_clearing_the_losing_call_of_each_overlapping_pair(
+    run_workflow, run_dir, subset_vcf, utils_docker, shard_bin_size
 ):
     # Add a copy of each tenth phased, non-repeat deletion shifted by one base, so it overlaps its original on the same haplotypes
     plain = run_dir / "overlapping.vcf"
@@ -614,21 +635,23 @@ def test_resolve_haplotype_overlaps_clears_the_losing_call_of_each_overlapping_p
     vcf = run_dir / "overlapping.vcf.gz"
     assert copies
 
-    outputs = run_workflow(
-        f"{UTILS}/ResolveHaplotypeOverlaps.wdl",
-        {
-            "vcf": str(vcf),
-            "vcf_idx": f"{vcf}.tbi",
-            "prefix": "resolved",
-            "records_per_shard": 150,
-            "utils_docker": utils_docker,
-        },
-    )
+    inputs = {
+        "vcf": str(vcf),
+        "vcf_idx": f"{vcf}.tbi",
+        "contigs": [CONTIG],
+        "prefix": "resolved",
+        **{f"run_{flag}": False for flag in POSTPROCESS_RUN_FLAGS},
+        "run_resolve_haplotype_overlaps": True,
+        "utils_docker": utils_docker,
+    }
+    if shard_bin_size:
+        inputs["shard_bin_size"] = shard_bin_size
+    outputs = run_workflow(f"{UTILS}/PostprocessCallset.wdl", inputs)
 
     _, before = load_records(vcf)
-    _, after = load_records(outputs["ResolveHaplotypeOverlaps.overlap_resolved_vcf"])
+    _, after = load_records(outputs["PostprocessCallset.post_processed_vcf"])
     by_id = {r["id"]: r for r in before}
-    overlaps = read_dicts(outputs["ResolveHaplotypeOverlaps.overlap_tsv"])
+    overlaps = read_dicts(outputs["PostprocessCallset.overlap_tsv"])
     assert len(overlaps) >= len(copies)
 
     def span(record):
@@ -2460,9 +2483,11 @@ def test_postprocess_callset_recomputes_allele_counts_for_singleton_filter(
         "drop_filters",
         "filter_single_read_singletons",
         "flag_homopolymer_trvs",
+        "normalize_allele_types",
         "normalize_ploidy",
         "prune_meis",
         "reassign_suffixes",
+        "resolve_haplotype_overlaps",
         "sorting",
         "transfer_genotypes",
         "unphase_samples",
@@ -2494,19 +2519,43 @@ def test_postprocess_callset_recomputes_allele_counts_for_singleton_filter(
     assert expected and expected <= flagged
 
 
-def test_normalize_allele_types_reproduces_released_types(run_workflow, run_dir, subset_vcf, utils_docker, source):
+def test_postprocess_callset_normalizes_allele_types_to_the_released_types(
+    run_workflow, run_dir, subset_vcf, utils_docker, source
+):
     def restore_raw_type(record):
         subtype = record.info.get("allele_subtype")
         if subtype:
             record.info["allele_type"] = "dup" if subtype == "tandem_dup" else subtype
 
     raw = rewrite_vcf(subset_vcf, run_dir / "raw_types.vcf.gz", ["allele_subtype"], restore_raw_type)
-    outputs = run_workflow(
-        f"{UTILS}/NormalizeAlleleTypes.wdl",
-        {"vcf": str(raw), "vcf_idx": f"{raw}.tbi", "prefix": "normalized", "utils_docker": utils_docker},
-    )
+    run_flags = [
+        "clean_vcf_header",
+        "compute_allele_counts",
+        "decrement_trv_ids",
+        "drop_filters",
+        "filter_assembly_only_singletons",
+        "filter_single_read_singletons",
+        "flag_homopolymer_trvs",
+        "normalize_ploidy",
+        "prune_meis",
+        "reassign_suffixes",
+        "resolve_haplotype_overlaps",
+        "sorting",
+        "transfer_genotypes",
+        "unphase_samples",
+    ]
+    inputs = {
+        "vcf": str(raw),
+        "vcf_idx": f"{raw}.tbi",
+        "contigs": [CONTIG],
+        "prefix": "normalized",
+        **{f"run_{flag}": False for flag in run_flags},
+        "run_normalize_allele_types": True,
+        "utils_docker": utils_docker,
+    }
+    outputs = run_workflow(f"{UTILS}/PostprocessCallset.wdl", inputs)
 
-    _, records = load_records(outputs["NormalizeAlleleTypes.transformed_vcf"])
+    _, records = load_records(outputs["PostprocessCallset.post_processed_vcf"])
     assert [site_key(r) for r in records] == [site_key(r) for r in source[1]]
 
     def types(r):

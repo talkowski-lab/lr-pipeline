@@ -606,26 +606,7 @@ workflows:
     filters:
       branches:
         - main
-      tags:
-        - /.*/
-
-  - subclass: WDL
-    name: NormalizeAlleleTypes
-    primaryDescriptorPath: /wdl/annotation_utils/NormalizeAlleleTypes.wdl
-    publish: true
-    filters:
-      branches:
-        - main
-      tags:
-        - /.*/
-
-  - subclass: WDL
-    name: ResolveHaplotypeOverlaps
-    primaryDescriptorPath: /wdl/annotation_utils/ResolveHaplotypeOverlaps.wdl
-    publish: true
-    filters:
-      branches:
-        - main
+        - kj-postprocess-merge-overlaps
       tags:
         - /.*/
 
