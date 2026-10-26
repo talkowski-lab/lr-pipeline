@@ -41,11 +41,16 @@ jobs:
         cache: pip
         cache-dependency-path: pyproject.toml
 
+    # The pin lives only in the pyproject.toml dev extra, which is what Dependabot bumps
     - name: Install ruff
-      # Keep in sync with the ruff pin in the pyproject.toml dev extra.
       run: |
         python -m pip install --upgrade pip
-        pip install ruff==0.17.1
+        pin="$(grep -oE '"ruff==[^"]+"' pyproject.toml | tr -d '"')"
+        if [[ "$(wc -l <<< "${pin}")" -ne 1 || -z "${pin}" ]]; then
+          echo "Expected exactly one ruff== pin in pyproject.toml, found: ${pin}" >&2
+          exit 1
+        fi
+        pip install "${pin}"
 
     - name: Lint with ruff
       run: |

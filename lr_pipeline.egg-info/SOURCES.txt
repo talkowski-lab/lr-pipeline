@@ -1,0 +1,8 @@
+LICENSE
+README.md
+pyproject.toml
+lr_pipeline.egg-info/PKG-INFO
+lr_pipeline.egg-info/SOURCES.txt
+lr_pipeline.egg-info/dependency_links.txt
+lr_pipeline.egg-info/requires.txt
+lr_pipeline.egg-info/top_level.txt

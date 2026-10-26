@@ -43,7 +43,7 @@ def string_constants(tree):
     }
 
 
-def tested_workflows():
+def covered_workflows():
     """Workflow files referenced as `{CONSTANT}/Name.wdl` or `wdl/<dir>/Name.wdl` in the tests/wdl modules."""
     constants = string_constants(ast.parse((REPO_ROOT / "tests" / "conftest.py").read_text()))
     tested = set()
@@ -61,7 +61,7 @@ def tested_workflows():
 
 def test_every_workflow_is_smoke_tested_or_exempt():
     workflows = workflow_files()
-    tested = {stem for stem, rel in workflows.items() if rel in tested_workflows()}
+    tested = {stem for stem, rel in workflows.items() if rel in covered_workflows()}
     exempt = set(EXEMPT)
 
     unknown = sorted(exempt - set(workflows))
