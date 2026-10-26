@@ -1,7 +1,7 @@
 version 1.0
 
-import "../utils/Structs.wdl"
-import "../utils/Helpers.wdl" as Helpers
+import "../../../wdl/utils/Structs.wdl"
+import "../../../wdl/utils/Helpers.wdl" as Helpers
 
 workflow MergeVEPAF {
     meta {
@@ -76,7 +76,7 @@ workflow MergeVEPAF {
     call Helpers.ConcatVcfs as MergeVcfs {
         input:
             vcfs = MergeVEPAnnotation.merged_vcf,
-            vcfs_idx = MergeVEPAnnotation.merged_vcf_idx,
+            vcf_idxs = MergeVEPAnnotation.merged_vcf_idx,
             prefix = prefix,
             docker = utils_docker,
             runtime_attr_override = runtime_attr_merge_vcfs

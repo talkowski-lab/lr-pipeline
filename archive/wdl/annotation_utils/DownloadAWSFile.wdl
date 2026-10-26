@@ -1,7 +1,8 @@
 version 1.0
 
-import "../utils/Structs.wdl"
-import "../utils/Helpers.wdl"
+import "../../../wdl/utils/Structs.wdl"
+import "../../../wdl/utils/Helpers.wdl"
+import "../utils/RetiredHelpers.wdl"
 
 workflow DownloadAWSFile {
     meta {
@@ -30,7 +31,7 @@ workflow DownloadAWSFile {
     String relative_path = sub(aws_path, "^" + base_path, "")
     String output_gcs_path = sub(gcs_folder, "/+$", "") + "/" + relative_path
 
-    call Helpers.TransferAWSToGCS {
+    call RetiredHelpers.TransferAWSToGCS {
         input:
             aws_path = aws_path,
             output_gcs_path = output_gcs_path,

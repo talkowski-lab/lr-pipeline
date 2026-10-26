@@ -18,6 +18,7 @@ Install the Python tooling with `pip install -e ".[dev]"`, and run the checks th
 |---|---|
 | `wdl/` | `find wdl -type f -name '*.wdl' -print0 \| xargs -0 -n1 java -jar "${WOMTOOL_JAR:-womtool.jar}" validate` |
 | `wdl/` | `python .github/scripts/check_wdl_style.py` |
+| `wdl/utils/`, `archive/wdl/` | `find archive/wdl -type f -name '*.wdl' \| grep -vxFf archive/wdl/womtool-excluded.txt \| xargs -n1 java -jar "${WOMTOOL_JAR:-womtool.jar}" validate` |
 | `scripts/`, `.github/scripts/`, `tests/` | `ruff check scripts .github/scripts tests` and `ruff format --check scripts .github/scripts tests` |
 | `scripts/`, `.github/scripts/`, `tests/` | `pytest tests/unit` |
 | A workflow in `tests/wdl/`, or `Dockerfile.utils` | `dockerfiles/build_docker.sh --no-push utils`, then `MINIWDL__SCHEDULER__CONTAINER_BACKEND=podman UTILS_DOCKER=localhost/utils:<branch> pytest -m wdl tests/wdl` |

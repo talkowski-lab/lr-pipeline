@@ -1,7 +1,8 @@
 version 1.0
 
-import "../utils/Helpers.wdl"
-import "../utils/Structs.wdl"
+import "../../../wdl/utils/Helpers.wdl"
+import "../utils/RetiredHelpers.wdl"
+import "../../../wdl/utils/Structs.wdl"
 
 workflow Whatshap {
     meta {
@@ -46,7 +47,7 @@ workflow Whatshap {
     }
 
     scatter (contig in contigs) {
-        call Helpers.SubsetBamToContig {
+        call RetiredHelpers.SubsetBamToContig {
             input:
                 bam = bam,
                 bai = bai,

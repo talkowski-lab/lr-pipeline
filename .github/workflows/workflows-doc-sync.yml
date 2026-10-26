@@ -49,7 +49,7 @@ jobs:
       # The document is regenerated and committed on push to main, so a stale copy on a
       # branch or pull request is not an error; only a document that cannot be built is
       # archive/ is excluded from check_wdl_style.py, so the generator parsing its retired
-      # workflows is the only guard that archive/docs/workflows.md still builds
+      # workflows is what guards that archive/docs/workflows.md still builds
       - name: Confirm the workflow documents can be generated
         run: |
           python .github/scripts/generate_workflows_doc.py --dry-run

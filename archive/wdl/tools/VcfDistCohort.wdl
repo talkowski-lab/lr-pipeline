@@ -1,8 +1,8 @@
 version 1.0
 
-import "../utils/Helpers.wdl"
-import "../utils/Structs.wdl"
-import "BackbonePhase.wdl"
+import "../../../wdl/utils/Helpers.wdl"
+import "../../../wdl/utils/Structs.wdl"
+import "../../../wdl/tools/BackbonePhase.wdl"
 import "VcfDist.wdl"
 
 workflow VcfDistCohort {

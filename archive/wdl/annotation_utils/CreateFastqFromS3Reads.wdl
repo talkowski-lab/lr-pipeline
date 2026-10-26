@@ -1,7 +1,8 @@
 version 1.0
 
-import "../utils/Helpers.wdl"
-import "../utils/Structs.wdl"
+import "../../../wdl/utils/Helpers.wdl"
+import "../utils/RetiredHelpers.wdl"
+import "../../../wdl/utils/Structs.wdl"
 
 workflow CreateFastqFromS3Reads {
     meta {
@@ -35,7 +36,7 @@ workflow CreateFastqFromS3Reads {
         }
     }
 
-    call Helpers.MergeFastq {
+    call RetiredHelpers.MergeFastq {
         input:
             fastq_gz_files = DownloadConvert.fastq_gz,
             prefix = prefix,

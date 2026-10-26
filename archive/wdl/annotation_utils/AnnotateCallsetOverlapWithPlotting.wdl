@@ -1,9 +1,9 @@
 version 1.0
 
-import "../utils/BedtoolsClosestSV.wdl"
-import "../utils/Helpers.wdl"
-import "../utils/Structs.wdl"
-import "../utils/TruvariMatch.wdl"
+import "../../../wdl/utils/BedtoolsClosestSV.wdl"
+import "../../../wdl/utils/Helpers.wdl"
+import "../../../wdl/utils/Structs.wdl"
+import "../../../wdl/utils/TruvariMatch.wdl"
 
 workflow AnnotateCallsetOverlapWithPlotting {
     meta {

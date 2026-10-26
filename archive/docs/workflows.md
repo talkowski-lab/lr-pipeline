@@ -802,7 +802,6 @@ Inputs:
 - `String phylop_ht`: From references.
 - `String revel_ht`: From references.
 - `String spliceai_ht`: From references.
-- `String annotate_in_silico_predictors_script`: Path to the Hail script that performs the lookups (defaults to this repository's copy on `main`). (default `https://raw.githubusercontent.com/talkowski-lab/lr-pipeline/main/scripts/annotation/annotate_insilico_predictors.py`)
 - `String genome_build`: Reference genome build passed to the in-silico predictor annotation script. (default `GRCh38`)
 - `String prefix`: Prefix for output file names.
 - `String utils_docker`, `String vrs_docker`, `String hail_docker`: Container images.
@@ -848,7 +847,6 @@ Inputs:
 - `String phylop_ht`: From references.
 - `String revel_ht`: From references.
 - `String spliceai_ht`: From references.
-- `String annotate_in_silico_predictors_script`: Path to the Hail script that performs the lookups (defaults to this repository's copy on `main`). (default `https://raw.githubusercontent.com/talkowski-lab/lr-pipeline/main/scripts/annotation/annotate_insilico_predictors.py`)
 - `String genome_build`: Reference genome build passed to the in-silico predictor annotation script. (default `GRCh38`)
 - `String prefix`: Prefix for output file names.
 - `String utils_docker`, `String trgt_docker`, `String vrs_docker`, `String hail_docker`: Container images.

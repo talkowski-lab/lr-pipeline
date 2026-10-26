@@ -1,6 +1,6 @@
 version 1.0
 
-import "utils/Structs.wdl"
+import "../../../wdl/utils/Structs.wdl"
 
 workflow MergeWithAgglovar {
     meta {
@@ -62,8 +62,8 @@ workflow MergeWithAgglovar {
     }
 
     output {
-        File merged_vcf = RunAgglovarMerge.merged_vcf
-        File merged_vcf_index = RunAgglovarMerge.merged_vcf_index
+        File merged_vcf = RunAgglovarMerge.agglovar_merged_vcf
+        File merged_vcf_index = RunAgglovarMerge.agglovar_merged_vcf_idx
     }
 }
 

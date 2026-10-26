@@ -1,7 +1,8 @@
 version 1.0
 
-import "../utils/Helpers.wdl"
-import "../utils/Structs.wdl"
+import "../../../wdl/utils/Helpers.wdl"
+import "../utils/RetiredHelpers.wdl"
+import "../../../wdl/utils/Structs.wdl"
 
 workflow TransferMethylationTags {
     meta {
@@ -83,7 +84,7 @@ workflow TransferMethylationTags {
         }
 
         scatter (contig in contigs) {
-            call Helpers.SubsetBamToContig {
+            call RetiredHelpers.SubsetBamToContig {
                 input:
                     bam = aligned_bam,
                     bai = aligned_bai,

@@ -1,7 +1,8 @@
 version 1.0
 
-import "../utils/Helpers.wdl"
-import "../utils/Structs.wdl"
+import "../../../wdl/utils/Helpers.wdl"
+import "../utils/RetiredHelpers.wdl"
+import "../../../wdl/utils/Structs.wdl"
 
 workflow IntegrateHGSVCReference {
     meta {
@@ -102,7 +103,7 @@ workflow IntegrateHGSVCReference {
     call Helpers.CheckSampleConsistency {
         input:
             vcfs = [snv_vcf_final, indel_vcf_final, sv_vcf_final],
-            vcfs_idx = [snv_vcf_idx_final, indel_vcf_idx_final, sv_vcf_idx_final],
+            vcf_idxs = [snv_vcf_idx_final, indel_vcf_idx_final, sv_vcf_idx_final],
             sample_ids = sample_ids,
             docker = utils_docker,
             runtime_attr_override = runtime_attr_check_samples
@@ -110,12 +111,12 @@ workflow IntegrateHGSVCReference {
 
     scatter (contig in contigs) {
         # SNV VCF Processing
-        call Helpers.SubsetVcfToSampleList as SubsetSnv {
+        call RetiredHelpers.SubsetVcfToSampleList as SubsetSnv {
             input:
                 vcf = snv_vcf_final,
                 vcf_idx = snv_vcf_idx_final,
                 samples = sample_ids,
-                contig = contig,
+                extra_args = "--regions ~{contig}",
                 prefix = "~{prefix}.~{contig}.snv.subset",
                 docker = utils_docker,
                 runtime_attr_override = runtime_attr_subset
@@ -143,12 +144,12 @@ workflow IntegrateHGSVCReference {
         }
 
         # Indel VCF Processing
-        call Helpers.SubsetVcfToSampleList as SubsetIndel {
+        call RetiredHelpers.SubsetVcfToSampleList as SubsetIndel {
             input:
                 vcf = indel_vcf_final,
                 vcf_idx = indel_vcf_idx_final,
                 samples = sample_ids,
-                contig = contig,
+                extra_args = "--regions ~{contig}",
                 prefix = "~{prefix}.~{contig}.indel.subset",
                 docker = utils_docker,
                 runtime_attr_override = runtime_attr_subset
@@ -176,12 +177,12 @@ workflow IntegrateHGSVCReference {
         }
 
         # SV VCF Processing
-        call Helpers.SubsetVcfToSampleList as SubsetSv {
+        call RetiredHelpers.SubsetVcfToSampleList as SubsetSv {
             input:
                 vcf = sv_vcf_final,
                 vcf_idx = sv_vcf_idx_final,
                 samples = sample_ids,
-                contig = contig,
+                extra_args = "--regions ~{contig}",
                 prefix = "~{prefix}.~{contig}.sv.subset",
                 docker = utils_docker,
                 runtime_attr_override = runtime_attr_subset
@@ -212,7 +213,9 @@ workflow IntegrateHGSVCReference {
         call Helpers.ConcatVcfs as MergeContigVcfs {
             input:
                 vcfs = [AddInfoSnv.annotated_vcf, AddInfoIndel.annotated_vcf, AddInfoSv.annotated_vcf],
-                vcfs_idx = [AddInfoSnv.annotated_vcf_idx, AddInfoIndel.annotated_vcf_idx, AddInfoSv.annotated_vcf_idx],
+                vcf_idxs = [AddInfoSnv.annotated_vcf_idx, AddInfoIndel.annotated_vcf_idx, AddInfoSv.annotated_vcf_idx],
+                allow_overlaps = true,
+                naive = false,
                 prefix = "~{prefix}.~{contig}.integrated",
                 docker = utils_docker,
                 runtime_attr_override = runtime_attr_merge
@@ -222,7 +225,9 @@ workflow IntegrateHGSVCReference {
     call Helpers.ConcatVcfs {
         input:
             vcfs = MergeContigVcfs.concat_vcf,
-            vcfs_idx = MergeContigVcfs.concat_vcf_idx,
+            vcf_idxs = MergeContigVcfs.concat_vcf_idx,
+            allow_overlaps = true,
+            naive = false,
             prefix = prefix,
             docker = utils_docker,
             runtime_attr_override = runtime_attr_concat

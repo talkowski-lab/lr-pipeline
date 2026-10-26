@@ -1,6 +1,6 @@
 version 1.0
 
-import "../utils/Structs.wdl"
+import "../../../wdl/utils/Structs.wdl"
 
 workflow AnnotateExternalAFs {
     meta {

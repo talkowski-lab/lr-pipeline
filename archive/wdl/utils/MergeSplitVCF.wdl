@@ -1,7 +1,7 @@
 
 version 1.0
 
-import "Structs.wdl"
+import "../../../wdl/utils/Structs.wdl"
 
 task SplitFile {
     input {

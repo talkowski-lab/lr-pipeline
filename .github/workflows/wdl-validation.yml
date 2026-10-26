@@ -5,11 +5,13 @@ on:
     branches: [ '**', '!dependabot/**' ]
     paths:
       - 'wdl/**'
+      - 'archive/wdl/**'
       - '.github/workflows/wdl-validation.yml'
   pull_request:
     branches: [ main ]
     paths:
       - 'wdl/**'
+      - 'archive/wdl/**'
       - '.github/workflows/wdl-validation.yml'
   workflow_dispatch:
 
@@ -52,3 +54,10 @@ jobs:
         run: |
           # shellcheck disable=SC2016
           find wdl -type f -name '*.wdl' -print0 | xargs -0 -P "$(nproc)" -I{} sh -c 'out=$(java -XX:TieredStopAtLevel=1 -jar womtool.jar validate "$1" 2>&1) || { printf "FAILED %s\n%s\n" "$1" "$out"; exit 255; }; echo "OK $1"' _ {}
+
+      # The archived workflows import the active task libraries, so a change to those is checked against them too.
+      # archive/wdl/womtool-excluded.txt lists the archived files left unvalidated, each explained in docs/ci-cd.md
+      - name: Validate archived WDLs
+        run: |
+          # shellcheck disable=SC2016
+          find archive/wdl -type f -name '*.wdl' | grep -vxFf archive/wdl/womtool-excluded.txt | tr '\n' '\0' | xargs -0 -P "$(nproc)" -I{} sh -c 'out=$(java -XX:TieredStopAtLevel=1 -jar womtool.jar validate "$1" 2>&1) || { printf "FAILED %s\n%s\n" "$1" "$out"; exit 255; }; echo "OK $1"' _ {}

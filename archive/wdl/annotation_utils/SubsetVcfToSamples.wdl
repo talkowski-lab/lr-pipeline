@@ -1,7 +1,8 @@
 version 1.0
 
-import "../utils/Structs.wdl"
-import "../utils/Helpers.wdl"
+import "../../../wdl/utils/Structs.wdl"
+import "../../../wdl/utils/Helpers.wdl"
+import "../utils/RetiredHelpers.wdl"
 
 workflow SubsetVcfToSamples {
     meta {
@@ -33,7 +34,7 @@ workflow SubsetVcfToSamples {
     }
 
     scatter (contig in contigs) {
-        call Helpers.SubsetVcfToSampleList {
+        call RetiredHelpers.SubsetVcfToSampleList {
             input:
                 vcf = vcf,
                 vcf_idx = vcf_idx,
@@ -48,8 +49,9 @@ workflow SubsetVcfToSamples {
     call Helpers.ConcatVcfs {
         input:
             vcfs = SubsetVcfToSampleList.subset_vcf,
-            vcfs_idx = SubsetVcfToSampleList.subset_vcf_idx,
-            merge_sort = true,
+            vcf_idxs = SubsetVcfToSampleList.subset_vcf_idx,
+            allow_overlaps = true,
+            naive = false,
             prefix = "~{prefix}.subset_samples",
             docker = utils_docker,
             runtime_attr_override = runtime_attr_concat_vcfs

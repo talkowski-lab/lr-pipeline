@@ -1,6 +1,6 @@
 version 1.0
 
-import "../utils/Helpers.wdl"
+import "../../../wdl/utils/Helpers.wdl"
 
 workflow UpdateGenotypes {
     meta {

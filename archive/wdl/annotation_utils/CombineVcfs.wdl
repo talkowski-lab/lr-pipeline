@@ -1,7 +1,8 @@
 version 1.0
 
-import "../utils/Helpers.wdl"
-import "../utils/Structs.wdl"
+import "../../../wdl/utils/Helpers.wdl"
+import "../utils/RetiredHelpers.wdl"
+import "../../../wdl/utils/Structs.wdl"
 
 workflow CombineVcfs {
     meta {
@@ -39,7 +40,7 @@ workflow CombineVcfs {
         RuntimeAttr? runtime_attr_concat_concatenated
     }
 
-    call Helpers.CheckSampleMatch {
+    call RetiredHelpers.CheckSampleMatch {
         input:
             vcf_a = a_vcf,
             vcf_a_idx = a_vcf_idx,

@@ -1,7 +1,8 @@
 version 1.0
 
-import "../utils/Helpers.wdl"
-import "../utils/Structs.wdl"
+import "../../../wdl/utils/Helpers.wdl"
+import "../utils/RetiredHelpers.wdl"
+import "../../../wdl/utils/Structs.wdl"
 
 workflow MergeSites {
     meta {
@@ -70,7 +71,7 @@ workflow MergeSites {
     }
 
     if (defined(shard_bin_size)) {
-        call Helpers.CreateShardsFromVcfIndex {
+        call RetiredHelpers.CreateShardsFromVcfIndex {
             input:
                 vcf_idx = vcf_idx,
                 ref_fai = select_first([ref_fai]),

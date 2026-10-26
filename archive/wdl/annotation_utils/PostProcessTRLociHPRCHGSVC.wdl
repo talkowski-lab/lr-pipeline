@@ -1,14 +1,14 @@
 version 1.0
 
-import "../annotation/AnnotateInSilicoPredictors.wdl"
-import "../annotation/AnnotateGQMetrics.wdl"
-import "../annotation/AnnotateRegion.wdl"
-import "../annotation/AnnotateSQMetrics.wdl"
-import "../annotation/AnnotateVRS.wdl"
-import "../tools/MergeHiPhaseCallsets.wdl"
-import "../utils/Helpers.wdl"
-import "../utils/Structs.wdl"
-import "AnnotateVcf.wdl"
+import "../../../wdl/annotation/AnnotateInSilicoPredictors.wdl"
+import "../../../wdl/annotation/AnnotateGQMetrics.wdl"
+import "../../../wdl/annotation/AnnotateRegion.wdl"
+import "../../../wdl/annotation/AnnotateSQMetrics.wdl"
+import "../../../wdl/annotation/AnnotateVRS.wdl"
+import "../../../wdl/tools/MergeHiPhaseCallsets.wdl"
+import "../../../wdl/utils/Helpers.wdl"
+import "../../../wdl/utils/Structs.wdl"
+import "../../../wdl/annotation_utils/AnnotateVcf.wdl"
 
 workflow PostProcessTRLociHPRCHGSVC {
     meta {
@@ -46,7 +46,6 @@ workflow PostProcessTRLociHPRCHGSVC {
         phylop_ht: "From references."
         revel_ht: "From references."
         spliceai_ht: "From references."
-        annotate_in_silico_predictors_script: "Path to the Hail script that performs the lookups (defaults to this repository's copy on `main`)."
         genome_build: "Reference genome build passed to the in-silico predictor annotation script."
         trv_postprocessed_vcf: "Post-processed tandem-repeat VCF."
         trv_postprocessed_vcf_idx: "Index for `trv_postprocessed_vcf`."
@@ -87,7 +86,6 @@ workflow PostProcessTRLociHPRCHGSVC {
         String phylop_ht
         String revel_ht
         String spliceai_ht
-        String annotate_in_silico_predictors_script = "https://raw.githubusercontent.com/talkowski-lab/lr-pipeline/main/scripts/annotation/annotate_insilico_predictors.py"
         String genome_build = "GRCh38"
 
         String utils_docker
@@ -288,7 +286,6 @@ workflow PostProcessTRLociHPRCHGSVC {
                     phylop_ht = phylop_ht,
                     revel_ht = revel_ht,
                     spliceai_ht = spliceai_ht,
-                    annotate_in_silico_predictors_script = annotate_in_silico_predictors_script,
                     genome_build = genome_build,
                     prefix = "~{prefix}.~{contig}.replacement.in_silico",
                     docker = hail_docker,
@@ -305,7 +302,7 @@ workflow PostProcessTRLociHPRCHGSVC {
                     info_descriptions = [["Genomic context of variant"], ["CADD raw score", "CADD PHRED score", "Largest Pangolin delta score", "Maximum REVEL score", "PhyloP score", "Maximum SpliceAI delta score"], ["VRS allele identifiers", "VRS annotation error", "VRS start positions", "VRS end positions", "VRS allele states", "VRS allele lengths", "VRS repeat subunit lengths"], ["Inbreeding coefficient, the excess heterozygosity at a variant site, computed as 1 - (the number of heterozygous genotypes)/(the number of heterozygous genotypes expected under Hardy-Weinberg equilibrium).", "Allele-specific maximum p-value over callset for binomial test of observed allele balance for a heterozygous genotype, given expectation of AB=0.5.", "Allele-specific sum of PL[0] values; used to approximate the QUAL score.", "Allele-specific variant call confidence normalized by depth of sample reads supporting a variant.", "Allele-specific depth over variant genotypes (does not include depth of reference samples).", "Hardy-Weinberg equilibrium p-value."], ["Histogram for SD calculated on high quality genotypes; bin edges are: 0|5|10|15|20|25|30|35|40|45|50|55|60|65|70|75|80|85|90|95|100.", "Histogram for SD in heterozygous individuals calculated on high quality genotypes; bin edges are: 0|5|10|15|20|25|30|35|40|45|50|55|60|65|70|75|80|85|90|95|100."], ["Histogram for AB in heterozygous individuals calculated on high quality genotypes; bin edges are: 0.00|0.05|0.10|0.15|0.20|0.25|0.30|0.35|0.40|0.45|0.50|0.55|0.60|0.65|0.70|0.75|0.80|0.85|0.90|0.95|1.00."]],
                     info_types = [["String"], ["Float", "Float", "Float", "Float", "Float", "Float"], ["String", "String", "Integer", "Integer", "String", "String", "String"], ["Float", "Float", "Integer", "Float", "Integer", "Float"], ["String", "String"], ["String"]],
                     info_numbers = [["1"], ["1", "1", "1", "1", "1", "1"], ["R", ".", "R", "R", ".", ".", "."], ["A", "A", "A", "A", "A", "1"], ["1", "1"], ["1"]],
-                    subset_vcf_strings = [],
+                    include_expressions = [],
                     awk_tsv_conditions = [],
                     subset_tsv_columns = [[6], [6, 7, 8, 9, 10, 11], [6, 7, 8, 9, 10, 11, 12], [6, 7, 8, 9, 10, 11], [6, 7], [6]],
                     strip_info_fields_per_tsv = [false, false, false, false, false, false],
