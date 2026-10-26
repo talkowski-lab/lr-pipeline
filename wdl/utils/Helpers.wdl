@@ -515,7 +515,7 @@ task BcftoolsMergeChunk {
 
             # Step 2
             ls list_*.bcf | sort -V > list.txt
-            # --force-single lets the merge proceed when there is only one file (small cohorts / single-family regenotyping produce a single batch).
+            # --force-single lets the merge proceed when there is only one file (small cohorts produce a single batch).
             ${TIME_COMMAND} bcftools merge --threads ${N_THREADS} --force-samples --force-single --merge ${MERGE_FLAG} --file-list list.txt --output-type b --output ~{chunk_id}_merged.bcf
             ${TIME_COMMAND} bcftools index --threads ${N_THREADS} -f ~{chunk_id}_merged.bcf
             df -h 1>&2
@@ -3400,8 +3400,8 @@ task RunPALMERShard {
 
     RuntimeAttr default_attr = object {
         cpu_cores: 1,
-        mem_gb: 4,
-        disk_gb: 4,
+        mem_gb: 8,
+        disk_gb: ceil(size(bam, "GB") + size(ref_fa, "GB")) + 10,
         boot_disk_gb: 10,
         preemptible_tries: 1,
         max_retries: 0

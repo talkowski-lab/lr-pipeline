@@ -615,7 +615,6 @@ def test_resolve_haplotype_overlaps_clears_the_losing_call_of_each_overlapping_p
         {
             "vcf": str(vcf),
             "vcf_idx": f"{vcf}.tbi",
-            "contig": CONTIG,
             "prefix": "resolved",
             "records_per_shard": 150,
             "utils_docker": utils_docker,
@@ -1713,11 +1712,28 @@ def test_summarize_annotations_tabulates_site_sample_allele_list_and_gene_summar
                 assert got[gene][column] == str(count), (name, gene, column)
 
 
+def trim_alleles(ref, alt):
+    while len(ref) > 1 and len(alt) > 1 and ref[-1] == alt[-1]:
+        ref, alt = ref[:-1], alt[:-1]
+    while len(ref) > 1 and len(alt) > 1 and ref[0] == alt[0]:
+        ref, alt = ref[1:], alt[1:]
+    return ref, alt
+
+
+def is_snv_ins_or_del(ref, alt):
+    trimmed_ref, trimmed_alt = trim_alleles(ref, alt)
+    return len(trimmed_ref) != len(trimmed_alt) or (len(trimmed_ref) == 1 and trimmed_ref != trimmed_alt)
+
+
 def test_preprocess_vcfs_splits_multiallelics_types_alleles_filters_by_length_and_renames_variants(
     run_workflow, run_dir, window_vcf, utils_docker
 ):
+    # Tandem repeat loci with same-length alleles never reach PreprocessVcfs, which fails on them
+    snv_ins_del = write_vcf(
+        window_vcf, run_dir / "snv_ins_del.vcf.gz", lambda r: all(is_snv_ins_or_del(r.ref, a) for a in r.alts)
+    )
     stripped = rewrite_vcf(
-        window_vcf, run_dir / "input.vcf.gz", ["allele_type", "allele_length", "allele_subtype", "SOURCE"], lambda r: None
+        snv_ins_del, run_dir / "input.vcf.gz", ["allele_type", "allele_length", "allele_subtype", "SOURCE"], lambda r: None
     )
     swaps = write_table(run_dir / "swap.tsv", [["HG00096", "SWAPPED"]])
     samples = ["SWAPPED", *SAMPLES[1:]]
@@ -1773,6 +1789,125 @@ def test_preprocess_vcfs_splits_multiallelics_types_alleles_filters_by_length_an
     assert len(kept) > 20
     for old, new in kept:
         assert new["gts"]["SWAPPED"] == old["gts"]["HG00096"] and new["gts"]["HG00128"] == old["gts"]["HG00128"]
+
+
+def write_window_type_vcf(path, rows, sv_info=True):
+    """Write one-sample (pos, ref, alt, info text, GT) rows on the window FASTA contig, bgzipped and tabix-indexed."""
+    with pysam.FastaFile(str(WINDOW_FASTA)) as fasta:
+        length = fasta.get_reference_length(CONTIG)
+    lines = ["##fileformat=VCFv4.2", f"##contig=<ID={CONTIG},length={length}>"]
+    if sv_info:
+        lines += [
+            '##INFO=<ID=SVTYPE,Number=1,Type=String,Description="SVTYPE">',
+            '##INFO=<ID=SVLEN,Number=1,Type=Integer,Description="SVLEN">',
+        ]
+    lines += [
+        '##FORMAT=<ID=GT,Number=1,Type=String,Description="Genotype">',
+        "#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT\tS1",
+    ]
+    lines += [f"{CONTIG}\t{pos}\t.\t{ref}\t{alt}\t.\tPASS\t{info or '.'}\tGT\t{gt}" for pos, ref, alt, info, gt in rows]
+    path.write_text("\n".join(lines) + "\n")
+    return index_table(path, "vcf")
+
+
+def run_preprocess_on_window_types(run_workflow, path, utils_docker, convert_symbolic=True):
+    return run_workflow(
+        f"{UTILS}/PreprocessVcfs.wdl",
+        {
+            "vcfs": [str(path)],
+            "vcf_idxs": [f"{path}.tbi"],
+            "prefix": "types",
+            "normalize_vcfs": [True],
+            "convert_aou_phase2_symbolic_alleles": [convert_symbolic],
+            "source_tags": [],
+            "swap_sample_lists": [],
+            "min_length_cutoffs": [],
+            "max_length_cutoffs": [],
+            "sample_ids": [],
+            "ref_fa": str(WINDOW_FASTA),
+            "ref_fai": f"{WINDOW_FASTA}.fai",
+            "utils_docker": utils_docker,
+        },
+    )
+
+
+def other_base(base):
+    return "C" if base != "C" else "G"
+
+
+def reverse_complement(sequence):
+    return sequence[::-1].translate(str.maketrans("ACGTN", "TGCAN"))
+
+
+def test_preprocess_vcfs_keeps_only_snv_ins_del_records(run_workflow, run_dir, utils_docker):
+    with pysam.FastaFile(str(WINDOW_FASTA)) as fasta:
+        seq = fasta.fetch(CONTIG).upper()
+
+    def ref(pos, length=1):
+        return seq[pos - 1 : pos - 1 + length]
+
+    padded = ref(10000, 3)
+    path = write_window_type_vcf(
+        run_dir / "types.vcf",
+        [
+            (1000, ref(1000), other_base(ref(1000)), None, "0/1"),
+            (2000, ref(2000, 6), ref(2000), None, "0/1"),
+            (3000, ref(3000), ref(3000) + "ACGTACGT", None, "0/1"),
+            # Long-SV representation from MergeCohortLongSVCallsets: REF=N with a symbolic ALT
+            (4000, "N", "<DEL>", "SVTYPE=DEL;SVLEN=-300", "0/1"),
+            (5000, "N", "<DUP>", "SVTYPE=DUP;SVLEN=200", "0/1"),
+            (6000, "N", "<INV>", "SVTYPE=INV;SVLEN=500", "0/1"),
+            (7000, ref(7000), "<INS>", "SVTYPE=INS;SVLEN=400", "0/1"),
+            (8000, ref(8000), ref(8000) + f"[{CONTIG}:9500[", "SVTYPE=BND", "0/1"),
+            # Sequence-resolved inversion, as FixSymbolicRecords writes it
+            (9000, ref(9000, 101), ref(9000) + reverse_complement(ref(9001, 100)), "SVTYPE=INV", "0/1"),
+            # Padded SNV beside a deletion at a multiallelic site, and an SNV beside a spanning deletion
+            (10000, padded, f"{padded[:2]}{other_base(padded[2])},{padded[0]}", None, "1/2"),
+            (11000, ref(11000), f"{other_base(ref(11000))},*", None, "1/2"),
+        ],
+    )
+
+    outputs = run_preprocess_on_window_types(run_workflow, path, utils_docker)
+
+    _, got = load_records(outputs["PreprocessVcfs.preprocessed_vcf"])
+    assert collections.Counter((r["info"]["allele_type"], r["info"]["allele_length"]) for r in got) == collections.Counter(
+        [("snv", 0), ("del", -5), ("ins", 8), ("del", -300), ("ins", 200), ("snv", 0), ("del", -2), ("snv", 0)]
+    )
+    for r in got:
+        assert r["ref"] == ref(r["pos"], len(r["ref"]))
+        assert not r["alts"][0].startswith("<") and r["alts"][0] != "*"
+    assert {r["pos"] for r in got if r["info"]["allele_type"] == "snv"} == {1000, 10002, 11000}
+
+
+def test_preprocess_vcfs_keeps_uppercased_records_without_an_svtype_header(run_workflow, run_dir, utils_docker):
+    # DeepVariant VCFs declare no SVTYPE
+    with pysam.FastaFile(str(WINDOW_FASTA)) as fasta:
+        seq = fasta.fetch(CONTIG).upper()
+    path = write_window_type_vcf(
+        run_dir / "dv.vcf",
+        # Lowercase bases, as normalizing against a soft-masked reference writes them
+        [
+            (1000, seq[999].lower(), other_base(seq[999]).lower(), None, "0/1"),
+            (3000, seq[2999], seq[2999] + "acgtacgt", None, "0/1"),
+        ],
+        sv_info=False,
+    )
+
+    outputs = run_preprocess_on_window_types(run_workflow, path, utils_docker, convert_symbolic=False)
+
+    _, got = load_records(outputs["PreprocessVcfs.preprocessed_vcf"])
+    assert [(r["info"]["allele_type"], r["info"]["allele_length"]) for r in got] == [("snv", 0), ("ins", 8)]
+    assert all(r["ref"].isupper() and all(a.isupper() for a in r["alts"]) for r in got)
+
+
+def test_preprocess_vcfs_rejects_same_length_multibase_records(run_workflow, run_dir, utils_docker):
+    with pysam.FastaFile(str(WINDOW_FASTA)) as fasta:
+        mnp_ref = fasta.fetch(CONTIG, 11999, 12002).upper()
+    mnp_alt = other_base(mnp_ref[0]) + mnp_ref[1] + other_base(mnp_ref[2])
+    path = write_window_type_vcf(run_dir / "mnp.vcf", [(12000, mnp_ref, mnp_alt, None, "0/1")])
+
+    with pytest.raises(WorkflowError):
+        run_preprocess_on_window_types(run_workflow, path, utils_docker)
 
 
 def test_preprocess_vcfs_concatenates_record_shards_of_several_vcfs_with_source_tags(

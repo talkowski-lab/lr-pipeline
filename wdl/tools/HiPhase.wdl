@@ -69,6 +69,7 @@ workflow HiPhase {
         RuntimeAttr? runtime_attr_subset_vcf_trgt
         RuntimeAttr? runtime_attr_process_trgt_vcf
         RuntimeAttr? runtime_attr_sync_contigs
+        RuntimeAttr? runtime_attr_subset_bam
         RuntimeAttr? runtime_attr_hiphase
         RuntimeAttr? runtime_attr_concat_per_contig
         RuntimeAttr? runtime_attr_concat_across_contigs
@@ -109,8 +110,8 @@ workflow HiPhase {
             input:
                 small_vcf = SubsetVcfShort.subset_vcf,
                 small_vcf_idx = SubsetVcfShort.subset_vcf_idx,
-                sv_vcf = SubsetVcfSv.subset_vcf,
-                sv_vcf_idx = SubsetVcfSv.subset_vcf_idx,
+                vcf = SubsetVcfSv.subset_vcf,
+                vcf_idx = SubsetVcfSv.subset_vcf_idx,
                 prefix = "~{prefix}.~{contig}.synced",
                 docker = utils_docker,
                 runtime_attr_override = runtime_attr_sync_contigs
@@ -140,18 +141,41 @@ workflow HiPhase {
                     docker = utils_docker,
                     runtime_attr_override = runtime_attr_process_trgt_vcf
             }
+
+            # HiPhase requires every VCF to declare the same contigs, and the small-variant VCF can carry ones TRGT's lacks, e.g. chrEBV
+            call SyncContigs as SyncTRGTContigs {
+                input:
+                    small_vcf = SubsetVcfShort.subset_vcf,
+                    small_vcf_idx = SubsetVcfShort.subset_vcf_idx,
+                    vcf = FilterTRGTVcf.processed_vcf,
+                    vcf_idx = FilterTRGTVcf.processed_vcf_idx,
+                    prefix = "~{prefix}.~{contig}.trgt.synced",
+                    docker = utils_docker,
+                    runtime_attr_override = runtime_attr_sync_contigs
+            }
+        }
+
+        # HiPhase writes every read of its input BAM to the haplotagged BAM, so each shard gets only its contig's reads
+        call Helpers.SubsetBamToRegions as SubsetBam {
+            input:
+                bam = bam,
+                bai = bai,
+                region_file = write_lines([contig]),
+                prefix = "~{prefix}.~{contig}",
+                docker = utils_docker,
+                runtime_attr_override = runtime_attr_subset_bam
         }
 
         call RunHiPhase {
             input:
-                bam = bam,
-                bai = bai,
+                bam = SubsetBam.subset_bam,
+                bai = SubsetBam.subset_bai,
                 unphased_snp_vcf = SubsetVcfShort.subset_vcf,
                 unphased_snp_vcf_idx = SubsetVcfShort.subset_vcf_idx,
                 unphased_sv_vcf = SyncContigs.synced_vcf,
                 unphased_sv_vcf_idx = SyncContigs.synced_vcf_idx,
-                unphased_trgt_vcf = FilterTRGTVcf.processed_vcf,
-                unphased_trgt_vcf_idx = FilterTRGTVcf.processed_vcf_idx,
+                unphased_trgt_vcf = SyncTRGTContigs.synced_vcf,
+                unphased_trgt_vcf_idx = SyncTRGTContigs.synced_vcf_idx,
                 ref_fa = ref_fa,
                 ref_fai = ref_fai,
                 extra_args = hiphase_extra_args,
@@ -256,8 +280,8 @@ task SyncContigs {
     input {
         File small_vcf
         File small_vcf_idx
-        File sv_vcf
-        File sv_vcf_idx
+        File vcf
+        File vcf_idx
         String prefix
         String docker
         RuntimeAttr? runtime_attr_override
@@ -266,14 +290,14 @@ task SyncContigs {
     command <<<
         set -euo pipefail
 
-        bcftools view --header-only ~{sv_vcf} | grep -v "^##contig" > sv_header_no_contigs.txt
+        bcftools view --header-only ~{vcf} | grep -v "^##contig" > header_no_contigs.txt
         bcftools view --header-only ~{small_vcf} | grep "^##contig" > small_vcf_contigs.txt
 
-        grep "^##fileformat" sv_header_no_contigs.txt > new_header.txt
+        grep "^##fileformat" header_no_contigs.txt > new_header.txt
         cat small_vcf_contigs.txt >> new_header.txt
-        grep -v "^##fileformat" sv_header_no_contigs.txt >> new_header.txt
+        grep -v "^##fileformat" header_no_contigs.txt >> new_header.txt
 
-        bcftools reheader --header new_header.txt --output ~{prefix}.vcf.gz ~{sv_vcf}
+        bcftools reheader --header new_header.txt --output ~{prefix}.vcf.gz ~{vcf}
         tabix -p vcf ~{prefix}.vcf.gz
     >>>
 
@@ -285,7 +309,7 @@ task SyncContigs {
     RuntimeAttr default_attr = object {
         cpu_cores: 1,
         mem_gb: 4,
-        disk_gb: 2 * ceil(size(small_vcf, "GB") + size(sv_vcf, "GB")) + 10,
+        disk_gb: 2 * ceil(size(small_vcf, "GB") + size(vcf, "GB")) + 10,
         boot_disk_gb: 10,
         preemptible_tries: 1,
         max_retries: 0

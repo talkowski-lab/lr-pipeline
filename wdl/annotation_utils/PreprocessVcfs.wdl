@@ -6,7 +6,7 @@ import "../utils/Helpers.wdl"
 workflow PreprocessVcfs {
     meta {
         description: [
-            "This utility preprocesses and integrates one or more cohort VCFs into a single VCF. It first optionally converts the symbolic `<DEL>` and `<DUP>` alleles of an All of Us Phase 2 VCF to sequence alleles and drops its remaining symbolic records, then applies any per-VCF sample-ID swaps, optionally subsets every VCF to the requested samples, and validates that the resulting sample sets are identical. Each VCF is then optionally normalized, annotated with core variant attributes and an optional source label, and length-filtered. Per-VCF controls are required arrays: an empty array disables that control for every VCF; a non-empty array must align with `vcfs`."
+            "This utility preprocesses and integrates one or more cohort VCFs into a single VCF. It first optionally converts the symbolic `<DEL>` and `<DUP>` alleles of an All of Us Phase 2 VCF to sequence alleles and drops its remaining symbolic records, then applies any per-VCF sample-ID swaps, optionally subsets every VCF to the requested samples, and validates that the resulting sample sets are identical. Each VCF is then optionally normalized and reduced to its SNV, insertion and deletion records: symbolic, breakend, spanning-deletion (`*`) and `SVTYPE=INV` records are dropped, and any other record whose trimmed REF and ALT have the same multi-base length fails the run. Kept alleles are uppercased, since normalizing against a soft-masked reference writes lowercase bases. The remaining records are annotated with core variant attributes and an optional source label, and length-filtered. Per-VCF controls are required arrays: an empty array disables that control for every VCF; a non-empty array must align with `vcfs`."
         ]
     }
 
@@ -14,7 +14,7 @@ workflow PreprocessVcfs {
         vcfs: "Cohort VCFs to preprocess and merge."
         vcf_idxs: "Indexes for `vcfs`."
         normalize_vcfs: "Per-VCF normalization settings. `[]` disables normalization; otherwise aligned with `vcfs`."
-        convert_aou_phase2_symbolic_alleles: "Per-VCF symbolic-allele conversion settings for All of Us Phase 2 VCFs, which carry nucleotide `INS` alleles alongside symbolic `<DEL>` and `<DUP>` alleles and a small number of other symbolic alleles. `[]` disables conversion; otherwise aligned with `vcfs`. Non-symbolic records pass through untouched. For enabled VCFs, `<DEL>` becomes a reference-anchored deletion whose `REF` is the deleted reference sequence and whose `ALT` is the anchor base, and `<DUP>` becomes a reference-anchored insertion whose `REF` is the anchor base and whose `ALT` is the anchor plus the duplicated reference sequence, using `SVLEN` or `END` as a fallback to determine the duplicated length. Converted records keep their `SVTYPE`, `SVLEN`, `CIPOS`, `CIEND`, `IMPRECISE` and `STRANDS` values, so a converted `<DUP>` reports `SVTYPE=DUP` even though its alleles are now an insertion; `END` is dropped once the ALT is no longer symbolic, and `INFO/allele_length` and `INFO/allele_type` are left to `AnnotateVariantAttributes`. Every other angle-bracket symbolic ALT, including `<INS>` and `<INV>`, is dropped, so that no symbolic record reaches `AnnotateVariantAttributes`, which derives both fields from the `REF` and `ALT` lengths and would read a symbolic ALT as a short insertion."
+        convert_aou_phase2_symbolic_alleles: "Per-VCF symbolic-allele conversion settings for VCFs that carry symbolic `<DEL>` and `<DUP>` alleles, such as All of Us Phase 2 VCFs and the cohort long-SV VCF from MergeCohortLongSVCallsets, whose symbolic records carry `REF=N`. `[]` disables conversion; otherwise aligned with `vcfs`. Non-symbolic records pass through untouched. For enabled VCFs, `<DEL>` becomes a reference-anchored deletion whose `REF` is the deleted reference sequence and whose `ALT` is the anchor base, and `<DUP>` becomes a reference-anchored insertion whose `REF` is the anchor base and whose `ALT` is the anchor plus the duplicated reference sequence, using `SVLEN` or `END` as a fallback to determine the duplicated length. Converted records keep their `SVTYPE`, `SVLEN`, `CIPOS`, `CIEND`, `IMPRECISE` and `STRANDS` values, so a converted `<DUP>` reports `SVTYPE=DUP` even though its alleles are now an insertion; `END` is dropped once the ALT is no longer symbolic, and `INFO/allele_length` and `INFO/allele_type` are left to `AnnotateVariantAttributes`. Every other angle-bracket symbolic ALT, including `<INS>` and `<INV>`, is dropped, so that no symbolic record reaches `AnnotateVariantAttributes`, which derives both fields from the `REF` and `ALT` lengths and would read a symbolic ALT as a short insertion."
         source_tags: "Per-VCF `SOURCE` values. `[]` disables source tagging; otherwise aligned with `vcfs`. Required when at least one length cutoff is enabled."
         swap_sample_lists: "Per-VCF sample-ID swap maps, applied before sample subsetting. `[]` disables swapping; otherwise aligned with `vcfs`. A zero-byte map means no swap for that VCF."
         min_length_cutoffs: "Per-VCF minimum absolute allele lengths. `[]` disables minimum-length filtering; otherwise aligned with `vcfs`. A value of `-1` disables this filter for that VCF. Calls with `abs(allele_length)` strictly below an enabled cutoff receive `SMALL_{source_tags[i]}`."
@@ -54,6 +54,7 @@ workflow PreprocessVcfs {
         RuntimeAttr? runtime_attr_shard
         RuntimeAttr? runtime_attr_normalize
         RuntimeAttr? runtime_attr_subset_samples
+        RuntimeAttr? runtime_attr_keep_snv_ins_del
         RuntimeAttr? runtime_attr_annotate_attributes
         RuntimeAttr? runtime_attr_add_info
         RuntimeAttr? runtime_attr_add_length_filters
@@ -64,6 +65,7 @@ workflow PreprocessVcfs {
 
     # Cromwell rejects an undefined optional entering a nested scatter, so these cross as one-element arrays
     Array[RuntimeAttr?] runtime_attr_normalize_wrapped = [runtime_attr_normalize]
+    Array[RuntimeAttr?] runtime_attr_keep_snv_ins_del_wrapped = [runtime_attr_keep_snv_ins_del]
     Array[RuntimeAttr?] runtime_attr_annotate_attributes_wrapped = [runtime_attr_annotate_attributes]
     Array[RuntimeAttr?] runtime_attr_add_info_wrapped = [runtime_attr_add_info]
     Array[RuntimeAttr?] runtime_attr_add_length_filters_wrapped = [runtime_attr_add_length_filters]
@@ -235,10 +237,19 @@ workflow PreprocessVcfs {
                         shard_vcf_idxs[shard_index]
                     ])
 
-                    call Helpers.AnnotateVariantAttributes {
+                    call KeepSnvInsDelRecords {
                         input:
                             vcf = normalized_vcf,
                             vcf_idx = normalized_vcf_idx,
+                            prefix = "~{prefix}.vcf_~{vcf_index}.shard_~{shard_index}.snv_ins_del",
+                            docker = utils_docker,
+                            runtime_attr_override = runtime_attr_keep_snv_ins_del_wrapped[0]
+                    }
+
+                    call Helpers.AnnotateVariantAttributes {
+                        input:
+                            vcf = KeepSnvInsDelRecords.kept_vcf,
+                            vcf_idx = KeepSnvInsDelRecords.kept_vcf_idx,
                             prefix = "~{prefix}.vcf_~{vcf_index}.shard_~{shard_index}.annotated",
                             docker = utils_docker,
                             runtime_attr_override = runtime_attr_annotate_attributes_wrapped[0]
@@ -491,6 +502,88 @@ CODE
         cpu_cores: 1,
         mem_gb: 1,
         disk_gb: 5,
+        boot_disk_gb: 10,
+        preemptible_tries: 1,
+        max_retries: 0
+    }
+    RuntimeAttr runtime_attr = select_first([runtime_attr_override, default_attr])
+    runtime {
+        cpu: select_first([runtime_attr.cpu_cores, default_attr.cpu_cores])
+        memory: select_first([runtime_attr.mem_gb, default_attr.mem_gb]) + " GiB"
+        disks: "local-disk " + select_first([runtime_attr.disk_gb, default_attr.disk_gb]) + " HDD"
+        bootDiskSizeGb: select_first([runtime_attr.boot_disk_gb, default_attr.boot_disk_gb])
+        docker: docker
+        preemptible: select_first([runtime_attr.preemptible_tries, default_attr.preemptible_tries])
+        maxRetries: select_first([runtime_attr.max_retries, default_attr.max_retries])
+    }
+}
+
+task KeepSnvInsDelRecords {
+    input {
+        File vcf
+        File vcf_idx
+        String prefix
+        String docker
+        RuntimeAttr? runtime_attr_override
+    }
+
+    command <<<
+        set -euo pipefail
+
+        python3 <<'CODE'
+import collections
+from pysam import VariantFile
+
+def trim(ref, alt):
+    while len(ref) > 1 and len(alt) > 1 and ref[-1] == alt[-1]:
+        ref, alt = ref[:-1], alt[:-1]
+    while len(ref) > 1 and len(alt) > 1 and ref[0] == alt[0]:
+        ref, alt = ref[1:], alt[1:]
+    return ref, alt
+
+def drop_reason(record):
+    if not record.alts or any(alt.startswith("<") or "[" in alt or "]" in alt or alt == "*" for alt in record.alts):
+        return "symbolic, breakend, overlap or missing ALT"
+    svtype = record.info.get("SVTYPE") if has_svtype else None
+    if "INV" in (svtype if isinstance(svtype, tuple) else (svtype,)):
+        return "SVTYPE=INV"
+    for alt in record.alts:
+        trimmed_ref, trimmed_alt = trim(record.ref.upper(), alt.upper())
+        if len(trimmed_ref) == len(trimmed_alt) and (len(trimmed_ref) > 1 or trimmed_ref == trimmed_alt):
+            raise ValueError(f"{record.chrom}:{record.pos}: {record.ref}>{alt} is neither an SNV, an insertion nor a deletion")
+    return None
+
+input_vcf = VariantFile("~{vcf}")
+# pysam raises, rather than returning None, on an INFO key the header lacks, as in DeepVariant VCFs
+has_svtype = "SVTYPE" in input_vcf.header.info
+output_vcf = VariantFile("~{prefix}.vcf.gz", "w", header=input_vcf.header)
+dropped = collections.Counter()
+for record in input_vcf:
+    reason = drop_reason(record)
+    if reason:
+        dropped[reason] += 1
+    else:
+        # Normalizing against a soft-masked reference writes lowercase bases, which HiPhase rejects as a reference mismatch
+        record.alleles = tuple(allele.upper() for allele in record.alleles)
+        output_vcf.write(record)
+input_vcf.close()
+output_vcf.close()
+for reason, count in dropped.items():
+    print(f"Dropped {count} records: {reason}")
+CODE
+
+        tabix -p vcf ~{prefix}.vcf.gz
+    >>>
+
+    output {
+        File kept_vcf = "~{prefix}.vcf.gz"
+        File kept_vcf_idx = "~{prefix}.vcf.gz.tbi"
+    }
+
+    RuntimeAttr default_attr = object {
+        cpu_cores: 1,
+        mem_gb: 4,
+        disk_gb: 2 * ceil(size(vcf, "GB")) + 5,
         boot_disk_gb: 10,
         preemptible_tries: 1,
         max_retries: 0

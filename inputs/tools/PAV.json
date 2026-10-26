@@ -1,14 +1,7 @@
 {
-    "PAV.mat_haplotypes": [
-        "gs://<cohort-bucket>/mat_haplotype"
-    ],
-    "PAV.pat_haplotypes": [
-        "gs://<cohort-bucket>/pat_haplotype"
-    ],
-    "PAV.sample_ids": [
-        "sample1",
-        "sample2"
-    ],
+    "PAV.mat_haplotype": "gs://<cohort-bucket>/mat_haplotype",
+    "PAV.pat_haplotype": "gs://<cohort-bucket>/pat_haplotype",
+    "PAV.sample_id": "sample1",
     "PAV.prefix": "cohort",
     "PAV.ref_fa": "gs://<references-bucket>/hg38.no_alt.fa",
     "PAV.ref_fai": "gs://<references-bucket>/hg38.no_alt.fa.fai",

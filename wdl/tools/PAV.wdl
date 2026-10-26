@@ -5,28 +5,26 @@ import "../utils/Structs.wdl"
 workflow PAV {
     meta {
         description: [
-            "This tool runs PAV (https://github.com/EichlerLab/pav) in batch mode across multiple samples' phased haplotype assemblies to call variants against the reference. It outputs per-sample VCFs, along with tarballs of the full PAV results and log directories."
+            "This tool runs PAV (https://github.com/EichlerLab/pav) on a sample's phased haplotype assemblies to call variants against the reference. It outputs the sample's tabix-indexed VCF, along with tarballs of the full PAV results and log directories."
         ]
     }
 
     parameter_meta {
-        mat_haplotypes: "Maternal haplotype assemblies, one per sample."
-        pat_haplotypes: "Paternal haplotype assemblies, one per sample."
-        sample_ids: "Sample IDs, aligned by index to `mat_haplotypes`/`pat_haplotypes`."
+        mat_haplotype: "Maternal haplotype assembly. Without parental data, either hifiasm haplotype."
+        pat_haplotype: "Paternal haplotype assembly. Without parental data, the other hifiasm haplotype."
+        sample_id: "Sample ID."
         ref_fa: "From references."
         ref_fai: "From references."
         pav_results_tarball: "Tarball of the full PAV results directory."
         pav_log_tarball: "Tarball of the full PAV log directory."
-        pav_vcfs: "Per-sample called VCFs."
-        pav_vcf_idx: "Indexes for the per-sample VCFs."
-        debug_sam: "Optional debug alignment file."
-        debug_temp: "Optional debug intermediate files."
+        pav_vcf: "Called VCF."
+        pav_vcf_idx: "Tabix index for `pav_vcf`."
     }
 
     input {
-        Array[File] mat_haplotypes
-        Array[File] pat_haplotypes
-        Array[String] sample_ids
+        File mat_haplotype
+        File pat_haplotype
+        String sample_id
         String prefix
 
         File ref_fa
@@ -39,9 +37,9 @@ workflow PAV {
 
     call CallPAV {
         input:
-            mat_haplotypes = mat_haplotypes,
-            pat_haplotypes = pat_haplotypes,
-            sample_ids = sample_ids,
+            mat_haplotype = mat_haplotype,
+            pat_haplotype = pat_haplotype,
+            sample_id = sample_id,
             ref_fa = ref_fa,
             ref_fai = ref_fai,
             prefix = prefix,
@@ -52,19 +50,16 @@ workflow PAV {
     output {
         File pav_results_tarball = CallPAV.results_tar
         File pav_log_tarball = CallPAV.log_tar
-        Array[File] pav_vcfs = CallPAV.vcfs
-        Array[File] pav_vcf_idx = CallPAV.vcf_idx
-
-        File? debug_sam = CallPAV.debug_sam
-        Array[File]? debug_temp = CallPAV.debug_temp
+        File pav_vcf = CallPAV.vcf
+        File pav_vcf_idx = CallPAV.vcf_idx
     }
 }
 
 task CallPAV {
     input {
-        Array[File] mat_haplotypes
-        Array[File] pat_haplotypes
-        Array[String] sample_ids
+        File mat_haplotype
+        File pat_haplotype
+        String sample_id
         String prefix
 
         File ref_fa
@@ -77,8 +72,8 @@ task CallPAV {
 
     RuntimeAttr default_attr = object {
         cpu_cores: 16,
-        mem_gb: 10,
-        disk_gb: 3 * ceil(size(mat_haplotypes, "GB") + size(pat_haplotypes, "GB") + size(ref_fa, "GB")) + 10,
+        mem_gb: 128,
+        disk_gb: 3 * ceil(size(mat_haplotype, "GB") + size(pat_haplotype, "GB") + size(ref_fa, "GB")) + 10,
         boot_disk_gb: 20,
         preemptible_tries: 1,
         max_retries: 0
@@ -108,28 +103,19 @@ with open("pav.json", "w") as f:
     json.dump(config, f)
 
 os.makedirs("asms", exist_ok=True)
-sample_ids = "~{sep=' ' sample_ids}".split(' ')
-mat_files = "~{sep=' ' mat_haplotypes}".split(' ')
-pat_files = "~{sep=' ' pat_haplotypes}".split(' ')
-
-if len(sample_ids) != len(mat_files) or len(sample_ids) != len(pat_files):
-    raise ValueError(f"Input array lengths must match: {len(sample_ids)} samples, {len(mat_files)} maternal, {len(pat_files)} paternal")
+mat_link = os.path.abspath("asms/~{sample_id}_mat.fa.gz")
+pat_link = os.path.abspath("asms/~{sample_id}_pat.fa.gz")
+os.symlink("~{mat_haplotype}", mat_link)
+os.symlink("~{pat_haplotype}", pat_link)
 
 with open("assemblies.tsv", "w") as f:
     f.write("NAME\tHAP_mat\tHAP_pat\n")
-    for i, sample_id in enumerate(sample_ids):
-        mat_link = f"asms/{sample_id}_mat.fa.gz"
-        pat_link = f"asms/{sample_id}_pat.fa.gz"
-        os.symlink(os.path.abspath(mat_files[i]), mat_link)
-        os.symlink(os.path.abspath(pat_files[i]), pat_link)
-
-        mat_link_abs = os.path.abspath(mat_link)
-        pat_link_abs = os.path.abspath(pat_link)
-        f.write(f"{sample_id}\t{mat_link_abs}\t{pat_link_abs}\n")
+    f.write(f"~{sample_id}\t{mat_link}\t{pat_link}\n")
 
 CODE
 
-        python3 -m pav3 batch --cores ~{effective_cpu}
+        python3 -m pav3 batch --cores ~{effective_cpu} || [ $? -eq 1 ]
+        bcftools index --tbi ~{sample_id}.vcf.gz
 
         tar -zcf ~{prefix}.pav_results.tar.gz results
         tar -zcf ~{prefix}.pav_log.tar.gz log
@@ -138,11 +124,8 @@ CODE
     output {
         File results_tar = "~{prefix}.pav_results.tar.gz"
         File log_tar = "~{prefix}.pav_log.tar.gz"
-        Array[File] vcfs = glob("*.vcf.gz")
-        Array[File] vcf_idx = glob("*.vcf.gz.csi")
-
-        File? debug_sam = "temp/HG00733/align/trim-none/align_qry_mat.sam.gz"
-        Array[File]? debug_temp = glob("temp/**/*")
+        File vcf = "~{sample_id}.vcf.gz"
+        File vcf_idx = "~{sample_id}.vcf.gz.tbi"
     }
 
     runtime {

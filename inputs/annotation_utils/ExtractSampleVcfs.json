@@ -28,10 +28,7 @@
         "chrY"
     ],
     "ExtractSampleVcfs.prefix": "cohort",
-    "ExtractSampleVcfs.sample_ids": [
-        "sample1",
-        "sample2"
-    ],
+    "ExtractSampleVcfs.sample_id": "sample1",
     "ExtractSampleVcfs.min_sv_length": 0,
     "ExtractSampleVcfs.utils_docker": "us-central1-docker.pkg.dev/talkowski-sv-gnomad/kj-dockers/utils:latest"
 }

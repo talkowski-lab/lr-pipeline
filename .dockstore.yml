@@ -444,6 +444,7 @@ workflows:
     filters:
       branches:
         - main
+        - kj-platinum-template
       tags:
         - /.*/
 
@@ -546,6 +547,7 @@ workflows:
     filters:
       branches:
         - main
+        - kj-platinum-template
       tags:
         - /.*/
 
@@ -616,6 +618,7 @@ workflows:
     filters:
       branches:
         - main
+        - kj-platinum-template
       tags:
         - /.*/
 
@@ -731,6 +734,7 @@ workflows:
     filters:
       branches:
         - main
+        - kj-platinum-template
       tags:
         - /.*/
 
@@ -811,6 +815,7 @@ workflows:
     filters:
       branches:
         - main
+        - kj-platinum-template
       tags:
         - /.*/
 
@@ -821,6 +826,7 @@ workflows:
     filters:
       branches:
         - main
+        - kj-platinum-template
       tags:
         - /.*/
 
@@ -851,6 +857,7 @@ workflows:
     filters:
       branches:
         - main
+        - kj-platinum-template
       tags:
         - /.*/
 
@@ -901,6 +908,7 @@ workflows:
     filters:
       branches:
         - main
+        - kj-platinum-template
       tags:
         - /.*/
 
@@ -911,6 +919,7 @@ workflows:
     filters:
       branches:
         - main
+        - kj-platinum-template
       tags:
         - /.*/
 
@@ -921,16 +930,18 @@ workflows:
     filters:
       branches:
         - main
+        - kj-platinum-template
       tags:
         - /.*/
 
   - subclass: WDL
-    name: RegenotypeFamilySVCallsets
-    primaryDescriptorPath: /wdl/tools/RegenotypeFamilySVCallsets.wdl
+    name: RegenotypeSVCallsets
+    primaryDescriptorPath: /wdl/tools/RegenotypeSVCallsets.wdl
     publish: true
     filters:
       branches:
         - main
+        - kj-platinum-template
       tags:
         - /.*/
 
@@ -941,6 +952,7 @@ workflows:
     filters:
       branches:
         - main
+        - kj-platinum-template
       tags:
         - /.*/
 

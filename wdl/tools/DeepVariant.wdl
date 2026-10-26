@@ -228,7 +228,7 @@ task RunDeepVariant {
             --regions "~{sep=' ' regions}" \
             --output_vcf="~{output_root}/~{prefix}.vcf.gz" \
             --output_gvcf="~{output_root}/~{prefix}.g.vcf.gz" \
-            --num_shards="${num_core}" || cat resources.log
+            --num_shards="${num_core}" || { cat resources.log; exit 1; }
 
         if ps -p "${monitor_job_id}" > /dev/null; then kill "${monitor_job_id}"; fi
     >>>
@@ -312,7 +312,7 @@ task RunDeepVariantGpu {
             --regions "~{sep=' ' regions}" \
             --output_vcf="~{output_root}/~{prefix}.vcf.gz" \
             --output_gvcf="~{output_root}/~{prefix}.g.vcf.gz" \
-            --num_shards="${num_core}" || cat resources.log
+            --num_shards="${num_core}" || { cat resources.log; exit 1; }
 
         if ps -p "${monitor_job_id}" > /dev/null; then kill "${monitor_job_id}"; fi
         if ps -p "${gpu_monitor_job_id}" > /dev/null; then kill "${gpu_monitor_job_id}"; fi

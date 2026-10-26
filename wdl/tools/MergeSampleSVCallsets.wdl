@@ -317,6 +317,9 @@ task MergeSampleCallsBatch {
             GCLOUD_STORAGE_BILLING_FLAGS="--billing-project=~{requester_pays_project}"
         fi
 
+        # FixSymbolicRecords takes each contig name as the header text up to the first space, so it fails on bare `>chr1` headers
+        awk '/^>/ && !/ / { $0 = $0 " " } { print }' ~{ref_fa} > ref_spaced_headers.fa
+
         # Applies `bcftools annotate`, transferring tags matched on the record ID. `~ID` only takes effect when REF,ALT are ALSO present in the annotation file and in --columns; otherwise bcftools silently falls back to CHROM,POS-only matching and mis-assigns tags across records that share a start coordinate. This wrapper injects REF,ALT (columns 4,5, looked up by the unique record ID) into the pre-built annotation TSV and splices REF,ALT into the column list, so the ~ID match engages. @param 1 bgzip'd annotation TSV: CHROM POS ID <tags...> (position-sorted). @param 2 header-lines file.  @param 3 --columns string containing ",~ID,". @param 4 input VCF (must have UNIQUE ids).  @param 5 output. @param 6 --output-type value (v/z/b).
         function AnnotateById() {
             local TSV=$1
@@ -459,8 +462,8 @@ task MergeSampleCallsBatch {
             ${TIME_COMMAND} bcftools view --output-type u --min-ac 1 --trim-alt-alleles ${SAMPLE_ID}_${CALLER_ID}_in.vcf | bcftools +fill-tags --output-type v --output ${SAMPLE_ID}_${CALLER_ID}_out.vcf -- -t AC,AN
             rm -f ${SAMPLE_ID}_${CALLER_ID}_in.vcf ; mv ${SAMPLE_ID}_${CALLER_ID}_out.vcf ${SAMPLE_ID}_${CALLER_ID}_in.vcf
 
-            # Ensuring that SVLEN has the correct type for bcftools norm
-            bcftools view --header-only ${SAMPLE_ID}_${CALLER_ID}_in.vcf | sed 's/ID=SVLEN,Number=.,/ID=SVLEN,Number=A,/g' > ${SAMPLE_ID}_${CALLER_ID}_header.txt
+            # Ensuring that SVLEN has the correct type for bcftools norm, and declaring VCFv4.2 like PBSV and Sniffles: PAV 3 writes VCFv4.5, which the merged header inherits, and Kanpig then rejects the callers' reserved INFO definitions against 4.5
+            bcftools view --header-only ${SAMPLE_ID}_${CALLER_ID}_in.vcf | sed -e 's/ID=SVLEN,Number=.,/ID=SVLEN,Number=A,/g' -e 's/^##fileformat=VCFv4\.5$/##fileformat=VCFv4.2/' > ${SAMPLE_ID}_${CALLER_ID}_header.txt
             ${TIME_COMMAND} bcftools reheader --header ${SAMPLE_ID}_${CALLER_ID}_header.txt --output ${SAMPLE_ID}_${CALLER_ID}_out.vcf ${SAMPLE_ID}_${CALLER_ID}_in.vcf
             rm -f ${SAMPLE_ID}_${CALLER_ID}_in.vcf ; mv ${SAMPLE_ID}_${CALLER_ID}_out.vcf ${SAMPLE_ID}_${CALLER_ID}_in.vcf
 
@@ -499,7 +502,7 @@ task MergeSampleCallsBatch {
             rm -f ${SAMPLE_ID}_${CALLER_ID}_in.vcf ; mv ${SAMPLE_ID}_${CALLER_ID}_out.vcf ${SAMPLE_ID}_${CALLER_ID}_in.vcf
 
             # 1.2 Fixing symbolic records
-            ${TIME_COMMAND} java -cp ~{docker_dir} -Xmx${EFFECTIVE_RAM_GB}G FixSymbolicRecords ${SAMPLE_ID}_${CALLER_ID}_in.vcf ~{ref_fa} > ${SAMPLE_ID}_${CALLER_ID}_out.vcf
+            ${TIME_COMMAND} java -cp ~{docker_dir} -Xmx${EFFECTIVE_RAM_GB}G FixSymbolicRecords ${SAMPLE_ID}_${CALLER_ID}_in.vcf ref_spaced_headers.fa >${SAMPLE_ID}_${CALLER_ID}_out.vcf
             rm -f ${SAMPLE_ID}_${CALLER_ID}_in.vcf ; mv ${SAMPLE_ID}_${CALLER_ID}_out.vcf ${SAMPLE_ID}_${CALLER_ID}_in.vcf
 
             # 1.3 Fixing REF

@@ -198,6 +198,11 @@ task RunMosDepthStream {
         RuntimeAttr? runtime_attr_override
     }
 
+    parameter_meta {
+        bam: { localization_optional: true }
+        bai: { localization_optional: true }
+    }
+
     command <<<
         set -euo pipefail
 

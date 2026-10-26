@@ -331,7 +331,9 @@ END
             # --force-single lets the merge proceed when there is only one file (small cohorts produce a single batch per chromosome).
             ${TIME_COMMAND} bcftools merge --threads ${N_THREADS} --force-samples --force-single --merge none --file-list list.txt --output-type b --output ./${CHROMOSOME}/merged.bcf
             ${TIME_COMMAND} bcftools index --threads ${N_THREADS} -f ./${CHROMOSOME}/merged.bcf
-            ${TIME_COMMAND} bcftools norm --threads ${N_THREADS} --do-not-normalize --multiallelics -any --output-type b ./${CHROMOSOME}/merged.bcf --output ./${CHROMOSOME}/normed.bcf
+            ${TIME_COMMAND} bcftools norm --threads ${N_THREADS} --do-not-normalize --multiallelics -any --output-type b ./${CHROMOSOME}/merged.bcf --output ./${CHROMOSOME}/split.bcf
+            # Dropping PAV 3 complex records: their symbolic ALT carries no length for TruvariDivide2Ultralong to read
+            ${TIME_COMMAND} bcftools view --threads ${N_THREADS} --exclude 'INFO/SVTYPE="CPX"' --output-type b ./${CHROMOSOME}/split.bcf --output ./${CHROMOSOME}/normed.bcf
             ${TIME_COMMAND} bcftools index --threads ${N_THREADS} -f ./${CHROMOSOME}/normed.bcf
             mv ./${CHROMOSOME}/normed.bcf ${CHROMOSOME}.bcf
             mv ./${CHROMOSOME}/normed.bcf.csi ${CHROMOSOME}.bcf.csi

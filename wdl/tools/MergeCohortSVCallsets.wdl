@@ -17,13 +17,13 @@ workflow MergeCohortSVCallsets {
     meta {
         description: [
             "This tool merges the scored per-sample SV calls written by MergeSampleSVCallsets into one cohort SV callset. Each chunk of the interval CSV is merged across samples with bcftools merge, each chromosome is resharded into truvari-collapse shards, matching sites within each shard are collapsed with Truvari (https://github.com/ACEnglish/truvari) collapse, and the collapsed shards are concatenated per chromosome and then genome-wide.",
-            "Nothing is returned as a workflow output. Each stage writes under 'remote_outdir', and the cohort callset is '06_concat/' followed by 'prefix' and '.bcf' there, which RegenotypeFamilySVCallsets reads with the same 'prefix'."
+            "Nothing is returned as a workflow output. Each stage writes under 'remote_outdir', and the cohort callset is '06_concat/' followed by 'prefix' and '.bcf' there, which RegenotypeSVCallsets reads with the same 'prefix'."
         ]
     }
 
     parameter_meta {
         remote_indir: "The 'remote_outdir' of MergeSampleSVCallsets, whose '02_scoring' subdirectory is read."
-        remote_outdir: "GCS directory the merge, shard, collapse and concatenation stages are written under, without a trailing slash. The cohort callset is written as '06_concat/<prefix>.bcf'; RegenotypeFamilySVCallsets must be given the same prefix."
+        remote_outdir: "GCS directory the merge, shard, collapse and concatenation stages are written under, without a trailing slash. The cohort callset is written as '06_concat/<prefix>.bcf'; RegenotypeSVCallsets must be given the same prefix."
         sample_ids_file: "Samples to merge, one per line, in the column order of the merged VCF. Derived from the per-sample marker files in 'remote_indir' when omitted."
         chromosomes: "Chromosomes to process, in output order."
         merge_mode: "How bcftools merge matches records: 1 by CHROM, POS, REF and ALT, or 2 by ID."

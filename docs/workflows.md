@@ -99,7 +99,7 @@ This file is generated from the `meta` and `parameter_meta` blocks of each workf
   - [MergeSampleSVCallsets](#mergesamplesvcallsets)
   - [MergeCohortSVCallsets](#mergecohortsvcallsets)
   - [MergeCohortLongSVCallsets](#mergecohortlongsvcallsets)
-  - [RegenotypeFamilySVCallsets](#regenotypefamilysvcallsets)
+  - [RegenotypeSVCallsets](#regenotypesvcallsets)
   - [MergeRegenotypedSVCallsets](#mergeregenotypedsvcallsets)
   - [TRGT](#trgt)
   - [TRGTLPS](#trgtlps)
@@ -1098,23 +1098,26 @@ Outputs:
 - `File dropped_vcf_idx`: Index for the sites-only VCF.
 
 ### [ExtractSampleVcfs](../wdl/annotation_utils/ExtractSampleVcfs.wdl)
-This utility extracts per-sample VCFs from a cohort VCF, splitting each sample's variants into a SNV/indel VCF and an SV VCF based on a minimum SV length. It outputs the per-sample SNV/indel and SV VCFs.
+This utility extracts one sample's VCFs from a cohort VCF, splitting its variants into a SNV/indel VCF and an SV VCF based on a minimum SV length and the `INFO/SOURCE` tags set by PreprocessVcfs. It is run once per sample, and outputs the sample's SNV/indel and SV VCFs.
 
 Inputs:
 - `File cohort_vcf`: Cohort VCF to extract from.
 - `File cohort_vcf_idx`: Index for the cohort VCF.
 - `Array[String] contigs`: Contigs to process within the cohort VCF.
-- `Array[String] sample_ids`: Samples to extract.
+- `String sample_id`: Sample to extract.
 - `Int min_sv_length`: Minimum length at which a variant is routed to the SV VCF rather than the SNV/indel VCF.
+- `String snv_indel_source_tag`: `INFO/SOURCE` of the calls routed to the SNV/indel VCF. (default `DeepVariant`)
+- `String sv_source_tag`: `INFO/SOURCE` of the SV calls routed to the SV VCF. (default `SV_Integration`)
+- `String long_sv_source_tag`: `INFO/SOURCE` of the long-SV calls routed to the SV VCF. (default `LongSV_Integration`)
 - `String prefix`: Prefix for output file names.
 - `String utils_docker`: Container image.
 - `RuntimeAttr? runtime_attr_*`: Optional per-task runtime overrides (6).
 
 Outputs:
-- `Array[File] snv_indel_vcfs`: Per-sample SNV/indel VCFs.
-- `Array[File] snv_indel_vcf_idxs`: Indexes for the SNV/indel VCFs.
-- `Array[File] sv_vcfs`: Per-sample SV VCFs.
-- `Array[File] sv_vcf_idxs`: Indexes for the SV VCFs.
+- `File snv_indel_vcf`: The sample's SNV/indel VCF.
+- `File snv_indel_vcf_idx`: Index for the SNV/indel VCF.
+- `File sv_vcf`: The sample's SV VCF.
+- `File sv_vcf_idx`: Index for the SV VCF.
 
 ### [IdentifyLowCoverageRegions](../wdl/annotation_utils/IdentifyLowCoverageRegions.wdl)
 This utility finds recurrent low-coverage regions from cohort mosdepth per-base BED files. It streams each sample independently, divides each chromosome into fixed bins anchored at position 0, and calculates each bin's base-weighted median coverage. Each sample's median binned coverage is rounded down before its regular low-coverage cutoff is calculated as `floor(median_coverage * median_coverage_cutoff)`; bins at or below this inclusive cutoff are flagged. A cohort bin fails when its low-coverage sample proportion is at or above the inclusive `sample_proportion_cutoff`.
@@ -1334,13 +1337,13 @@ Outputs:
 - `File merge_summary_tsv`: TSV with one row per allele type and size bin, tandem repeats sharing a single row without a bin, and three columns per entry of `vcf_names` holding how many of that callset's records went in, how many came out merged with another record, and how many came out on their own. The merged and unmerged counts sum to the input count.
 
 ### [PreprocessVcfs](../wdl/annotation_utils/PreprocessVcfs.wdl)
-This utility preprocesses and integrates one or more cohort VCFs into a single VCF. It first optionally converts the symbolic `<DEL>` and `<DUP>` alleles of an All of Us Phase 2 VCF to sequence alleles and drops its remaining symbolic records, then applies any per-VCF sample-ID swaps, optionally subsets every VCF to the requested samples, and validates that the resulting sample sets are identical. Each VCF is then optionally normalized, annotated with core variant attributes and an optional source label, and length-filtered. Per-VCF controls are required arrays: an empty array disables that control for every VCF; a non-empty array must align with `vcfs`.
+This utility preprocesses and integrates one or more cohort VCFs into a single VCF. It first optionally converts the symbolic `<DEL>` and `<DUP>` alleles of an All of Us Phase 2 VCF to sequence alleles and drops its remaining symbolic records, then applies any per-VCF sample-ID swaps, optionally subsets every VCF to the requested samples, and validates that the resulting sample sets are identical. Each VCF is then optionally normalized and reduced to its SNV, insertion and deletion records: symbolic, breakend, spanning-deletion (`*`) and `SVTYPE=INV` records are dropped, and any other record whose trimmed REF and ALT have the same multi-base length fails the run. Kept alleles are uppercased, since normalizing against a soft-masked reference writes lowercase bases. The remaining records are annotated with core variant attributes and an optional source label, and length-filtered. Per-VCF controls are required arrays: an empty array disables that control for every VCF; a non-empty array must align with `vcfs`.
 
 Inputs:
 - `Array[File] vcfs`: Cohort VCFs to preprocess and merge.
 - `Array[File] vcf_idxs`: Indexes for `vcfs`.
 - `Array[Boolean] normalize_vcfs`: Per-VCF normalization settings. `[]` disables normalization; otherwise aligned with `vcfs`.
-- `Array[Boolean] convert_aou_phase2_symbolic_alleles`: Per-VCF symbolic-allele conversion settings for All of Us Phase 2 VCFs, which carry nucleotide `INS` alleles alongside symbolic `<DEL>` and `<DUP>` alleles and a small number of other symbolic alleles. `[]` disables conversion; otherwise aligned with `vcfs`. Non-symbolic records pass through untouched. For enabled VCFs, `<DEL>` becomes a reference-anchored deletion whose `REF` is the deleted reference sequence and whose `ALT` is the anchor base, and `<DUP>` becomes a reference-anchored insertion whose `REF` is the anchor base and whose `ALT` is the anchor plus the duplicated reference sequence, using `SVLEN` or `END` as a fallback to determine the duplicated length. Converted records keep their `SVTYPE`, `SVLEN`, `CIPOS`, `CIEND`, `IMPRECISE` and `STRANDS` values, so a converted `<DUP>` reports `SVTYPE=DUP` even though its alleles are now an insertion; `END` is dropped once the ALT is no longer symbolic, and `INFO/allele_length` and `INFO/allele_type` are left to `AnnotateVariantAttributes`. Every other angle-bracket symbolic ALT, including `<INS>` and `<INV>`, is dropped, so that no symbolic record reaches `AnnotateVariantAttributes`, which derives both fields from the `REF` and `ALT` lengths and would read a symbolic ALT as a short insertion.
+- `Array[Boolean] convert_aou_phase2_symbolic_alleles`: Per-VCF symbolic-allele conversion settings for VCFs that carry symbolic `<DEL>` and `<DUP>` alleles, such as All of Us Phase 2 VCFs and the cohort long-SV VCF from MergeCohortLongSVCallsets, whose symbolic records carry `REF=N`. `[]` disables conversion; otherwise aligned with `vcfs`. Non-symbolic records pass through untouched. For enabled VCFs, `<DEL>` becomes a reference-anchored deletion whose `REF` is the deleted reference sequence and whose `ALT` is the anchor base, and `<DUP>` becomes a reference-anchored insertion whose `REF` is the anchor base and whose `ALT` is the anchor plus the duplicated reference sequence, using `SVLEN` or `END` as a fallback to determine the duplicated length. Converted records keep their `SVTYPE`, `SVLEN`, `CIPOS`, `CIEND`, `IMPRECISE` and `STRANDS` values, so a converted `<DUP>` reports `SVTYPE=DUP` even though its alleles are now an insertion; `END` is dropped once the ALT is no longer symbolic, and `INFO/allele_length` and `INFO/allele_type` are left to `AnnotateVariantAttributes`. Every other angle-bracket symbolic ALT, including `<INS>` and `<INV>`, is dropped, so that no symbolic record reaches `AnnotateVariantAttributes`, which derives both fields from the `REF` and `ALT` lengths and would read a symbolic ALT as a short insertion.
 - `Array[String] source_tags`: Per-VCF `SOURCE` values. `[]` disables source tagging; otherwise aligned with `vcfs`. Required when at least one length cutoff is enabled.
 - `Array[File] swap_sample_lists`: Per-VCF sample-ID swap maps, applied before sample subsetting. `[]` disables swapping; otherwise aligned with `vcfs`. A zero-byte map means no swap for that VCF.
 - `Array[Int] min_length_cutoffs`: Per-VCF minimum absolute allele lengths. `[]` disables minimum-length filtering; otherwise aligned with `vcfs`. A value of `-1` disables this filter for that VCF. Calls with `abs(allele_length)` strictly below an enabled cutoff receive `SMALL_{source_tags[i]}`.
@@ -1351,7 +1354,7 @@ Inputs:
 - `File ref_fai`: From references.
 - `String prefix`: Prefix for output file names.
 - `String utils_docker`: Container image.
-- `RuntimeAttr? runtime_attr_*`: Optional per-task runtime overrides (14).
+- `RuntimeAttr? runtime_attr_*`: Optional per-task runtime overrides (15).
 
 Outputs:
 - `File preprocessed_vcf`: Preprocessed and merged cohort VCF.
@@ -1487,13 +1490,12 @@ Outputs:
 - `File transformed_vcf_idx`: Index for `transformed_vcf`.
 
 ### [ResolveHaplotypeOverlaps](../wdl/annotation_utils/ResolveHaplotypeOverlaps.wdl)
-This utility detects and resolves haplotype-level overlaps among non-TR, non-TR-enveloped variants in a phased cohort VCF. For each sample, it extracts the sample's non-ref calls (excluding `allele_type='trv'` and `INFO/TR_ENVELOPED` variants), then sweeps each haplotype's variant intervals to find all overlapping pairs. Overlapping pairs are resolved by keeping the variant that spans more reference sequence (larger `len(REF)`) - which always favors DELs over INS or SNVs. When two variants span the same reference length, the higher-GQ call wins; remaining ties are broken by `INFO/allele_length`, then type rank (DEL > INS > SNV), then QUAL, then input-file order. The loser's FORMAT fields (`GT`, `GQ`, `DP`, `EV`, `BEV`, `AD`, `PL`) are cleared in the output VCF. The workflow scatters per-sample detection across all samples, then applies the collected clears to the given contig (with optional record-count sharding) to produce the resolved VCF.
+This utility detects and resolves haplotype-level overlaps among non-TR, non-TR-enveloped variants in a phased cohort VCF. For each sample, it extracts the sample's non-ref calls (excluding `allele_type='trv'` and `INFO/TR_ENVELOPED` variants), then sweeps each haplotype's variant intervals to find all overlapping pairs. Overlapping pairs are resolved by keeping the variant that spans more reference sequence (larger `len(REF)`) - which always favors DELs over INS or SNVs. When two variants span the same reference length, the higher-GQ call wins; remaining ties are broken by `INFO/allele_length`, then type rank (DEL > INS > SNV), then QUAL, then input-file order. The loser's FORMAT fields (`GT`, `GQ`, `DP`, `EV`, `BEV`, `AD`, `PL`) are cleared in the output VCF. The workflow scatters per-sample detection across all samples, then applies the collected clears to the whole VCF (with optional record-count sharding) to produce the resolved VCF.
 
 Inputs:
 - `File vcf`: Phased cohort VCF to resolve.
 - `File vcf_idx`: Index for `vcf`.
-- `String contig`: Contig to process.
-- `Int? records_per_shard`: When set, shards the contig into chunks of this many records for the clearing step.
+- `Int? records_per_shard`: When set, shards the VCF into chunks of this many records for the clearing step.
 - `String prefix`: Prefix for output file names.
 - `String utils_docker`: Container image.
 - `RuntimeAttr? runtime_attr_*`: Optional per-task runtime overrides (7).
@@ -1736,7 +1738,7 @@ Inputs:
 - `Boolean run_haplotagging`: Whether to also haplotag the BAM. (default `false`)
 - `String prefix`: Prefix for output file names.
 - `String hiphase_docker`, `String hiphase_preprocess_docker`, `String utils_docker`: Container images.
-- `RuntimeAttr? runtime_attr_*`: Optional per-task runtime overrides (10).
+- `RuntimeAttr? runtime_attr_*`: Optional per-task runtime overrides (11).
 
 Outputs:
 - `File hiphase_vcf`: Phased VCF.
@@ -2137,12 +2139,12 @@ Outputs:
 - `File palmer_merged_vcf_idx`: Index for the merged VCF.
 
 ### [PAV](../wdl/tools/PAV.wdl)
-This tool runs PAV (https://github.com/EichlerLab/pav) in batch mode across multiple samples' phased haplotype assemblies to call variants against the reference. It outputs per-sample VCFs, along with tarballs of the full PAV results and log directories.
+This tool runs PAV (https://github.com/EichlerLab/pav) on a sample's phased haplotype assemblies to call variants against the reference. It outputs the sample's tabix-indexed VCF, along with tarballs of the full PAV results and log directories.
 
 Inputs:
-- `Array[File] mat_haplotypes`: Maternal haplotype assemblies, one per sample.
-- `Array[File] pat_haplotypes`: Paternal haplotype assemblies, one per sample.
-- `Array[String] sample_ids`: Sample IDs, aligned by index to `mat_haplotypes`/`pat_haplotypes`.
+- `File mat_haplotype`: Maternal haplotype assembly. Without parental data, either hifiasm haplotype.
+- `File pat_haplotype`: Paternal haplotype assembly. Without parental data, the other hifiasm haplotype.
+- `String sample_id`: Sample ID.
 - `File ref_fa`: From references.
 - `File ref_fai`: From references.
 - `String prefix`: Prefix for output file names.
@@ -2152,10 +2154,8 @@ Inputs:
 Outputs:
 - `File pav_results_tarball`: Tarball of the full PAV results directory.
 - `File pav_log_tarball`: Tarball of the full PAV log directory.
-- `Array[File] pav_vcfs`: Per-sample called VCFs.
-- `Array[File] pav_vcf_idx`: Indexes for the per-sample VCFs.
-- `File? debug_sam`: Optional debug alignment file.
-- `Array[File]? debug_temp`: Optional debug intermediate files.
+- `File pav_vcf`: Called VCF.
+- `File pav_vcf_idx`: Tabix index for `pav_vcf`.
 
 ### [PBSV](../wdl/tools/PBSV.wdl)
 This tool calls structural variants from a sample's aligned long reads using pbsv (https://github.com/PacificBiosciences/pbsv). Signatures of structural variation are discovered from the alignments and then genotyped into a bgzipped, indexed VCF.
@@ -2298,11 +2298,11 @@ Inputs:
 ### [MergeCohortSVCallsets](../wdl/tools/MergeCohortSVCallsets.wdl)
 This tool merges the scored per-sample SV calls written by MergeSampleSVCallsets into one cohort SV callset. Each chunk of the interval CSV is merged across samples with bcftools merge, each chromosome is resharded into truvari-collapse shards, matching sites within each shard are collapsed with Truvari (https://github.com/ACEnglish/truvari) collapse, and the collapsed shards are concatenated per chromosome and then genome-wide.
 
-Nothing is returned as a workflow output. Each stage writes under 'remote_outdir', and the cohort callset is '06_concat/' followed by 'prefix' and '.bcf' there, which RegenotypeFamilySVCallsets reads with the same 'prefix'.
+Nothing is returned as a workflow output. Each stage writes under 'remote_outdir', and the cohort callset is '06_concat/' followed by 'prefix' and '.bcf' there, which RegenotypeSVCallsets reads with the same 'prefix'.
 
 Inputs:
 - `String remote_indir`: The 'remote_outdir' of MergeSampleSVCallsets, whose '02_scoring' subdirectory is read.
-- `String remote_outdir`: GCS directory the merge, shard, collapse and concatenation stages are written under, without a trailing slash. The cohort callset is written as '06_concat/<prefix>.bcf'; RegenotypeFamilySVCallsets must be given the same prefix.
+- `String remote_outdir`: GCS directory the merge, shard, collapse and concatenation stages are written under, without a trailing slash. The cohort callset is written as '06_concat/<prefix>.bcf'; RegenotypeSVCallsets must be given the same prefix.
 - `File? sample_ids_file`: Samples to merge, one per line, in the column order of the merged VCF. Derived from the per-sample marker files in 'remote_indir' when omitted.
 - `Array[String] chromosomes`: Chromosomes to process, in output order. (default `["chr1", "chr2", "chr3", "chr4", "chr5", "chr6", "chr7", "chr8", "chr9", "chr10", "chr11", "chr12", "chr13", "chr14", "chr15", "chr16", "chr17", "chr18", "chr19", "chr20", "chr21", "chr22", "chrX", "chrY"]`)
 - `Int merge_mode`: How bcftools merge matches records: 1 by CHROM, POS, REF and ALT, or 2 by ID. (default `1`)
@@ -2344,20 +2344,18 @@ Inputs:
 - `String sv_integration_docker`: Container image.
 - `RuntimeAttr? runtime_attr_*`: Optional per-task runtime overrides (7).
 
-### [RegenotypeFamilySVCallsets](../wdl/tools/RegenotypeFamilySVCallsets.wdl)
-This tool regenotypes the cohort SV callset from MergeCohortSVCallsets jointly within one family with Kanpig (https://github.com/ACEnglish/kanpig). The family's members are first checked against the PED, then a family-specific candidate VCF is built from the cohort callset and each member is regenotyped against its reads, and each member's regenotyped calls are split into the chunks of the interval CSV.
+### [RegenotypeSVCallsets](../wdl/tools/RegenotypeSVCallsets.wdl)
+This tool regenotypes every sample at every site of the cohort SV callset from MergeCohortSVCallsets with Kanpig (https://github.com/ACEnglish/kanpig), against the sample's reads, so that each sample carries a called genotype at each cohort site. Each sample's regenotyped calls are split into the chunks of the interval CSV.
 
-It is run once per family, as one Terra sample set per family, and every family's run writes into the same 'remote_outdir'. Nothing is returned as a workflow output; MergeRegenotypedSVCallsets merges what the family runs wrote into the regenotyped cohort callset.
+It is run once over the cohort, as one Terra sample set, with the samples scattered. A sample whose marker file already exists in 'remote_outdir' is skipped, so a resubmission only reruns the samples that failed. Nothing is returned as a workflow output; MergeRegenotypedSVCallsets merges what the samples wrote into the regenotyped cohort callset.
 
 Inputs:
-- `String family_id`: Family to regenotype, which must match a family ID in column 1 of the PED.
-- `Array[String] sample_ids`: Members of the family, aligned by index with every other per-sample array. Must match the family's members in the PED exactly.
-- `Array[String] sample_sexes`: Sex of each member. 'M' selects the male ploidy BED for Kanpig; any other value selects the female one.
-- `Array[String] aligned_bams`: GCS paths to each member's aligned reads.
+- `Array[String] sample_ids`: Samples to regenotype, aligned by index with every other per-sample array.
+- `Array[String] sample_sexes`: Sex of each sample. 'M' selects the male ploidy BED for Kanpig; any other value selects the female one.
+- `Array[String] aligned_bams`: GCS paths to each sample's aligned reads.
 - `Array[String] aligned_bais`: GCS paths to the indexes for 'aligned_bams'.
-- `File ped`: Six-column pedigree defining each family's members.
 - `String remote_indir`: The 'remote_outdir' of MergeCohortSVCallsets, whose '06_concat' subdirectory holds the cohort callset as '<prefix>.bcf'. The workflow 'prefix' must match the one given to MergeCohortSVCallsets.
-- `String remote_outdir`: GCS directory shared by every family's run, which the per-sample regenotyped chunks are written under, without a trailing slash.
+- `String remote_outdir`: GCS directory the per-sample regenotyped chunks are written under, without a trailing slash.
 - `String requester_pays_project`: Project billed for reads from requester-pays buckets. Leave empty when none are read. (default empty)
 - `String kanpig_params_cohort`: Kanpig arguments for regenotyping against the cohort callset. (default `--neighdist 500 --gpenalty 0.04 --hapsim 0.97`)
 - `File split_for_bcftools_merge_csv`: The interval CSV the rest of the SV integration used.
@@ -2368,19 +2366,19 @@ Inputs:
 - `File autosomes_bed`: Autosomes, used to report each member's heterozygous-call rate.
 - `String prefix`: Prefix for output file names.
 - `String sv_integration_docker`: Container image.
-- `RuntimeAttr? runtime_attr_*`: Optional per-task runtime overrides (2).
+- `RuntimeAttr? runtime_attr_*`: Optional per-task runtime overrides.
 
 ### [MergeRegenotypedSVCallsets](../wdl/tools/MergeRegenotypedSVCallsets.wdl)
-This tool merges the per-family regenotyped SV calls written by RegenotypeFamilySVCallsets into one regenotyped cohort SV callset. Each chunk of the interval CSV is merged across every sample of every family with bcftools merge, matching records by ID and dropping records that are REF in every sample, and the merged chunks are concatenated in genome order.
+This tool merges the per-sample regenotyped SV calls written by RegenotypeSVCallsets into one regenotyped cohort SV callset. Each chunk of the interval CSV is merged across every sample with bcftools merge, matching records by ID and dropping records that are REF in every sample, and the merged chunks are concatenated in genome order.
 
 Nothing is returned as a workflow output. The merged chunks are written under 'merge' in 'remote_outdir', and the regenotyped cohort callset is 'concat/' followed by 'prefix' and '.bcf' there.
 
 Inputs:
-- `String remote_indir`: The 'remote_outdir' shared by every RegenotypeFamilySVCallsets run.
+- `String remote_indir`: The 'remote_outdir' of RegenotypeSVCallsets.
 - `String remote_outdir`: GCS directory the merged chunks and the concatenated callset are written under, without a trailing slash. The concatenated callset is written as 'concat/<prefix>.bcf'.
 - `File? sample_ids_file`: Samples to merge, one per line, in the column order of the merged VCF. Derived from the per-sample marker files in 'remote_indir' when omitted.
 - `Int merge_mode`: How bcftools merge matches records: 1 by CHROM, POS, REF and ALT, or 2 by ID. Regenotyped calls share the cohort IDs, so 2 is correct here. (default `2`)
-- `File split_for_bcftools_merge_csv`: The interval CSV RegenotypeFamilySVCallsets split the regenotyped calls into.
+- `File split_for_bcftools_merge_csv`: The interval CSV RegenotypeSVCallsets split the regenotyped calls into.
 - `String prefix`: Prefix for output file names.
 - `String sv_integration_docker`: Container image.
 - `RuntimeAttr? runtime_attr_*`: Optional per-task runtime overrides (4).

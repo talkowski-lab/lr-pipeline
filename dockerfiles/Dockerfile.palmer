@@ -3,6 +3,9 @@ FROM ${BASE_IMAGE}
 
 MAINTAINER Karan Jaisingh
 
+# Install at /, where PATH and RunPALMERShard (/PALMER/PALMER) expect the tools, not in the base image's WORKDIR
+WORKDIR /
+
 RUN apt-get -y update \
     && apt-get -y install make cmake protobuf-compiler tree less pkg-config libncurses5-dev \
     && apt-get clean
