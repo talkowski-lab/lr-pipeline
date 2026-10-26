@@ -29,9 +29,9 @@ The script does the following:
 | `main` | `<YYYYMMDD>-<short-sha>` and `:latest` | The HEAD commit's date and 7-character SHA, e.g. `20261022-72ee249`, so every tag maps to exactly one commit |
 | any other branch | `:<branch>` only | The branch name itself, so parallel branches never overwrite each other's images or `:latest` |
 
-A `main` build refuses to push from a dirty tree, because its tag names the HEAD commit. A branch build also passes `--build-arg BASE_IMAGE=<registry>/<base>:<branch>` when the Dockerfile's `ARG BASE_IMAGE` default is a `:latest` image from this registry and that base has a build on the same branch, so a branch that changes what the base image bakes in is testable end to end; otherwise the `:latest` default is used. `merge_branch.sh` deletes the branch's image tags once the branch merges, and the merged change reaches `:latest` only when the image is rebuilt from the main checkout. The earlier `kj_V<N>` auto-increment tags are no longer produced; the existing ones remain in Artifact Registry as history.
+A `main` build refuses to push from a dirty tree, because its tag names the HEAD commit. A branch build also passes `--build-arg BASE_IMAGE=<registry>/<base>:<branch>` when the Dockerfile's `ARG BASE_IMAGE` default is a `:latest` image from this registry and that base has a build on the same branch, so a branch that changes what the base image bakes in is testable end to end; otherwise the `:latest` default is used. `merge_branch.sh` deletes the branch's image tags once the branch merges, and the merged change reaches `:latest` only when the image is rebuilt from the main checkout.
 
-Every upstream tool is pinned in `versions.env`: released tools by version, and tools built from a git clone by commit, as `<image>__<NAME>_COMMIT` keys - for example `svan__SVAN_COMMIT` and `stranalysis__STR_ANALYSIS_COMMIT`. The commits are the ones baked into the current `:latest` images, so a rebuild reproduces them rather than picking up the upstream default branch. Python packages (`pip`, `awscli`, `pysam`, ...), the Rust toolchain, the Google Cloud SDK and the nimble packages are pinned there too, and the `utils` R packages come from the dated Posit Package Manager CRAN snapshot `utils__CRAN_SNAPSHOT`, so a rebuild reproduces the same package versions. The only pins written inline are the apt package versions, since they follow the Ubuntu release the base image uses; the deadsnakes Python 3.12 in `pav` follows its PPA and cannot be pinned. `Dockerfile.palmer` is intentionally left unpinned. [`tests/unit/test_repo_invariants.py`](../tests/unit/test_repo_invariants.py) fails on an `ARG` with no key, a key no Dockerfile declares, any other unpinned `git clone`, an unpinned `pip install`, `apt-get upgrade` or `|| true`, or a Dockerfile that names the private registry in `FROM` instead of `${BASE_IMAGE}`. [`.hadolint.yaml`](../.hadolint.yaml) configures `hadolint` for the Dockerfiles, which CI runs - see [CI/CD](ci-cd.md#github-actions).
+Every upstream tool is pinned in `versions.env`: released tools by version, and tools built from a git clone by commit, as `<image>__<NAME>_COMMIT` keys - for example `svan__SVAN_COMMIT` and `stranalysis__STR_ANALYSIS_COMMIT`. The commits are the ones baked into the current `:latest` images, so a rebuild reproduces them rather than picking up the upstream default branch. Language packages, toolchains and SDKs are pinned there too, and R packages come from a dated CRAN snapshot, so a rebuild reproduces the same package versions. The only pins written inline are the apt package versions, since they follow the Ubuntu release the base image uses. [`tests/unit/test_repo_invariants.py`](../tests/unit/test_repo_invariants.py) fails on an `ARG` with no key, a key no Dockerfile declares, any other unpinned `git clone`, an unpinned `pip install`, `apt-get upgrade` or `|| true`, or a Dockerfile that names the private registry in `FROM` instead of `${BASE_IMAGE}`. [`.hadolint.yaml`](../.hadolint.yaml) configures `hadolint` for the Dockerfiles, which CI runs - see [CI/CD](ci-cd.md#github-actions).
 
 [`.github/workflows/docker-build.yml`](../.github/workflows/docker-build.yml) builds the changed Dockerfiles in CI, without pushing, on top of a `utils:ci` image it builds itself with `BASE_IMAGE=utils:ci` - see [CI/CD](ci-cd.md#docker-images).
 
@@ -71,7 +71,7 @@ Built from [dockerfiles/](../dockerfiles/) in this repository and pushed to the 
 | `vep_hail_docker` | `vephail` | [`Dockerfile.vephail`](../dockerfiles/Dockerfile.vephail) |
 | `vrs_docker` | `vrs` | [`Dockerfile.vrs`](../dockerfiles/Dockerfile.vrs) |
 
-`Dockerfile.utils` is the base image for most other repo Dockerfiles. `Dockerfile.hail` is `hailgenetics/hail:0.2.122` plus the `scripts/` tree, and `Dockerfile.vephail` builds on the VEP image with Hail pinned through `HAIL_VERSION`; neither inherits from `utils`. The `minimap2` image serves both `MinimapReadAlignment` and `MinimapAlignment`, replacing the Eichler Lab `assembly_eval:0.2` image the latter used to take, and provides `minimap2`, `samtools`, `k8` and `paftools.js`. It builds samtools from source at the `utils` htslib version, as `pav` does, because the apt samtools 1.13 in `utils` runs against htslib 1.20 and fails sorting assembly contigs longer than about 100 Mb. Every Dockerfile in `dockerfiles/` maps to exactly one argument above; retired ones live in [`archive/dockerfiles/`](../archive/dockerfiles/) and are not built.
+Every Dockerfile in `dockerfiles/` maps to exactly one argument above; retired ones live in [`archive/dockerfiles/`](../archive/dockerfiles/) and are not built.
 
 
 ## Collaborators
@@ -80,14 +80,10 @@ Built and maintained outside this repository. The Digest column records the mani
 | Argument Name | Image | Source | Digest |
 |---|---|---|---|
 | `automop_docker` | `us.gcr.io/broad-dsde-methods/automop:0.1` | Broad Data Sciences Platform | |
-| `deepvariant_docker` | `us.gcr.io/broad-dsp-lrma/lr-deepvariant:1.6.0` | [long-read-pipelines](https://github.com/broadinstitute/long-read-pipelines), the source of the `DeepVariant` workflow | |
-| `deepvariant_gpu_docker` | `us.gcr.io/broad-dsp-lrma/lr-deepvariant:1.6.0-gpu` | [long-read-pipelines](https://github.com/broadinstitute/long-read-pipelines) | |
 | `gatk_docker` | `us.gcr.io/broad-dsde-methods/gatk-sv/gatk:mw-gatk-sv-672d85` | [GATK-SV](https://github.com/broadinstitute/gatk-sv) development build, kept over a GATK release because it carries `TrainSVGenotyping` and `GenotypeSVs`, which no release includes | |
 | `hiphase_docker` | `us.gcr.io/broad-dsp-lrma/hangsuunc/hiphase:v1.5.0` | Hang Su | `sha256:a7cca48696f6134ea8ba32ba5ddb0bbc0e55013357071f915ca937993c23a23c` |
 | `hiphase_preprocess_docker` | `hangsuunc/cleanvcf:v1` | Hang Su | `sha256:73fd5d2f982f95e97e67286783646f3c5c9d5c85cf2b43e8d2cd717bbf8f98ae` |
 | `remap_docker` | `quay.io/ymostovoy/lr-remap:latest` | Yulia Mostovoy; a modified Truvari whose `anno remap` takes `--mm2-threshold` and `--cov-threshold`, which no Truvari release has | `sha256:3410df5da3631e9eab42e6e7cb750a0a91d1e9b94a523bd632586a1c565a6e6d` |
-| `resource_visualization_docker` | `us.gcr.io/broad-dsp-lrma/lr-resource-visual:0.1.1` | [long-read-pipelines](https://github.com/broadinstitute/long-read-pipelines) | |
-| `sv_base_mini_docker` | `us.gcr.io/broad-dsde-methods/gatk-sv/sv-base-mini:2024-10-25-v0.29-beta-5ea22a52` | [GATK-SV](https://github.com/broadinstitute/gatk-sv) | |
 | `sv_integration_docker` | `us.gcr.io/broad-dsp-lrma/fcunial/callset_integration_phase2_workpackages` | Fabio Cunial; bundles the compiled Java and scripts of [callset_integration_phase2](https://github.com/fabio-cunial/callset_integration_phase2) | untagged, `:latest` moves; `sha256:ad7202bbeb8eff86df592e334026ff262ec66b0057c3f7e5fa256e7761f1e9e9` |
 | `xgb_scoring_docker` | `us.gcr.io/broad-dsde-methods/broad-gatk-snapshots/gatk:sl_aou_lr_intrasample_filtering_xgb` | GATK snapshot from the `sl_aou_lr_intrasample_filtering_xgb` branch, running the XGBoost scoring of `MergeSampleSVCallsets` | `sha256:a35a80cf67bd366fdc6a34a5b99e2632a607cebd7f007bb607de2ce3f1de8e8b` |
 
@@ -97,6 +93,7 @@ Public images.
 
 | Argument Name | Image | Source |
 |---|---|---|
+| `deepvariant_docker` | `google/deepvariant:1.6.0` | [DeepVariant](https://github.com/google/deepvariant) |
 | `glnexus_docker` | `ghcr.io/dnanexus-rnd/glnexus:v1.4.1` | DNAnexus |
 | `repeatmasker_docker` | `dfam/tetools:1.8` | Dfam consortium |
 | `sv_pipeline_docker` | `us.gcr.io/broad-dsde-methods/gatk-sv/sv-pipeline:2025-10-02-v1.1-483973d6` | [GATK-SV](https://github.com/broadinstitute/gatk-sv) |

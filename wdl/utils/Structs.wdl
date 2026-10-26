@@ -36,7 +36,6 @@ struct SmallVarJobConfig {
 
     Int dv_threads
     Int dv_memory
-    Boolean use_gpu
 
     Boolean run_clair3
     Boolean phase_and_tag

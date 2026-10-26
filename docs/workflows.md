@@ -1646,7 +1646,7 @@ Outputs:
 - `File missing_samples`: Samples with no matching base VCF.
 
 ### [DeepVariant](../wdl/tools/DeepVariant.wdl)
-This tool follows the DeepVariant path of the linked source workflow: it reads the source reference-bundle and small-variant-options JSON files, subsets the input BAM into its size-balanced shards, calls CPU or GPU DeepVariant, then merges the VCFs and gVCFs. The same region list controls BAM subsetting and DeepVariant `--regions`, preventing duplicate off-shard zero-depth gVCF blocks. It performs no explicit GCS-directory copy; map its declared outputs directly to attributes in the main Terra entity table.
+This tool follows the DeepVariant path of the linked source workflow: it reads the source reference-bundle and small-variant-options JSON files, subsets the input BAM into its size-balanced shards, calls DeepVariant, then merges the VCFs and gVCFs. The same region list controls BAM subsetting and DeepVariant `--regions`, preventing duplicate off-shard zero-depth gVCF blocks. It performs no explicit GCS-directory copy; map its declared outputs directly to attributes in the main Terra entity table.
 
 Inputs:
 - `File bam`: Aligned whole-genome BAM and index.
@@ -1654,19 +1654,17 @@ Inputs:
 - `String sex`: Biological sex; `M` enables the source reference bundle's haploid-contig and PAR settings.
 - `String model_for_dv_andor_pepper`: DeepVariant model, such as `PACBIO` or `ONT_R104`.
 - `File ref_bundle_json_file`: Source-compatible reference bundle JSON. Its size-balanced shard manifests are required.
-- `File small_variant_calling_options_json`: Source-compatible small-variant options JSON, providing DeepVariant threads, memory, GPU use, and haploid contigs.
+- `File small_variant_calling_options_json`: Source-compatible small-variant options JSON, providing DeepVariant threads, memory and haploid contigs.
 - `Array[String] gcp_zones`: Placement zones. (default `["us-central1-a", "us-central1-b", "us-central1-c", "us-central1-f"]`)
 - `String prefix`: Prefix for output file names.
-- `String deepvariant_docker`, `String deepvariant_gpu_docker`, `String utils_docker`, `String resource_visualization_docker`: Container images.
-- `RuntimeAttr? runtime_attr_*`: Optional per-task runtime overrides (7).
+- `String deepvariant_docker`, `String utils_docker`: Container images.
+- `RuntimeAttr? runtime_attr_*`: Optional per-task runtime overrides (5).
 
 Outputs:
 - `File gvcf`: Merged gVCF.
 - `File gvcf_idx`: Index for gvcf.
 - `File vcf`: Merged VCF.
 - `File vcf_idx`: Index for vcf.
-- `Array[File] resource_usage_logs`: Per-shard diagnostic outputs.
-- `Array[File] resource_usage_visualizations`: Per-shard diagnostic outputs.
 - `Array[File] visual_reports`: Per-shard diagnostic outputs.
 
 ### [Hifiasm](../wdl/tools/Hifiasm.wdl)

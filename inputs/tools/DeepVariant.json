@@ -6,8 +6,6 @@
     "DeepVariant.model_for_dv_andor_pepper": "model_for_dv_andor_pepper",
     "DeepVariant.ref_bundle_json_file": "gs://<references-bucket>/ref_bundle_json_file",
     "DeepVariant.small_variant_calling_options_json": "gs://<cohort-bucket>/small_variant_calling_options.json",
-    "DeepVariant.deepvariant_docker": "us.gcr.io/broad-dsp-lrma/lr-deepvariant:1.6.0",
-    "DeepVariant.deepvariant_gpu_docker": "us.gcr.io/broad-dsp-lrma/lr-deepvariant:1.6.0-gpu",
-    "DeepVariant.utils_docker": "us-central1-docker.pkg.dev/talkowski-sv-gnomad/kj-dockers/utils:latest",
-    "DeepVariant.resource_visualization_docker": "us.gcr.io/broad-dsp-lrma/lr-resource-visual:0.1.1"
+    "DeepVariant.deepvariant_docker": "google/deepvariant:1.6.0",
+    "DeepVariant.utils_docker": "us-central1-docker.pkg.dev/talkowski-sv-gnomad/kj-dockers/utils:latest"
 }

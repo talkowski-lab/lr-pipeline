@@ -701,6 +701,7 @@ workflows:
     filters:
       branches:
         - main
+        - kj-deepvariant-published-image
       tags:
         - /.*/
 

@@ -9,7 +9,7 @@ import "../utils/Helpers.wdl"
 workflow DeepVariant {
     meta {
         description: [
-            "This tool follows the DeepVariant path of the linked source workflow: it reads the source reference-bundle and small-variant-options JSON files, subsets the input BAM into its size-balanced shards, calls CPU or GPU DeepVariant, then merges the VCFs and gVCFs. The same region list controls BAM subsetting and DeepVariant `--regions`, preventing duplicate off-shard zero-depth gVCF blocks. It performs no explicit GCS-directory copy; map its declared outputs directly to attributes in the main Terra entity table."
+            "This tool follows the DeepVariant path of the linked source workflow: it reads the source reference-bundle and small-variant-options JSON files, subsets the input BAM into its size-balanced shards, calls DeepVariant, then merges the VCFs and gVCFs. The same region list controls BAM subsetting and DeepVariant `--regions`, preventing duplicate off-shard zero-depth gVCF blocks. It performs no explicit GCS-directory copy; map its declared outputs directly to attributes in the main Terra entity table."
         ]
     }
 
@@ -19,14 +19,12 @@ workflow DeepVariant {
         sex: "Biological sex; `M` enables the source reference bundle's haploid-contig and PAR settings."
         model_for_dv_andor_pepper: "DeepVariant model, such as `PACBIO` or `ONT_R104`."
         ref_bundle_json_file: "Source-compatible reference bundle JSON. Its size-balanced shard manifests are required."
-        small_variant_calling_options_json: "Source-compatible small-variant options JSON, providing DeepVariant threads, memory, GPU use, and haploid contigs."
+        small_variant_calling_options_json: "Source-compatible small-variant options JSON, providing DeepVariant threads, memory and haploid contigs."
         gcp_zones: "Placement zones."
         gvcf: "Merged gVCF."
         gvcf_idx: "Index for gvcf."
         vcf: "Merged VCF."
         vcf_idx: "Index for vcf."
-        resource_usage_logs: "Per-shard diagnostic outputs."
-        resource_usage_visualizations: "Per-shard diagnostic outputs."
         visual_reports: "Per-shard diagnostic outputs."
     }
 
@@ -41,15 +39,11 @@ workflow DeepVariant {
         Array[String] gcp_zones = ["us-central1-a", "us-central1-b", "us-central1-c", "us-central1-f"]
 
         String deepvariant_docker
-        String deepvariant_gpu_docker
         String utils_docker
-        String resource_visualization_docker
 
         RuntimeAttr? runtime_attr_collapse_zones
         RuntimeAttr? runtime_attr_subset_bam
         RuntimeAttr? runtime_attr_run_deepvariant
-        RuntimeAttr? runtime_attr_run_deepvariant_gpu
-        RuntimeAttr? runtime_attr_visualize_resource_usage
         RuntimeAttr? runtime_attr_merge_gvcfs
         RuntimeAttr? runtime_attr_merge_vcfs
     }
@@ -96,67 +90,30 @@ workflow DeepVariant {
                     runtime_attr_override = runtime_attr_subset_bam
             }
 
-            if (!small_variant_options.use_gpu) {
-                call RunDeepVariant as RunCpu {
-                    input:
-                        bam = SubsetBam.subset_bam,
-                        bai = SubsetBam.subset_bai,
-                        ref_fa = ref_bundle.fasta,
-                        ref_fai = ref_bundle.fai,
-                        regions = shard_regions,
-                        sex = sex,
-                        haploid_contigs = small_variant_options.haploid_contigs,
-                        par_regions_bed = ref_bundle.PAR_bed,
-                        model_type = model_for_dv_andor_pepper,
-                        threads = small_variant_options.dv_threads,
-                        memory = cpu_memory,
-                        zones = zones,
-                        prefix = "~{prefix}.~{shard_id}",
-                        docker = deepvariant_docker,
-                        runtime_attr_override = runtime_attr_run_deepvariant
-                }
-            }
-
-            if (small_variant_options.use_gpu) {
-                call RunDeepVariantGpu as RunGpu {
-                    input:
-                        bam = SubsetBam.subset_bam,
-                        bai = SubsetBam.subset_bai,
-                        ref_fa = ref_bundle.fasta,
-                        ref_fai = ref_bundle.fai,
-                        regions = shard_regions,
-                        sex = sex,
-                        haploid_contigs = small_variant_options.haploid_contigs,
-                        par_regions_bed = ref_bundle.PAR_bed,
-                        model_type = model_for_dv_andor_pepper,
-                        threads = small_variant_options.dv_threads,
-                        memory = small_variant_options.dv_memory,
-                        zones = zones,
-                        prefix = "~{prefix}.~{shard_id}",
-                        docker = deepvariant_gpu_docker,
-                        runtime_attr_override = runtime_attr_run_deepvariant_gpu
-                }
-            }
-
-            File shard_vcf = select_first([RunCpu.vcf, RunGpu.vcf])
-            File shard_gvcf = select_first([RunCpu.gvcf, RunGpu.gvcf])
-            File resource_usage_log = select_first([RunCpu.resource_usage_log, RunGpu.resource_usage_log])
-            File visual_report = select_first([RunCpu.visual_report, RunGpu.visual_report])
-
-            call VisualizeResourceUsage {
+            call RunDeepVariant {
                 input:
-                    resource_log = resource_usage_log,
-                    output_pdf_name = "~{prefix}.deepvariant.resource-usage.~{shard_id}.pdf",
-                    plot_title = "DeepVariant on ~{prefix}, shard ~{shard_id}",
-                    docker = resource_visualization_docker,
-                    runtime_attr_override = runtime_attr_visualize_resource_usage
+                    bam = SubsetBam.subset_bam,
+                    bai = SubsetBam.subset_bai,
+                    ref_fa = ref_bundle.fasta,
+                    ref_fai = ref_bundle.fai,
+                    regions = shard_regions,
+                    sex = sex,
+                    haploid_contigs = small_variant_options.haploid_contigs,
+                    par_regions_bed = ref_bundle.PAR_bed,
+                    model_type = model_for_dv_andor_pepper,
+                    threads = small_variant_options.dv_threads,
+                    memory = cpu_memory,
+                    zones = zones,
+                    prefix = "~{prefix}.~{shard_id}",
+                    docker = deepvariant_docker,
+                    runtime_attr_override = runtime_attr_run_deepvariant
             }
         }
     }
 
     call MergeAndSortVcfs as MergeGvcfs {
         input:
-            vcfs = select_all(shard_gvcf),
+            vcfs = select_all(RunDeepVariant.gvcf),
             ref_fai = ref_bundle.fai,
             prefix = "~{prefix}.deepvariant.g",
             docker = utils_docker,
@@ -165,7 +122,7 @@ workflow DeepVariant {
 
     call MergeAndSortVcfs as MergeVcfs {
         input:
-            vcfs = select_all(shard_vcf),
+            vcfs = select_all(RunDeepVariant.vcf),
             ref_fai = ref_bundle.fai,
             prefix = "~{prefix}.deepvariant",
             docker = utils_docker,
@@ -177,9 +134,7 @@ workflow DeepVariant {
         File gvcf_idx = MergeGvcfs.vcf_idx
         File vcf = MergeVcfs.vcf
         File vcf_idx = MergeVcfs.vcf_idx
-        Array[File] resource_usage_logs = select_all(resource_usage_log)
-        Array[File] resource_usage_visualizations = select_all(VisualizeResourceUsage.plot_pdf)
-        Array[File] visual_reports = select_all(visual_report)
+        Array[File] visual_reports = select_all(RunDeepVariant.visual_report)
     }
 }
 
@@ -215,10 +170,6 @@ task RunDeepVariant {
         num_core=$(grep -c '^processor' /proc/cpuinfo)
         mkdir -p "~{output_root}"
 
-        export MONITOR_MOUNT_POINT="/mnt/disks/cromwell_root/"
-        bash /opt/vm_local_monitoring_script.sh &> resources.log &
-        monitor_job_id=$(ps -aux | grep -F 'vm_local_monitoring_script.sh' | head -1 | awk '{print $2}')
-
         /opt/deepvariant/bin/run_deepvariant \
             --model_type=~{model_type} \
             --ref=~{ref_fa} \
@@ -228,13 +179,10 @@ task RunDeepVariant {
             --regions "~{sep=' ' regions}" \
             --output_vcf="~{output_root}/~{prefix}.vcf.gz" \
             --output_gvcf="~{output_root}/~{prefix}.g.vcf.gz" \
-            --num_shards="${num_core}" || { cat resources.log; exit 1; }
-
-        if ps -p "${monitor_job_id}" > /dev/null; then kill "${monitor_job_id}"; fi
+            --num_shards="${num_core}"
     >>>
 
     output {
-        File resource_usage_log = "resources.log"
         File vcf = "~{output_root}/~{prefix}.vcf.gz"
         File vcf_idx = "~{output_root}/~{prefix}.vcf.gz.tbi"
         File gvcf = "~{output_root}/~{prefix}.g.vcf.gz"
@@ -260,133 +208,6 @@ task RunDeepVariant {
         maxRetries: select_first([runtime_attr.max_retries, default_attr.max_retries])
         docker: docker
         zones: zones
-    }
-}
-
-task RunDeepVariantGpu {
-    input {
-        File bam
-        File bai
-        File ref_fa
-        File ref_fai
-        Array[String] regions
-        String sex
-        String? haploid_contigs
-        File? par_regions_bed
-        String model_type
-        Int threads
-        Int memory
-        String zones
-        String prefix
-        String docker
-        RuntimeAttr? runtime_attr_override
-    }
-
-    String output_root = "/mnt/disks/cromwell_root/dv_output"
-    Int bam_size = ceil(size(bam, "GB"))
-    Int inflation_factor = if (bam_size > 100) then 10 else 5
-    Int disk_size = if (inflation_factor * bam_size > 100) then inflation_factor * bam_size else 100
-    Int gpu_cpu = if (threads > 12) then 12 else threads
-    Int gpu_memory = if (memory > 64) then 64 else memory
-    Boolean use_haploid_contigs = sex == "M" && defined(haploid_contigs)
-    Boolean use_par_regions_bed = sex == "M" && defined(par_regions_bed)
-
-    command <<<
-        set -euo pipefail
-
-        num_core=$(grep -c '^processor' /proc/cpuinfo)
-        mkdir -p "~{output_root}"
-
-        export MONITOR_MOUNT_POINT="/mnt/disks/cromwell_root/"
-        bash vm_local_monitoring_script.sh &> resources.log &
-        monitor_job_id=$(ps -aux | grep -F 'vm_local_monitoring_script.sh' | head -1 | awk '{print $2}')
-        gpustat -a -i 1 &> gpu.usages.log &
-        gpu_monitor_job_id=$(ps -aux | grep -F 'gpustat' | head -1 | awk '{print $2}')
-
-        /opt/deepvariant/bin/run_deepvariant \
-            --model_type=~{model_type} \
-            --ref=~{ref_fa} \
-            ~{true='--haploid_contigs ' false='' use_haploid_contigs}~{select_first([haploid_contigs, ""])} \
-            ~{true='--par_regions_bed ' false='' use_par_regions_bed}~{select_first([par_regions_bed, ""])} \
-            --reads=~{bam} \
-            --regions "~{sep=' ' regions}" \
-            --output_vcf="~{output_root}/~{prefix}.vcf.gz" \
-            --output_gvcf="~{output_root}/~{prefix}.g.vcf.gz" \
-            --num_shards="${num_core}" || { cat resources.log; exit 1; }
-
-        if ps -p "${monitor_job_id}" > /dev/null; then kill "${monitor_job_id}"; fi
-        if ps -p "${gpu_monitor_job_id}" > /dev/null; then kill "${gpu_monitor_job_id}"; fi
-    >>>
-
-    output {
-        File resource_usage_log = "resources.log"
-        File gpu_usage_log = "gpu.usages.log"
-        File vcf = "~{output_root}/~{prefix}.vcf.gz"
-        File vcf_idx = "~{output_root}/~{prefix}.vcf.gz.tbi"
-        File gvcf = "~{output_root}/~{prefix}.g.vcf.gz"
-        File gvcf_idx = "~{output_root}/~{prefix}.g.vcf.gz.tbi"
-        File visual_report = "~{output_root}/~{prefix}.visual_report.html"
-    }
-
-    RuntimeAttr default_attr = object {
-        cpu_cores: gpu_cpu,
-        mem_gb: gpu_memory,
-        disk_gb: disk_size,
-        boot_disk_gb: 30,
-        preemptible_tries: 1,
-        max_retries: 0
-    }
-    RuntimeAttr runtime_attr = select_first([runtime_attr_override, default_attr])
-    runtime {
-        cpu: select_first([runtime_attr.cpu_cores, default_attr.cpu_cores])
-        memory: select_first([runtime_attr.mem_gb, default_attr.mem_gb]) + " GiB"
-        disks: "local-disk " + select_first([runtime_attr.disk_gb, default_attr.disk_gb]) + " SSD"
-        bootDiskSizeGb: select_first([runtime_attr.boot_disk_gb, default_attr.boot_disk_gb])
-        preemptible: select_first([runtime_attr.preemptible_tries, default_attr.preemptible_tries])
-        maxRetries: select_first([runtime_attr.max_retries, default_attr.max_retries])
-        docker: docker
-        zones: zones
-        gpuType: "nvidia-tesla-v100"
-        gpuCount: 1
-    }
-}
-
-task VisualizeResourceUsage {
-    input {
-        File resource_log
-        String output_pdf_name
-        String plot_title
-        String docker
-        RuntimeAttr? runtime_attr_override
-    }
-
-    command <<<
-        set -euo pipefail
-
-        /opt/plot.resources.R "~{resource_log}" "~{output_pdf_name}" "~{plot_title}"
-    >>>
-
-    output {
-        File plot_pdf = "~{output_pdf_name}"
-    }
-
-    RuntimeAttr default_attr = object {
-        cpu_cores: 1,
-        mem_gb: 1,
-        disk_gb: 10,
-        boot_disk_gb: 10,
-        preemptible_tries: 1,
-        max_retries: 0
-    }
-    RuntimeAttr runtime_attr = select_first([runtime_attr_override, default_attr])
-    runtime {
-        cpu: select_first([runtime_attr.cpu_cores, default_attr.cpu_cores])
-        memory: select_first([runtime_attr.mem_gb, default_attr.mem_gb]) + " GiB"
-        disks: "local-disk " + select_first([runtime_attr.disk_gb, default_attr.disk_gb]) + " HDD"
-        bootDiskSizeGb: select_first([runtime_attr.boot_disk_gb, default_attr.boot_disk_gb])
-        preemptible: select_first([runtime_attr.preemptible_tries, default_attr.preemptible_tries])
-        maxRetries: select_first([runtime_attr.max_retries, default_attr.max_retries])
-        docker: docker
     }
 }
 
