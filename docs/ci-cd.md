@@ -47,7 +47,7 @@ Two layers of tests live under [`tests/`](../tests/), both configured in `pyproj
   ```
   CI uses Docker and builds the utils image itself from `Dockerfile.utils`, because the Artifact Registry is private.
 
-A unit test enforces that every directly-run workflow in `wdl/annotation` and `wdl/annotation_utils` has a smoke test in `tests/wdl/` or an entry with a reason in the `EXEMPT` dict of `tests/unit/test_smoke_coverage.py`, so a new workflow needs one or the other.
+A unit test enforces that every directly-run workflow in `wdl/annotation`, `wdl/annotation_utils` and `wdl/tools` has a smoke test in `tests/wdl/` or an entry with a reason in the `EXEMPT` dict of `tests/unit/test_smoke_coverage.py`, so a new workflow needs one or the other.
 
 See [`tests/README.md`](../tests/README.md) for what each test covers.
 

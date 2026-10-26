@@ -3,9 +3,9 @@ import re
 
 from conftest import REPO_ROOT
 
-WDL_DIRS = ["wdl/annotation", "wdl/annotation_utils"]
+WDL_DIRS = ["wdl/annotation", "wdl/annotation_utils", "wdl/tools"]
 
-# Workflows without a smoke test. Every WDL workflow in the two directories needs a test in tests/wdl or an entry here.
+# Workflows without a smoke test. Every WDL workflow in WDL_DIRS needs a test in tests/wdl or an entry here.
 EXEMPT = {
     "AnnotateInSilicoPredictors": "runs Hail with external predictor tables (hail image, large resources)",
     "AnnotateVEPHail": "runs VEP through Hail with a VEP cache (vephail image, large resources)",
@@ -20,7 +20,33 @@ EXEMPT = {
     "CreateCohortDepthFiles": "needs mosdepth-sized inputs for all 24 contigs",
     "CreateCNVDepthPlots": "needs depth matrices for all 24 contigs and the plotting image",
     "CreateTRGTHistograms": "needs the stranalysis image",
-    "SummarizeAnnotationsGATKSV": "needs SV_colors.txt in the utils image, absent until the file is committed",
+    "Automop": "cleans up a Terra workspace through FISS (automop image)",
+    "DeepVariant": "needs the DeepVariant image and an aligned BAM",
+    "GLNexus": "needs the GLnexus and hail images and per-sample gVCFs",
+    "HiFiCNV": "needs the HiFiCNV image and an aligned BAM",
+    "HiPhase": "needs the HiPhase images and an aligned BAM",
+    "Hifiasm": "needs the hifiasm image and raw reads",
+    "Kanpig": "needs the kanpig image and aligned BAMs",
+    "LongReadCNVs": "needs the GATK and sv-pipeline images and depth from aligned BAMs",
+    "MethylationProfiling": "needs the cpgtools image and an aligned BAM with methylation tags",
+    "MinimapAlignment": "needs the minimap2 image and raw reads",
+    "MinimapReadAlignment": "needs the minimap2 image and raw reads",
+    "MosDepth": "needs the mosdepth images and an aligned BAM",
+    "PALMERAssembly": "needs the PALMER image and aligned assembly BAMs",
+    "PALMERDiploid": "needs the PALMER image and an aligned BAM",
+    "PAV": "needs the PAV image and phased haplotype assemblies",
+    "PBSV": "needs the pbsv image and an aligned BAM",
+    "RepeatMasker": "needs the multi-GB Dfam TE Tools image",
+    "Sawfish": "needs the sawfish image and aligned BAMs",
+    "Sniffles": "needs the Sniffles image and an aligned BAM",
+    "TRGT": "needs the TRGT image and an aligned BAM",
+    "TRGTLPS": "needs the trgt-lps and stranalysis images",
+    "Vamos": "needs the vamos image and an aligned BAM",
+    "MergeCohortLongSVCallsets": "needs the collaborator SV-integration image",
+    "MergeCohortSVCallsets": "needs the collaborator SV-integration image",
+    "MergeRegenotypedSVCallsets": "needs the collaborator SV-integration image",
+    "MergeSampleSVCallsets": "needs the collaborator SV-integration and XGBoost scoring images",
+    "RegenotypeSVCallsets": "needs the collaborator SV-integration image",
 }
 
 
@@ -53,9 +79,8 @@ def covered_workflows():
         for name, stem in re.findall(r"\{(\w+)\}/(\w+)\.wdl", source):
             if local.get(name) in WDL_DIRS:
                 tested.add(f"{local[name]}/{stem}.wdl")
-        tested.update(
-            f"{directory}/{stem}.wdl" for directory, stem in re.findall(r"(wdl/annotation(?:_utils)?)/(\w+)\.wdl", source)
-        )
+        literal = re.findall(r"(wdl/(?:annotation|annotation_utils|tools))/(\w+)\.wdl", source)
+        tested.update(f"{directory}/{stem}.wdl" for directory, stem in literal)
     return tested
 
 

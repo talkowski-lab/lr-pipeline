@@ -2497,3 +2497,41 @@ def test_extract_random_calls_keeps_records_sharing_a_span(run_workflow, vcf_inp
 
     _, selected_vcf = load_records(outputs["ExtractRandomCalls.variant_vcf"])
     assert sorted(r["id"] for r in selected_vcf) == sorted(carried)
+
+
+def test_summarize_annotations_gatksv_splits_alleles_and_draws_the_cohort_plots(run_workflow, run_dir, window_vcf, utils_docker):
+    ped = write_table(run_dir / "cohort.ped", [[s, s, 0, 0, 1 + i % 2, 0] for i, s in enumerate(SAMPLES)])
+    outputs = run_workflow(
+        f"{UTILS}/SummarizeAnnotationsGATKSV.wdl",
+        {
+            "vcfs": [str(window_vcf)],
+            "vcf_idxs": [f"{window_vcf}.tbi"],
+            "prefix": "qc",
+            "ped": str(ped),
+            "ref_fa": str(WINDOW_FASTA),
+            "ref_fai": f"{WINDOW_FASTA}.fai",
+            "records_per_shard": 30,
+            "samples_per_shard": 2,
+            "utils_docker": utils_docker,
+        },
+    )
+
+    # Multi-allelic records are split into one row per ALT, named <ID>_<n>, so carriers are compared per original ID
+    _, records = load_records(window_vcf)
+    expected, got = collections.defaultdict(collections.Counter), collections.defaultdict(collections.Counter)
+    for record in records:
+        for allele in range(1, len(record["alts"]) + 1):
+            expected[record["id"]][tuple(sorted(s for s, gt in record["gts"].items() if allele in gt))] += 1
+    for row in read_dicts(outputs["SummarizeAnnotationsGATKSV.vcf2bed_bed"]):
+        name = row["name"] if row["name"] in expected else row["name"].rsplit("_", 1)[0]
+        got[name][tuple(sorted(filter(None, row["samples"].split(","))))] += 1
+    assert got == expected
+
+    with tarfile.open(outputs["SummarizeAnnotationsGATKSV.vcf_qc_tarball"]) as tar:
+        names = {Path(n).name for n in tar.getnames()}
+        member = next(m for m in tar.getmembers() if m.name.endswith("qc.samples_analyzed.list"))
+        analyzed = tar.extractfile(member).read().decode().split()
+    assert analyzed == SAMPLES
+    assert {"qc.VCF_sites.stats.bed.gz", "qc.VCF_sites.stats.bed.gz.tbi"} <= names
+    plots = {"size_distribution.pdf", "af_distribution.pdf", "gt_overall_distribution.png", "counts_per_genome_distribution.png"}
+    assert plots <= names

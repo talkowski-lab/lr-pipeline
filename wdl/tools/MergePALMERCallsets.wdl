@@ -36,7 +36,7 @@ workflow MergePALMERCallsets {
                 vcfs = vcfs,
                 vcf_idxs = vcf_idxs,
                 contig = contig,
-                prefix = "~{prefix}.{contig}",
+                prefix = "~{prefix}.~{contig}",
                 docker = utils_docker,
                 runtime_attr_override = runtime_attr_merge_vcfs
         }

@@ -5,7 +5,7 @@ This directory holds the test suite for the scripts and workflows in this reposi
 ## Layout
 - `unit/` - fast pytest tests of the Python under `scripts/` and `.github/scripts/`, plus repository invariants: Dockerfile pins resolve and are used, and every `/opt/scripts` path a workflow calls exists. They need no container and no Hail.
 - `unit/test_smoke_coverage.py` - the coverage rule for the smoke tests; see [Coverage rule](#coverage-rule).
-- `wdl/` - smoke tests that run workflows under miniwdl in the `utils` image, marked `wdl`. `test_annotation.py` and `test_annotation_utils.py` cover the directly-run workflows in `wdl/annotation` and `wdl/annotation_utils`; each test computes its expected outputs independently in Python from the fixture records.
+- `wdl/` - smoke tests that run workflows under miniwdl in the `utils` image, marked `wdl`. `test_annotation.py`, `test_annotation_utils.py` and `test_tools.py` cover the directly-run workflows in `wdl/annotation`, `wdl/annotation_utils` and `wdl/tools`; each test computes its expected outputs independently in Python from the fixture records.
 - `data/` - test fixtures: a 385-record chr22 subset VCF and a small chr22 window FASTA; see [data/README.md](data/README.md) for how they were built.
 - `conftest.py` - shared fixtures and helpers, including `run_workflow`, which runs a WDL under miniwdl and returns its outputs.
 
@@ -48,7 +48,7 @@ The full suite takes about six minutes.
 
 
 ## Coverage rule
-Every directly-run workflow in `wdl/annotation` and `wdl/annotation_utils` needs a smoke test in `tests/wdl/`. `tests/unit/test_smoke_coverage.py` enforces this: it finds each workflow, collects the `.wdl` files the tests in `tests/wdl/` run, and fails when a workflow is neither tested nor listed in `EXEMPT`, or when a workflow is both.
+Every directly-run workflow in `wdl/annotation`, `wdl/annotation_utils` and `wdl/tools` needs a smoke test in `tests/wdl/`. `tests/unit/test_smoke_coverage.py` enforces this: it finds each workflow, collects the `.wdl` files the tests in `tests/wdl/` run, and fails when a workflow is neither tested nor listed in `EXEMPT`, or when a workflow is both.
 
 To add an exemption, add the workflow name to the `EXEMPT` dict in that file with a one-line reason. Use it only for a workflow that needs an image other than `utils` or a large external resource. Remove the entry when you add the test.
 

@@ -20,6 +20,7 @@ CONTIG_LENGTH = 50818468
 SAMPLES = ["HG00096", "HG00097", "HG00099", "HG00126", "HG00128"]
 UTILS = "wdl/annotation_utils"
 ANNOTATION = "wdl/annotation"
+TOOLS = "wdl/tools"
 
 # The checker scripts import one another by bare module name
 sys.path.insert(0, str(REPO_ROOT / ".github" / "scripts"))

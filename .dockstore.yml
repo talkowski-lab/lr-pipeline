@@ -841,6 +841,7 @@ workflows:
     filters:
       branches:
         - main
+        - kj-ci-hygiene
       tags:
         - /.*/
 
