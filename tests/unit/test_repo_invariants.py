@@ -1,3 +1,4 @@
+import json
 import re
 import subprocess
 
@@ -92,3 +93,14 @@ def test_derived_dockerfiles_use_base_image_arg(dockerfile):
     assert not re.search(r"^FROM us-central1-docker\.pkg\.dev/", text, re.M)
     if re.search(r"^ARG BASE_IMAGE=", text, re.M):
         assert re.search(r"^ARG BASE_IMAGE=us-central1-docker\.pkg\.dev/\S+:latest\n+FROM \$\{BASE_IMAGE\}$", text, re.M)
+
+
+NOTEBOOKS = [
+    REPO_ROOT / path for path in subprocess.check_output(["git", "ls-files", "*.ipynb"], cwd=REPO_ROOT, text=True).split()
+]
+
+
+@pytest.mark.parametrize("notebook", NOTEBOOKS, ids=lambda path: path.name)
+def test_notebooks_hold_only_code(notebook):
+    cells = json.loads(notebook.read_text())["cells"]
+    assert [cell for cell in cells if cell["metadata"] or cell.get("outputs") or cell.get("execution_count") is not None] == []

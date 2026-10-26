@@ -34,7 +34,7 @@ docs/                # Extended documentation (this file included)
 archive/             # Retired workflows, scripts, Dockerfiles, notebooks and their reference docs
   docs/workflows.md  # Generated from the retired workflows, the counterpart to docs/workflows.md
   wdl/               # Retired workflows, validated by womtool; utils/RetiredHelpers.wdl holds deleted Helpers tasks they call
-  notebooks/         # Retired ad hoc Jupyter notebooks (Terra cost analysis via the API and BigQuery)
+  notebooks/         # Retired ad hoc Jupyter notebooks (Terra cost analysis via the API and BigQuery), code only - no outputs or cell metadata
   .github/           # Inactive Docker build-on-push workflow and its helper script
 .claude/
   settings.json      # Wires .github/hooks/ into Claude Code
