@@ -881,7 +881,6 @@ workflows:
     filters:
       branches:
         - main
-        - kj-reset-aligned-reads
       tags:
         - /.*/
 
