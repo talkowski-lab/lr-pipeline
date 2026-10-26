@@ -11,14 +11,14 @@ workflow PALMERAssembly {
     }
 
     parameter_meta {
-        bam_pat: "Aligned assembly for paternal haplotype."
-        bai_pat: "Index for `bam_pat`."
-        bam_mat: "Aligned assembly for maternal haplotype."
-        bai_mat: "Index for `bam_mat`."
-        override_palmer_calls_pat: "Optional precomputed PALMER calls for the paternal haplotype, causing the workflow to bypass execution."
-        override_palmer_tsd_files_pat: "Optional precomputed PALMER TSD files for the paternal haplotype, causing the workflow to bypass execution."
-        override_palmer_calls_mat: "Optional precomputed PALMER calls for the maternal haplotype, causing the workflow to bypass execution."
-        override_palmer_tsd_files_mat: "Optional precomputed PALMER TSD files for the maternal haplotype, causing the workflow to bypass execution."
+        bam_hap2: "Aligned haplotype 2 assembly."
+        bai_hap2: "Index for `bam_hap2`."
+        bam_hap1: "Aligned haplotype 1 assembly."
+        bai_hap1: "Index for `bam_hap1`."
+        override_palmer_calls_hap2: "Optional precomputed PALMER calls for haplotype 2, causing the workflow to bypass execution."
+        override_palmer_tsd_files_hap2: "Optional precomputed PALMER TSD files for haplotype 2, causing the workflow to bypass execution."
+        override_palmer_calls_hap1: "Optional precomputed PALMER calls for haplotype 1, causing the workflow to bypass execution."
+        override_palmer_tsd_files_hap1: "Optional precomputed PALMER TSD files for haplotype 1, causing the workflow to bypass execution."
         ref_fa: "From references."
         ref_fai: "From references."
         contigs: "Contigs to run PALMER on."
@@ -26,14 +26,14 @@ workflow PALMERAssembly {
         mode: "PALMER run mode."
         mei_types: "MEI modes to run PALMER in - a subset of `ALU`, `SVA`, `LINE` or `HERVK`."
         truvari_collapse_params: "Per-MEI-type Truvari parameters used when merging calls across haplotypes."
-        palmer_pat_calls: "Raw PALMER calls for the paternal haplotype, per MEI type."
-        palmer_pat_tsd_reads: "PALMER TSD reads for the paternal haplotype, per MEI type."
-        palmer_pat_vcfs: "Paternal-haplotype PALMER VCFs, per MEI type."
-        palmer_pat_vcf_idxs: "Indexes for the paternal-haplotype VCFs."
-        palmer_mat_calls: "Raw PALMER calls for the maternal haplotype, per MEI type."
-        palmer_mat_tsd_reads: "PALMER TSD reads for the maternal haplotype, per MEI type."
-        palmer_mat_vcfs: "Maternal-haplotype PALMER VCFs, per MEI type."
-        palmer_mat_vcf_idxs: "Indexes for the maternal-haplotype VCFs."
+        palmer_hap2_calls: "Raw PALMER calls for haplotype 2, per MEI type."
+        palmer_hap2_tsd_reads: "PALMER TSD reads for haplotype 2, per MEI type."
+        palmer_hap2_vcfs: "Haplotype 2 PALMER VCFs, per MEI type."
+        palmer_hap2_vcf_idxs: "Indexes for the haplotype 2 VCFs."
+        palmer_hap1_calls: "Raw PALMER calls for haplotype 1, per MEI type."
+        palmer_hap1_tsd_reads: "PALMER TSD reads for haplotype 1, per MEI type."
+        palmer_hap1_vcfs: "Haplotype 1 PALMER VCFs, per MEI type."
+        palmer_hap1_vcf_idxs: "Indexes for the haplotype 1 VCFs."
         palmer_diploid_vcfs: "Diploid PALMER VCFs merged across haplotypes, per MEI type."
         palmer_diploid_vcf_idxs: "Indexes for the diploid VCFs."
         palmer_combined_vcf: "Final VCF combining all MEI types."
@@ -41,14 +41,14 @@ workflow PALMERAssembly {
     }
 
     input {
-        File? bam_pat
-        File? bai_pat
-        File? bam_mat
-        File? bai_mat
-        Array[File]? override_palmer_calls_pat
-        Array[File]? override_palmer_tsd_files_pat
-        Array[File]? override_palmer_calls_mat
-        Array[File]? override_palmer_tsd_files_mat
+        File? bam_hap2
+        File? bai_hap2
+        File? bam_hap1
+        File? bai_hap1
+        Array[File]? override_palmer_calls_hap2
+        Array[File]? override_palmer_tsd_files_hap2
+        Array[File]? override_palmer_calls_hap1
+        Array[File]? override_palmer_tsd_files_hap1
         File ref_fa
         File ref_fai
         Array[String] contigs
@@ -77,110 +77,110 @@ workflow PALMERAssembly {
         String mei_type = mei_types[idx]
         String collapse_params = if defined(truvari_collapse_params) then select_first([truvari_collapse_params])[idx] else "--pctsize 0.9 --pctovl 0.9 --pctseq 0.9 --refdist 500"
 
-        # Call MEIs on the paternal haplotype
-        if (!defined(override_palmer_calls_pat)) {
-            call Helpers.SplitBam as SplitBamPat {
+        # Call MEIs on haplotype 2, placed first in the genotype
+        if (!defined(override_palmer_calls_hap2)) {
+            call Helpers.SplitBam as SplitBamHap2 {
                 input:
-                    bam = select_first([bam_pat]),
-                    bai = select_first([bai_pat]),
-                    prefix = "~{prefix}.pat",
+                    bam = select_first([bam_hap2]),
+                    bai = select_first([bai_hap2]),
+                    prefix = "~{prefix}.hap2",
                     contigs = contigs,
                     docker = utils_docker,
                     runtime_attr_override = runtime_attr_split_bam
             }
 
-            scatter (i in range(length(SplitBamPat.bams))) {
-                call Helpers.RunPALMERShard as RunPALMERShardPat {
+            scatter (i in range(length(SplitBamHap2.bams))) {
+                call Helpers.RunPALMERShard as RunPALMERShardHap2 {
                     input:
-                        bam = SplitBamPat.bams[i],
-                        bai = SplitBamPat.bais[i],
+                        bam = SplitBamHap2.bams[i],
+                        bai = SplitBamHap2.bais[i],
                         mode = mode,
                         mei_type = mei_type,
                         ref_fa = ref_fa,
-                        prefix = "~{prefix}.shard_{i}.pat",
+                        prefix = "~{prefix}.shard_{i}.hap2",
                         docker = palmer_docker,
                         runtime_attr_override = runtime_attr_run_palmer_wrapped[0]
                 }
             }
 
-            call Helpers.MergePALMEROutputs as MergePALMEROutputsPat {
+            call Helpers.MergePALMEROutputs as MergePALMEROutputsHap2 {
                 input:
-                    calls_shards = RunPALMERShardPat.calls_shard,
-                    tsd_reads_shards = RunPALMERShardPat.tsd_reads_shard,
+                    calls_shards = RunPALMERShardHap2.calls_shard,
+                    tsd_reads_shards = RunPALMERShardHap2.tsd_reads_shard,
                     mei_type = mei_type,
-                    prefix = "~{prefix}.merged_pat",
+                    prefix = "~{prefix}.merged_hap2",
                     docker = utils_docker,
                     runtime_attr_override = runtime_attr_merge_palmer_outputs
             }
         }
 
-        File calls_file_pat = if defined (override_palmer_calls_pat) then select_first([override_palmer_calls_pat])[idx] else select_first([MergePALMEROutputsPat.calls])
-        File tsd_file_pat = if defined (override_palmer_tsd_files_pat) then select_first([override_palmer_tsd_files_pat])[idx] else select_first([MergePALMEROutputsPat.tsd_reads])
+        File calls_file_hap2 = if defined (override_palmer_calls_hap2) then select_first([override_palmer_calls_hap2])[idx] else select_first([MergePALMEROutputsHap2.calls])
+        File tsd_file_hap2 = if defined (override_palmer_tsd_files_hap2) then select_first([override_palmer_tsd_files_hap2])[idx] else select_first([MergePALMEROutputsHap2.tsd_reads])
 
-        call Helpers.ConvertPALMERToVcf as ConvertPALMERToVcfPat {
+        call Helpers.ConvertPALMERToVcf as ConvertPALMERToVcfHap2 {
             input:
-                palmer_calls = calls_file_pat,
-                palmer_tsd_reads = tsd_file_pat,
+                palmer_calls = calls_file_hap2,
+                palmer_tsd_reads = tsd_file_hap2,
                 mei_type = mei_type,
                 sample = sample,
                 ref_fa = ref_fa,
                 ref_fai = ref_fai,
                 haplotype = "1|0",
-                prefix = "~{prefix}.~{mei_type}.pat",
+                prefix = "~{prefix}.~{mei_type}.hap2",
                 docker = utils_docker,
                 runtime_attr_override = runtime_attr_palmer_to_vcf
         }
 
-        # Call MEIs on the maternal haplotype
-        if (!defined(override_palmer_calls_mat)) {
-            call Helpers.SplitBam as SplitBamMat {
+        # Call MEIs on haplotype 1, placed second in the genotype
+        if (!defined(override_palmer_calls_hap1)) {
+            call Helpers.SplitBam as SplitBamHap1 {
                 input:
-                    bam = select_first([bam_mat]),
-                    bai = select_first([bai_mat]),
-                    prefix = "~{prefix}.mat",
+                    bam = select_first([bam_hap1]),
+                    bai = select_first([bai_hap1]),
+                    prefix = "~{prefix}.hap1",
                     contigs = contigs,
                     docker = utils_docker,
                     runtime_attr_override = runtime_attr_split_bam
             }
 
-            scatter (i in range(length(SplitBamMat.bams))) {
-                call Helpers.RunPALMERShard as RunPALMERShardMat {
+            scatter (i in range(length(SplitBamHap1.bams))) {
+                call Helpers.RunPALMERShard as RunPALMERShardHap1 {
                     input:
-                        bam = SplitBamMat.bams[i],
-                        bai = SplitBamMat.bais[i],
+                        bam = SplitBamHap1.bams[i],
+                        bai = SplitBamHap1.bais[i],
                         mode = mode,
                         mei_type = mei_type,
                         ref_fa = ref_fa,
-                        prefix = "~{prefix}.shard_{i}.mat",
+                        prefix = "~{prefix}.shard_{i}.hap1",
                         docker = palmer_docker,
                         runtime_attr_override = runtime_attr_run_palmer_wrapped[0]
                 }
             }
 
-            call Helpers.MergePALMEROutputs as MergePALMEROutputsMat {
+            call Helpers.MergePALMEROutputs as MergePALMEROutputsHap1 {
                 input:
-                    calls_shards = RunPALMERShardMat.calls_shard,
-                    tsd_reads_shards = RunPALMERShardMat.tsd_reads_shard,
+                    calls_shards = RunPALMERShardHap1.calls_shard,
+                    tsd_reads_shards = RunPALMERShardHap1.tsd_reads_shard,
                     mei_type = mei_type,
-                    prefix = "~{prefix}.merged_mat",
+                    prefix = "~{prefix}.merged_hap1",
                     docker = utils_docker,
                     runtime_attr_override = runtime_attr_merge_palmer_outputs
             }
         }
 
-        File calls_file_mat = if defined (override_palmer_calls_mat) then select_first([override_palmer_calls_mat])[idx] else select_first([MergePALMEROutputsMat.calls])
-        File tsd_file_mat = if defined (override_palmer_tsd_files_mat) then select_first([override_palmer_tsd_files_mat])[idx] else select_first([MergePALMEROutputsMat.tsd_reads])
+        File calls_file_hap1 = if defined (override_palmer_calls_hap1) then select_first([override_palmer_calls_hap1])[idx] else select_first([MergePALMEROutputsHap1.calls])
+        File tsd_file_hap1 = if defined (override_palmer_tsd_files_hap1) then select_first([override_palmer_tsd_files_hap1])[idx] else select_first([MergePALMEROutputsHap1.tsd_reads])
 
-        call Helpers.ConvertPALMERToVcf as ConvertPALMERToVcfMat {
+        call Helpers.ConvertPALMERToVcf as ConvertPALMERToVcfHap1 {
             input:
-                palmer_calls = calls_file_mat,
-                palmer_tsd_reads = tsd_file_mat,
+                palmer_calls = calls_file_hap1,
+                palmer_tsd_reads = tsd_file_hap1,
                 mei_type = mei_type,
                 sample = sample,
                 ref_fa = ref_fa,
                 ref_fai = ref_fai,
                 haplotype = "0|1",
-                prefix = "~{prefix}.~{mei_type}.mat",
+                prefix = "~{prefix}.~{mei_type}.hap1",
                 docker = utils_docker,
                 runtime_attr_override = runtime_attr_palmer_to_vcf
         }
@@ -188,10 +188,10 @@ workflow PALMERAssembly {
         # Collapse the two haplotype callsets into a diploid callset
         call TruvariCollapse {
             input:
-                vcf_pat = ConvertPALMERToVcfPat.vcf,
-                vcf_pat_idx = ConvertPALMERToVcfPat.vcf_idx,
-                vcf_mat = ConvertPALMERToVcfMat.vcf,
-                vcf_mat_idx = ConvertPALMERToVcfMat.vcf_idx,
+                vcf_hap2 = ConvertPALMERToVcfHap2.vcf,
+                vcf_hap2_idx = ConvertPALMERToVcfHap2.vcf_idx,
+                vcf_hap1 = ConvertPALMERToVcfHap1.vcf,
+                vcf_hap1_idx = ConvertPALMERToVcfHap1.vcf_idx,
                 collapse_params = collapse_params,
                 ref_fa = ref_fa,
                 ref_fai = ref_fai,
@@ -213,15 +213,15 @@ workflow PALMERAssembly {
     }
 
     output {
-        Array[File] palmer_pat_calls = calls_file_pat
-        Array[File] palmer_pat_tsd_reads = tsd_file_pat
-        Array[File] palmer_pat_vcfs = ConvertPALMERToVcfPat.vcf
-        Array[File] palmer_pat_vcf_idxs = ConvertPALMERToVcfPat.vcf_idx
+        Array[File] palmer_hap2_calls = calls_file_hap2
+        Array[File] palmer_hap2_tsd_reads = tsd_file_hap2
+        Array[File] palmer_hap2_vcfs = ConvertPALMERToVcfHap2.vcf
+        Array[File] palmer_hap2_vcf_idxs = ConvertPALMERToVcfHap2.vcf_idx
 
-        Array[File] palmer_mat_calls = calls_file_mat
-        Array[File] palmer_mat_tsd_reads = tsd_file_mat
-        Array[File] palmer_mat_vcfs = ConvertPALMERToVcfMat.vcf
-        Array[File] palmer_mat_vcf_idxs = ConvertPALMERToVcfMat.vcf_idx
+        Array[File] palmer_hap1_calls = calls_file_hap1
+        Array[File] palmer_hap1_tsd_reads = tsd_file_hap1
+        Array[File] palmer_hap1_vcfs = ConvertPALMERToVcfHap1.vcf
+        Array[File] palmer_hap1_vcf_idxs = ConvertPALMERToVcfHap1.vcf_idx
 
         Array[File] palmer_diploid_vcfs = TruvariCollapse.diploid_vcf
         Array[File] palmer_diploid_vcf_idxs = TruvariCollapse.diploid_vcf_idx
@@ -233,10 +233,10 @@ workflow PALMERAssembly {
 
 task TruvariCollapse {
     input {
-        File vcf_pat
-        File vcf_pat_idx
-        File vcf_mat
-        File vcf_mat_idx
+        File vcf_hap2
+        File vcf_hap2_idx
+        File vcf_hap1
+        File vcf_hap1_idx
         String collapse_params
         File ref_fa
         File ref_fai
@@ -250,8 +250,8 @@ task TruvariCollapse {
 
         bcftools concat \
             -a \
-            ~{vcf_pat} \
-            ~{vcf_mat} \
+            ~{vcf_hap2} \
+            ~{vcf_hap1} \
         | bcftools sort \
             --max-mem ~{select_first([runtime_attr.mem_gb, default_attr.mem_gb]) - 1}G \
             -T . \
@@ -284,7 +284,7 @@ task TruvariCollapse {
     RuntimeAttr default_attr = object {
         cpu_cores: 1,
         mem_gb: 4,
-        disk_gb: 3 * ceil(size(vcf_pat, "GB") + size(vcf_mat, "GB")) + 10,
+        disk_gb: 3 * ceil(size(vcf_hap2, "GB") + size(vcf_hap1, "GB")) + 10,
         boot_disk_gb: 10,
         preemptible_tries: 1,
         max_retries: 0

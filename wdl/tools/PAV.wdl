@@ -10,8 +10,8 @@ workflow PAV {
     }
 
     parameter_meta {
-        mat_haplotype: "Maternal haplotype assembly. Without parental data, either hifiasm haplotype."
-        pat_haplotype: "Paternal haplotype assembly. Without parental data, the other hifiasm haplotype."
+        assembly_hap1: "Haplotype 1 assembly."
+        assembly_hap2: "Haplotype 2 assembly."
         sample_id: "Sample ID."
         ref_fa: "From references."
         ref_fai: "From references."
@@ -22,8 +22,8 @@ workflow PAV {
     }
 
     input {
-        File mat_haplotype
-        File pat_haplotype
+        File assembly_hap1
+        File assembly_hap2
         String sample_id
         String prefix
 
@@ -37,8 +37,8 @@ workflow PAV {
 
     call CallPAV {
         input:
-            mat_haplotype = mat_haplotype,
-            pat_haplotype = pat_haplotype,
+            assembly_hap1 = assembly_hap1,
+            assembly_hap2 = assembly_hap2,
             sample_id = sample_id,
             ref_fa = ref_fa,
             ref_fai = ref_fai,
@@ -57,8 +57,8 @@ workflow PAV {
 
 task CallPAV {
     input {
-        File mat_haplotype
-        File pat_haplotype
+        File assembly_hap1
+        File assembly_hap2
         String sample_id
         String prefix
 
@@ -73,7 +73,7 @@ task CallPAV {
     RuntimeAttr default_attr = object {
         cpu_cores: 16,
         mem_gb: 128,
-        disk_gb: 3 * ceil(size(mat_haplotype, "GB") + size(pat_haplotype, "GB") + size(ref_fa, "GB")) + 10,
+        disk_gb: 3 * ceil(size(assembly_hap1, "GB") + size(assembly_hap2, "GB") + size(ref_fa, "GB")) + 10,
         boot_disk_gb: 20,
         preemptible_tries: 1,
         max_retries: 0
@@ -103,14 +103,14 @@ with open("pav.json", "w") as f:
     json.dump(config, f)
 
 os.makedirs("asms", exist_ok=True)
-mat_link = os.path.abspath("asms/~{sample_id}_mat.fa.gz")
-pat_link = os.path.abspath("asms/~{sample_id}_pat.fa.gz")
-os.symlink("~{mat_haplotype}", mat_link)
-os.symlink("~{pat_haplotype}", pat_link)
+hap1_link = os.path.abspath("asms/~{sample_id}_hap1.fa.gz")
+hap2_link = os.path.abspath("asms/~{sample_id}_hap2.fa.gz")
+os.symlink("~{assembly_hap1}", hap1_link)
+os.symlink("~{assembly_hap2}", hap2_link)
 
 with open("assemblies.tsv", "w") as f:
-    f.write("NAME\tHAP_mat\tHAP_pat\n")
-    f.write(f"~{sample_id}\t{mat_link}\t{pat_link}\n")
+    f.write("NAME\tHAP_hap1\tHAP_hap2\n")
+    f.write(f"~{sample_id}\t{hap1_link}\t{hap2_link}\n")
 
 CODE
 

@@ -1,6 +1,6 @@
 {
-    "PAV.mat_haplotype": "gs://<cohort-bucket>/mat_haplotype",
-    "PAV.pat_haplotype": "gs://<cohort-bucket>/pat_haplotype",
+    "PAV.assembly_hap1": "gs://<cohort-bucket>/assembly_hap1",
+    "PAV.assembly_hap2": "gs://<cohort-bucket>/assembly_hap2",
     "PAV.sample_id": "sample1",
     "PAV.prefix": "cohort",
     "PAV.ref_fa": "gs://<references-bucket>/hg38.no_alt.fa",

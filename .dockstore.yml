@@ -791,6 +791,7 @@ workflows:
     filters:
       branches:
         - main
+        - kj-haplotype-names
       tags:
         - /.*/
 
@@ -821,6 +822,7 @@ workflows:
     filters:
       branches:
         - main
+        - kj-haplotype-names
       tags:
         - /.*/
 
@@ -851,6 +853,7 @@ workflows:
     filters:
       branches:
         - main
+        - kj-haplotype-names
       tags:
         - /.*/
 

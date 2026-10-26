@@ -1992,11 +1992,11 @@ Outputs:
 - `File cpg_hap2_bed_idx`: Index for the haplotype 2 BED.
 
 ### [MinimapAlignment](../wdl/tools/MinimapAlignment.wdl)
-This workflow leverages Minimap2 (https://github.com/lh3/minimap2) in order to align a sample's maternal and paternal assemblies to a reference.
+This workflow leverages Minimap2 (https://github.com/lh3/minimap2) in order to align a sample's two haplotype assemblies to a reference.
 
 Inputs:
-- `File assembly_mat`: Maternal assembly.
-- `File assembly_pat`: Paternal assembly.
+- `File assembly_hap1`: Haplotype 1 assembly.
+- `File assembly_hap2`: Haplotype 2 assembly.
 - `File ref_fa`: From references.
 - `File ref_fai`: From references.
 - `String sample_id`: ID of the sample being aligned.
@@ -2007,12 +2007,12 @@ Inputs:
 - `RuntimeAttr? runtime_attr_*`: Optional per-task runtime overrides.
 
 Outputs:
-- `File minimap_assembled_bam_mat`: Aligned maternal-assembly BAM.
-- `File minimap_assembled_bai_mat`: Index for the maternal BAM.
-- `File minimap_assembled_paf_mat`: Maternal-assembly PAF alignment.
-- `File minimap_assembled_bam_pat`: Aligned paternal-assembly BAM.
-- `File minimap_assembled_bai_pat`: Index for the paternal BAM.
-- `File minimap_assembled_paf_pat`: Paternal-assembly PAF alignment.
+- `File minimap_assembled_bam_hap1`: Aligned haplotype 1 assembly BAM.
+- `File minimap_assembled_bai_hap1`: Index for the haplotype 1 BAM.
+- `File minimap_assembled_paf_hap1`: Haplotype 1 assembly PAF alignment.
+- `File minimap_assembled_bam_hap2`: Aligned haplotype 2 assembly BAM.
+- `File minimap_assembled_bai_hap2`: Index for the haplotype 2 BAM.
+- `File minimap_assembled_paf_hap2`: Haplotype 2 assembly PAF alignment.
 
 ### [MinimapReadAlignment](../wdl/tools/MinimapReadAlignment.wdl)
 This tool aligns a sample's unaligned long reads to a reference using Minimap2 (https://github.com/lh3/minimap2). Every unaligned BAM for the sample is converted to FASTQ, streamed through Minimap2 in a single pass and coordinate-sorted into one indexed BAM.
@@ -2063,14 +2063,14 @@ Outputs:
 This workflow runs PALMER on a pair of aligned assembly haplotypes in order to generate MEI calls. It then convets the raw PALMER calls generated into a VCF, merges calls across the haplotypes to create a diploid VCF per haplotype and then finally integrates these into a final VCF containing multiple MEI types.
 
 Inputs:
-- `File? bam_pat`: Aligned assembly for paternal haplotype.
-- `File? bai_pat`: Index for `bam_pat`.
-- `File? bam_mat`: Aligned assembly for maternal haplotype.
-- `File? bai_mat`: Index for `bam_mat`.
-- `Array[File]? override_palmer_calls_pat`: Optional precomputed PALMER calls for the paternal haplotype, causing the workflow to bypass execution.
-- `Array[File]? override_palmer_tsd_files_pat`: Optional precomputed PALMER TSD files for the paternal haplotype, causing the workflow to bypass execution.
-- `Array[File]? override_palmer_calls_mat`: Optional precomputed PALMER calls for the maternal haplotype, causing the workflow to bypass execution.
-- `Array[File]? override_palmer_tsd_files_mat`: Optional precomputed PALMER TSD files for the maternal haplotype, causing the workflow to bypass execution.
+- `File? bam_hap2`: Aligned haplotype 2 assembly.
+- `File? bai_hap2`: Index for `bam_hap2`.
+- `File? bam_hap1`: Aligned haplotype 1 assembly.
+- `File? bai_hap1`: Index for `bam_hap1`.
+- `Array[File]? override_palmer_calls_hap2`: Optional precomputed PALMER calls for haplotype 2, causing the workflow to bypass execution.
+- `Array[File]? override_palmer_tsd_files_hap2`: Optional precomputed PALMER TSD files for haplotype 2, causing the workflow to bypass execution.
+- `Array[File]? override_palmer_calls_hap1`: Optional precomputed PALMER calls for haplotype 1, causing the workflow to bypass execution.
+- `Array[File]? override_palmer_tsd_files_hap1`: Optional precomputed PALMER TSD files for haplotype 1, causing the workflow to bypass execution.
 - `File ref_fa`: From references.
 - `File ref_fai`: From references.
 - `Array[String] contigs`: Contigs to run PALMER on.
@@ -2083,14 +2083,14 @@ Inputs:
 - `RuntimeAttr? runtime_attr_*`: Optional per-task runtime overrides (6).
 
 Outputs:
-- `Array[File] palmer_pat_calls`: Raw PALMER calls for the paternal haplotype, per MEI type.
-- `Array[File] palmer_pat_tsd_reads`: PALMER TSD reads for the paternal haplotype, per MEI type.
-- `Array[File] palmer_pat_vcfs`: Paternal-haplotype PALMER VCFs, per MEI type.
-- `Array[File] palmer_pat_vcf_idxs`: Indexes for the paternal-haplotype VCFs.
-- `Array[File] palmer_mat_calls`: Raw PALMER calls for the maternal haplotype, per MEI type.
-- `Array[File] palmer_mat_tsd_reads`: PALMER TSD reads for the maternal haplotype, per MEI type.
-- `Array[File] palmer_mat_vcfs`: Maternal-haplotype PALMER VCFs, per MEI type.
-- `Array[File] palmer_mat_vcf_idxs`: Indexes for the maternal-haplotype VCFs.
+- `Array[File] palmer_hap2_calls`: Raw PALMER calls for haplotype 2, per MEI type.
+- `Array[File] palmer_hap2_tsd_reads`: PALMER TSD reads for haplotype 2, per MEI type.
+- `Array[File] palmer_hap2_vcfs`: Haplotype 2 PALMER VCFs, per MEI type.
+- `Array[File] palmer_hap2_vcf_idxs`: Indexes for the haplotype 2 VCFs.
+- `Array[File] palmer_hap1_calls`: Raw PALMER calls for haplotype 1, per MEI type.
+- `Array[File] palmer_hap1_tsd_reads`: PALMER TSD reads for haplotype 1, per MEI type.
+- `Array[File] palmer_hap1_vcfs`: Haplotype 1 PALMER VCFs, per MEI type.
+- `Array[File] palmer_hap1_vcf_idxs`: Indexes for the haplotype 1 VCFs.
 - `Array[File] palmer_diploid_vcfs`: Diploid PALMER VCFs merged across haplotypes, per MEI type.
 - `Array[File] palmer_diploid_vcf_idxs`: Indexes for the diploid VCFs.
 - `File palmer_combined_vcf`: Final VCF combining all MEI types.
@@ -2141,8 +2141,8 @@ Outputs:
 This tool runs PAV (https://github.com/EichlerLab/pav) on a sample's phased haplotype assemblies to call variants against the reference. It outputs the sample's tabix-indexed VCF, along with tarballs of the full PAV results and log directories.
 
 Inputs:
-- `File mat_haplotype`: Maternal haplotype assembly. Without parental data, either hifiasm haplotype.
-- `File pat_haplotype`: Paternal haplotype assembly. Without parental data, the other hifiasm haplotype.
+- `File assembly_hap1`: Haplotype 1 assembly.
+- `File assembly_hap2`: Haplotype 2 assembly.
 - `String sample_id`: Sample ID.
 - `File ref_fa`: From references.
 - `File ref_fai`: From references.

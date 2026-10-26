@@ -6,29 +6,29 @@ import "../utils/Structs.wdl"
 workflow MinimapAlignment {
     meta {
         description: [
-            "This workflow leverages Minimap2 (https://github.com/lh3/minimap2) in order to align a sample's maternal and paternal assemblies to a reference."
+            "This workflow leverages Minimap2 (https://github.com/lh3/minimap2) in order to align a sample's two haplotype assemblies to a reference."
         ]
     }
 
     parameter_meta {
-        assembly_mat: "Maternal assembly."
-        assembly_pat: "Paternal assembly."
+        assembly_hap1: "Haplotype 1 assembly."
+        assembly_hap2: "Haplotype 2 assembly."
         ref_fa: "From references."
         ref_fai: "From references."
         sample_id: "ID of the sample being aligned."
         minimap_flags: "Parameters to use when running Minimap2."
         minimap_threads: "Number of alignment threads."
-        minimap_assembled_bam_mat: "Aligned maternal-assembly BAM."
-        minimap_assembled_bai_mat: "Index for the maternal BAM."
-        minimap_assembled_paf_mat: "Maternal-assembly PAF alignment."
-        minimap_assembled_bam_pat: "Aligned paternal-assembly BAM."
-        minimap_assembled_bai_pat: "Index for the paternal BAM."
-        minimap_assembled_paf_pat: "Paternal-assembly PAF alignment."
+        minimap_assembled_bam_hap1: "Aligned haplotype 1 assembly BAM."
+        minimap_assembled_bai_hap1: "Index for the haplotype 1 BAM."
+        minimap_assembled_paf_hap1: "Haplotype 1 assembly PAF alignment."
+        minimap_assembled_bam_hap2: "Aligned haplotype 2 assembly BAM."
+        minimap_assembled_bai_hap2: "Index for the haplotype 2 BAM."
+        minimap_assembled_paf_hap2: "Haplotype 2 assembly PAF alignment."
     }
 
     input {
-        File assembly_mat
-        File assembly_pat
+        File assembly_hap1
+        File assembly_hap2
         File ref_fa
         File ref_fai
         String prefix
@@ -42,9 +42,9 @@ workflow MinimapAlignment {
         RuntimeAttr? runtime_attr_align_asm2ref
     }
 
-    call AlignAssembly as AlignMat {
+    call AlignAssembly as AlignHap1 {
         input:
-            assembly_fa = assembly_mat,
+            assembly_fa = assembly_hap1,
             hap = 1,
             flags = minimap_flags,
             threads = minimap_threads,
@@ -56,9 +56,9 @@ workflow MinimapAlignment {
             runtime_attr_override = runtime_attr_align_asm2ref
     }
 
-    call AlignAssembly as AlignPat {
+    call AlignAssembly as AlignHap2 {
         input:
-            assembly_fa = assembly_pat,
+            assembly_fa = assembly_hap2,
             hap = 2,
             flags = minimap_flags,
             threads = minimap_threads,
@@ -71,12 +71,12 @@ workflow MinimapAlignment {
     }
 
     output {
-        File minimap_assembled_bam_mat = AlignMat.bam
-        File minimap_assembled_bai_mat = AlignMat.bai
-        File minimap_assembled_paf_mat = AlignMat.paf
-        File minimap_assembled_bam_pat = AlignPat.bam
-        File minimap_assembled_bai_pat = AlignPat.bai
-        File minimap_assembled_paf_pat = AlignPat.paf
+        File minimap_assembled_bam_hap1 = AlignHap1.bam
+        File minimap_assembled_bai_hap1 = AlignHap1.bai
+        File minimap_assembled_paf_hap1 = AlignHap1.paf
+        File minimap_assembled_bam_hap2 = AlignHap2.bam
+        File minimap_assembled_bai_hap2 = AlignHap2.bai
+        File minimap_assembled_paf_hap2 = AlignHap2.paf
     }
 }
 
@@ -94,7 +94,7 @@ task AlignAssembly {
         RuntimeAttr? runtime_attr_override
     }
 
-    String out_prefix = "~{prefix}.~{sample_id}-asm_h~{hap}.minimap2"
+    String out_prefix = "~{prefix}.~{sample_id}-asm_hap~{hap}.minimap2"
     Int mm2_threads = threads - 4
 
     command <<<

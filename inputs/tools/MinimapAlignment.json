@@ -1,6 +1,6 @@
 {
-    "MinimapAlignment.assembly_mat": "gs://<cohort-bucket>/assembly_mat",
-    "MinimapAlignment.assembly_pat": "gs://<cohort-bucket>/assembly_pat",
+    "MinimapAlignment.assembly_hap1": "gs://<cohort-bucket>/assembly_hap1",
+    "MinimapAlignment.assembly_hap2": "gs://<cohort-bucket>/assembly_hap2",
     "MinimapAlignment.ref_fa": "gs://<references-bucket>/hg38.no_alt.fa",
     "MinimapAlignment.ref_fai": "gs://<references-bucket>/hg38.no_alt.fa.fai",
     "MinimapAlignment.prefix": "cohort",
