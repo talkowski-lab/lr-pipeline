@@ -821,6 +821,7 @@ workflows:
     filters:
       branches:
         - main
+        - kj-palmer-hap-order
       tags:
         - /.*/
 

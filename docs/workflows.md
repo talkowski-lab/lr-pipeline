@@ -2062,15 +2062,17 @@ Outputs:
 ### [PALMERAssembly](../wdl/tools/PALMERAssembly.wdl)
 This workflow runs PALMER on a pair of aligned assembly haplotypes in order to generate MEI calls. It then convets the raw PALMER calls generated into a VCF, merges calls across the haplotypes to create a diploid VCF per haplotype and then finally integrates these into a final VCF containing multiple MEI types.
 
+Haplotype 1 calls take the first allele of the phased genotype and haplotype 2 calls the second, matching the hap1/hap2 order used across the pipeline.
+
 Inputs:
-- `File? bam_hap2`: Aligned haplotype 2 assembly.
-- `File? bai_hap2`: Index for `bam_hap2`.
 - `File? bam_hap1`: Aligned haplotype 1 assembly.
 - `File? bai_hap1`: Index for `bam_hap1`.
-- `Array[File]? override_palmer_calls_hap2`: Optional precomputed PALMER calls for haplotype 2, causing the workflow to bypass execution.
-- `Array[File]? override_palmer_tsd_files_hap2`: Optional precomputed PALMER TSD files for haplotype 2, causing the workflow to bypass execution.
+- `File? bam_hap2`: Aligned haplotype 2 assembly.
+- `File? bai_hap2`: Index for `bam_hap2`.
 - `Array[File]? override_palmer_calls_hap1`: Optional precomputed PALMER calls for haplotype 1, causing the workflow to bypass execution.
 - `Array[File]? override_palmer_tsd_files_hap1`: Optional precomputed PALMER TSD files for haplotype 1, causing the workflow to bypass execution.
+- `Array[File]? override_palmer_calls_hap2`: Optional precomputed PALMER calls for haplotype 2, causing the workflow to bypass execution.
+- `Array[File]? override_palmer_tsd_files_hap2`: Optional precomputed PALMER TSD files for haplotype 2, causing the workflow to bypass execution.
 - `File ref_fa`: From references.
 - `File ref_fai`: From references.
 - `Array[String] contigs`: Contigs to run PALMER on.
@@ -2083,14 +2085,14 @@ Inputs:
 - `RuntimeAttr? runtime_attr_*`: Optional per-task runtime overrides (6).
 
 Outputs:
-- `Array[File] palmer_hap2_calls`: Raw PALMER calls for haplotype 2, per MEI type.
-- `Array[File] palmer_hap2_tsd_reads`: PALMER TSD reads for haplotype 2, per MEI type.
-- `Array[File] palmer_hap2_vcfs`: Haplotype 2 PALMER VCFs, per MEI type.
-- `Array[File] palmer_hap2_vcf_idxs`: Indexes for the haplotype 2 VCFs.
 - `Array[File] palmer_hap1_calls`: Raw PALMER calls for haplotype 1, per MEI type.
 - `Array[File] palmer_hap1_tsd_reads`: PALMER TSD reads for haplotype 1, per MEI type.
 - `Array[File] palmer_hap1_vcfs`: Haplotype 1 PALMER VCFs, per MEI type.
 - `Array[File] palmer_hap1_vcf_idxs`: Indexes for the haplotype 1 VCFs.
+- `Array[File] palmer_hap2_calls`: Raw PALMER calls for haplotype 2, per MEI type.
+- `Array[File] palmer_hap2_tsd_reads`: PALMER TSD reads for haplotype 2, per MEI type.
+- `Array[File] palmer_hap2_vcfs`: Haplotype 2 PALMER VCFs, per MEI type.
+- `Array[File] palmer_hap2_vcf_idxs`: Indexes for the haplotype 2 VCFs.
 - `Array[File] palmer_diploid_vcfs`: Diploid PALMER VCFs merged across haplotypes, per MEI type.
 - `Array[File] palmer_diploid_vcf_idxs`: Indexes for the diploid VCFs.
 - `File palmer_combined_vcf`: Final VCF combining all MEI types.
