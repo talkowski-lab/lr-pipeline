@@ -2,8 +2,9 @@
 """Check that Markdown files follow the style conventions in docs/conventions.md.
 
 Only the mechanically checkable conventions are enforced: whitespace, blank-line
-spacing around headings, thematic dividers, and nested list indentation. Rules that
-need judgement - wording, section ordering, link targets - are left to review.
+spacing around headings, thematic dividers, nested list indentation, and that every
+Markdown file is referenced from somewhere. Rules that need judgement - wording,
+section ordering, link targets - are left to review.
 
 Fenced code blocks hold code rather than Markdown, so they are exempt from the
 heading and list rules; tabs and trailing whitespace are still checked there.
@@ -12,9 +13,12 @@ Usage: check_markdown_style.py [PATH ...]   (defaults to README.md, AGENTS.md,
 CONTRIBUTING.md, CODE_OF_CONDUCT.md, SECURITY.md, .github/PULL_REQUEST_TEMPLATE.md,
 docs/ and tests/; directories recurse for *.md). Symlinks are skipped so the AGENTS.md
 mirrors at .claude/CLAUDE.md and .github/copilot-instructions.md are reported once.
+With no PATH, the repository-wide reference rule also runs over every tracked *.md.
 """
 
+import posixpath
 import re
+import subprocess
 import sys
 from pathlib import Path
 
@@ -34,6 +38,7 @@ FENCE_RE = re.compile(r"^\s*(```|~~~)")
 HEADING_RE = re.compile(r"^(#{1,6})\s+\S")
 LIST_ITEM_RE = re.compile(r"^( *)([-*+]|\d+[.)])(\s+)\S")
 DIVIDER_RE = re.compile(r"^\s{0,3}(-{3,}|\*{3,}|_{3,})\s*$")
+MD_MENTION_RE = re.compile(r"[\w./-]*\.md(?!\w)")
 
 
 class Checker:
@@ -173,6 +178,53 @@ def collect_files(paths):
     return [p for p in files if not p.is_symlink()]
 
 
+def tracked_texts(root):
+    """Read every tracked text file under root that is not a symlink, keyed by repository-relative path."""
+    listing = subprocess.run(["git", "ls-files", "-z"], cwd=str(root), check=True, capture_output=True, text=True).stdout
+    texts = {}
+    for rel in filter(None, listing.split("\0")):
+        path = root / rel
+        if path.is_symlink() or not path.is_file():
+            continue
+        try:
+            texts[rel] = path.read_text(encoding="utf-8")
+        except UnicodeDecodeError:
+            continue
+    return texts
+
+
+def find_unreferenced(texts):
+    """Return the Markdown files in texts ({repository-relative path: text}) that no other file mentions.
+
+    A mention is any path ending in `.md` that resolves to the file from the repository root or, as a
+    relative link does, from the mentioning file's directory. A bare basename counts too when no other
+    Markdown file shares it, so `README.md` alone never vouches for a nested README. The root README.md
+    is the repository's landing page and needs no referrer.
+    """
+    by_name = {}
+    for path in texts:
+        if path.endswith(".md"):
+            by_name.setdefault(posixpath.basename(path), set()).add(path)
+    referenced = set()
+    for referrer, text in texts.items():
+        base = posixpath.dirname(referrer)
+        for mention in set(MD_MENTION_RE.findall(text)):
+            candidates = {posixpath.normpath(mention.lstrip("/")), posixpath.normpath(posixpath.join(base, mention))}
+            same_name = by_name.get(posixpath.basename(mention), set())
+            if len(same_name) == 1:
+                candidates |= same_name
+            referenced |= candidates - {referrer}
+    targets = {path for path in texts if path.endswith(".md") and path != "README.md"}
+    return sorted(targets - referenced)
+
+
+def check_references(root):
+    return [
+        (rel, 1, "M008", "not referenced by any other tracked file; link or mention it from a relevant document")
+        for rel in find_unreferenced(tracked_texts(root))
+    ]
+
+
 def main():
     paths = sys.argv[1:] or DEFAULT_PATHS
     files = collect_files(paths)
@@ -180,6 +232,8 @@ def main():
     for path in files:
         rel = str(path.relative_to(REPO_ROOT)) if REPO_ROOT in path.parents else str(path)
         errors.extend(Checker(rel, path.read_text()).run())
+    if not sys.argv[1:]:
+        errors.extend(check_references(REPO_ROOT))
 
     if errors:
         print("Markdown style check failed:\n")

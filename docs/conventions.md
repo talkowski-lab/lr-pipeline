@@ -130,7 +130,8 @@ These rules apply to WDL, Python, R and Bash alike, including code embedded in a
 - Do not use thematic section dividers such as `---`.
 - Indent a nested list item to its parent's content column - two spaces under a `-` parent, three under a `1.` parent - never with tabs. This is what CommonMark requires for the item to nest, and four or more spaces past the content column would turn it into a code block instead.
 - Every file should end with exactly one newline, and no line should carry trailing whitespace.
-- The rules above are enforced by `.github/scripts/check_markdown_style.py`, which should be run after editing any Markdown file. Fenced code blocks are exempt from the heading and list rules, since they hold code rather than Markdown.
+- Every tracked Markdown file other than the root `README.md` must be referenced by at least one other tracked file - a relative link to it, or a mention of its repository-relative path. A bare basename also counts when no other Markdown file shares it, so a nested `README.md` needs a path such as `data/README.md`. Add the reference from the most relevant document, e.g. [Repository structure](repository-structure.md), rather than leaving a file nobody can find.
+- The rules above are enforced by `.github/scripts/check_markdown_style.py`, which should be run after editing any Markdown file. Fenced code blocks are exempt from the heading and list rules, since they hold code rather than Markdown. The reference rule runs only when the script is given no paths, and covers every tracked `.md` file, including `archive/`; symlinks are neither checked nor counted as referrers.
 
 
 ## Workspace

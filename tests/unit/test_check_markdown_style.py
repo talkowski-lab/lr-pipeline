@@ -1,3 +1,5 @@
+import subprocess
+
 import pytest
 from conftest import load_script
 
@@ -61,3 +63,52 @@ def test_repository_docs_pass(repo_root):
     for path in md.collect_files(["README.md", "docs"]):
         errors.extend(md.Checker(str(path), path.read_text()).run())
     assert errors == []
+
+
+@pytest.mark.parametrize(
+    "texts,orphans",
+    [
+        # The root README needs no referrer; a file mentioning itself does not count
+        ({"README.md": "", "docs/a.md": "see docs/a.md"}, ["docs/a.md"]),
+        ({"README.md": "[A](docs/a.md#top)", "docs/a.md": ""}, []),
+        # Relative links resolve from the mentioning file's directory
+        ({"README.md": "", "docs/a.md": "[B](../tests/b.md)", "tests/b.md": "[A](../docs/a.md)"}, []),
+        ({"README.md": "tests/README.md", "tests/README.md": "[data](data/README.md)", "tests/data/README.md": ""}, []),
+        # A unique basename counts from anywhere, including non-Markdown files
+        ({"README.md": "", "docs/a.md": "", "scripts/x.py": "# documented in a.md"}, []),
+        # A shared basename alone does not identify the file
+        ({"README.md": "see README.md", "tests/README.md": ""}, ["tests/README.md"]),
+        (
+            {"README.md": "workflows.md", "docs/workflows.md": "", "archive/docs/workflows.md": ""},
+            ["archive/docs/workflows.md", "docs/workflows.md"],
+        ),
+        (
+            {
+                "README.md": "",
+                "CONTRIBUTING.md": "`archive/docs/workflows.md`",
+                "archive/docs/workflows.md": "docs/workflows.md",
+                "docs/workflows.md": "CONTRIBUTING.md",
+            },
+            [],
+        ),
+    ],
+)
+def test_find_unreferenced(texts, orphans):
+    assert md.find_unreferenced(texts) == orphans
+
+
+def test_check_references_reads_tracked_files(tmp_path):
+    (tmp_path / "docs").mkdir()
+    (tmp_path / "README.md").write_text("[A](docs/a.md)\n")
+    (tmp_path / "docs" / "a.md").write_text("")
+    (tmp_path / "docs" / "orphan.md").write_text("")
+    (tmp_path / "docs" / "untracked.md").write_text("")
+    (tmp_path / "binary.dat").write_bytes(b"\xff\xfe orphan.md")
+    (tmp_path / "link.md").symlink_to("README.md")
+    subprocess.run(["git", "init", "-q"], cwd=tmp_path, check=True)
+    subprocess.run(["git", "add", "README.md", "docs/a.md", "docs/orphan.md", "binary.dat", "link.md"], cwd=tmp_path, check=True)
+    assert [(error[0], error[2]) for error in md.check_references(tmp_path)] == [("docs/orphan.md", "M008")]
+
+
+def test_repository_markdown_is_referenced(repo_root):
+    assert md.check_references(repo_root) == []
