@@ -2,7 +2,7 @@ name: Dockstore Sync Check
 
 on:
   push:
-    branches: [ main ]
+    branches: [ '**', '!dependabot/**' ]
     paths:
       - 'wdl/**'
       - '.dockstore.yml'
@@ -19,7 +19,7 @@ permissions:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 jobs:
   dockstore_sync_check:
@@ -47,6 +47,6 @@ jobs:
           python .github/scripts/check_dockstore_sync.py
 
       - name: Check no feature branch filters remain on main
-        if: github.event_name == 'push'
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         run: |
           python .github/scripts/check_dockstore_sync.py --main-only

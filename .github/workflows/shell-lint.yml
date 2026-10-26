@@ -2,7 +2,7 @@ name: Shell and Dockerfile Lint
 
 on:
   push:
-    branches: [ main ]
+    branches: [ '**', '!dependabot/**' ]
     paths:
       - '**/*.sh'
       - '.githooks/**'
@@ -23,7 +23,7 @@ permissions:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 jobs:
   shellcheck:

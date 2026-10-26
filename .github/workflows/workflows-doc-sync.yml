@@ -2,7 +2,7 @@ name: Workflows Doc Sync
 
 on:
   push:
-    branches: [ main ]
+    branches: [ '**', '!dependabot/**' ]
     paths:
       - 'wdl/**'
       - 'archive/wdl/**'
@@ -25,11 +25,11 @@ permissions:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 jobs:
   check:
-    if: github.event_name == 'pull_request'
+    if: github.event_name == 'pull_request' || github.ref != 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     name: Check Workflow Documentation
@@ -47,7 +47,7 @@ jobs:
           python .github/scripts/check_wdl_style.py
 
       # The document is regenerated and committed on push to main, so a stale copy on a
-      # pull request is not an error; only a document that cannot be built is
+      # branch or pull request is not an error; only a document that cannot be built is
       # archive/ is excluded from check_wdl_style.py, so the generator parsing its retired
       # workflows is the only guard that archive/docs/workflows.md still builds
       - name: Confirm the workflow documents can be generated
@@ -56,7 +56,7 @@ jobs:
           python .github/scripts/generate_workflows_doc.py --site archive --dry-run
 
   generate:
-    if: github.event_name == 'push'
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     name: Generate Workflow Documentation

@@ -54,6 +54,6 @@ To add an exemption, add the workflow name to the `EXEMPT` dict in that file wit
 
 
 ## Continuous integration
-`.github/workflows/tests.yml` runs on pushes and pull requests to `main` that touch the workflows, scripts, tests, the `utils` image or `pyproject.toml`.
+`.github/workflows/tests.yml` runs on pushes to any branch and on pull requests that touch the workflows, scripts, tests, the `utils` image or `pyproject.toml`.
 - The `unit` job installs the test dependencies on Python 3.10 and runs `pytest tests/unit`.
 - The `wdl` job builds `dockerfiles/Dockerfile.utils` with the build arguments from `dockerfiles/build_args.sh`, loads it into Docker as `utils:ci`, and runs `pytest -m wdl tests/wdl` with the default miniwdl Docker backend. miniwdl uses an image already present in the local Docker daemon rather than pulling it.

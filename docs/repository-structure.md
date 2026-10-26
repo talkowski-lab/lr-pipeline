@@ -101,4 +101,4 @@ Some workflows invoke scripts under `/opt/sv-pipeline/` or `/app/SVAN/`. Those b
 
 
 ## CI/CD
-Nine GitHub Actions workflows gate `main`, covering WDL syntax, WDL style, Markdown style, Python linting, unit and WDL smoke tests, shell and Dockerfile linting, Dockstore registration, agent-instruction sync and workflow-documentation generation. See [CI/CD](ci-cd.md) for the full table, the matching commands to run locally before pushing, and how Dockstore registration and image releases work.
+The GitHub Actions workflows check every branch and `main`, covering WDL syntax, WDL style, Markdown style, Python linting, unit and WDL smoke tests, shell and Dockerfile linting, Dockstore registration, agent-instruction sync and workflow-documentation generation. See [CI/CD](ci-cd.md) for the full table, the matching commands to run locally before pushing, and how Dockstore registration and image releases work.

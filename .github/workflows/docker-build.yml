@@ -4,7 +4,7 @@ name: Docker build
 # broken pins and installs before an image is built for release. Never pushes.
 on:
   push:
-    branches: main
+    branches: [ '**', '!dependabot/**' ]
     paths:
       - 'dockerfiles/**'
       - '.github/workflows/docker-build.yml'
@@ -24,7 +24,7 @@ permissions:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 jobs:
   build:
@@ -32,7 +32,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 180
     env:
-      BASE_REF: ${{ github.event.pull_request.base.sha || github.event.before }}
+      PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+      PUSH_BEFORE_SHA: ${{ github.event.before }}
       INPUT_IMAGES: ${{ inputs.images }}
     steps:
     - name: Checkout code
@@ -42,6 +43,19 @@ jobs:
 
     - name: Set up Docker Buildx
       uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+    # A branch diffs against its merge base with main, so a Dockerfile changed in an earlier
+    # push whose run was cancelled is still built
+    - name: Resolve the commit to diff against
+      run: |
+        if [[ "${GITHUB_EVENT_NAME}" == "pull_request" ]]; then
+          base="${PR_BASE_SHA}"
+        elif [[ "${GITHUB_REF}" == "refs/heads/main" ]]; then
+          base="${PUSH_BEFORE_SHA}"
+        else
+          base="$(git merge-base origin/main HEAD)"
+        fi
+        echo "BASE_REF=${base}" >> "$GITHUB_ENV"
 
     - name: Select images to build
       id: select

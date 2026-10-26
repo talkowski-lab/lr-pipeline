@@ -44,6 +44,7 @@ Images are built from [`dockerfiles/`](dockerfiles/) with `dockerfiles/build_doc
 ## Maintainer Workflow
 Maintainers work from a worktree per branch rather than from a fork, and merge locally rather than through a pull request.
 - `.github/scripts/new_worktree.sh <branch>` cuts the branch from `origin/main`, pushes it and creates `../lr-pipeline-worktrees/<branch>`.
+- Every push to the branch runs the CI workflows whose paths it touches, so check those runs before merging.
 - To test a workflow from the branch in Terra, list the branch under `filters.branches` in its `.dockstore.yml` entry.
 - `.github/scripts/merge_branch.sh <branch>` strips the branch filters, rebases, fast-forwards `main`, pushes, and removes the worktree, branch and branch image tags. Repository administrators are exempt from the pull request ruleset, which is what allows this push.
 
