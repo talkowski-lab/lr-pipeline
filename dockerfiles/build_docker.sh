@@ -14,8 +14,11 @@ set -euo pipefail
 # Tool versions and upstream commits are centralized in dockerfiles/versions.env
 # and resolved into --build-arg values by dockerfiles/build_args.sh.
 #
+# Every build carries OCI labels naming the source repository, the commit, the tag
+# it was built as and the build time, and a push prints the pushed manifest digest.
+#
 # Dockerfiles are named Dockerfile.<image-name>, so the image
-# name is the only argument needed. --no-push builds and tags locally only.
+# name is the only argument needed. --no-push, in any position, builds and tags locally only.
 #
 # Usage: dockerfiles/build_docker.sh [--no-push] <image-name>
 # Example: dockerfiles/build_docker.sh utils
@@ -25,12 +28,19 @@ REGISTRY="${DOCKER_REGISTRY:-us-central1-docker.pkg.dev/talkowski-sv-gnomad/kj-d
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 push=true
-if [[ "${1:-}" == "--no-push" ]]; then
-    push=false
-    shift
+positional=()
+for arg in "$@"; do
+    case "${arg}" in
+        --no-push) push=false ;;
+        *) positional+=("${arg}") ;;
+    esac
+done
+if [[ ${#positional[@]} -ne 1 ]]; then
+    echo "Usage: dockerfiles/build_docker.sh [--no-push] <image-name>" >&2
+    exit 2
 fi
 
-image_name="$1"
+image_name="${positional[0]}"
 dockerfile_name="Dockerfile.${image_name}"
 dockerfile="${REPO_ROOT}/dockerfiles/${dockerfile_name}"
 
@@ -64,17 +74,27 @@ else
     fi
 fi
 
+label_args=(
+    --label "org.opencontainers.image.source=https://github.com/talkowski-lab/lr-pipeline"
+    --label "org.opencontainers.image.revision=$(git -C "${REPO_ROOT}" rev-parse HEAD)"
+    --label "org.opencontainers.image.version=${new_tag}"
+    --label "org.opencontainers.image.created=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+)
+
 echo "Building ${image_name}:${new_tag} from ${dockerfile_name}"
-podman build --platform linux/amd64 --network=host "${base_args[@]+"${base_args[@]}"}" "${build_args[@]+"${build_args[@]}"}" -f "${dockerfile}" -t "${image_name}:${new_tag}" "${REPO_ROOT}"
+podman build --platform linux/amd64 --network=host "${base_args[@]+"${base_args[@]}"}" "${build_args[@]+"${build_args[@]}"}" "${label_args[@]}" -f "${dockerfile}" -t "${image_name}:${new_tag}" "${REPO_ROOT}"
 
 if [[ "${push}" == false ]]; then
     echo "Built localhost/${image_name}:${new_tag} without pushing"
     exit 0
 fi
 
+# Every tag points at the same manifest, so the digest of any one push names them all
+digest_file="$(mktemp)"
+trap 'rm -f "${digest_file}"' EXIT
 for tag in "${push_tags[@]}"; do
     podman tag "${image_name}:${new_tag}" "${REGISTRY}/${image_name}:${tag}"
-    podman push "${REGISTRY}/${image_name}:${tag}"
+    podman push --digestfile "${digest_file}" "${REGISTRY}/${image_name}:${tag}"
 done
 
-echo "Pushed ${REGISTRY}/${image_name} with tags: ${push_tags[*]}"
+echo "Pushed ${REGISTRY}/${image_name}@$(cat "${digest_file}") with tags: ${push_tags[*]}"

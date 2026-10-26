@@ -34,7 +34,7 @@
             "filter_trid_motif_pair"
         ]
     ],
-    "TRGTLPS.trgt_lps_docker": "us-central1-docker.pkg.dev/talkowski-sv-gnomad/kj-dockers/trgt-lps:latest",
+    "TRGTLPS.trgt_lps_docker": "us-central1-docker.pkg.dev/talkowski-sv-gnomad/kj-dockers/trgtlps:latest",
     "TRGTLPS.utils_docker": "us-central1-docker.pkg.dev/talkowski-sv-gnomad/kj-dockers/utils:latest",
     "TRGTLPS.stranalysis_docker": "us-central1-docker.pkg.dev/talkowski-sv-gnomad/kj-dockers/stranalysis:latest"
 }

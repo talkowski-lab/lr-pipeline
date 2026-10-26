@@ -88,7 +88,7 @@ No status checks are required, because every workflow is path-filtered: a requir
 
 
 ## Docker Images
-CI builds images only to check that they build: `docker-build.yml` builds the changed Dockerfiles from the branch's or pull request's tree and discards them, so a broken pin or install is caught before release. It uses Docker, builds `utils` first as `utils:ci` (sharing the `tests.yml` layer cache) and builds every other image `FROM` it through `BASE_IMAGE`, with `trgt:ci` first for `trgtlps`. Images that are released are built locally with `build_docker.sh` and pushed to Artifact Registry by the maintainer - see [Building and Pushing](dockers.md#building-and-pushing). Contributors without registry access build with `--no-push`.
+CI builds images only to check that they build: `docker-build.yml` builds the changed Dockerfiles from the branch's or pull request's tree and discards them, so a broken pin or install is caught before release. It uses Docker, builds `utils` first as `utils:ci` (sharing the `tests.yml` layer cache) and builds every other image `FROM` it through `BASE_IMAGE`, with `trgt:ci` first for `trgtlps`. Images that are released are built locally with `build_docker.sh` and pushed to Artifact Registry by the maintainer - see [Building and Pushing](dockers.md#building-and-pushing). Contributors without registry access build with `--no-push`. CI has no registry credentials, so [`audit_images.sh`](../dockerfiles/audit_images.sh), which confirms every `:latest` carries a dated tag, is run by the maintainer rather than in CI.
 
 [`.hadolint.yaml`](../.hadolint.yaml) configures `hadolint` for the Dockerfiles, run in CI by `shell-lint.yml`; each ignored rule carries a comment justifying it.
 

@@ -3,7 +3,7 @@ This document lists the Docker images used by the pipeline - repo-built, collabo
 
 
 ## Building and Pushing
-Every container image is built from a `dockerfiles/Dockerfile.<image-name>` file, where `<image-name>` is all-lowercase and is exactly the name the image is pushed under - e.g. `Dockerfile.utils` builds `utils`, `Dockerfile.stranalysis` builds `stranalysis`. There is no separate name-mapping file; the Dockerfile suffix mechanically is the image name. The one exception is `Dockerfile.trgtlps`, which is pushed as `trgt-lps` with a hyphen, so do not assume the two always match.
+Every container image is built from a `dockerfiles/Dockerfile.<image-name>` file, where `<image-name>` is all-lowercase and is exactly the name the image is pushed under - e.g. `Dockerfile.utils` builds `utils`, `Dockerfile.stranalysis` builds `stranalysis`. There is no separate name-mapping file; the Dockerfile suffix mechanically is the image name, so `Dockerfile.trgtlps` is pushed as `trgtlps`. An older `trgt-lps` image in the registry predates the build script and is not rebuilt.
 
 Images are pushed to Artifact Registry at:
 ```
@@ -12,7 +12,7 @@ us-central1-docker.pkg.dev/talkowski-sv-gnomad/kj-dockers/<image-name>
 
 This registry is private. To run the pipeline elsewhere, build the images you need from [`dockerfiles/`](../dockerfiles/), push them to a registry your Terra workspace can pull from, and point the workspace data at them. Set `DOCKER_REGISTRY` to that registry - e.g. `DOCKER_REGISTRY=us-central1-docker.pkg.dev/<project>/<repository> dockerfiles/build_docker.sh utils` - and the script pushes there instead. Build `utils` first, then `trgt`, since the other repository images start from one of them. Each of those Dockerfiles declares `ARG BASE_IMAGE=<registry>/<base>:latest` before `FROM ${BASE_IMAGE}`, so point it at your registry with `--build-arg BASE_IMAGE=<your-registry>/utils:latest` instead of editing the Dockerfile.
 
-Build and push an image with the helper script, which takes the image name as its only argument:
+Build and push an image with the helper script, which takes the image name as its only argument, plus an optional `--no-push` in any position:
 ```bash
 dockerfiles/build_docker.sh [--no-push] <image-name>
 # e.g. dockerfiles/build_docker.sh utils
@@ -21,8 +21,9 @@ dockerfiles/build_docker.sh [--no-push] <image-name>
 The script does the following:
 - Resolves the build arguments through [`dockerfiles/build_args.sh`](../dockerfiles/build_args.sh) `<image-name>`, which prints a `NAME=value` line for every `ARG` declared in the Dockerfile without an inline default, taken from [`dockerfiles/versions.env`](../dockerfiles/versions.env) where it is keyed as `<image-name>__<ARG_NAME>`. CI uses the same script, so local and CI builds resolve identically. A missing key fails the build.
 - Builds with `podman build --platform linux/amd64` from the repository root - meaning the worktree it is run from, so each branch builds its own tree.
+- Labels the build with the OCI keys `org.opencontainers.image.source`, `.revision` (the full HEAD commit), `.version` (the tag it is built as) and `.created`, so `podman inspect` on any pulled image names the commit behind it.
 - Tags the build by the branch it was built on, since branches are developed in parallel worktrees - see [Branches](conventions.md#branches).
-- With `--no-push`, builds and tags locally only, as `localhost/<image-name>:<tag>`, and pushes nothing. This is how contributors without registry access build images, and how the utils image for the [smoke tests](ci-cd.md#tests) is made.
+- With `--no-push`, builds and tags locally only, as `localhost/<image-name>:<tag>`, and pushes nothing. A push ends by printing the pushed manifest digest, `<registry>/<image-name>@sha256:...`. This is how contributors without registry access build images, and how the utils image for the [smoke tests](ci-cd.md#tests) is made.
 
 | Branch | Tags pushed | How the tag is chosen |
 |---|---|---|
@@ -39,7 +40,7 @@ Two consequences worth knowing:
 - Because the build context is the repository root, `Dockerfile.utils`, `Dockerfile.hail` and `Dockerfile.vephail` bake the live `scripts/` tree into the image at `/opt/scripts`, so a change under `scripts/` reaches a running task only once those images and the images inheriting from `utils` are rebuilt - see [Scripts](repository-structure.md#scripts) for how each script reaches a task.
 - The script needs an authenticated `gcloud` for the branch base-image lookup and a `podman` logged in to the registry for the push; neither is needed with `--no-push` on a branch.
 
-**Which tag to use:** WDL tasks never hardcode a docker image URI - the `String docker` task input is always supplied by the caller via Terra workspace data, per [Conventions](conventions.md). Workspace data should point at the `:latest` tag for each image, since every `main` build retags `:latest` to the newest build. The dated tags exist purely as an immutable version history, for pinning or rolling back to a specific prior build. While testing a branch, point that branch's Terra method config at the `:<branch>` tag instead, and drop back to `:latest` after the merge and rebuild.
+**Which tag to use:** WDL tasks never hardcode a docker image URI - the `String docker` task input is always supplied by the caller via Terra workspace data, per [Conventions](conventions.md). For development, workspace data points at the `:latest` tag of each image, since every `main` build retags `:latest` to the newest build. A production or publication run should instead pin each image by its dated tag, or by the digest the build printed, so the exact images behind a callset stay recoverable after `:latest` moves; the dated tags are also how to roll back to a prior build. [`dockerfiles/audit_images.sh`](../dockerfiles/audit_images.sh) lists the digest and dated tag behind every image's `:latest`, and exits non-zero naming any image whose `:latest` has no dated tag. While testing a branch, point that branch's Terra method config at the `:<branch>` tag instead, and drop back to `:latest` after the merge and rebuild.
 
 
 ## Repository
@@ -65,7 +66,7 @@ Built from [dockerfiles/](../dockerfiles/) in this repository and pushed to the 
 | `stranalysis_docker` | `stranalysis` | [`Dockerfile.stranalysis`](../dockerfiles/Dockerfile.stranalysis) |
 | `svan_docker` | `svan` | [`Dockerfile.svan`](../dockerfiles/Dockerfile.svan) |
 | `trgt_docker` | `trgt` | [`Dockerfile.trgt`](../dockerfiles/Dockerfile.trgt) |
-| `trgt_lps_docker` | `trgt-lps` | [`Dockerfile.trgtlps`](../dockerfiles/Dockerfile.trgtlps) |
+| `trgt_lps_docker` | `trgtlps` | [`Dockerfile.trgtlps`](../dockerfiles/Dockerfile.trgtlps) |
 | `utils_docker` | `utils` | [`Dockerfile.utils`](../dockerfiles/Dockerfile.utils) |
 | `vamos_docker` | `vamos` | [`Dockerfile.vamos`](../dockerfiles/Dockerfile.vamos) |
 | `vep_hail_docker` | `vephail` | [`Dockerfile.vephail`](../dockerfiles/Dockerfile.vephail) |
