@@ -6,7 +6,7 @@ Thanks for helping improve lr-pipeline. This page covers how to propose a change
 1. Fork the repository and create a branch with any descriptive name other than `main` - e.g. `annotate-dbvar-mem`.
 2. Make the change following [Conventions](docs/conventions.md) - WDL, Python and Markdown style, and the comment rules.
 3. Run the local checks below that match what you changed.
-4. Open a pull request against `main` and fill in the template. A pull request is required: `main` is protected by a ruleset - see [Branch Protection](docs/ci-cd.md#branch-protection).
+4. Open a pull request against `main` and fill in the template. The code owners in [`.github/CODEOWNERS`](.github/CODEOWNERS) are requested as reviewers automatically. A pull request is required: `main` is protected by a ruleset - see [Branch Protection](docs/ci-cd.md#branch-protection).
 
 Do not edit `docs/workflows.md` or `archive/docs/workflows.md`. They are generated from each workflow's `meta` and `parameter_meta` blocks, and CI regenerates and commits them after the merge.
 

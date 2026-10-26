@@ -25,6 +25,7 @@ data/                # Local-only analysis inputs, outputs and scratch work; git
 docs/                # Extended documentation (this file included)
 .github/
   workflows/         # Active GitHub Actions CI
+  CODEOWNERS         # Default reviewers requested on every pull request
   dependabot.yml     # Weekly updates for GitHub Actions, pip dependencies and Docker base images
   ISSUE_TEMPLATE/    # Bug report and feature request issue forms
   PULL_REQUEST_TEMPLATE.md
@@ -32,6 +33,7 @@ docs/                # Extended documentation (this file included)
   hooks/             # Agent hook scripts keeping sessions out of the main checkout and in a worktree
 archive/             # Retired workflows, scripts, Dockerfiles, notebooks and their reference docs
   docs/workflows.md  # Generated from the retired workflows, the counterpart to docs/workflows.md
+  wdl/               # Retired workflows, validated by womtool; utils/RetiredHelpers.wdl holds deleted Helpers tasks they call
   notebooks/         # Retired ad hoc Jupyter notebooks (Terra cost analysis via the API and BigQuery)
   .github/           # Inactive Docker build-on-push workflow and its helper script
 .claude/

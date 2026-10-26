@@ -88,7 +88,7 @@ Two GitHub rulesets protect `main`.
 - `main: no deletion or force push` applies to everyone, with no bypass.
 - `main: pull request required` requires every change to arrive through a pull request, except from repository administrators and deploy keys. Those two exceptions keep the maintainer's fast-forward push from `merge_branch.sh` and the `workflows-doc-sync.yml` bot commit working; GitHub does not accept the GitHub Actions integration as a bypass actor on a repository ruleset, so that job pushes with the `workflows-doc-sync` deploy key, whose private half is the `DOCS_DEPLOY_KEY` repository secret. Rotating the key means replacing both.
 
-No status checks are required, because every workflow is path-filtered: a required check that never runs on a pull request touching other paths would block it indefinitely. Reviewers check the results of the workflows that did run. Private vulnerability reporting is enabled - see [SECURITY.md](../SECURITY.md).
+[`.github/CODEOWNERS`](../.github/CODEOWNERS) requests its owners as reviewers on every pull request; the ruleset does not require their approval. No status checks are required, because every workflow is path-filtered: a required check that never runs on a pull request touching other paths would block it indefinitely. Reviewers check the results of the workflows that did run. Private vulnerability reporting is enabled - see [SECURITY.md](../SECURITY.md).
 
 
 ## Docker Images
