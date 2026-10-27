@@ -576,6 +576,7 @@ workflows:
     filters:
       branches:
         - main
+        - kj-many-to-many-accuracy
       tags:
         - /.*/
 

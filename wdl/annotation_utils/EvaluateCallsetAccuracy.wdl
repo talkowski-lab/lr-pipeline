@@ -3,14 +3,13 @@ version 1.0
 import "../annotation/AnnotateRegion.wdl"
 import "../utils/ExactMatch.wdl"
 import "../utils/Structs.wdl"
-import "../utils/TruvariMatch.wdl"
 
 workflow EvaluateCallsetAccuracy {
     meta {
         description: [
             "This utility benchmarks one contig of a cohort VCF against a truth set combined from an SNV & indel truth VCF and an SV truth VCF, reporting precision and recall at the site and call level. Each truth VCF is cut to the callset's samples and contig, split into biallelic records and left-aligned, and the SNV & indel truth is restricted to `truth_snv_indel_bed` when given. SV truth records identical in CHROM, POS, REF and ALT to an SNV & indel truth record are dropped before the two are combined, so each variant is counted once. The BED also restricts callset records shorter than `sv_min_length`, matching the truth records it bounds; longer callset records are kept genome-wide like the SV truth. Only records with at least one non-reference call are kept on either side.",
-            "Matching reuses the first round of `AnnotateCallsetOverlap`, an exact match on CHROM, POS, REF and ALT, followed by a single Truvari pass at 0.5 sequence similarity, size similarity and overlap on the records left unmatched on both sides, admitting callset records with `abs(INFO/allele_length)` of at least `min_sv_length_truvari_vcf` and truth records of at least `min_sv_length_truvari_truth_vcf`. Every record is therefore paired at most once. Truvari skips records longer than 50 kb, so those count only through the exact match.",
-            "A site is one record and a call is one sample's non-reference genotype at it, with phasing and zygosity ignored. A callset site is a true positive when it matched a truth record and a callset call when that sample is also non-reference in the matched truth record; a truth site or call is recovered the same way from the other side. Precision counts callset sites and calls, stratified by `INFO/allele_type` and `abs(INFO/allele_length)`, and recall counts truth sites and calls, stratified by the type and length of the truth record - `SVTYPE` and `SVLEN` when present, otherwise REF and ALT. A matched pair can therefore fall in different strata on the two sides. Truth records that are not an SNV, insertion or deletion, such as multi-nucleotide variants and inversions, are left out of recall.",
+            "Matching reuses the first round of `AnnotateCallsetOverlap`, an exact match on CHROM, POS, REF and ALT, followed by a single Truvari pass at 0.5 sequence similarity, size similarity and overlap between the callset records left unmatched, with `abs(INFO/allele_length)` of at least `min_sv_length_truvari_vcf`, and every truth record of at least `min_sv_length_truvari_truth_vcf`. The Truvari pass keeps every pair that passes these thresholds rather than one partner per record, so a record can match several records on the other side, and each record still counts once in its own side's totals. Truvari skips records longer than 50 kb, so those count only through the exact match.",
+            "A site is one record and a call is one sample's non-reference genotype at it, with phasing and zygosity ignored. A callset site is a true positive when it matched any truth record and a callset call when that sample is also non-reference in any matched truth record; a truth site or call is recovered the same way from the other side. Precision counts callset sites and calls, stratified by `INFO/allele_type` and `abs(INFO/allele_length)`, and recall counts truth sites and calls, stratified by the type and length of the truth record - `SVTYPE` and `SVLEN` when present, otherwise REF and ALT. A matched pair can therefore fall in different strata on the two sides. Truth records that are not an SNV, insertion or deletion, such as multi-nucleotide variants and inversions, are left out of recall.",
             "Each record is also assigned the genomic region of `AnnotateRegion` - simple repeat, segmental duplication, RepeatMasker or unique sequence - and rows are stratified into `US/RM` and `SD/SR`, by the callset record's region for precision and the truth record's for recall.",
             "Every row is reported at both matching stages, cumulatively, so the `truvari` rows give the totals. All count columns sum across contigs."
         ]
@@ -37,6 +36,8 @@ workflow EvaluateCallsetAccuracy {
         simple_repeats_bed: "From references."
         seg_dup_bed: "From references."
         repeat_masked_bed: "From references."
+        exact_match_tsv: "Exact-match pairs, one row per callset record with the callset record ID in the fifth column and the truth record ID in the seventh."
+        truvari_match_tsv: "Truvari pairs in the same layout, one row per passing callset and truth record pair."
         accuracy_tsv: "One row per level (`site` or `call`), sample, allele type, length bin, region (`US/RM` or `SD/SR`) and cumulative matching stage (`exact` or `truvari`), with `tp_eval`, `fp`, `tp_truth`, `fn`, precision, recall and F1; strata with no records on either side are left out. Site rows use sample `all`; type, length bin and region each have an `all` marginal."
     }
 
@@ -55,7 +56,7 @@ workflow EvaluateCallsetAccuracy {
         Int sv_min_length = 50
         Int min_sv_length_truvari_vcf = 5
         Int min_sv_length_truvari_truth_vcf = 10
-        Array[Int] length_bins = [0, 1, 50, 500]
+        Array[Int] length_bins = [0, 1, 50, 2000]
 
         Int shard_bin_size_exact_match = 5000000
         Int records_per_shard_region = 10000
@@ -70,8 +71,7 @@ workflow EvaluateCallsetAccuracy {
 
         RuntimeAttr? runtime_attr_prepare_eval
         RuntimeAttr? runtime_attr_prepare_truth
-        RuntimeAttr? runtime_attr_drop_matched_truth
-        RuntimeAttr? runtime_attr_run_truvari
+        RuntimeAttr? runtime_attr_truvari_match
         RuntimeAttr? runtime_attr_count_accuracy
         RuntimeAttr? runtime_attr_create_exact_shards
         RuntimeAttr? runtime_attr_subset_exact_vcf
@@ -146,35 +146,21 @@ workflow EvaluateCallsetAccuracy {
             runtime_attr_concat_exact_truth = runtime_attr_concat_exact_truth
     }
 
-    # ExactMatch hands Truvari every long enough truth record, so remove those already matched to keep pairs one-to-one
-    call DropMatchedTruthRecords {
-        input:
-            vcf = select_first([ExactMatch.truvari_truth_vcf]),
-            vcf_idx = select_first([ExactMatch.truvari_truth_vcf_idx]),
-            match_tsv = select_first([ExactMatch.annotated_tsv]),
-            prefix = "~{prefix}.~{contig}.truvari_truth",
-            docker = utils_docker,
-            runtime_attr_override = runtime_attr_drop_matched_truth
-    }
-
-    call TruvariMatch.RunTruvari {
+    # ExactMatch hands Truvari every long enough truth record, so a truth record matched exactly can still pair with other callset records
+    call TruvariMatchAllPairs {
         input:
             vcf = ExactMatch.truvari_eval_vcf,
             vcf_idx = ExactMatch.truvari_eval_vcf_idx,
-            truth_snv_indel_vcf = DropMatchedTruthRecords.unmatched_vcf,
-            truth_snv_indel_vcf_idx = DropMatchedTruthRecords.unmatched_vcf_idx,
+            truth_vcf = select_first([ExactMatch.truvari_truth_vcf]),
+            truth_vcf_idx = select_first([ExactMatch.truvari_truth_vcf_idx]),
             pctseq = 0.5,
             pctsize = 0.5,
             pctovl = 0.5,
-            sizemin = 0,
-            sizefilt = 0,
-            tag_value = "TRUVARI",
-            source_tag = "truth",
             ref_fa = ref_fa,
             ref_fai = ref_fai,
             prefix = "~{prefix}.~{contig}.truvari",
             docker = utils_docker,
-            runtime_attr_override = runtime_attr_run_truvari
+            runtime_attr_override = runtime_attr_truvari_match
     }
 
     call AnnotateRegion.AnnotateRegion as AnnotateEvalRegion {
@@ -217,7 +203,7 @@ workflow EvaluateCallsetAccuracy {
             truth_vcf_idx = PrepareAccuracyTruthVcf.truth_vcf_idx,
             eval_region_tsv = AnnotateEvalRegion.annotations_tsv_region,
             truth_region_tsv = AnnotateTruthRegion.annotations_tsv_region,
-            match_tsvs = select_all([ExactMatch.annotated_tsv, RunTruvari.annotation_tsv]),
+            match_tsvs = select_all([ExactMatch.annotated_tsv, TruvariMatchAllPairs.annotation_tsv]),
             length_bins = length_bins,
             prefix = "~{prefix}.~{contig}.callset_accuracy",
             docker = utils_docker,
@@ -225,6 +211,8 @@ workflow EvaluateCallsetAccuracy {
     }
 
     output {
+        File exact_match_tsv = select_first([ExactMatch.annotated_tsv])
+        File truvari_match_tsv = TruvariMatchAllPairs.annotation_tsv
         File accuracy_tsv = CountCallsetAccuracy.accuracy_tsv
     }
 }
@@ -392,11 +380,17 @@ CODE
     }
 }
 
-task DropMatchedTruthRecords {
+task TruvariMatchAllPairs {
     input {
         File vcf
         File vcf_idx
-        File match_tsv
+        File truth_vcf
+        File truth_vcf_idx
+        Float pctseq
+        Float pctsize
+        Float pctovl
+        File ref_fa
+        File ref_fai
         String prefix
         String docker
         RuntimeAttr? runtime_attr_override
@@ -405,22 +399,56 @@ task DropMatchedTruthRecords {
     command <<<
         set -euo pipefail
 
-        # The truth ID is the seventh column of the exact-match annotations
-        grep -v '^#' ~{match_tsv} | cut -f7 > matched_ids.txt || true
+        # Truvari looks for each index beside its VCF, but Cromwell localizes separately globbed shard indexes elsewhere
+        if [[ "~{vcf_idx}" != "~{vcf}.tbi" ]]; then
+            ln -sf "~{vcf_idx}" "~{vcf}.tbi"
+        fi
+        if [[ "~{truth_vcf_idx}" != "~{truth_vcf}.tbi" ]]; then
+            ln -sf "~{truth_vcf_idx}" "~{truth_vcf}.tbi"
+        fi
 
-        bcftools view -e 'ID=@matched_ids.txt' -Oz -o ~{prefix}.vcf.gz ~{vcf}
-        tabix -p vcf -f ~{prefix}.vcf.gz
+        python3 <<'CODE'
+import truvari
+from truvari.bench import check_inputs, parse_args
+
+# Build the parameters as `truvari bench` does, so its filters and defaults apply unchanged
+args = parse_args(['-b', "~{truth_vcf}", '-c', "~{vcf}", '-o', 'unused', '--reference', "~{ref_fa}",
+                   '--pctseq', "~{pctseq}", '--pctsize', "~{pctsize}", '--pctovl', "~{pctovl}", '--sizemin', '0', '--sizefilt', '0'])
+check_inputs(args)
+params = truvari.VariantParams(args, skip_gt=args.bSample is None or args.cSample is None,
+                               short_circuit=args.short, decompose=args.no_decompose)
+bench = truvari.Bench(params)
+base = truvari.VariantFile("~{truth_vcf}", params=params)
+comp = truvari.VariantFile("~{vcf}", params=params)
+tree = truvari.build_region_tree(base, comp)
+truvari.merge_region_tree_overlaps(tree)
+
+# Keep every pair passing the thresholds instead of letting a picker choose one partner per record
+pairs = set()
+for chunk, chunk_id in truvari.chunker(params, ('base', base.fetch_regions(tree)), ('comp', comp.fetch_regions(tree))):
+    if not chunk['base'] or not chunk['comp']:
+        continue
+    for row in bench.build_matrix(chunk['base'], chunk['comp'], chunk_id):
+        for match in row:
+            if match.state:
+                record = match.comp
+                pairs.add((record.chrom, record.pos + 1, record.ref, record.alts[0], record.id, match.base.id))
+
+with open("~{prefix}.annotation.tsv", 'w') as handle:
+    for chrom, pos, ref, alt, eval_id, truth_id in sorted(pairs):
+        handle.write(f'{chrom}\t{pos}\t{ref}\t{alt}\t{eval_id}\tTRUVARI\t{truth_id}\ttruth\t.\n')
+print(f'{len(pairs)} pairs between {len({p[4] for p in pairs})} callset and {len({p[5] for p in pairs})} truth records')
+CODE
     >>>
 
     output {
-        File unmatched_vcf = "~{prefix}.vcf.gz"
-        File unmatched_vcf_idx = "~{prefix}.vcf.gz.tbi"
+        File annotation_tsv = "~{prefix}.annotation.tsv"
     }
 
     RuntimeAttr default_attr = object {
         cpu_cores: 1,
         mem_gb: 4,
-        disk_gb: 2 * ceil(size(vcf, "GB") + size(match_tsv, "GB")) + 10,
+        disk_gb: 2 * ceil(size(vcf, "GB") + size(truth_vcf, "GB") + size(ref_fa, "GB")) + 10,
         boot_disk_gb: 10,
         preemptible_tries: 1,
         max_retries: 0
@@ -502,8 +530,8 @@ for allele_type, _, _, _ in truths.values():
     if allele_type not in TYPES:
         skipped[allele_type] += 1
 
-# Each callset record is matched at most once, by the first stage that pairs it
-matches = {}
+# A callset record can pair with several truth records, each pair kept at the first stage that finds it
+matches = defaultdict(dict)
 for path in "~{sep=',' match_tsvs}".split(','):
     with open(path) as handle:
         for line in handle:
@@ -511,9 +539,7 @@ for path in "~{sep=',' match_tsvs}".split(','):
                 continue
             fields = line.rstrip('\n').split('\t')
             eval_id, stage, truth_id = fields[4], fields[5], fields[6]
-            if eval_id in matches:
-                sys.exit(f'Callset record {eval_id} is matched more than once')
-            matches[eval_id] = (STAGES.index(stage), truth_id)
+            matches[eval_id].setdefault(truth_id, STAGES.index(stage))
 
 counts = defaultdict(lambda: [0] * len(COUNT_COLUMNS))
 
@@ -526,12 +552,11 @@ def add(stage, level, sample, allele_type, size, region, column):
 for stage_index, stage in enumerate(STAGES):
     recovered = defaultdict(set)
     for eval_id, (allele_type, size, region, eval_carriers) in evals.items():
-        match = matches.get(eval_id)
-        truth_id = match[1] if match is not None and match[0] <= stage_index else None
-        matched_carriers = truths[truth_id][3] if truth_id is not None else frozenset()
-        if truth_id is not None:
+        truth_ids = [truth_id for truth_id, index in matches.get(eval_id, {}).items() if index <= stage_index]
+        matched_carriers = frozenset().union(*(truths[truth_id][3] for truth_id in truth_ids))
+        for truth_id in truth_ids:
             recovered[truth_id] |= eval_carriers
-        add(stage, 'site', 'all', allele_type, size, region, 'tp_eval' if truth_id is not None else 'fp')
+        add(stage, 'site', 'all', allele_type, size, region, 'tp_eval' if truth_ids else 'fp')
         for sample in eval_carriers:
             column = 'tp_eval' if sample in matched_carriers else 'fp'
             add(stage, 'call', sample, allele_type, size, region, column)
@@ -572,7 +597,8 @@ with open("~{prefix}.tsv", 'w', newline='') as handle:
                             writer.writerow([level, sample, allele_type, size, region, stage.lower(),
                                              tp_eval, fp, tp_truth, fn, fmt(precision), fmt(recall), fmt(f1)])
 
-print(f'{len(evals)} callset and {len(truths)} truth records, {len(matches)} matched; truth left out of recall: {dict(skipped)}')
+pairs = sum(len(matched) for matched in matches.values())
+print(f'{len(evals)} callset and {len(truths)} truth records, {len(matches)} callset records in {pairs} pairs; truth left out of recall: {dict(skipped)}')
 CODE
     >>>
 
