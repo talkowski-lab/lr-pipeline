@@ -1756,7 +1756,7 @@ Outputs:
 - `File hificnv_log`: HiFiCNV log file.
 
 ### [HiPhase](../wdl/tools/HiPhase.wdl)
-This tool runs PacBio HiPhase (https://github.com/PacificBiosciences/HiPhase) to jointly phase a sample's small-variant, SV and (optionally) TRGT VCFs against its aligned reads. It preprocesses and synchronizes the input VCFs per contig, phases them together and optionally haplotags the BAM. It outputs the phased VCF, per-contig phasing statistics and an optional haplotagged BAM.
+This tool runs PacBio HiPhase (https://github.com/PacificBiosciences/HiPhase) to jointly phase a sample's small-variant, SV and (optionally) TRGT VCFs against its aligned reads. It preprocesses and synchronizes the input VCFs per contig and phases them together. When a TRGT VCF is given, each contig is phased a second time without it, and the small variants and SVs that HiPhase leaves unphased inside a TRGT call (`PF=TR_OVERLAP`) take their phased genotype and phase set from that second pass; the TRGT records excluded from phasing by the TRGT filters are kept in the output unphased. It outputs the phased VCF, per-contig counts of the genotypes filled from the second pass and per-contig phasing statistics.
 
 Inputs:
 - `File bam`: Aligned reads for the sample.
@@ -1770,15 +1770,14 @@ Inputs:
 - `File ref_fa`: From references.
 - `File ref_fai`: From references.
 - `Array[String] contigs`: Contigs to phase.
-- `Int? trgt_min_repeat_unit`: Minimum repeat-unit length retained when filtering the TRGT VCF.
+- `Int? trgt_min_repeat_unit`: Minimum repeat-unit length a TRGT record needs to be phased; shorter ones are kept in the output unphased.
 - `Boolean? trgt_normalize`: Whether to normalize the TRGT VCF before phasing.
 - `Int? trgt_min_length_diff`: Minimum length difference retained when filtering the TRGT VCF.
 - `Int? trgt_max_catalog_length`: Maximum catalog length retained when filtering the TRGT VCF.
 - `String? hiphase_extra_args`: Additional arguments passed to HiPhase.
-- `Boolean run_haplotagging`: Whether to also haplotag the BAM. (default `false`)
 - `String prefix`: Prefix for output file names.
 - `String hiphase_docker`, `String hiphase_preprocess_docker`, `String utils_docker`: Container images.
-- `RuntimeAttr? runtime_attr_*`: Optional per-task runtime overrides (11).
+- `RuntimeAttr? runtime_attr_*`: Optional per-task runtime overrides (12).
 
 Outputs:
 - `File hiphase_vcf`: Phased VCF.
@@ -1787,8 +1786,7 @@ Outputs:
 - `Array[File] hiphase_stats`: Per-contig phasing statistics.
 - `Array[File] hiphase_blocks`: Per-contig phase blocks.
 - `Array[File] hiphase_summary`: Per-contig phasing summaries.
-- `File? hiphase_haplotagged_bam`: Haplotagged BAM (only when `run_haplotagging`).
-- `File? hiphase_haplotagged_bam_idx`: Index for the haplotagged BAM (only when `run_haplotagging`).
+- `Array[File] hiphase_fill_stats`: Per-contig counts of heterozygous, unphased and second-pass-filled genotypes (only when `trgt_vcf` is given).
 
 ### [MergeHiPhaseCallsets](../wdl/tools/MergeHiPhaseCallsets.wdl)
 This tool merges per-sample HiPhase-phased VCFs into a cohort VCF on a per-contig basis, optionally also merging the TRGT tandem-repeat calls separately - fixing TRGT `END`/`AL` headers and propagating phase-set tags. It outputs the merged integrated VCF and an optional merged TRGT VCF.

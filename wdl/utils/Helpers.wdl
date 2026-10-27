@@ -2352,15 +2352,21 @@ def keep_record(record):
 
 vcf_in = pysam.VariantFile("~{vcf}")
 vcf_out = pysam.VariantFile("preprocessed.vcf.gz", "wz", header=vcf_in.header)
+vcf_excluded = pysam.VariantFile("~{prefix}.excluded.vcf.gz", "wz", header=vcf_in.header)
 
 for record in vcf_in:
     a_type = record.info.get("allele_type")
     if (a_type and a_type != "trv") or (keep_record(record)):
         vcf_out.write(record)
+    else:
+        vcf_excluded.write(record)
 
 vcf_in.close()
 vcf_out.close()
+vcf_excluded.close()
 CODE
+
+        tabix -p vcf -f ~{prefix}.excluded.vcf.gz
 
         if [[ "~{normalize}" == "true" ]]; then
             bcftools norm \
@@ -2384,6 +2390,8 @@ CODE
     output {
         File processed_vcf = "~{prefix}.vcf.gz"
         File processed_vcf_idx = "~{prefix}.vcf.gz.tbi"
+        File excluded_vcf = "~{prefix}.excluded.vcf.gz"
+        File excluded_vcf_idx = "~{prefix}.excluded.vcf.gz.tbi"
     }
 
     RuntimeAttr default_attr = object {

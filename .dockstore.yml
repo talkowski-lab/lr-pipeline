@@ -741,6 +741,7 @@ workflows:
     filters:
       branches:
         - main
+        - kj-hiphase-notrgt-fill
       tags:
         - /.*/
 
