@@ -28,7 +28,7 @@ EXEMPT = {
     "Hifiasm": "needs the hifiasm image and raw reads",
     "Kanpig": "needs the kanpig image and aligned BAMs",
     "LongReadCNVs": "needs the GATK and sv-pipeline images and depth from aligned BAMs",
-    "MethylationProfiling": "needs the cpgtools image and an aligned BAM with methylation tags",
+    "MethylationProfiling": "needs the whatshap and cpgtools images and an aligned BAM with methylation tags",
     "MinimapAlignment": "needs the minimap2 image and raw reads",
     "MinimapReadAlignment": "needs the minimap2 image and raw reads",
     "MosDepth": "needs the mosdepth images and an aligned BAM",

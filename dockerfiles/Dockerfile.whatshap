@@ -1,0 +1,7 @@
+ARG BASE_IMAGE=us-central1-docker.pkg.dev/talkowski-sv-gnomad/kj-dockers/utils:latest
+FROM ${BASE_IMAGE}
+
+MAINTAINER Karan Jaisingh
+
+ARG WHATSHAP_VERSION
+RUN pip3 install --no-cache-dir whatshap==${WHATSHAP_VERSION}

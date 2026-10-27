@@ -2014,16 +2014,21 @@ Outputs:
 - `File genotyping_rd_table`: Read-depth evidence used for genotyping.
 
 ### [MethylationProfiling](../wdl/tools/MethylationProfiling.wdl)
-This tool generates CpG methylation pileups from a haplotagged BAM using pb-CpG-tools (https://github.com/PacificBiosciences/pb-CpG-tools), producing combined and per-haplotype methylation BED tracks.
+This tool generates a sample's CpG methylation pileups using pb-CpG-tools (https://github.com/PacificBiosciences/pb-CpG-tools), producing combined and per-haplotype methylation BED tracks.
+
+The reads are first haplotagged per contig with WhatsHap (https://github.com/whatshap/whatshap) against the sample's phased heterozygous biallelic SNVs, so haplotype 1 follows the first GT allele; run on the sample's backbone-phased VCF, that keeps each haplotype on one parent across the contig. The haplotagged contigs are merged before the pileup.
 
 Inputs:
-- `File bam`: Haplotagged aligned reads.
+- `File bam`: Aligned reads.
 - `File bai`: Index for `bam`.
+- `File phased_vcf`: The sample's phased VCF, ideally from backbone phasing.
+- `File phased_vcf_idx`: Index for `phased_vcf`.
+- `Array[String] contigs`: Contigs to haplotag and profile.
 - `File ref_fa`: From references.
 - `File ref_fai`: From references.
 - `String prefix`: Prefix for output file names.
-- `String cpg_docker`: Container image.
-- `RuntimeAttr? runtime_attr_*`: Optional per-task runtime overrides.
+- `String utils_docker`, `String whatshap_docker`, `String cpg_docker`: Container images.
+- `RuntimeAttr? runtime_attr_*`: Optional per-task runtime overrides (5).
 
 Outputs:
 - `File cpg_combined_bed`: Combined methylation pileup BED.

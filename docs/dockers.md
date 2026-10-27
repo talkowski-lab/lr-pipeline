@@ -71,6 +71,7 @@ Built from [dockerfiles/](../dockerfiles/) in this repository and pushed to the 
 | `vamos_docker` | `vamos` | [`Dockerfile.vamos`](../dockerfiles/Dockerfile.vamos) |
 | `vep_hail_docker` | `vephail` | [`Dockerfile.vephail`](../dockerfiles/Dockerfile.vephail) |
 | `vrs_docker` | `vrs` | [`Dockerfile.vrs`](../dockerfiles/Dockerfile.vrs) |
+| `whatshap_docker` | `whatshap` | [`Dockerfile.whatshap`](../dockerfiles/Dockerfile.whatshap) |
 
 Every Dockerfile in `dockerfiles/` maps to exactly one argument above; retired ones live in [`archive/dockerfiles/`](../archive/dockerfiles/) and are not built.
 
