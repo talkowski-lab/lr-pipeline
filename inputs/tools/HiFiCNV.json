@@ -9,5 +9,6 @@
     "HiFiCNV.exclude_bed_idx": "gs://<references-bucket>/exclude.bed.tbi",
     "HiFiCNV.expected_cn_male": "gs://<references-bucket>/expected_cn_male",
     "HiFiCNV.expected_cn_female": "gs://<references-bucket>/expected_cn_female",
-    "HiFiCNV.hificnv_docker": "us-central1-docker.pkg.dev/talkowski-sv-gnomad/kj-dockers/hificnv:latest"
+    "HiFiCNV.hificnv_docker": "us-central1-docker.pkg.dev/talkowski-sv-gnomad/kj-dockers/hificnv:latest",
+    "HiFiCNV.utils_docker": "us-central1-docker.pkg.dev/talkowski-sv-gnomad/kj-dockers/utils:latest"
 }

@@ -22,5 +22,6 @@
     "Sawfish.expected_cn_female": "gs://<references-bucket>/expected_cn_female",
     "Sawfish.exclude_bed": "gs://<references-bucket>/exclude.bed",
     "Sawfish.exclude_bed_idx": "gs://<references-bucket>/exclude.bed.tbi",
-    "Sawfish.sawfish_docker": "us-central1-docker.pkg.dev/talkowski-sv-gnomad/kj-dockers/sawfish:latest"
+    "Sawfish.sawfish_docker": "us-central1-docker.pkg.dev/talkowski-sv-gnomad/kj-dockers/sawfish:latest",
+    "Sawfish.utils_docker": "us-central1-docker.pkg.dev/talkowski-sv-gnomad/kj-dockers/utils:latest"
 }

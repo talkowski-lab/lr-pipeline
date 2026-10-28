@@ -1,11 +1,13 @@
 version 1.0
 
+import "../utils/Helpers.wdl"
 import "../utils/Structs.wdl"
 
 workflow HiFiCNV {
     meta {
         description: [
-            "This tool runs PacBio HiFiCNV (https://github.com/PacificBiosciences/HiFiCNV) on a sample's aligned HiFi BAM to call copy number variants from read depth. It outputs the CNV VCF, a copy-number bedgraph, a depth BigWig track and the tool's log."
+            "This tool runs PacBio HiFiCNV (https://github.com/PacificBiosciences/HiFiCNV) on a sample's aligned HiFi BAM to call copy number variants from read depth. It outputs the CNV VCF, a copy-number bedgraph, a depth BigWig track and the tool's log.",
+            "Regions are excluded in two stages, as in LongReadCNVs. `exclude_bed` is masked from calling, and when `exclude_intervals` is set, calls a single interval of it covers by at least `exclude_overlap_fraction` are then dropped from the VCF."
         ]
     }
 
@@ -22,7 +24,9 @@ workflow HiFiCNV {
         maf: "Optional minor-allele-frequency track passed to HiFiCNV as `--maf`."
         cov_regex: "Optional regular expression passed to HiFiCNV as `--cov-regex`, selecting the contigs used to estimate expected coverage."
         disable_vcf_filters: "Whether to pass `--disable-vcf-filters`, emitting every call rather than only those HiFiCNV would keep."
-        hificnv_vcf: "CNV calls VCF."
+        exclude_intervals: "Optional intervals whose overlapping calls are dropped after calling."
+        exclude_overlap_fraction: "Share of a call a single interval of `exclude_intervals` must cover for the call to be dropped."
+        hificnv_vcf: "CNV calls VCF, without the calls dropped by `exclude_intervals` when it is set."
         hificnv_vcf_idx: "Index for the CNV calls VCF."
         hificnv_bedgraph: "Per-window copy number bedgraph."
         hificnv_depth_bw: "Depth BigWig track."
@@ -46,10 +50,14 @@ workflow HiFiCNV {
         File? maf
         String? cov_regex
         Boolean disable_vcf_filters = false
+        File? exclude_intervals
+        Float exclude_overlap_fraction = 0.5
 
         String hificnv_docker
+        String utils_docker
 
         RuntimeAttr? runtime_attr_run_hificnv
+        RuntimeAttr? runtime_attr_exclude_intervals
     }
 
     File sex_specific_cn = if sex == 'M' then expected_cn_male else expected_cn_female
@@ -71,9 +79,22 @@ workflow HiFiCNV {
             runtime_attr_override = runtime_attr_run_hificnv
     }
 
+    if (defined(exclude_intervals)) {
+        call Helpers.ExcludeRecordsByIntervalOverlap {
+            input:
+                vcf = RunHiFiCNV.hificnv_vcf,
+                vcf_idx = RunHiFiCNV.hificnv_vcf_idx,
+                intervals = select_first([exclude_intervals]),
+                overlap_fraction = exclude_overlap_fraction,
+                prefix = "~{prefix}.intervals_excluded",
+                docker = utils_docker,
+                runtime_attr_override = runtime_attr_exclude_intervals
+        }
+    }
+
     output {
-        File hificnv_vcf = RunHiFiCNV.hificnv_vcf
-        File hificnv_vcf_idx = RunHiFiCNV.hificnv_vcf_idx
+        File hificnv_vcf = select_first([ExcludeRecordsByIntervalOverlap.filtered_vcf, RunHiFiCNV.hificnv_vcf])
+        File hificnv_vcf_idx = select_first([ExcludeRecordsByIntervalOverlap.filtered_vcf_idx, RunHiFiCNV.hificnv_vcf_idx])
         File hificnv_bedgraph = RunHiFiCNV.hificnv_bedgraph
         File hificnv_depth_bw = RunHiFiCNV.hificnv_depth_bw
         File hificnv_log = RunHiFiCNV.hificnv_log

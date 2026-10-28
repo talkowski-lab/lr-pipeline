@@ -1942,6 +1942,68 @@ task ExactMatch {
     }
 }
 
+task ExcludeRecordsByIntervalOverlap {
+    input {
+        File vcf
+        File vcf_idx
+        File intervals
+        Float overlap_fraction
+        Array[String] sv_types = []
+        Int min_size = 0
+        String prefix
+        String docker
+        RuntimeAttr? runtime_attr_override
+    }
+
+    command <<<
+        set -euo pipefail
+
+        # Key candidate records by VCF body row, since HiFiCNV leaves ID unset; END - POS is 0 for BND and INS
+        bcftools query -f '%CHROM\t%POS\t%END\t%SVTYPE\n' '~{vcf}' \
+            | awk -F'\t' -v OFS='\t' -v types='~{sep="," sv_types}' -v min_size=~{min_size} \
+                'BEGIN { n = split(types, a, ","); for (i = 1; i <= n; i++) keep[a[i]] }
+                (n == 0 || ($4 in keep)) && $3 - $2 >= min_size { print $1, $2, $3, NR, $4 }' \
+            > candidates.bed
+        # Drop a record when a single interval covers at least overlap_fraction of it
+        bedtools coverage -f ~{overlap_fraction} -a candidates.bed -b '~{intervals}' \
+            | awk -F'\t' '$6 > 0' \
+            | cut -f4 \
+            > excluded_rows.list
+
+        bcftools view -h --no-version '~{vcf}' > '~{prefix}.vcf'
+        # getline rather than NR==FNR, which would treat the VCF as the list when no record is excluded
+        bcftools view -H '~{vcf}' \
+            | awk -v f=excluded_rows.list 'BEGIN { while ((getline l < f) > 0) drop[l] } !(NR in drop)' \
+            >> '~{prefix}.vcf'
+        bgzip '~{prefix}.vcf'
+        tabix -p vcf '~{prefix}.vcf.gz'
+    >>>
+
+    output {
+        File filtered_vcf = "~{prefix}.vcf.gz"
+        File filtered_vcf_idx = "~{prefix}.vcf.gz.tbi"
+    }
+
+    RuntimeAttr default_attr = object {
+        cpu_cores: 1,
+        mem_gb: 4,
+        disk_gb: 3 * ceil(size(vcf, "GB") + size(intervals, "GB")) + 10,
+        boot_disk_gb: 10,
+        preemptible_tries: 1,
+        max_retries: 0
+    }
+    RuntimeAttr runtime_attr = select_first([runtime_attr_override, default_attr])
+    runtime {
+        cpu: select_first([runtime_attr.cpu_cores, default_attr.cpu_cores])
+        memory: select_first([runtime_attr.mem_gb, default_attr.mem_gb]) + " GiB"
+        disks: "local-disk " + select_first([runtime_attr.disk_gb, default_attr.disk_gb]) + " HDD"
+        bootDiskSizeGb: select_first([runtime_attr.boot_disk_gb, default_attr.boot_disk_gb])
+        docker: docker
+        preemptible: select_first([runtime_attr.preemptible_tries, default_attr.preemptible_tries])
+        maxRetries: select_first([runtime_attr.max_retries, default_attr.max_retries])
+    }
+}
+
 task ExtractSample {
     input {
         File vcf

@@ -1,11 +1,13 @@
 version 1.0
 
+import "../utils/Helpers.wdl"
 import "../utils/Structs.wdl"
 
 workflow Sawfish {
     meta {
         description: [
-            "This tool calls structural variants and copy-number variants from aligned long reads with sawfish. It runs the per-sample discover step in a scatter, then joint-calls across the cohort, using per-sample sex to select the expected copy-number track."
+            "This tool calls structural variants and copy-number variants from aligned long reads with sawfish. It runs the per-sample discover step in a scatter, then joint-calls across the cohort, using per-sample sex to select the expected copy-number track.",
+            "Regions are excluded in two stages, as in LongReadCNVs. `exclude_bed` is masked from calling, and when `exclude_intervals` is set, DEL and DUP records of at least `exclude_min_cnv_size` that a single interval of it covers by at least `exclude_overlap_fraction` are then dropped from the VCF. Shorter DEL and DUP records and every other SV type are kept."
         ]
     }
 
@@ -26,7 +28,10 @@ workflow Sawfish {
         disable_cnv: "Skip CNV calling entirely."
         treat_single_copy_as_haploid: "Emit haploid genotypes on single-copy contigs."
         report_supporting_reads: "Also emit the reads supporting each call."
-        sawfish_vcf: "Joint-called SV and CNV VCF."
+        exclude_intervals: "Optional intervals whose overlapping DEL and DUP records are dropped after joint calling."
+        exclude_overlap_fraction: "Share of a record a single interval of `exclude_intervals` must cover for the record to be dropped."
+        exclude_min_cnv_size: "Minimum length of a DEL or DUP record for `exclude_intervals` to apply."
+        sawfish_vcf: "Joint-called SV and CNV VCF, without the records dropped by `exclude_intervals` when it is set."
         sawfish_vcf_idx: "Index for `sawfish_vcf`."
         sawfish_bedgraphs: "Per-sample depth bedGraph files."
         sawfish_depth_bws: "Per-sample depth bigWig files."
@@ -55,11 +60,16 @@ workflow Sawfish {
         Boolean disable_cnv = false
         Boolean treat_single_copy_as_haploid = false
         Boolean report_supporting_reads = false
+        File? exclude_intervals
+        Float exclude_overlap_fraction = 0.5
+        Int exclude_min_cnv_size = 4000
 
         String sawfish_docker
+        String utils_docker
 
         RuntimeAttr? runtime_attr_discover
         RuntimeAttr? runtime_attr_joint_call
+        RuntimeAttr? runtime_attr_exclude_intervals
     }
 
     scatter (i in range(length(bams))) {
@@ -100,9 +110,24 @@ workflow Sawfish {
             runtime_attr_override = runtime_attr_joint_call
     }
 
+    if (defined(exclude_intervals)) {
+        call Helpers.ExcludeRecordsByIntervalOverlap {
+            input:
+                vcf = JointCall.sawfish_vcf,
+                vcf_idx = JointCall.sawfish_vcf_idx,
+                intervals = select_first([exclude_intervals]),
+                overlap_fraction = exclude_overlap_fraction,
+                sv_types = ["DEL", "DUP"],
+                min_size = exclude_min_cnv_size,
+                prefix = "~{prefix}.intervals_excluded",
+                docker = utils_docker,
+                runtime_attr_override = runtime_attr_exclude_intervals
+        }
+    }
+
     output {
-        File sawfish_vcf = JointCall.sawfish_vcf
-        File sawfish_vcf_idx = JointCall.sawfish_vcf_idx
+        File sawfish_vcf = select_first([ExcludeRecordsByIntervalOverlap.filtered_vcf, JointCall.sawfish_vcf])
+        File sawfish_vcf_idx = select_first([ExcludeRecordsByIntervalOverlap.filtered_vcf_idx, JointCall.sawfish_vcf_idx])
         Array[File] sawfish_bedgraphs = JointCall.sawfish_bedgraphs
         Array[File] sawfish_depth_bws = JointCall.sawfish_depth_bws
         File sawfish_log = JointCall.sawfish_log
