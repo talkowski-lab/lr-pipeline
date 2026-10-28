@@ -50,7 +50,6 @@ workflows:
     filters:
       branches:
         - main
-        - kj-dbvar-svtype-tuple
       tags:
         - /.*/
 
