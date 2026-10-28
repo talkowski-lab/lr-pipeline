@@ -110,6 +110,7 @@ workflows:
     filters:
       branches:
         - main
+        - kj-meds-max-length
       tags:
         - /.*/
 

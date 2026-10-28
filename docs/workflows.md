@@ -380,13 +380,14 @@ Outputs:
 - `File annotations_tsv_l1meaid`: TSV of L1ME-AID and INTACT_MEI MEI annotations.
 
 ### [AnnotateMEDs](../wdl/annotation/AnnotateMEDs.wdl)
-This workflow annotates mobile element deletions (MEDs) by intersecting the deletions in the input VCF against a catalog of known mobile-element loci. Deletions are extracted to BED form and matched to the catalog using size-similarity, reciprocal-overlap, breakpoint-window and sequence-similarity thresholds, producing a TSV of the deletions identified as MEDs.
+This workflow annotates mobile element deletions (MEDs) by intersecting the deletions in the input VCF against a catalog of known mobile-element loci. Deletions up to a maximum length are extracted to BED form and matched to the catalog using size-similarity, reciprocal-overlap, breakpoint-window and sequence-similarity thresholds, producing a TSV of the deletions identified as MEDs.
 
 Inputs:
 - `File vcf`: VCF to annotate.
 - `File vcf_idx`: Index for VCF to annotate.
 - `Array[String] contigs`: Contigs to annotate within the input VCF.
 - `Int? records_per_shard`: Number of variants to keep within a single shard during annotation.
+- `Int max_del_length`: Maximum deletion length, in bp, to test as a mobile element deletion; longer deletions are skipped. (default `100000`)
 - `Int del_breakpoint_window`: Breakpoint window, in bp, for matching. (default `500`)
 - `Float del_reciprocal_overlap`: Minimum reciprocal overlap for a deletion to match a catalog locus. (default `0.0`)
 - `Float del_sequence_similarity`: Minimum sequence similarity for a deletion to match a catalog locus. (default `0.7`)

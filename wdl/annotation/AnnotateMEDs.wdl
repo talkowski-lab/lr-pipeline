@@ -6,7 +6,7 @@ import "../utils/Structs.wdl"
 workflow AnnotateMEDs {
     meta {
         description: [
-            "This workflow annotates mobile element deletions (MEDs) by intersecting the deletions in the input VCF against a catalog of known mobile-element loci. Deletions are extracted to BED form and matched to the catalog using size-similarity, reciprocal-overlap, breakpoint-window and sequence-similarity thresholds, producing a TSV of the deletions identified as MEDs."
+            "This workflow annotates mobile element deletions (MEDs) by intersecting the deletions in the input VCF against a catalog of known mobile-element loci. Deletions up to a maximum length are extracted to BED form and matched to the catalog using size-similarity, reciprocal-overlap, breakpoint-window and sequence-similarity thresholds, producing a TSV of the deletions identified as MEDs."
         ]
     }
 
@@ -15,6 +15,7 @@ workflow AnnotateMEDs {
         vcf_idx: "Index for VCF to annotate."
         contigs: "Contigs to annotate within the input VCF."
         records_per_shard: "Number of variants to keep within a single shard during annotation."
+        max_del_length: "Maximum deletion length, in bp, to test as a mobile element deletion; longer deletions are skipped."
         del_breakpoint_window: "Breakpoint window, in bp, for matching."
         del_reciprocal_overlap: "Minimum reciprocal overlap for a deletion to match a catalog locus."
         del_sequence_similarity: "Minimum sequence similarity for a deletion to match a catalog locus."
@@ -31,6 +32,7 @@ workflow AnnotateMEDs {
 
         Int? records_per_shard
 
+        Int max_del_length = 100000
         Int del_breakpoint_window = 500
         Float del_reciprocal_overlap = 0.0
         Float del_sequence_similarity = 0.7
@@ -74,7 +76,7 @@ workflow AnnotateMEDs {
             input:
                 vcf = contig_vcf,
                 vcf_idx = contig_vcf_idx,
-                include_args = 'INFO/allele_type="del"',
+                include_args = "INFO/allele_type=\"del\" && abs(INFO/allele_length) <= ~{max_del_length}",
                 prefix = "~{prefix}.~{contig}.del_subset",
                 docker = utils_docker,
                 runtime_attr_override = runtime_attr_subset
