@@ -296,6 +296,8 @@ with open("~{prefix}.annotations.unsorted.tsv", 'w') as out:
     for rec in query:
         # Resolve the per-SVTYPE search criteria for this record
         svtype = rec.info.get('SVTYPE')
+        if isinstance(svtype, (list, tuple)):
+            svtype = svtype[0]
         if svtype not in PARAMS:
             continue
         params = PARAMS[svtype]
