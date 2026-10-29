@@ -550,17 +550,6 @@ workflows:
         - /.*/
 
   - subclass: WDL
-    name: SetMissingFiltersToPass
-    primaryDescriptorPath: /wdl/annotation_utils/SetMissingFiltersToPass.wdl
-    publish: true
-    filters:
-      branches:
-        - main
-        - kj-pass-missing-filters
-      tags:
-        - /.*/
-
-  - subclass: WDL
     name: EvaluateBackbonePhasing
     primaryDescriptorPath: /wdl/annotation_utils/EvaluateBackbonePhasing.wdl
     publish: true

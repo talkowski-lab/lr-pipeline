@@ -61,7 +61,6 @@ This file is generated from the `meta` and `parameter_meta` blocks of each workf
   - [MergeHiPhaseCallsets](#mergehiphasecallsets)
   - [MergeVcfs](#mergevcfs)
   - [PreprocessVcfs](#preprocessvcfs)
-  - [SetMissingFiltersToPass](#setmissingfilterstopass)
   - [EvaluateBackbonePhasing](#evaluatebackbonephasing)
   - [EvaluateCallsetAccuracy](#evaluatecallsetaccuracy)
   - [EvaluateOverlappingTRLoci](#evaluateoverlappingtrloci)
@@ -1349,20 +1348,6 @@ Inputs:
 Outputs:
 - `File preprocessed_vcf`: Preprocessed and merged cohort VCF.
 - `File preprocessed_vcf_idx`: Index for the preprocessed VCF.
-
-### [SetMissingFiltersToPass](../wdl/annotation_utils/SetMissingFiltersToPass.wdl)
-This one-off utility sets the FILTER of every record without a FILTER value to `PASS`, for callsets built before `PreprocessVcfs` did so for the GLnexus records.
-
-Inputs:
-- `File vcf`: VCF to update.
-- `File vcf_idx`: Index for `vcf`.
-- `String prefix`: Prefix for output file names.
-- `String utils_docker`: Container image.
-- `RuntimeAttr? runtime_attr_*`: Optional per-task runtime overrides.
-
-Outputs:
-- `File pass_filled_vcf`: `vcf` with every missing FILTER value set to `PASS`.
-- `File pass_filled_vcf_idx`: Index for `pass_filled_vcf`.
 
 ### [EvaluateBackbonePhasing](../wdl/annotation_utils/EvaluateBackbonePhasing.wdl)
 This utility evaluates backbone-phasing accuracy by comparing backbone-phased VCFs against base (truth) VCFs. It assigns samples to their base VCFs, compares phased genotypes per contig and aggregates the results into tables broken down by variants outside tandem repeats, TR-enveloped variants and TR variants. It outputs these summary tables plus per-VCF status tables.

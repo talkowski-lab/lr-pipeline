@@ -50,6 +50,7 @@ This file is generated from the `meta` and `parameter_meta` blocks of each workf
   - [ReplaceKanpigGT](#replacekanpiggt)
   - [ReplaceSampleCalls](#replacesamplecalls)
   - [ResolveHaplotypeOverlaps](#resolvehaplotypeoverlaps)
+  - [SetMissingFiltersToPass](#setmissingfilterstopass)
   - [SubsetTRGTToCatalog](#subsettrgttocatalog)
   - [SubsetVcfToContigs](#subsetvcftocontigs)
   - [SubsetVcfToPerSample](#subsetvcftopersample)
@@ -1024,6 +1025,20 @@ Outputs:
 - `File overlap_resolved_vcf`: VCF with overlapping loser genotypes cleared.
 - `File overlap_resolved_vcf_idx`: Index for `overlap_resolved_vcf`.
 - `File overlap_tsv`: TSV of all detected overlap pairs, with columns `sample`, `haplotype`, `variant_id_retained`, `var_type_retained`, `size_bin_retained`, `variant_id_cleared`, `var_type_cleared`, `size_bin_cleared`.
+
+### [SetMissingFiltersToPass](../wdl/annotation_utils/SetMissingFiltersToPass.wdl)
+This one-off utility sets the FILTER of every record without a FILTER value to `PASS`, for callsets built before `PreprocessVcfs` did so for the GLnexus records.
+
+Inputs:
+- `File vcf`: VCF to update.
+- `File vcf_idx`: Index for `vcf`.
+- `String prefix`: Prefix for output file names.
+- `String utils_docker`: Container image.
+- `RuntimeAttr? runtime_attr_*`: Optional per-task runtime overrides.
+
+Outputs:
+- `File pass_filled_vcf`: `vcf` with every missing FILTER value set to `PASS`.
+- `File pass_filled_vcf_idx`: Index for `pass_filled_vcf`.
 
 ### [SubsetTRGTToCatalog](../wdl/annotation_utils/SubsetTRGTToCatalog.wdl)
 This utility subsets a merged TRGT VCF down to the loci present in a given TRGT catalog BED, per contig. It outputs the catalog-restricted TRGT VCF.
