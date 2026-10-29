@@ -661,7 +661,6 @@ workflows:
     filters:
       branches:
         - main
-        - kj-automop-success
       tags:
         - /.*/
 
