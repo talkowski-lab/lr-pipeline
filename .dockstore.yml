@@ -20,7 +20,6 @@ workflows:
     filters:
       branches:
         - main
-        - kj-ncr-cutoff-recommendations
       tags:
         - /.*/
 
@@ -587,7 +586,6 @@ workflows:
     filters:
       branches:
         - main
-        - kj-ncr-cutoff-recommendations
       tags:
         - /.*/
 
