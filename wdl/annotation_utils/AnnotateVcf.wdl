@@ -218,7 +218,8 @@ info_types = [line.strip().split('\t') for line in open('~{write_tsv(info_types)
 info_numbers = [line.strip().split('\t') for line in open('~{write_tsv(info_numbers)}')]
 subset_tsv_columns = [line.strip().split('\t') for line in open('~{write_tsv(subset_tsv_columns)}')]
 subset_tsv_columns = [cols if cols != [''] else [] for cols in subset_tsv_columns]
-strip_per_tsv = [line.strip() == "true" for line in open('~{write_lines(strip_info_fields_per_tsv)}')]
+# Cromwell writes an empty array as a single blank line
+strip_per_tsv = [line.strip() == "true" for line in open('~{write_lines(strip_info_fields_per_tsv)}') if line.strip()]
 
 if len(info_names) != len(info_descriptions) or len(info_names) != len(info_types) or len(info_names) != len(info_numbers):
     sys.stderr.write("Error: All info arrays must have the same length.\n")
