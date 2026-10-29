@@ -21,7 +21,7 @@ workflow AnnotateIndelTRs {
         min_tandem_repeat_length: "Minimum total tandem-repeat length for an indel to be flagged."
         min_repeats: "Minimum number of repeats for an indel to be flagged."
         min_repeat_unit_length: "Minimum repeat-unit length for an indel to be flagged."
-        annotations_tsv_trs: "TSV of indels flagged as tandem repeats."
+        annotations_tsv_indel_trs: "TSV of indels flagged as tandem repeats."
     }
 
     input {
@@ -122,7 +122,7 @@ workflow AnnotateIndelTRs {
     }
 
     output {
-        File annotations_tsv_trs = select_first([ConcatTsvs.concatenated_tsv, final_annotations_tsv[0]])
+        File annotations_tsv_indel_trs = select_first([ConcatTsvs.concatenated_tsv, final_annotations_tsv[0]])
     }
 }
 

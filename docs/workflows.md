@@ -13,7 +13,7 @@ This file is generated from the `meta` and `parameter_meta` blocks of each workf
   - [AnnotateDbVaR](#annotatedbvar)
   - [AnnotateIndelTRs](#annotateindeltrs)
   - [AnnotateInSilicoPredictors](#annotateinsilicopredictors)
-  - [AnnotateGnomADSTR](#annotategnomadstr)
+  - [AnnotateGnomADTROverlap](#annotategnomadtroverlap)
   - [AnnotateGQMetrics](#annotategqmetrics)
   - [AnnotateL1MEAID](#annotatel1meaid)
   - [AnnotateMEDs](#annotatemeds)
@@ -23,12 +23,12 @@ This file is generated from the `meta` and `parameter_meta` blocks of each workf
   - [AnnotateSQMetrics](#annotatesqmetrics)
   - [AnnotateSVAN](#annotatesvan)
   - [AnnotateSVAnnotate](#annotatesvannotate)
-  - [AnnotateVEPHail](#annotatevephail)
+  - [AnnotateVEP](#annotatevep)
   - [AnnotateVEPTRVs](#annotateveptrvs)
   - [AnnotateVRS](#annotatevrs)
   - [AnnotateTruvariRemap](#annotatetruvariremap)
 - [Annotation Utilities](#annotation-utilities)
-  - [AnnotateTREndTags](#annotatetrendtags)
+  - [FillTREndTags](#filltrendtags)
   - [AnnotateAlleleType](#annotatealleletype)
   - [AnnotateVcf](#annotatevcf)
   - [CombineTRs](#combinetrs)
@@ -55,13 +55,12 @@ This file is generated from the `meta` and `parameter_meta` blocks of each workf
   - [FilterLowCoverageRegions](#filterlowcoverageregions)
   - [FilterLowCoverageGenotypes](#filterlowcoveragegenotypes)
   - [FilterNCRCutoffs](#filterncrcutoffs)
-  - [FillFormatFields](#fillformatfields)
   - [FillPhasedGenotypes](#fillphasedgenotypes)
   - [CreateTRGTHistograms](#createtrgthistograms)
   - [IntegrateTRs](#integratetrs)
+  - [MergeHiPhaseCallsets](#mergehiphasecallsets)
   - [MergeVcfs](#mergevcfs)
   - [PreprocessVcfs](#preprocessvcfs)
-  - [FillBackbonePhasedGenotypes](#fillbackbonephasedgenotypes)
   - [EvaluateBackbonePhasing](#evaluatebackbonephasing)
   - [EvaluateCallsetAccuracy](#evaluatecallsetaccuracy)
   - [EvaluateOverlappingTRLoci](#evaluateoverlappingtrloci)
@@ -79,7 +78,6 @@ This file is generated from the `meta` and `parameter_meta` blocks of each workf
   - [Hifiasm](#hifiasm)
   - [HiFiCNV](#hificnv)
   - [HiPhase](#hiphase)
-  - [MergeHiPhaseCallsets](#mergehiphasecallsets)
   - [Kanpig](#kanpig)
   - [GLNexus](#glnexus)
   - [LongReadCNVs](#longreadcnvs)
@@ -232,8 +230,8 @@ Inputs:
 - `RuntimeAttr? runtime_attr_*`: Optional per-task runtime overrides (36).
 
 Outputs:
-- `File annotations_tsv_benchmark`: TSV mapping callset variants to their matched truth variants, match type, and the truth callset's AC/AF/AN and genotype-count fields, sorted by CHROM then POS.
-- `File annotations_header_benchmark`: Header listing the extra annotation columns present in `annotations_tsv_benchmark`.
+- `File annotations_tsv_overlap`: TSV mapping callset variants to their matched truth variants, match type, and the truth callset's AC/AF/AN and genotype-count fields, sorted by CHROM then POS.
+- `File annotations_header_overlap`: Header listing the extra annotation columns present in `annotations_tsv_overlap`.
 
 ### [AnnotateDbSNP](../wdl/annotation/AnnotateDbSNP.wdl)
 This workflow annotates each variant in the input VCF with its dbSNP reference SNP identifier (rsID). It matches variants against a per-contig dbSNP VCF on CHROM, POS, REF and ALT, emitting a TSV mapping each matched variant to its `dbSNP_ID`.
@@ -300,7 +298,7 @@ Inputs:
 - `RuntimeAttr? runtime_attr_*`: Optional per-task runtime overrides (5).
 
 Outputs:
-- `File annotations_tsv_trs`: TSV of indels flagged as tandem repeats.
+- `File annotations_tsv_indel_trs`: TSV of indels flagged as tandem repeats.
 
 ### [AnnotateInSilicoPredictors](../wdl/annotation/AnnotateInSilicoPredictors.wdl)
 This workflow annotates SNVs and indels with precomputed in-silico predictor scores - CADD, Pangolin, PhyloP, REVEL and SpliceAI - drawn from the gnomAD V4 Hail Tables. It shards the VCF and uses a Hail-based script to look up each variant's scores, emitting a TSV of per-variant predictions.
@@ -323,7 +321,7 @@ Inputs:
 Outputs:
 - `File annotations_tsv_insilico`: TSV of per-variant in-silico predictor scores.
 
-### [AnnotateGnomADSTR](../wdl/annotation/AnnotateGnomADSTR.wdl)
+### [AnnotateGnomADTROverlap](../wdl/annotation/AnnotateGnomADTROverlap.wdl)
 This workflow annotates tandem-repeat variants in the input VCF with overlapping loci from the gnomAD V4 tandem-repeat catalog. It subsets to tandem-repeat calls and matches each against the catalog using a minimum reciprocal-overlap threshold, emitting a TSV linking calls to their gnomAD TR locus.
 
 Inputs:
@@ -338,7 +336,7 @@ Inputs:
 - `RuntimeAttr? runtime_attr_*`: Optional per-task runtime overrides (6).
 
 Outputs:
-- `File annotations_tsv_gnomad_str`: TSV mapping tandem-repeat calls to their gnomAD TR loci.
+- `File annotations_tsv_str_overlap`: TSV mapping tandem-repeat calls to their gnomAD TR loci.
 
 ### [AnnotateGQMetrics](../wdl/annotation/AnnotateGQMetrics.wdl)
 This workflow computes binned distributions of genotype-quality metrics across the carriers of each variant. For every configured FORMAT field it counts the genotypes whose value falls into each bin - optionally restricted to a variant filter and respecting whether larger or smaller values of that field are better - and can additionally bin allele-balance values. It emits a per-variant TSV of these distribution counts.
@@ -540,7 +538,7 @@ Outputs:
 - `File annotations_tsv_svannotate`: TSV of SVAnnotate functional-effect annotations.
 - `File annotations_header_svannotate`: Header lines describing the SVAnnotate annotation fields.
 
-### [AnnotateVEPHail](../wdl/annotation/AnnotateVEPHail.wdl)
+### [AnnotateVEP](../wdl/annotation/AnnotateVEP.wdl)
 This workflow leverages the Ensembl Variant Effect Predictor (VEP) (https://useast.ensembl.org/info/docs/tools/vep/index.html) in order to annotate predicted functional effects based on site-level information. It strips genotypes, scatters the VCF into shards, optionally normalizes and splits multiallelics around the VEP call, and uses Hail in order to run this annotation process in a more efficient and scalable manner before concatenating the per-shard annotations into a single TSV.
 
 Inputs:
@@ -592,7 +590,7 @@ Inputs:
 - `RuntimeAttr? runtime_attr_*`: Optional per-task runtime overrides (6).
 
 Outputs:
-- `File annotations_tsv_vep_trv`: TSV with a header and one row per TRV ALT allele, with columns CHROM, POS, REF, ALT, ID, NORM_POS, NORM_REF, NORM_ALT, AC, AF and VEP, where VEP holds the comma-separated VEP annotations for that allele.
+- `File annotations_tsv_vep_trvs`: TSV with a header and one row per TRV ALT allele, with columns CHROM, POS, REF, ALT, ID, NORM_POS, NORM_REF, NORM_ALT, AC, AF and VEP, where VEP holds the comma-separated VEP annotations for that allele.
 
 ### [AnnotateVRS](../wdl/annotation/AnnotateVRS.wdl)
 This workflow annotates each variant with its GA4GH Variant Representation Specification (VRS) attributes using a seqrepo sequence repository. It runs `vrs-annotate` per contig to add the VRS INFO fields, then extracts them into an annotation TSV of five locating columns (CHROM, POS, REF, ALT, ID) followed by a column for each VRS field.
@@ -631,14 +629,14 @@ Inputs:
 - `RuntimeAttr? runtime_attr_*`: Optional per-task runtime overrides (5).
 
 Outputs:
-- `File annotations_tsv_remap`: TSV of insertion remap results.
+- `File annotations_tsv_truvari_remap`: TSV of insertion remap results.
 
 
 ## Annotation Utilities
 
 
-### [AnnotateTREndTags](../wdl/annotation_utils/AnnotateTREndTags.wdl)
-This utility adds an `END` INFO tag to the tandem-repeat records of a VCF, computed per contig, so that downstream tools correctly interpret the span of each TR call. It outputs the updated VCF.
+### [FillTREndTags](../wdl/annotation_utils/FillTREndTags.wdl)
+This utility fills the `END` INFO tag on the tandem-repeat records of a VCF, computed per contig, so that downstream tools correctly interpret the span of each TR call. It outputs the updated VCF.
 
 Inputs:
 - `File vcf`: VCF to update.
@@ -1082,6 +1080,8 @@ Outputs:
 - `Array[File] contig_vcf_idxs`: Indexes for `contig_vcfs`.
 - `Array[File] contig_no_geno_vcfs`: Per-contig genotype-free VCFs when requested.
 - `Array[File] contig_no_geno_vcf_idxs`: Indexes for `contig_no_geno_vcfs` when requested.
+- `File? contig_vcf`: The single contig's VCF when one contig is requested, for a per-contig data table row.
+- `File? contig_vcf_idx`: Index for `contig_vcf`.
 
 ### [StripGenotypes](../wdl/annotation_utils/StripGenotypes.wdl)
 This utility strips all genotype (sample) columns from a VCF, optionally sharding by record count for speed. It outputs the resulting sites-only VCF.
@@ -1150,7 +1150,7 @@ This utility adds the `LOW_COVERAGE_REGION` FILTER to a VCF record when at least
 Inputs:
 - `File vcf`: VCF to filter.
 - `File vcf_idx`: Index for VCF to filter.
-- `File low_coverage_regions_bed`: BED of low-coverage regions. It may include multiple contigs; the workflow subsets it to the requested `contigs`.
+- `File low_coverage_regions_bed`: BED of low-coverage regions - the `low_coverage_regions` reference, the `failed_bins_bed` output of `IdentifyLowCoverageRegions`, or both concatenated. It may include multiple contigs; the workflow subsets it to the requested `contigs`.
 - `Array[String] contigs`: Contigs to process within the input VCF.
 - `Float min_region_coverage_cutoff`: Inclusive minimum fraction of a variant's reference span that must overlap a low-coverage region to add the filter.
 - `Int? records_per_shard`: Number of variants per shard. When set, variants are processed in parallel shards and concatenated.
@@ -1206,40 +1206,6 @@ Outputs:
 - `File filtered_vcf`: VCF with the sites carrying no alternate allele removed and the high no-call rate sites flagged.
 - `File filtered_vcf_idx`: Index for `filtered_vcf`.
 
-### [FillFormatFields](../wdl/annotation_utils/FillFormatFields.wdl)
-This utility fills missing FORMAT fields in one VCF using the values from a second, more complete VCF covering the same sites. It supports selectively copying named format fields plus toggles for filling alternate and reference genotypes, unphasing genotypes and adding PL. Sites are matched on CHROM/POS/REF/ALT, optionally also requiring a matching ID, and filling can be restricted to variants whose INFO field matches a given value. Either input can first be run through `bcftools norm`, sharded by record count so normalization never runs over a whole-contig VCF at once; normalized shards are re-concatenated with sorting (since normalization can shift a variant's position, e.g. when splitting a multiallelic) before being re-binned for matching. It outputs the refilled VCF.
-
-Inputs:
-- `File unfilled_vcf`: VCF whose FORMAT fields are filled.
-- `File unfilled_vcf_idx`: Index for `unfilled_vcf`.
-- `File filled_vcf`: VCF providing the FORMAT field values.
-- `File filled_vcf_idx`: Index for `filled_vcf`.
-- `String contig`: Contig to process.
-- `File? ref_fa`: Reference FASTA used for normalization. Required if either normalize input is `true`.
-- `File? ref_fai`: Index for `ref_fa`. Required if either normalize input is `true`.
-- `Int? records_per_shard_normalize`: Number of variants per shard when normalizing. When set, normalization runs in parallel shards that are re-concatenated and sorted afterward.
-- `Int? shard_bin_size_fill`: Region-bin size, in bp, used when sharding the contig for matching/filling.
-- `Array[String] transfer_format_fields`: FORMAT fields to fill from `filled_vcf`.
-- `Array[String] drop_format_fields`: FORMAT fields to drop entirely from the output (e.g. fields known to be unreliable). Cannot include `GT`.
-- `Boolean fill_alt_gts`: Whether to overwrite a sample's GT in `unfilled_vcf` with `filled_vcf`'s GT when `filled_vcf`'s GT is alt-containing, regardless of the current GT in `unfilled_vcf`.
-- `Boolean fill_ref_gts`: Whether to overwrite a sample's GT in `unfilled_vcf` with `filled_vcf`'s GT when `filled_vcf`'s GT is non-alt (hom-ref or no-call), regardless of the current GT in `unfilled_vcf`.
-- `Boolean match_by_id`: Whether matching also requires equal variant IDs, in addition to CHROM/POS/REF/ALT.
-- `Boolean unphase_gts`: Whether to unphase genotypes while filling.
-- `Boolean add_missing_pl_via_ad`: Whether to add a `PL` FORMAT field derived from `AD` for genotypes that lack one.
-- `Boolean expand_ad_across_alleles`: Whether to expand a fully-missing `AD` into one missing value per allele, which GLNexus writes as a bare '.' rather than '.,.'.
-- `Boolean split_rnc_across_alleles`: Whether to split a merged `RNC` code into one character per allele copy, which GLNexus writes as 'MI' rather than 'M,I'.
-- `Boolean normalize_unfilled_vcf`: Whether to normalize `unfilled_vcf` with `bcftools norm` before matching.
-- `Boolean normalize_filled_vcf`: Whether to normalize `filled_vcf` with `bcftools norm` before matching.
-- `String? subset_unfilled_vcf_field`: INFO field on `unfilled_vcf` used to limit which variants are filled. Requires `subset_unfilled_vcf_value`.
-- `String? subset_unfilled_vcf_value`: Value that `subset_unfilled_vcf_field` must equal for a variant to be filled. Variants that don't match are left unfilled.
-- `String prefix`: Prefix for output file names.
-- `String utils_docker`: Container image.
-- `RuntimeAttr? runtime_attr_*`: Optional per-task runtime overrides (11).
-
-Outputs:
-- `File refilled_vcf`: VCF with FORMAT fields filled.
-- `File refilled_vcf_idx`: Index for the refilled VCF.
-
 ### [FillPhasedGenotypes](../wdl/annotation_utils/FillPhasedGenotypes.wdl)
 This utility transfers phasing information from a phased VCF onto the genotypes of an unphased VCF over matching sites, optionally sharding each contig by region. It outputs the phased VCF.
 
@@ -1293,6 +1259,27 @@ Inputs:
 Outputs:
 - `File tr_annotated_vcf`: Base VCF annotated with integrated TR calls.
 - `File tr_annotated_vcf_idx`: Index for the annotated VCF.
+
+### [MergeHiPhaseCallsets](../wdl/annotation_utils/MergeHiPhaseCallsets.wdl)
+This tool merges per-sample HiPhase-phased VCFs into a cohort VCF on a per-contig basis, optionally also merging the TRGT tandem-repeat calls separately - fixing TRGT `END`/`AL` headers and propagating phase-set tags. It outputs the merged integrated VCF and an optional merged TRGT VCF.
+
+Inputs:
+- `Array[File] phased_vcfs`: Per-sample HiPhase-phased VCFs to merge.
+- `Array[File] phased_vcf_idxs`: Indexes for `phased_vcfs`.
+- `File ref_fa`: From references.
+- `File ref_fai`: From references.
+- `Array[String] contigs`: Contigs to process.
+- `Boolean merge_trgt`: Whether to additionally merge the TRGT tandem-repeat calls separately.
+- `String merge_args`: Arguments controlling the VCF merge. (default `--merge id`)
+- `String prefix`: Prefix for output file names.
+- `String trgt_docker`, `String utils_docker`: Container images.
+- `RuntimeAttr? runtime_attr_*`: Optional per-task runtime overrides (11).
+
+Outputs:
+- `File hiphase_merged_integrated_vcf`: Merged integrated cohort VCF.
+- `File hiphase_merged_integrated_vcf_idx`: Index for the merged integrated VCF.
+- `File? hiphase_merged_trgt_vcf`: Merged TRGT VCF (only when `merge_trgt`).
+- `File? hiphase_merged_trgt_vcf_idx`: Index for the merged TRGT VCF (only when `merge_trgt`).
 
 ### [MergeVcfs](../wdl/annotation_utils/MergeVcfs.wdl)
 This utility merges per-contig VCFs that were called across distinct sample sets into a single callset for the contig, handling tandem-repeat and non-tandem-repeat variants separately.
@@ -1361,25 +1348,6 @@ Inputs:
 Outputs:
 - `File preprocessed_vcf`: Preprocessed and merged cohort VCF.
 - `File preprocessed_vcf_idx`: Index for the preprocessed VCF.
-
-### [FillBackbonePhasedGenotypes](../wdl/annotation_utils/FillBackbonePhasedGenotypes.wdl)
-This utility merges a backbone-phased VCF with its no-TRGT counterpart (the same backbone-phasing run without TRGT calls included): for each still-unphased heterozygous genotype in `backbone_phased_vcf`, if a matching variant exists in `backbone_phased_notrgt_vcf` with a phased genotype, that phased `GT` (and `PS`) is pulled into the output. Region sharding is optional. It outputs the merged VCF and a per-sample TSV of heterozygous/unphased/pulled genotype counts.
-
-Inputs:
-- `File backbone_phased_vcf`: Backbone-phased VCF whose remaining unphased het genotypes are filled.
-- `File backbone_phased_vcf_idx`: Index for `backbone_phased_vcf`.
-- `File backbone_phased_notrgt_vcf`: Backbone-phased VCF (without TRGT calls) providing phased genotypes to pull from.
-- `File backbone_phased_notrgt_vcf_idx`: Index for `backbone_phased_notrgt_vcf`.
-- `String contig`: Contig to process.
-- `Int? shard_bin_size`: Region-bin size, in bp, used when sharding the contig.
-- `String prefix`: Prefix for output file names.
-- `String utils_docker`: Container image.
-- `RuntimeAttr? runtime_attr_*`: Optional per-task runtime overrides (6).
-
-Outputs:
-- `File backbone_merged_vcf`: Merged VCF with phased genotypes pulled in where available.
-- `File backbone_merged_vcf_idx`: Index for the merged VCF.
-- `File backbone_merged_tsv`: Per-sample TSV of heterozygous, unphased, and post-pull unphased genotype counts.
 
 ### [EvaluateBackbonePhasing](../wdl/annotation_utils/EvaluateBackbonePhasing.wdl)
 This utility evaluates backbone-phasing accuracy by comparing backbone-phased VCFs against base (truth) VCFs. It assigns samples to their base VCFs, compares phased genotypes per contig and aggregates the results into tables broken down by variants outside tandem repeats, TR-enveloped variants and TR variants. It outputs these summary tables plus per-VCF status tables.
@@ -1762,27 +1730,6 @@ Outputs:
 - `Array[File] hiphase_blocks`: Per-contig phase blocks.
 - `Array[File] hiphase_summary`: Per-contig phasing summaries.
 - `Array[File] hiphase_fill_stats`: Per-contig counts of heterozygous, unphased and second-pass-filled genotypes (only when `trgt_vcf` is given).
-
-### [MergeHiPhaseCallsets](../wdl/tools/MergeHiPhaseCallsets.wdl)
-This tool merges per-sample HiPhase-phased VCFs into a cohort VCF on a per-contig basis, optionally also merging the TRGT tandem-repeat calls separately - fixing TRGT `END`/`AL` headers and propagating phase-set tags. It outputs the merged integrated VCF and an optional merged TRGT VCF.
-
-Inputs:
-- `Array[File] phased_vcfs`: Per-sample HiPhase-phased VCFs to merge.
-- `Array[File] phased_vcf_idxs`: Indexes for `phased_vcfs`.
-- `File ref_fa`: From references.
-- `File ref_fai`: From references.
-- `Array[String] contigs`: Contigs to process.
-- `Boolean merge_trgt`: Whether to additionally merge the TRGT tandem-repeat calls separately.
-- `String merge_args`: Arguments controlling the VCF merge. (default `--merge id`)
-- `String prefix`: Prefix for output file names.
-- `String trgt_docker`, `String utils_docker`: Container images.
-- `RuntimeAttr? runtime_attr_*`: Optional per-task runtime overrides (11).
-
-Outputs:
-- `File hiphase_merged_integrated_vcf`: Merged integrated cohort VCF.
-- `File hiphase_merged_integrated_vcf_idx`: Index for the merged integrated VCF.
-- `File? hiphase_merged_trgt_vcf`: Merged TRGT VCF (only when `merge_trgt`).
-- `File? hiphase_merged_trgt_vcf_idx`: Index for the merged TRGT VCF (only when `merge_trgt`).
 
 ### [Kanpig](../wdl/tools/Kanpig.wdl)
 This tool regenotypes a cohort SV VCF against each sample's aligned reads using Kanpig (https://github.com/ACEnglish/kanpig). It subsets the cohort to the target samples, runs Kanpig per sample with sex-aware ploidy beds, and merges the per-sample genotypes back into both a raw and a processed cohort VCF. It outputs the regenotyped (processed) and raw Kanpig VCFs.
@@ -2789,7 +2736,7 @@ Outputs:
 - `File annotation_tsv`: Nearest-neighbour annotations for the remaining records.
 
 ### [ScatterVcf](../wdl/utils/ScatterVcf.wdl)
-This sub-workflow shards a VCF, either by contig, into a fixed number of record-count shards, or both. It can operate on a localized file or stream a remote one, and is used by `AnnotateVEPHail` to parallelize VEP annotation.
+This sub-workflow shards a VCF, either by contig, into a fixed number of record-count shards, or both. It can operate on a localized file or stream a remote one, and is used by `AnnotateVEP` to parallelize VEP annotation.
 
 Inputs:
 - `File file`: VCF or Hail MatrixTable to shard.

@@ -4,7 +4,7 @@ import "../utils/Helpers.wdl"
 import "../utils/ScatterVcf.wdl"
 import "../utils/Structs.wdl"
 
-workflow AnnotateVEPHail {
+workflow AnnotateVEP {
     meta {
         description: [
             "This workflow leverages the Ensembl Variant Effect Predictor (VEP) (https://useast.ensembl.org/info/docs/tools/vep/index.html) in order to annotate predicted functional effects based on site-level information. It strips genotypes, scatters the VCF into shards, optionally normalizes and splits multiallelics around the VEP call, and uses Hail in order to run this annotation process in a more efficient and scalable manner before concatenating the per-shard annotations into a single TSV."

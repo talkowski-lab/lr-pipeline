@@ -49,7 +49,7 @@ def main():
         )
         header = hl.get_vcf_metadata(args.vcf)
 
-    # Sites-only inputs, such as AnnotateVEPHail's stripped VCF, have no GT
+    # Sites-only inputs, such as AnnotateVEP's stripped VCF, have no GT
     if "GT" in mt.entry:
         # Normalize haploid calls (e.g. chrY) to diploid
         mt = mt.annotate_entries(GT=hl.if_else(mt.GT.ploidy == 1, hl.call(mt.GT[0], mt.GT[0]), mt.GT))

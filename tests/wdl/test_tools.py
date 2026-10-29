@@ -1,6 +1,6 @@
 import pysam
 import pytest
-from conftest import CONTIG, FAI, SAMPLES, TOOLS, WINDOW_FASTA, load_records, rewrite_vcf, site_key, write_vcf
+from conftest import CONTIG, FAI, SAMPLES, TOOLS, UTILS, WINDOW_FASTA, load_records, rewrite_vcf, site_key, write_vcf
 from pysam import bcftools
 
 pytestmark = pytest.mark.wdl
@@ -97,7 +97,7 @@ def test_merge_hiphase_callsets_merges_disjoint_sample_sets_without_trgt(run_wor
         subset_samples(subset_vcf, run_dir / "second.vcf.gz", SAMPLES[3:]),
     ]
     outputs = run_workflow(
-        f"{TOOLS}/MergeHiPhaseCallsets.wdl",
+        f"{UTILS}/MergeHiPhaseCallsets.wdl",
         {
             "phased_vcfs": [str(p) for p in parts],
             "phased_vcf_idxs": [f"{p}.tbi" for p in parts],

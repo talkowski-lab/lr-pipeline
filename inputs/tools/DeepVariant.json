@@ -4,8 +4,8 @@
     "DeepVariant.sex": "female",
     "DeepVariant.prefix": "cohort",
     "DeepVariant.model_for_dv_andor_pepper": "model_for_dv_andor_pepper",
-    "DeepVariant.ref_bundle_json_file": "gs://<references-bucket>/ref_bundle_json_file",
-    "DeepVariant.small_variant_calling_options_json": "gs://<cohort-bucket>/small_variant_calling_options.json",
+    "DeepVariant.ref_bundle_json_file": "gs://<references-bucket>/grch38-noalt.ref-bundle.json",
+    "DeepVariant.small_variant_calling_options_json": "gs://<references-bucket>/SmallVariantsCallingStandardOptions-CCS.json",
     "DeepVariant.deepvariant_docker": "google/deepvariant:1.6.0",
     "DeepVariant.utils_docker": "us-central1-docker.pkg.dev/talkowski-sv-gnomad/kj-dockers/utils:latest"
 }

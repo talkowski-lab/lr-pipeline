@@ -1,8 +1,8 @@
 {
     "AnnotateDbVaR.vcf": "gs://<cohort-bucket>/cohort.vcf.gz",
     "AnnotateDbVaR.vcf_idx": "gs://<cohort-bucket>/cohort.vcf.gz.tbi",
-    "AnnotateDbVaR.dbvar_vcf": "gs://<references-bucket>/GRCh38.variant_call.all.vcf.gz",
-    "AnnotateDbVaR.dbvar_vcf_idx": "gs://<references-bucket>/GRCh38.variant_call.all.vcf.gz.tbi",
+    "AnnotateDbVaR.dbvar_vcf": "gs://<references-bucket>/dbvar_vcfs/chr22.vcf.gz",
+    "AnnotateDbVaR.dbvar_vcf_idx": "gs://<references-bucket>/dbvar_vcfs/chr22.vcf.gz.tbi",
     "AnnotateDbVaR.contigs": [
         "chr1",
         "chr2",

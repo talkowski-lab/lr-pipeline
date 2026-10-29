@@ -2,7 +2,7 @@ version 1.0
 
 import "../utils/Helpers.wdl"
 import "../utils/Structs.wdl"
-import "AnnotateVEPHail.wdl"
+import "AnnotateVEP.wdl"
 
 workflow AnnotateVEPTRVs {
     meta {
@@ -25,7 +25,7 @@ workflow AnnotateVEPTRVs {
         ref_fa_gz: "bgzipped `ref_fa`, from references."
         ref_fai_gz: "Index for `ref_fa_gz`, from references."
         ref_vep_cache: "From references."
-        annotations_tsv_vep_trv: "TSV with a header and one row per TRV ALT allele, with columns CHROM, POS, REF, ALT, ID, NORM_POS, NORM_REF, NORM_ALT, AC, AF and VEP, where VEP holds the comma-separated VEP annotations for that allele."
+        annotations_tsv_vep_trvs: "TSV with a header and one row per TRV ALT allele, with columns CHROM, POS, REF, ALT, ID, NORM_POS, NORM_REF, NORM_ALT, AC, AF and VEP, where VEP holds the comma-separated VEP annotations for that allele."
     }
 
     input {
@@ -89,7 +89,7 @@ workflow AnnotateVEPTRVs {
                 runtime_attr_override = runtime_attr_normalize_trv_alleles
         }
 
-        call AnnotateVEPHail.VepAnnotate {
+        call AnnotateVEP.VepAnnotate {
             input:
                 vcf = NormalizeTRVAlleles.normalized_vcf,
                 ref_vep_cache = ref_vep_cache,
@@ -123,7 +123,7 @@ workflow AnnotateVEPTRVs {
     }
 
     output {
-        File annotations_tsv_vep_trv = ConcatShards.concatenated_tsv
+        File annotations_tsv_vep_trvs = ConcatShards.concatenated_tsv
     }
 }
 

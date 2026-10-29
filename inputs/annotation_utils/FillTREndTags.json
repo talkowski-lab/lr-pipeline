@@ -1,7 +1,7 @@
 {
-    "AnnotateTREndTags.vcf": "gs://<cohort-bucket>/cohort.vcf.gz",
-    "AnnotateTREndTags.vcf_idx": "gs://<cohort-bucket>/cohort.vcf.gz.tbi",
-    "AnnotateTREndTags.contigs": [
+    "FillTREndTags.vcf": "gs://<cohort-bucket>/cohort.vcf.gz",
+    "FillTREndTags.vcf_idx": "gs://<cohort-bucket>/cohort.vcf.gz.tbi",
+    "FillTREndTags.contigs": [
         "chr1",
         "chr2",
         "chr3",
@@ -27,6 +27,6 @@
         "chrX",
         "chrY"
     ],
-    "AnnotateTREndTags.prefix": "cohort",
-    "AnnotateTREndTags.utils_docker": "us-central1-docker.pkg.dev/talkowski-sv-gnomad/kj-dockers/utils:latest"
+    "FillTREndTags.prefix": "cohort",
+    "FillTREndTags.utils_docker": "us-central1-docker.pkg.dev/talkowski-sv-gnomad/kj-dockers/utils:latest"
 }

@@ -6,7 +6,7 @@ import "Structs.wdl"
 workflow ScatterVcf {
     meta {
         description: [
-            "This sub-workflow shards a VCF, either by contig, into a fixed number of record-count shards, or both. It can operate on a localized file or stream a remote one, and is used by `AnnotateVEPHail` to parallelize VEP annotation."
+            "This sub-workflow shards a VCF, either by contig, into a fixed number of record-count shards, or both. It can operate on a localized file or stream a remote one, and is used by `AnnotateVEP` to parallelize VEP annotation."
         ]
     }
 

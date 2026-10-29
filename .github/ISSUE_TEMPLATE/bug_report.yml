@@ -6,7 +6,7 @@ body:
     id: workflow
     attributes:
       label: Workflow or script
-      description: The workflow name, e.g. `AnnotateVEPHail`, or the script path.
+      description: The workflow name, e.g. `AnnotateVEP`, or the script path.
     validations:
       required: true
   - type: input

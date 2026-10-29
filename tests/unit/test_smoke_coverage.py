@@ -8,7 +8,7 @@ WDL_DIRS = ["wdl/annotation", "wdl/annotation_utils", "wdl/tools"]
 # Workflows without a smoke test. Every WDL workflow in WDL_DIRS needs a test in tests/wdl or an entry here.
 EXEMPT = {
     "AnnotateInSilicoPredictors": "runs Hail with external predictor tables (hail image, large resources)",
-    "AnnotateVEPHail": "runs VEP through Hail with a VEP cache (vephail image, large resources)",
+    "AnnotateVEP": "runs VEP through Hail with a VEP cache (vephail image, large resources)",
     "AnnotateVEPTRVs": "runs VEP with a VEP cache (vephail image, large resources)",
     "AnnotateIndelTRs": "needs the stranalysis image",
     "AnnotateL1MEAID": "needs the l1meaid, RepeatMasker and intact MEI images and resources",

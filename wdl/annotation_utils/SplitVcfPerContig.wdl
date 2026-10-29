@@ -23,6 +23,8 @@ workflow SplitVcfPerContig {
         contig_vcf_idxs: "Indexes for `contig_vcfs`."
         contig_no_geno_vcfs: "Per-contig genotype-free VCFs when requested."
         contig_no_geno_vcf_idxs: "Indexes for `contig_no_geno_vcfs` when requested."
+        contig_vcf: "The single contig's VCF when one contig is requested, for a per-contig data table row."
+        contig_vcf_idx: "Index for `contig_vcf`."
     }
 
     input {
@@ -74,11 +76,18 @@ workflow SplitVcfPerContig {
         }
     }
 
+    if (length(contigs) == 1) {
+        File single_contig_vcf = SplitByContig.contig_vcf[0]
+        File single_contig_vcf_idx = SplitByContig.contig_vcf_idx[0]
+    }
+
     output {
         Array[File] contig_vcfs = SplitByContig.contig_vcf
         Array[File] contig_vcf_idxs = SplitByContig.contig_vcf_idx
         Array[File] contig_no_geno_vcfs = select_all(SplitByContig.contig_no_geno_vcf)
         Array[File] contig_no_geno_vcf_idxs = select_all(SplitByContig.contig_no_geno_vcf_idx)
+        File? contig_vcf = single_contig_vcf
+        File? contig_vcf_idx = single_contig_vcf_idx
     }
 }
 

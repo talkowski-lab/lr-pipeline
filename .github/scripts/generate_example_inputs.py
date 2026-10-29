@@ -45,14 +45,13 @@ NAMED = {
     "pedigree": COHORT + "cohort.ped",
     "bam": COHORT + "sample.bam",
     "bai": COHORT + "sample.bam.bai",
+    # Per-contig references, documented as a folder of chr<N>.vcf.gz files
+    "dbsnp_vcf": REFERENCES + "dbsnp_vcfs/chr22.vcf.gz",
+    "dbvar_vcf": REFERENCES + "dbvar_vcfs/chr22.vcf.gz",
 }
 
 # Reference-like inputs absent from docs/references.md; they live in the references bucket
-EXTRA_REFERENCES = {
-    "autosomes_bed", "standard_chromosomes_bed", "exclude_bed", "expected_cn_female", "expected_cn_male",
-    "ref_agp", "ref_map_file", "ref_bundle_json_file", "training_resource_bed", "training_resource_vcf",
-    "intervals",
-}  # fmt: skip
+EXTRA_REFERENCES = {"exclude_bed", "expected_cn_female", "expected_cn_male", "intervals"}
 
 # Extension of a File input is taken from its name suffix, e.g. `annotations_tsv` -> annotations.tsv
 SUFFIX_EXT = {"_tsv": ".tsv", "_bed": ".bed", "_json": ".json", "_csv": ".csv", "_gtf": ".gtf", "_script": ".py", "_agp": ".agp"}
@@ -75,7 +74,7 @@ def read_table(path, section_start, section_end=None):
 def load_references():
     """Input name -> file name of the copy documented in docs/references.md."""
     refs = {}
-    for row in read_table("docs/references.md", "## Shared References", "## Released Callset Inputs"):
+    for row in read_table("docs/references.md", "# References"):
         url = re.search(r"\]\((gs://[^)]+)\)", row)
         if url:
             refs[re.match(r"^\| `(\w+)`", row).group(1)] = url.group(1).rstrip("/").rsplit("/", 1)[1]

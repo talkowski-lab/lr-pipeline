@@ -24,6 +24,8 @@ This file is generated from the `meta` and `parameter_meta` blocks of each workf
   - [CreatePedigreeAncestryFilesAoUPhase1](#createpedigreeancestryfilesaouphase1)
   - [DownloadAWSFile](#downloadawsfile)
   - [ExtractBamRegion](#extractbamregion)
+  - [FillBackbonePhasedGenotypes](#fillbackbonephasedgenotypes)
+  - [FillFormatFields](#fillformatfields)
   - [FillFormatFieldsBcfTools](#fillformatfieldsbcftools)
   - [FilterDuplicateZeroDepthReferenceBlocks](#filterduplicatezerodepthreferenceblocks)
   - [FilterTRGTCalls](#filtertrgtcalls)
@@ -433,6 +435,59 @@ Inputs:
 Outputs:
 - `File regional_bam`: BAM holding only the requested region.
 - `File regional_bai`: Index for `regional_bam`.
+
+### [FillBackbonePhasedGenotypes](../wdl/annotation_utils/FillBackbonePhasedGenotypes.wdl)
+This utility merges a backbone-phased VCF with its no-TRGT counterpart (the same backbone-phasing run without TRGT calls included): for each still-unphased heterozygous genotype in `backbone_phased_vcf`, if a matching variant exists in `backbone_phased_notrgt_vcf` with a phased genotype, that phased `GT` (and `PS`) is pulled into the output. Region sharding is optional. It outputs the merged VCF and a per-sample TSV of heterozygous/unphased/pulled genotype counts.
+
+Inputs:
+- `File backbone_phased_vcf`: Backbone-phased VCF whose remaining unphased het genotypes are filled.
+- `File backbone_phased_vcf_idx`: Index for `backbone_phased_vcf`.
+- `File backbone_phased_notrgt_vcf`: Backbone-phased VCF (without TRGT calls) providing phased genotypes to pull from.
+- `File backbone_phased_notrgt_vcf_idx`: Index for `backbone_phased_notrgt_vcf`.
+- `String contig`: Contig to process.
+- `Int? shard_bin_size`: Region-bin size, in bp, used when sharding the contig.
+- `String prefix`: Prefix for output file names.
+- `String utils_docker`: Container image.
+- `RuntimeAttr? runtime_attr_*`: Optional per-task runtime overrides (6).
+
+Outputs:
+- `File backbone_merged_vcf`: Merged VCF with phased genotypes pulled in where available.
+- `File backbone_merged_vcf_idx`: Index for the merged VCF.
+- `File backbone_merged_tsv`: Per-sample TSV of heterozygous, unphased, and post-pull unphased genotype counts.
+
+### [FillFormatFields](../wdl/annotation_utils/FillFormatFields.wdl)
+This utility fills missing FORMAT fields in one VCF using the values from a second, more complete VCF covering the same sites. It supports selectively copying named format fields plus toggles for filling alternate and reference genotypes, unphasing genotypes and adding PL. Sites are matched on CHROM/POS/REF/ALT, optionally also requiring a matching ID, and filling can be restricted to variants whose INFO field matches a given value. Either input can first be run through `bcftools norm`, sharded by record count so normalization never runs over a whole-contig VCF at once; normalized shards are re-concatenated with sorting (since normalization can shift a variant's position, e.g. when splitting a multiallelic) before being re-binned for matching. It outputs the refilled VCF.
+
+Inputs:
+- `File unfilled_vcf`: VCF whose FORMAT fields are filled.
+- `File unfilled_vcf_idx`: Index for `unfilled_vcf`.
+- `File filled_vcf`: VCF providing the FORMAT field values.
+- `File filled_vcf_idx`: Index for `filled_vcf`.
+- `String contig`: Contig to process.
+- `File? ref_fa`: Reference FASTA used for normalization. Required if either normalize input is `true`.
+- `File? ref_fai`: Index for `ref_fa`. Required if either normalize input is `true`.
+- `Int? records_per_shard_normalize`: Number of variants per shard when normalizing. When set, normalization runs in parallel shards that are re-concatenated and sorted afterward.
+- `Int? shard_bin_size_fill`: Region-bin size, in bp, used when sharding the contig for matching/filling.
+- `Array[String] transfer_format_fields`: FORMAT fields to fill from `filled_vcf`.
+- `Array[String] drop_format_fields`: FORMAT fields to drop entirely from the output (e.g. fields known to be unreliable). Cannot include `GT`.
+- `Boolean fill_alt_gts`: Whether to overwrite a sample's GT in `unfilled_vcf` with `filled_vcf`'s GT when `filled_vcf`'s GT is alt-containing, regardless of the current GT in `unfilled_vcf`.
+- `Boolean fill_ref_gts`: Whether to overwrite a sample's GT in `unfilled_vcf` with `filled_vcf`'s GT when `filled_vcf`'s GT is non-alt (hom-ref or no-call), regardless of the current GT in `unfilled_vcf`.
+- `Boolean match_by_id`: Whether matching also requires equal variant IDs, in addition to CHROM/POS/REF/ALT.
+- `Boolean unphase_gts`: Whether to unphase genotypes while filling.
+- `Boolean add_missing_pl_via_ad`: Whether to add a `PL` FORMAT field derived from `AD` for genotypes that lack one.
+- `Boolean expand_ad_across_alleles`: Whether to expand a fully-missing `AD` into one missing value per allele, which GLNexus writes as a bare '.' rather than '.,.'.
+- `Boolean split_rnc_across_alleles`: Whether to split a merged `RNC` code into one character per allele copy, which GLNexus writes as 'MI' rather than 'M,I'.
+- `Boolean normalize_unfilled_vcf`: Whether to normalize `unfilled_vcf` with `bcftools norm` before matching.
+- `Boolean normalize_filled_vcf`: Whether to normalize `filled_vcf` with `bcftools norm` before matching.
+- `String? subset_unfilled_vcf_field`: INFO field on `unfilled_vcf` used to limit which variants are filled. Requires `subset_unfilled_vcf_value`.
+- `String? subset_unfilled_vcf_value`: Value that `subset_unfilled_vcf_field` must equal for a variant to be filled. Variants that don't match are left unfilled.
+- `String prefix`: Prefix for output file names.
+- `String utils_docker`: Container image.
+- `RuntimeAttr? runtime_attr_*`: Optional per-task runtime overrides (11).
+
+Outputs:
+- `File refilled_vcf`: VCF with FORMAT fields filled.
+- `File refilled_vcf_idx`: Index for the refilled VCF.
 
 ### [FillFormatFieldsBcfTools](../wdl/annotation_utils/FillFormatFieldsBcfTools.wdl)
 This utility transfers FORMAT fields from a filled VCF back onto an unfilled VCF using `bcftools`, optionally unphasing genotypes, adding a `PL` field and adjusting the `EV` header Number. It is the `bcftools` counterpart to `FillFormatFields`.

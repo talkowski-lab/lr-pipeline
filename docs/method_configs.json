@@ -1,0 +1,1336 @@
+[
+    {
+        "name": "01-CreateCohortMetadata",
+        "workflow": "CreateCohortMetadata",
+        "root_entity_type": "sample_set",
+        "inputs": {
+            "CreateCohortMetadata.ancestry_file": "workspace.ancestry",
+            "CreateCohortMetadata.ped_file": "workspace.ped",
+            "CreateCohortMetadata.prefix": "this.sample_set_id",
+            "CreateCohortMetadata.utils_docker": "workspace.utils_docker"
+        },
+        "outputs": {
+            "CreateCohortMetadata.metadata": "this.cohort_metadata"
+        }
+    },
+    {
+        "name": "01-Hifiasm",
+        "workflow": "Hifiasm",
+        "root_entity_type": "sample",
+        "inputs": {
+            "Hifiasm.bams": "[this.unaligned_bam]",
+            "Hifiasm.hifiasm_docker": "workspace.hifiasm_docker",
+            "Hifiasm.prefix": "this.sample_id"
+        },
+        "outputs": {
+            "Hifiasm.hifiasm_hap1_fa": "this.hifiasm_hap1_fa",
+            "Hifiasm.hifiasm_hap1_gfa": "this.hifiasm_hap1_gfa",
+            "Hifiasm.hifiasm_hap2_fa": "this.hifiasm_hap2_fa",
+            "Hifiasm.hifiasm_hap2_gfa": "this.hifiasm_hap2_gfa",
+            "Hifiasm.hifiasm_log": "this.hifiasm_log",
+            "Hifiasm.hifiasm_primary_fa": "this.hifiasm_primary_fa",
+            "Hifiasm.hifiasm_primary_gfa": "this.hifiasm_primary_gfa"
+        }
+    },
+    {
+        "name": "01-MinimapReadAlignment",
+        "workflow": "MinimapReadAlignment",
+        "root_entity_type": "sample",
+        "inputs": {
+            "MinimapReadAlignment.bams": "[this.unaligned_bam]",
+            "MinimapReadAlignment.minimap2_docker": "workspace.minimap2_docker",
+            "MinimapReadAlignment.prefix": "this.sample_id",
+            "MinimapReadAlignment.ref_fa": "workspace.ref_fa",
+            "MinimapReadAlignment.ref_fai": "workspace.ref_fai",
+            "MinimapReadAlignment.sample_id": "this.sample_id"
+        },
+        "outputs": {
+            "MinimapReadAlignment.aligned_bai": "this.aligned_bai",
+            "MinimapReadAlignment.aligned_bam": "this.aligned_bam"
+        }
+    },
+    {
+        "name": "02-DeepVariant",
+        "workflow": "DeepVariant",
+        "root_entity_type": "sample",
+        "inputs": {
+            "DeepVariant.bai": "this.aligned_bai",
+            "DeepVariant.bam": "this.aligned_bam",
+            "DeepVariant.deepvariant_docker": "workspace.deepvariant_docker",
+            "DeepVariant.model_for_dv_andor_pepper": "\"PACBIO\"",
+            "DeepVariant.prefix": "this.sample_id",
+            "DeepVariant.ref_bundle_json_file": "workspace.ref_bundle_json_file",
+            "DeepVariant.runtime_attr_run_deepvariant": "{\"mem_gb\": 52}",
+            "DeepVariant.sex": "this.sex",
+            "DeepVariant.small_variant_calling_options_json": "workspace.small_variant_calling_options_json",
+            "DeepVariant.utils_docker": "workspace.utils_docker"
+        },
+        "outputs": {
+            "DeepVariant.gvcf": "this.deepvariant_gvcf",
+            "DeepVariant.gvcf_idx": "this.deepvariant_gvcf_idx",
+            "DeepVariant.vcf": "this.deepvariant_vcf",
+            "DeepVariant.vcf_idx": "this.deepvariant_vcf_idx"
+        }
+    },
+    {
+        "name": "02-MinimapAlignment",
+        "workflow": "MinimapAlignment",
+        "root_entity_type": "sample",
+        "inputs": {
+            "MinimapAlignment.assembly_hap1": "this.hifiasm_hap1_fa",
+            "MinimapAlignment.assembly_hap2": "this.hifiasm_hap2_fa",
+            "MinimapAlignment.minimap2_docker": "workspace.minimap2_docker",
+            "MinimapAlignment.prefix": "this.sample_id",
+            "MinimapAlignment.ref_fa": "workspace.ref_fa",
+            "MinimapAlignment.ref_fai": "workspace.ref_fai",
+            "MinimapAlignment.sample_id": "this.sample_id"
+        },
+        "outputs": {
+            "MinimapAlignment.minimap_assembled_bai_hap1": "this.minimap_assembled_bai_hap1",
+            "MinimapAlignment.minimap_assembled_bai_hap2": "this.minimap_assembled_bai_hap2",
+            "MinimapAlignment.minimap_assembled_bam_hap1": "this.minimap_assembled_bam_hap1",
+            "MinimapAlignment.minimap_assembled_bam_hap2": "this.minimap_assembled_bam_hap2"
+        }
+    },
+    {
+        "name": "02-MosDepth",
+        "workflow": "MosDepth",
+        "root_entity_type": "sample",
+        "inputs": {
+            "MosDepth.bai": "this.aligned_bai",
+            "MosDepth.bam": "this.aligned_bam",
+            "MosDepth.contigs": "workspace.contigs",
+            "MosDepth.fast_mode": "false",
+            "MosDepth.mosdepth_docker": "workspace.mosdepth_docker",
+            "MosDepth.mosdepthstream_docker": "workspace.mosdepthstream_docker",
+            "MosDepth.prefix": "this.sample_id",
+            "MosDepth.ref_fa": "workspace.ref_fa",
+            "MosDepth.ref_fai": "workspace.ref_fai",
+            "MosDepth.single_contig": "false",
+            "MosDepth.stream_mode": "true",
+            "MosDepth.utils_docker": "workspace.utils_docker"
+        },
+        "outputs": {
+            "MosDepth.mosdepth_dist": "this.mosdepth_dist",
+            "MosDepth.mosdepth_per_base": "this.mosdepth_per_base",
+            "MosDepth.mosdepth_per_base_csi": "this.mosdepth_per_base_csi",
+            "MosDepth.mosdepth_regions_bed": "this.mosdepth_regions_bed",
+            "MosDepth.mosdepth_regions_bed_csi": "this.mosdepth_regions_bed_csi",
+            "MosDepth.mosdepth_summary": "this.mosdepth_summary"
+        }
+    },
+    {
+        "name": "02-PAV",
+        "workflow": "PAV",
+        "root_entity_type": "sample",
+        "inputs": {
+            "PAV.assembly_hap1": "this.hifiasm_hap1_fa",
+            "PAV.assembly_hap2": "this.hifiasm_hap2_fa",
+            "PAV.pav_docker": "workspace.pav_docker",
+            "PAV.prefix": "this.sample_id",
+            "PAV.ref_fa": "workspace.ref_fa",
+            "PAV.ref_fai": "workspace.ref_fai",
+            "PAV.sample_id": "this.sample_id"
+        },
+        "outputs": {
+            "PAV.pav_log_tarball": "this.pav_log_tarball",
+            "PAV.pav_results_tarball": "this.pav_results_tarball",
+            "PAV.pav_vcf": "this.pav_vcf",
+            "PAV.pav_vcf_idx": "this.pav_vcf_idx"
+        }
+    },
+    {
+        "name": "02-PBSV",
+        "workflow": "PBSV",
+        "root_entity_type": "sample",
+        "inputs": {
+            "PBSV.bai": "this.aligned_bai",
+            "PBSV.bam": "this.aligned_bam",
+            "PBSV.pbsv_docker": "workspace.pbsv_docker",
+            "PBSV.prefix": "this.sample_id",
+            "PBSV.ref_fa": "workspace.ref_fa",
+            "PBSV.ref_fai": "workspace.ref_fai"
+        },
+        "outputs": {
+            "PBSV.pbsv_vcf": "this.pbsv_vcf",
+            "PBSV.pbsv_vcf_idx": "this.pbsv_vcf_idx"
+        }
+    },
+    {
+        "name": "02-Sniffles",
+        "workflow": "Sniffles",
+        "root_entity_type": "sample",
+        "inputs": {
+            "Sniffles.bai": "this.aligned_bai",
+            "Sniffles.bam": "this.aligned_bam",
+            "Sniffles.prefix": "this.sample_id",
+            "Sniffles.ref_fa": "workspace.ref_fa",
+            "Sniffles.ref_fai": "workspace.ref_fai",
+            "Sniffles.sample_id": "this.sample_id",
+            "Sniffles.sniffles_docker": "workspace.sniffles_docker"
+        },
+        "outputs": {
+            "Sniffles.sniffles_snf": "this.sniffles_snf",
+            "Sniffles.sniffles_vcf": "this.sniffles_vcf",
+            "Sniffles.sniffles_vcf_idx": "this.sniffles_vcf_idx"
+        }
+    },
+    {
+        "name": "02-TRGT-TRExplorer",
+        "workflow": "TRGT",
+        "root_entity_type": "sample",
+        "inputs": {
+            "TRGT.bai": "this.aligned_bai",
+            "TRGT.bam": "this.aligned_bam",
+            "TRGT.catalog_name": "\"TRExplorer\"",
+            "TRGT.prefix": "this.sample_id",
+            "TRGT.ref_fa": "workspace.ref_fa",
+            "TRGT.ref_fai": "workspace.ref_fai",
+            "TRGT.repeat_catalog_trgt": "workspace.repeat_catalog_trexplorer",
+            "TRGT.sample_id": "this.sample_id",
+            "TRGT.sex": "this.sex",
+            "TRGT.trgt_docker": "workspace.trgt_docker"
+        },
+        "outputs": {
+            "TRGT.trgt_vcf": "this.trgt_trexplorer_vcf",
+            "TRGT.trgt_vcf_idx": "this.trgt_trexplorer_vcf_idx"
+        }
+    },
+    {
+        "name": "02-TRGT-Vamos",
+        "workflow": "TRGT",
+        "root_entity_type": "sample",
+        "inputs": {
+            "TRGT.bai": "this.aligned_bai",
+            "TRGT.bam": "this.aligned_bam",
+            "TRGT.catalog_name": "\"Vamos\"",
+            "TRGT.prefix": "this.sample_id",
+            "TRGT.ref_fa": "workspace.ref_fa",
+            "TRGT.ref_fai": "workspace.ref_fai",
+            "TRGT.repeat_catalog_trgt": "workspace.repeat_catalog_vamos",
+            "TRGT.sample_id": "this.sample_id",
+            "TRGT.sex": "this.sex",
+            "TRGT.trgt_docker": "workspace.trgt_docker"
+        },
+        "outputs": {
+            "TRGT.trgt_vcf": "this.trgt_vamos_vcf",
+            "TRGT.trgt_vcf_idx": "this.trgt_vamos_vcf_idx"
+        }
+    },
+    {
+        "name": "03-CombineTRs",
+        "workflow": "CombineTRs",
+        "root_entity_type": "sample",
+        "inputs": {
+            "CombineTRs.contigs": "workspace.contigs",
+            "CombineTRs.prefix": "this.sample_id",
+            "CombineTRs.sample_ids": "[this.sample_id]",
+            "CombineTRs.tr_callers": "[\"TRExplorer\", \"Vamos\"]",
+            "CombineTRs.tr_vcf_idxs": "[this.trgt_trexplorer_vcf_idx, this.trgt_vamos_vcf_idx]",
+            "CombineTRs.tr_vcfs": "[this.trgt_trexplorer_vcf, this.trgt_vamos_vcf]",
+            "CombineTRs.utils_docker": "workspace.utils_docker"
+        },
+        "outputs": {
+            "CombineTRs.combined_tr_vcf": "this.trgt_combined_vcf",
+            "CombineTRs.combined_tr_vcf_idx": "this.trgt_combined_vcf_idx"
+        }
+    },
+    {
+        "name": "03-ConcatenateMosDepth",
+        "workflow": "ConcatenateMosDepth",
+        "root_entity_type": "sample",
+        "inputs": {
+            "ConcatenateMosDepth.mosdepth_bed_files": "this.mosdepth_per_base",
+            "ConcatenateMosDepth.prefix": "this.sample_id",
+            "ConcatenateMosDepth.utils_docker": "workspace.utils_docker"
+        },
+        "outputs": {
+            "ConcatenateMosDepth.mosdepth_per_base_combined": "this.mosdepth_per_base_combined",
+            "ConcatenateMosDepth.mosdepth_per_base_combined_idx": "this.mosdepth_per_base_combined_idx"
+        }
+    },
+    {
+        "name": "03-GLNexus",
+        "workflow": "GLNexus",
+        "root_entity_type": "sample_set",
+        "inputs": {
+            "GLNexus.glnexus_docker": "workspace.glnexus_docker",
+            "GLNexus.gvcf_idxs": "this.samples.deepvariant_gvcf_idx",
+            "GLNexus.gvcfs": "this.samples.deepvariant_gvcf",
+            "GLNexus.hail_docker": "workspace.hail_docker",
+            "GLNexus.prefix": "this.sample_set_id",
+            "GLNexus.ref_map_file": "workspace.ref_map_file"
+        },
+        "outputs": {
+            "GLNexus.joint_vcf": "this.snv_indel_vcf",
+            "GLNexus.joint_vcf_idx": "this.snv_indel_vcf_idx"
+        }
+    },
+    {
+        "name": "03-MergeSampleSVCallsets",
+        "workflow": "MergeSampleSVCallsets",
+        "root_entity_type": "sample_set",
+        "inputs": {
+            "MergeSampleSVCallsets.aligned_bais": "this.samples.aligned_bai",
+            "MergeSampleSVCallsets.aligned_bams": "this.samples.aligned_bam",
+            "MergeSampleSVCallsets.autosomes_bed": "workspace.autosomes_bed",
+            "MergeSampleSVCallsets.hyperparameters_json": "workspace.hyperparameters_json",
+            "MergeSampleSVCallsets.pav_beds": "this.samples.pav_vcf",
+            "MergeSampleSVCallsets.pav_vcf_idxs": "this.samples.pav_vcf_idx",
+            "MergeSampleSVCallsets.pav_vcfs": "this.samples.pav_vcf",
+            "MergeSampleSVCallsets.pbsv_vcf_idxs": "this.samples.pbsv_vcf_idx",
+            "MergeSampleSVCallsets.pbsv_vcfs": "this.samples.pbsv_vcf",
+            "MergeSampleSVCallsets.ploidy_bed_female": "workspace.ploidy_bed_female",
+            "MergeSampleSVCallsets.ploidy_bed_male": "workspace.ploidy_bed_male",
+            "MergeSampleSVCallsets.prefix": "this.sample_set_id",
+            "MergeSampleSVCallsets.ref_agp": "workspace.ref_agp",
+            "MergeSampleSVCallsets.ref_fa": "workspace.ref_fa",
+            "MergeSampleSVCallsets.ref_fai": "workspace.ref_fai",
+            "MergeSampleSVCallsets.remote_outdir": "this.sv_integration_dir",
+            "MergeSampleSVCallsets.sample_ids": "this.samples.sample_id",
+            "MergeSampleSVCallsets.sample_sexes": "this.samples.sex",
+            "MergeSampleSVCallsets.scoring_python_script": "workspace.scoring_python_script",
+            "MergeSampleSVCallsets.sniffles_vcf_idxs": "this.samples.sniffles_vcf_idx",
+            "MergeSampleSVCallsets.sniffles_vcfs": "this.samples.sniffles_vcf",
+            "MergeSampleSVCallsets.split_for_bcftools_merge_csv": "workspace.split_for_bcftools_merge_csv",
+            "MergeSampleSVCallsets.standard_chromosomes_bed": "workspace.standard_chromosomes_bed",
+            "MergeSampleSVCallsets.sv_integration_docker": "workspace.sv_integration_docker",
+            "MergeSampleSVCallsets.training_python_script": "workspace.training_python_script",
+            "MergeSampleSVCallsets.training_resource_bed": "workspace.training_resource_bed",
+            "MergeSampleSVCallsets.training_resource_vcf": "workspace.training_resource_vcf",
+            "MergeSampleSVCallsets.training_resource_vcf_idx": "workspace.training_resource_vcf_idx",
+            "MergeSampleSVCallsets.xgb_scoring_docker": "workspace.xgb_scoring_docker"
+        },
+        "outputs": {}
+    },
+    {
+        "name": "03-PALMERAssembly",
+        "workflow": "PALMERAssembly",
+        "root_entity_type": "sample",
+        "inputs": {
+            "PALMERAssembly.bai_hap1": "this.minimap_assembled_bai_hap1",
+            "PALMERAssembly.bai_hap2": "this.minimap_assembled_bai_hap2",
+            "PALMERAssembly.bam_hap1": "this.minimap_assembled_bam_hap1",
+            "PALMERAssembly.bam_hap2": "this.minimap_assembled_bam_hap2",
+            "PALMERAssembly.contigs": "workspace.contigs",
+            "PALMERAssembly.mei_types": "[\"ALU\",\"SVA\",\"LINE\",\"HERVK\"]",
+            "PALMERAssembly.mode": "\"asm\"",
+            "PALMERAssembly.palmer_docker": "workspace.palmer_docker",
+            "PALMERAssembly.prefix": "this.sample_id",
+            "PALMERAssembly.ref_fa": "workspace.ref_fa",
+            "PALMERAssembly.ref_fai": "workspace.ref_fai",
+            "PALMERAssembly.sample": "this.sample_id",
+            "PALMERAssembly.utils_docker": "workspace.utils_docker"
+        },
+        "outputs": {
+            "PALMERAssembly.palmer_combined_vcf": "this.palmer_assembly_vcf",
+            "PALMERAssembly.palmer_combined_vcf_idx": "this.palmer_assembly_vcf_idx"
+        }
+    },
+    {
+        "name": "04-CreateCohortCoverageSummary",
+        "workflow": "CreateCohortCoverageSummary",
+        "root_entity_type": "sample_set",
+        "inputs": {
+            "CreateCohortCoverageSummary.bin_size": "100",
+            "CreateCohortCoverageSummary.contigs": "workspace.contigs",
+            "CreateCohortCoverageSummary.mosdepth_bed_files": "this.samples.mosdepth_per_base_combined",
+            "CreateCohortCoverageSummary.mosdepth_bed_idx": "this.samples.mosdepth_per_base_combined_idx",
+            "CreateCohortCoverageSummary.prefix": "this.sample_set_id",
+            "CreateCohortCoverageSummary.ref_fai": "workspace.ref_fai",
+            "CreateCohortCoverageSummary.thresholds": "[1, 5, 10, 15, 20, 25, 30, 50, 100]",
+            "CreateCohortCoverageSummary.utils_docker": "workspace.utils_docker",
+            "CreateCohortCoverageSummary.window_size": "10000000"
+        },
+        "outputs": {
+            "CreateCohortCoverageSummary.binned_coverage_tsv": "this.binned_coverage_tsv"
+        }
+    },
+    {
+        "name": "04-FillTREndTags",
+        "workflow": "FillTREndTags",
+        "root_entity_type": "sample",
+        "inputs": {
+            "FillTREndTags.contigs": "workspace.contigs",
+            "FillTREndTags.prefix": "this.sample_id",
+            "FillTREndTags.utils_docker": "workspace.utils_docker",
+            "FillTREndTags.vcf": "this.trgt_combined_vcf",
+            "FillTREndTags.vcf_idx": "this.trgt_combined_vcf_idx"
+        },
+        "outputs": {
+            "FillTREndTags.vcf_with_end": "this.trgt_vcf",
+            "FillTREndTags.vcf_with_end_idx": "this.trgt_vcf_idx"
+        }
+    },
+    {
+        "name": "04-IdentifyLowCoverageRegions",
+        "workflow": "IdentifyLowCoverageRegions",
+        "root_entity_type": "sample_set",
+        "inputs": {
+            "IdentifyLowCoverageRegions.bin_size": "100",
+            "IdentifyLowCoverageRegions.mosdepth_bed_files": "this.samples.mosdepth_per_base_combined",
+            "IdentifyLowCoverageRegions.ped": "workspace.ped",
+            "IdentifyLowCoverageRegions.prefix": "this.sample_set_id",
+            "IdentifyLowCoverageRegions.runtime_attr_aggregate_coverage": "{\"disk_gb\": 100}",
+            "IdentifyLowCoverageRegions.sample_ids": "this.samples.sample_id",
+            "IdentifyLowCoverageRegions.sample_proportion_cutoff": "0.9",
+            "IdentifyLowCoverageRegions.utils_docker": "workspace.utils_docker"
+        },
+        "outputs": {
+            "IdentifyLowCoverageRegions.chromosome_low_coverage_tar": "this.chromosome_low_coverage_tar",
+            "IdentifyLowCoverageRegions.cohort_coverage_counts_tsv": "this.cohort_coverage_counts_tsv",
+            "IdentifyLowCoverageRegions.failed_bins_bed": "this.failed_bins_bed",
+            "IdentifyLowCoverageRegions.sample_cutoffs_tsv": "this.sample_cutoffs_tsv",
+            "IdentifyLowCoverageRegions.sample_histograms_tar": "this.sample_histograms_tar"
+        }
+    },
+    {
+        "name": "04-MergeCohortLongSVCallsets",
+        "workflow": "MergeCohortLongSVCallsets",
+        "root_entity_type": "sample_set",
+        "inputs": {
+            "MergeCohortLongSVCallsets.prefix": "this.sample_set_id",
+            "MergeCohortLongSVCallsets.ref_fa": "workspace.ref_fa",
+            "MergeCohortLongSVCallsets.ref_fai": "workspace.ref_fai",
+            "MergeCohortLongSVCallsets.remote_indir": "this.sv_integration_dir",
+            "MergeCohortLongSVCallsets.remote_outdir": "this.sv_integration_dir",
+            "MergeCohortLongSVCallsets.suffixes": "[\"ultralong\"]",
+            "MergeCohortLongSVCallsets.sv_integration_docker": "workspace.sv_integration_docker"
+        },
+        "outputs": {}
+    },
+    {
+        "name": "04-MergeCohortSVCallsets",
+        "workflow": "MergeCohortSVCallsets",
+        "root_entity_type": "sample_set",
+        "inputs": {
+            "MergeCohortSVCallsets.prefix": "this.sample_set_id",
+            "MergeCohortSVCallsets.remote_indir": "this.sv_integration_dir",
+            "MergeCohortSVCallsets.remote_outdir": "this.sv_integration_dir",
+            "MergeCohortSVCallsets.split_for_bcftools_merge_csv": "workspace.split_for_bcftools_merge_csv",
+            "MergeCohortSVCallsets.sv_integration_docker": "workspace.sv_integration_docker"
+        },
+        "outputs": {}
+    },
+    {
+        "name": "04-MergePALMERCallsets",
+        "workflow": "MergePALMERCallsets",
+        "root_entity_type": "sample_set",
+        "inputs": {
+            "MergePALMERCallsets.contigs": "workspace.contigs",
+            "MergePALMERCallsets.prefix": "this.sample_set_id",
+            "MergePALMERCallsets.utils_docker": "workspace.utils_docker",
+            "MergePALMERCallsets.vcf_idxs": "this.samples.palmer_assembly_vcf_idx",
+            "MergePALMERCallsets.vcfs": "this.samples.palmer_assembly_vcf"
+        },
+        "outputs": {
+            "MergePALMERCallsets.palmer_merged_vcf": "this.palmer_merged_vcf",
+            "MergePALMERCallsets.palmer_merged_vcf_idx": "this.palmer_merged_vcf_idx"
+        }
+    },
+    {
+        "name": "05-RegenotypeSVCallsets",
+        "workflow": "RegenotypeSVCallsets",
+        "root_entity_type": "sample_set",
+        "inputs": {
+            "RegenotypeSVCallsets.aligned_bais": "this.samples.aligned_bai",
+            "RegenotypeSVCallsets.aligned_bams": "this.samples.aligned_bam",
+            "RegenotypeSVCallsets.autosomes_bed": "workspace.autosomes_bed",
+            "RegenotypeSVCallsets.ploidy_bed_female": "workspace.ploidy_bed_female",
+            "RegenotypeSVCallsets.ploidy_bed_male": "workspace.ploidy_bed_male",
+            "RegenotypeSVCallsets.prefix": "this.sample_set_id",
+            "RegenotypeSVCallsets.ref_fa": "workspace.ref_fa",
+            "RegenotypeSVCallsets.ref_fai": "workspace.ref_fai",
+            "RegenotypeSVCallsets.remote_indir": "this.sv_integration_dir",
+            "RegenotypeSVCallsets.remote_outdir": "this.sv_regenotype_dir",
+            "RegenotypeSVCallsets.sample_ids": "this.samples.sample_id",
+            "RegenotypeSVCallsets.sample_sexes": "this.samples.sex",
+            "RegenotypeSVCallsets.split_for_bcftools_merge_csv": "workspace.split_for_bcftools_merge_csv",
+            "RegenotypeSVCallsets.sv_integration_docker": "workspace.sv_integration_docker"
+        },
+        "outputs": {}
+    },
+    {
+        "name": "06-MergeRegenotypedSVCallsets",
+        "workflow": "MergeRegenotypedSVCallsets",
+        "root_entity_type": "sample_set",
+        "inputs": {
+            "MergeRegenotypedSVCallsets.prefix": "this.sample_set_id",
+            "MergeRegenotypedSVCallsets.remote_indir": "this.sv_regenotype_dir",
+            "MergeRegenotypedSVCallsets.remote_outdir": "this.sv_integration_dir",
+            "MergeRegenotypedSVCallsets.split_for_bcftools_merge_csv": "workspace.split_for_bcftools_merge_csv",
+            "MergeRegenotypedSVCallsets.sv_integration_docker": "workspace.sv_integration_docker"
+        },
+        "outputs": {}
+    },
+    {
+        "name": "07-PreprocessVcfs",
+        "workflow": "PreprocessVcfs",
+        "root_entity_type": "sample_set",
+        "inputs": {
+            "PreprocessVcfs.convert_aou_phase2_symbolic_alleles": "[false, false, true]",
+            "PreprocessVcfs.drop_out_of_range_lengths": "true",
+            "PreprocessVcfs.max_length_cutoffs": "[49, 2000, -1]",
+            "PreprocessVcfs.min_length_cutoffs": "[-1, 50, 2001]",
+            "PreprocessVcfs.normalize_vcfs": "[true, true, true]",
+            "PreprocessVcfs.prefix": "this.sample_set_id",
+            "PreprocessVcfs.records_per_shard": "50000",
+            "PreprocessVcfs.ref_fa": "workspace.ref_fa",
+            "PreprocessVcfs.ref_fai": "workspace.ref_fai",
+            "PreprocessVcfs.sample_ids": "this.samples.sample_id",
+            "PreprocessVcfs.source_tags": "[\"DeepVariant\", \"SV_Integration\", \"LongSV_Integration\"]",
+            "PreprocessVcfs.swap_sample_lists": "[]",
+            "PreprocessVcfs.utils_docker": "workspace.utils_docker",
+            "PreprocessVcfs.vcf_idxs": "[this.snv_indel_vcf_idx, this.sv_vcf_idx, this.sv_long_vcf_idx]",
+            "PreprocessVcfs.vcfs": "[this.snv_indel_vcf, this.sv_vcf, this.sv_long_vcf]"
+        },
+        "outputs": {
+            "PreprocessVcfs.preprocessed_vcf": "workspace.integrated_vcf",
+            "PreprocessVcfs.preprocessed_vcf_idx": "workspace.integrated_vcf_idx"
+        }
+    },
+    {
+        "name": "08-ExtractSampleVcfs_Base",
+        "workflow": "ExtractSampleVcfs",
+        "root_entity_type": "sample",
+        "inputs": {
+            "ExtractSampleVcfs.cohort_vcf": "workspace.integrated_vcf",
+            "ExtractSampleVcfs.cohort_vcf_idx": "workspace.integrated_vcf_idx",
+            "ExtractSampleVcfs.contigs": "workspace.contigs",
+            "ExtractSampleVcfs.min_sv_length": "50",
+            "ExtractSampleVcfs.prefix": "this.sample_id",
+            "ExtractSampleVcfs.sample_id": "this.sample_id",
+            "ExtractSampleVcfs.utils_docker": "workspace.utils_docker"
+        },
+        "outputs": {
+            "ExtractSampleVcfs.snv_indel_vcf": "this.snv_indel_vcf",
+            "ExtractSampleVcfs.snv_indel_vcf_idx": "this.snv_indel_vcf_idx",
+            "ExtractSampleVcfs.sv_vcf": "this.sv_vcf",
+            "ExtractSampleVcfs.sv_vcf_idx": "this.sv_vcf_idx"
+        }
+    },
+    {
+        "name": "09-HiPhase",
+        "workflow": "HiPhase",
+        "root_entity_type": "sample",
+        "inputs": {
+            "HiPhase.bai": "this.aligned_bai",
+            "HiPhase.bam": "this.aligned_bam",
+            "HiPhase.contigs": "workspace.contigs",
+            "HiPhase.hiphase_docker": "workspace.hiphase_docker",
+            "HiPhase.hiphase_preprocess_docker": "workspace.hiphase_preprocess_docker",
+            "HiPhase.prefix": "this.sample_id",
+            "HiPhase.ref_fa": "workspace.ref_fa",
+            "HiPhase.ref_fai": "workspace.ref_fai",
+            "HiPhase.small_vcf": "this.snv_indel_vcf",
+            "HiPhase.small_vcf_idx": "this.snv_indel_vcf_idx",
+            "HiPhase.sv_vcf": "this.sv_vcf",
+            "HiPhase.sv_vcf_idx": "this.sv_vcf_idx",
+            "HiPhase.trgt_min_repeat_unit": "2",
+            "HiPhase.trgt_vcf": "this.trgt_vcf",
+            "HiPhase.trgt_vcf_idx": "this.trgt_vcf_idx",
+            "HiPhase.utils_docker": "workspace.utils_docker"
+        },
+        "outputs": {
+            "HiPhase.hiphase_blocks": "this.hiphase_blocks",
+            "HiPhase.hiphase_fill_stats": "this.hiphase_fill_stats",
+            "HiPhase.hiphase_haplotag_files": "this.hiphase_haplotag_files",
+            "HiPhase.hiphase_stats": "this.hiphase_stats",
+            "HiPhase.hiphase_summary": "this.hiphase_summary",
+            "HiPhase.hiphase_vcf": "this.hiphase_vcf",
+            "HiPhase.hiphase_vcf_idx": "this.hiphase_vcf_idx"
+        }
+    },
+    {
+        "name": "10-MergeHiPhaseCallsets",
+        "workflow": "MergeHiPhaseCallsets",
+        "root_entity_type": "sample_set",
+        "inputs": {
+            "MergeHiPhaseCallsets.contigs": "workspace.contigs",
+            "MergeHiPhaseCallsets.merge_trgt": "true",
+            "MergeHiPhaseCallsets.phased_vcf_idxs": "this.samples.hiphase_vcf_idx",
+            "MergeHiPhaseCallsets.phased_vcfs": "this.samples.hiphase_vcf",
+            "MergeHiPhaseCallsets.prefix": "this.sample_set_id",
+            "MergeHiPhaseCallsets.ref_fa": "workspace.ref_fa",
+            "MergeHiPhaseCallsets.ref_fai": "workspace.ref_fai",
+            "MergeHiPhaseCallsets.trgt_docker": "workspace.trgt_docker",
+            "MergeHiPhaseCallsets.utils_docker": "workspace.utils_docker"
+        },
+        "outputs": {
+            "MergeHiPhaseCallsets.hiphase_merged_integrated_vcf": "this.hiphase_merged_integrated_vcf",
+            "MergeHiPhaseCallsets.hiphase_merged_integrated_vcf_idx": "this.hiphase_merged_integrated_vcf_idx",
+            "MergeHiPhaseCallsets.hiphase_merged_trgt_vcf": "this.hiphase_merged_trgt_vcf",
+            "MergeHiPhaseCallsets.hiphase_merged_trgt_vcf_idx": "this.hiphase_merged_trgt_vcf_idx"
+        }
+    },
+    {
+        "name": "11-FillPhasedGenotypes",
+        "workflow": "FillPhasedGenotypes",
+        "root_entity_type": "sample_set",
+        "inputs": {
+            "FillPhasedGenotypes.contigs": "workspace.contigs",
+            "FillPhasedGenotypes.phased_vcf": "this.hiphase_merged_integrated_vcf",
+            "FillPhasedGenotypes.phased_vcf_idx": "this.hiphase_merged_integrated_vcf_idx",
+            "FillPhasedGenotypes.prefix": "this.sample_set_id",
+            "FillPhasedGenotypes.shard_bin_size": "5000000",
+            "FillPhasedGenotypes.unphased_vcf": "workspace.integrated_vcf",
+            "FillPhasedGenotypes.unphased_vcf_idx": "workspace.integrated_vcf_idx",
+            "FillPhasedGenotypes.utils_docker": "workspace.utils_docker"
+        },
+        "outputs": {
+            "FillPhasedGenotypes.hiphase_phased_vcf": "this.hiphase_phased_vcf",
+            "FillPhasedGenotypes.hiphase_phased_vcf_idx": "this.hiphase_phased_vcf_idx"
+        }
+    },
+    {
+        "name": "11-TRGTLPS",
+        "workflow": "TRGTLPS",
+        "root_entity_type": "sample_set",
+        "inputs": {
+            "TRGTLPS.contigs": "workspace.contigs",
+            "TRGTLPS.filter_trid_motif_pairs": "[]",
+            "TRGTLPS.normalize_chry_haploid_genotypes": "true",
+            "TRGTLPS.prefix": "this.sample_set_id",
+            "TRGTLPS.stranalysis_docker": "workspace.stranalysis_docker",
+            "TRGTLPS.trgt_lps_docker": "workspace.trgt_lps_docker",
+            "TRGTLPS.utils_docker": "workspace.utils_docker",
+            "TRGTLPS.vcf": "this.hiphase_merged_trgt_vcf",
+            "TRGTLPS.vcf_idx": "this.hiphase_merged_trgt_vcf_idx"
+        },
+        "outputs": {
+            "TRGTLPS.trgt_lps_tsv": "this.trgt_lps_tsv",
+            "TRGTLPS.vcf_trid_metadata_tsvs": "this.vcf_trid_metadata_tsvs"
+        }
+    },
+    {
+        "name": "12-CreateTRGTHistograms",
+        "workflow": "CreateTRGTHistograms",
+        "root_entity_type": "sample_set",
+        "inputs": {
+            "CreateTRGTHistograms.contigs": "workspace.contigs",
+            "CreateTRGTHistograms.filter_trid_motif_pairs": "[]",
+            "CreateTRGTHistograms.lps_tsv": "this.trgt_lps_tsv",
+            "CreateTRGTHistograms.metadata_tsv": "this.cohort_metadata",
+            "CreateTRGTHistograms.prefix": "this.sample_set_id",
+            "CreateTRGTHistograms.stranalysis_docker": "workspace.stranalysis_docker",
+            "CreateTRGTHistograms.utils_docker": "workspace.utils_docker",
+            "CreateTRGTHistograms.vcf_trid_metadata_tsvs": "this.vcf_trid_metadata_tsvs"
+        },
+        "outputs": {
+            "CreateTRGTHistograms.trgt_histograms_tsv": "this.trgt_histograms_tsv"
+        }
+    },
+    {
+        "name": "12-IntegrateTRs",
+        "workflow": "IntegrateTRs",
+        "root_entity_type": "sample_set",
+        "inputs": {
+            "IntegrateTRs.contigs": "workspace.contigs",
+            "IntegrateTRs.prefix": "this.sample_set_id",
+            "IntegrateTRs.sample_ids": "this.samples.sample_id",
+            "IntegrateTRs.tr_catalog_ids": "[\"TRExplorer\", \"Vamos\"]",
+            "IntegrateTRs.tr_catalogs": "[workspace.repeat_catalog_trexplorer, workspace.repeat_catalog_vamos]",
+            "IntegrateTRs.tr_vcf": "this.hiphase_merged_trgt_vcf",
+            "IntegrateTRs.tr_vcf_idx": "this.hiphase_merged_trgt_vcf_idx",
+            "IntegrateTRs.utils_docker": "workspace.utils_docker",
+            "IntegrateTRs.vcf": "this.hiphase_phased_vcf",
+            "IntegrateTRs.vcf_idx": "this.hiphase_phased_vcf_idx"
+        },
+        "outputs": {
+            "IntegrateTRs.tr_annotated_vcf": "this.phased_vcf",
+            "IntegrateTRs.tr_annotated_vcf_idx": "this.phased_vcf_idx"
+        }
+    },
+    {
+        "name": "13-SplitVcfPerContig_PALMER",
+        "workflow": "SplitVcfPerContig",
+        "root_entity_type": "contig",
+        "inputs": {
+            "SplitVcfPerContig.contigs": "[this.contig_id]",
+            "SplitVcfPerContig.prefix": "this.contig_id",
+            "SplitVcfPerContig.utils_docker": "workspace.utils_docker",
+            "SplitVcfPerContig.vcf": "this.sample_set.palmer_merged_vcf",
+            "SplitVcfPerContig.vcf_idx": "this.sample_set.palmer_merged_vcf_idx"
+        },
+        "outputs": {
+            "SplitVcfPerContig.contig_vcf": "this.palmer_vcf",
+            "SplitVcfPerContig.contig_vcf_idx": "this.palmer_vcf_idx"
+        }
+    },
+    {
+        "name": "13-SplitVcfPerContig_Phased",
+        "workflow": "SplitVcfPerContig",
+        "root_entity_type": "contig",
+        "inputs": {
+            "SplitVcfPerContig.contigs": "[this.contig_id]",
+            "SplitVcfPerContig.prefix": "this.contig_id",
+            "SplitVcfPerContig.utils_docker": "workspace.utils_docker",
+            "SplitVcfPerContig.vcf": "this.sample_set.phased_vcf",
+            "SplitVcfPerContig.vcf_idx": "this.sample_set.phased_vcf_idx"
+        },
+        "outputs": {
+            "SplitVcfPerContig.contig_vcf": "this.phased_vcf",
+            "SplitVcfPerContig.contig_vcf_idx": "this.phased_vcf_idx"
+        }
+    },
+    {
+        "name": "14-BackbonePhase",
+        "workflow": "BackbonePhase",
+        "root_entity_type": "contig",
+        "inputs": {
+            "BackbonePhase.allow_unphased_match_phase": "false",
+            "BackbonePhase.base_vcf_idxs": "[workspace.truth_platinum_pedigree_vcf_idx]",
+            "BackbonePhase.base_vcfs": "[workspace.truth_platinum_pedigree_vcf]",
+            "BackbonePhase.contig": "this.contig_id",
+            "BackbonePhase.prefix": "this.contig_id",
+            "BackbonePhase.utils_docker": "workspace.utils_docker",
+            "BackbonePhase.vcf": "this.phased_vcf",
+            "BackbonePhase.vcf_idx": "this.phased_vcf_idx"
+        },
+        "outputs": {
+            "BackbonePhase.missing_samples": "this.backbone_missing_samples",
+            "BackbonePhase.transferred_vcf": "this.backbone_phased_vcf",
+            "BackbonePhase.transferred_vcf_idx": "this.backbone_phased_vcf_idx"
+        }
+    },
+    {
+        "name": "15-AnnotateDbSNP",
+        "workflow": "AnnotateDbSNP",
+        "root_entity_type": "contig",
+        "inputs": {
+            "AnnotateDbSNP.contigs": "[this.contig_id]",
+            "AnnotateDbSNP.dbsnp_vcf": "this.dbsnp_vcf",
+            "AnnotateDbSNP.dbsnp_vcf_idx": "this.dbsnp_vcf_idx",
+            "AnnotateDbSNP.prefix": "this.contig_id",
+            "AnnotateDbSNP.shard_bin_size": "5000000",
+            "AnnotateDbSNP.utils_docker": "workspace.utils_docker",
+            "AnnotateDbSNP.vcf": "this.backbone_phased_vcf",
+            "AnnotateDbSNP.vcf_idx": "this.backbone_phased_vcf_idx"
+        },
+        "outputs": {
+            "AnnotateDbSNP.annotations_tsv_dbsnp": "this.annotations_tsv_dbsnp"
+        }
+    },
+    {
+        "name": "15-AnnotateGnomADTROverlap",
+        "workflow": "AnnotateGnomADTROverlap",
+        "root_entity_type": "contig",
+        "inputs": {
+            "AnnotateGnomADTROverlap.contigs": "[this.contig_id]",
+            "AnnotateGnomADTROverlap.gnomad_tr_json": "workspace.gnomad_tr_json",
+            "AnnotateGnomADTROverlap.prefix": "this.contig_id",
+            "AnnotateGnomADTROverlap.records_per_shard": "50000",
+            "AnnotateGnomADTROverlap.utils_docker": "workspace.utils_docker",
+            "AnnotateGnomADTROverlap.vcf": "this.backbone_phased_vcf",
+            "AnnotateGnomADTROverlap.vcf_idx": "this.backbone_phased_vcf_idx"
+        },
+        "outputs": {
+            "AnnotateGnomADTROverlap.annotations_tsv_str_overlap": "this.annotations_tsv_str_overlap"
+        }
+    },
+    {
+        "name": "15-AnnotateInSilicoPredictors",
+        "workflow": "AnnotateInSilicoPredictors",
+        "root_entity_type": "contig",
+        "inputs": {
+            "AnnotateInSilicoPredictors.cadd_ht": "workspace.cadd_ht",
+            "AnnotateInSilicoPredictors.contigs": "[this.contig_id]",
+            "AnnotateInSilicoPredictors.hail_docker": "workspace.hail_docker",
+            "AnnotateInSilicoPredictors.pangolin_ht": "workspace.pangolin_ht",
+            "AnnotateInSilicoPredictors.phylop_ht": "workspace.phylop_ht",
+            "AnnotateInSilicoPredictors.prefix": "this.contig_id",
+            "AnnotateInSilicoPredictors.records_per_shard": "50000",
+            "AnnotateInSilicoPredictors.revel_ht": "workspace.revel_ht",
+            "AnnotateInSilicoPredictors.spliceai_ht": "workspace.spliceai_ht",
+            "AnnotateInSilicoPredictors.utils_docker": "workspace.utils_docker",
+            "AnnotateInSilicoPredictors.vcf": "this.backbone_phased_vcf",
+            "AnnotateInSilicoPredictors.vcf_idx": "this.backbone_phased_vcf_idx"
+        },
+        "outputs": {
+            "AnnotateInSilicoPredictors.annotations_tsv_insilico": "this.annotations_tsv_insilico"
+        }
+    },
+    {
+        "name": "15-AnnotateIndelTRs",
+        "workflow": "AnnotateIndelTRs",
+        "root_entity_type": "contig",
+        "inputs": {
+            "AnnotateIndelTRs.contigs": "[this.contig_id]",
+            "AnnotateIndelTRs.prefix": "this.contig_id",
+            "AnnotateIndelTRs.records_per_shard": "50000",
+            "AnnotateIndelTRs.ref_fa": "workspace.ref_fa",
+            "AnnotateIndelTRs.ref_fai": "workspace.ref_fai",
+            "AnnotateIndelTRs.stranalysis_docker": "workspace.stranalysis_docker",
+            "AnnotateIndelTRs.utils_docker": "workspace.utils_docker",
+            "AnnotateIndelTRs.vcf": "this.backbone_phased_vcf",
+            "AnnotateIndelTRs.vcf_idx": "this.backbone_phased_vcf_idx"
+        },
+        "outputs": {
+            "AnnotateIndelTRs.annotations_tsv_indel_trs": "this.annotations_tsv_indel_trs"
+        }
+    },
+    {
+        "name": "15-AnnotateL1MEAID",
+        "workflow": "AnnotateL1MEAID",
+        "root_entity_type": "contig",
+        "inputs": {
+            "AnnotateL1MEAID.contigs": "[this.contig_id]",
+            "AnnotateL1MEAID.intact_mei_docker": "workspace.intact_mei_docker",
+            "AnnotateL1MEAID.l1meaid_docker": "workspace.l1meaid_docker",
+            "AnnotateL1MEAID.min_length": "50",
+            "AnnotateL1MEAID.prefix": "this.contig_id",
+            "AnnotateL1MEAID.records_per_shard": "50000",
+            "AnnotateL1MEAID.repeatmasker_docker": "workspace.repeatmasker_docker",
+            "AnnotateL1MEAID.utils_docker": "workspace.utils_docker",
+            "AnnotateL1MEAID.vcf": "this.backbone_phased_vcf",
+            "AnnotateL1MEAID.vcf_idx": "this.backbone_phased_vcf_idx"
+        },
+        "outputs": {
+            "AnnotateL1MEAID.annotations_tsv_l1meaid": "this.annotations_tsv_l1meaid"
+        }
+    },
+    {
+        "name": "15-AnnotateMEDs",
+        "workflow": "AnnotateMEDs",
+        "root_entity_type": "contig",
+        "inputs": {
+            "AnnotateMEDs.contigs": "[this.contig_id]",
+            "AnnotateMEDs.mei_catalog": "workspace.mei_catalog",
+            "AnnotateMEDs.prefix": "this.contig_id",
+            "AnnotateMEDs.records_per_shard": "50000",
+            "AnnotateMEDs.utils_docker": "workspace.utils_docker",
+            "AnnotateMEDs.vcf": "this.backbone_phased_vcf",
+            "AnnotateMEDs.vcf_idx": "this.backbone_phased_vcf_idx"
+        },
+        "outputs": {
+            "AnnotateMEDs.annotations_tsv_meds": "this.annotations_tsv_meds"
+        }
+    },
+    {
+        "name": "15-AnnotateRegion",
+        "workflow": "AnnotateRegion",
+        "root_entity_type": "contig",
+        "inputs": {
+            "AnnotateRegion.contigs": "[this.contig_id]",
+            "AnnotateRegion.prefix": "this.contig_id",
+            "AnnotateRegion.records_per_shard": "50000",
+            "AnnotateRegion.repeat_masked_bed": "workspace.repeat_masked_bed",
+            "AnnotateRegion.seg_dup_bed": "workspace.seg_dup_bed",
+            "AnnotateRegion.simple_repeats_bed": "workspace.simple_repeats_bed",
+            "AnnotateRegion.utils_docker": "workspace.utils_docker",
+            "AnnotateRegion.vcf": "this.backbone_phased_vcf",
+            "AnnotateRegion.vcf_idx": "this.backbone_phased_vcf_idx"
+        },
+        "outputs": {
+            "AnnotateRegion.annotations_tsv_region": "this.annotations_tsv_region"
+        }
+    },
+    {
+        "name": "15-AnnotateSVAN",
+        "workflow": "AnnotateSVAN",
+        "root_entity_type": "contig",
+        "inputs": {
+            "AnnotateSVAN.contigs": "[this.contig_id]",
+            "AnnotateSVAN.exons_bed": "workspace.exons_bed",
+            "AnnotateSVAN.mei_bwa_idx": "workspace.mei_bwa_idx",
+            "AnnotateSVAN.mei_fa": "workspace.mei_fa",
+            "AnnotateSVAN.prefix": "this.contig_id",
+            "AnnotateSVAN.records_per_shard": "50000",
+            "AnnotateSVAN.ref_bwa_idx": "workspace.ref_bwa_idx",
+            "AnnotateSVAN.ref_fa": "workspace.ref_fa",
+            "AnnotateSVAN.repeats_bed": "workspace.repeats_bed",
+            "AnnotateSVAN.svan_docker": "workspace.svan_docker",
+            "AnnotateSVAN.utils_docker": "workspace.utils_docker",
+            "AnnotateSVAN.vcf": "this.backbone_phased_vcf",
+            "AnnotateSVAN.vcf_idx": "this.backbone_phased_vcf_idx",
+            "AnnotateSVAN.vntr_bed": "workspace.vntr_bed"
+        },
+        "outputs": {
+            "AnnotateSVAN.annotations_header_svan": "this.annotations_header_svan",
+            "AnnotateSVAN.annotations_tsv_svan": "this.annotations_tsv_svan"
+        }
+    },
+    {
+        "name": "15-AnnotateVEP",
+        "workflow": "AnnotateVEP",
+        "root_entity_type": "contig",
+        "inputs": {
+            "AnnotateVEP.ScatterVcf.records_per_shard": "5000",
+            "AnnotateVEP.hail_docker": "workspace.hail_docker",
+            "AnnotateVEP.prefix": "this.contig_id",
+            "AnnotateVEP.ref_fa": "workspace.ref_fa",
+            "AnnotateVEP.ref_fa_gz": "workspace.ref_fa_gz",
+            "AnnotateVEP.ref_fai": "workspace.ref_fai",
+            "AnnotateVEP.ref_fai_gz": "workspace.ref_fai_gz",
+            "AnnotateVEP.ref_vep_cache": "workspace.ref_vep_cache",
+            "AnnotateVEP.runtime_attr_vep_annotate": "{\"mem_gb\": 8}",
+            "AnnotateVEP.split_into_shards": "true",
+            "AnnotateVEP.subset_vcf_string": "\"-i 'INFO/allele_type!=\\\"trv\\\" && abs(INFO/allele_length)<=10000000'\"",
+            "AnnotateVEP.utils_docker": "workspace.utils_docker",
+            "AnnotateVEP.vcf": "this.backbone_phased_vcf",
+            "AnnotateVEP.vcf_idx": "this.backbone_phased_vcf_idx",
+            "AnnotateVEP.vep_hail_docker": "workspace.vep_hail_docker"
+        },
+        "outputs": {
+            "AnnotateVEP.annotations_tsv_vep": "this.annotations_tsv_vep"
+        }
+    },
+    {
+        "name": "15-AnnotateVRS",
+        "workflow": "AnnotateVRS",
+        "root_entity_type": "contig",
+        "inputs": {
+            "AnnotateVRS.contigs": "[this.contig_id]",
+            "AnnotateVRS.prefix": "this.contig_id",
+            "AnnotateVRS.records_per_shard": "50000",
+            "AnnotateVRS.seqrepo_tar": "workspace.seqrepo_tar",
+            "AnnotateVRS.utils_docker": "workspace.utils_docker",
+            "AnnotateVRS.vcf": "this.backbone_phased_vcf",
+            "AnnotateVRS.vcf_idx": "this.backbone_phased_vcf_idx",
+            "AnnotateVRS.vrs_docker": "workspace.vrs_docker"
+        },
+        "outputs": {
+            "AnnotateVRS.annotations_tsv_vrs": "this.annotations_tsv_vrs"
+        }
+    },
+    {
+        "name": "15-ConcatenateVcfsAcrossContigs",
+        "workflow": "ConcatenateVcfsAcrossContigs",
+        "root_entity_type": "contig_set",
+        "inputs": {
+            "ConcatenateVcfsAcrossContigs.contigs": "this.contigs.contig_id",
+            "ConcatenateVcfsAcrossContigs.prefix": "\"cohort.backbone_phased\"",
+            "ConcatenateVcfsAcrossContigs.utils_docker": "workspace.utils_docker",
+            "ConcatenateVcfsAcrossContigs.vcf_idxs": "this.contigs.backbone_phased_vcf_idx",
+            "ConcatenateVcfsAcrossContigs.vcfs": "this.contigs.backbone_phased_vcf"
+        },
+        "outputs": {
+            "ConcatenateVcfsAcrossContigs.concat_vcf": "workspace.backbone_phased_vcf",
+            "ConcatenateVcfsAcrossContigs.concat_vcf_idx": "workspace.backbone_phased_vcf_idx"
+        }
+    },
+    {
+        "name": "15-RepeatMasker",
+        "workflow": "RepeatMasker",
+        "root_entity_type": "contig",
+        "inputs": {
+            "RepeatMasker.min_length": "50",
+            "RepeatMasker.prefix": "this.contig_id",
+            "RepeatMasker.repeatmasker_docker": "workspace.repeatmasker_docker",
+            "RepeatMasker.utils_docker": "workspace.utils_docker",
+            "RepeatMasker.vcf": "this.backbone_phased_vcf",
+            "RepeatMasker.vcf_idx": "this.backbone_phased_vcf_idx"
+        },
+        "outputs": {
+            "RepeatMasker.rm_fa": "this.rm_fa",
+            "RepeatMasker.rm_out": "this.rm_out"
+        }
+    },
+    {
+        "name": "16-AnnotatePALMER",
+        "workflow": "AnnotatePALMER",
+        "root_entity_type": "contig",
+        "inputs": {
+            "AnnotatePALMER.contigs": "[this.contig_id]",
+            "AnnotatePALMER.mei_types": "[\"ALU\", \"LINE\", \"SVA\"]",
+            "AnnotatePALMER.min_length": "50",
+            "AnnotatePALMER.palmer_vcf": "this.palmer_vcf",
+            "AnnotatePALMER.palmer_vcf_idx": "this.palmer_vcf_idx",
+            "AnnotatePALMER.prefix": "this.contig_id",
+            "AnnotatePALMER.records_per_shard": "50000",
+            "AnnotatePALMER.ref_fai": "workspace.ref_fai",
+            "AnnotatePALMER.rm_buffer": "50",
+            "AnnotatePALMER.rm_out": "this.rm_out",
+            "AnnotatePALMER.utils_docker": "workspace.utils_docker",
+            "AnnotatePALMER.vcf": "this.backbone_phased_vcf",
+            "AnnotatePALMER.vcf_idx": "this.backbone_phased_vcf_idx"
+        },
+        "outputs": {
+            "AnnotatePALMER.annotations_tsv_palmer": "this.annotations_tsv_palmer"
+        }
+    },
+    {
+        "name": "16-ExtractSampleVcfs_Backbone",
+        "workflow": "ExtractSampleVcfs",
+        "root_entity_type": "sample",
+        "inputs": {
+            "ExtractSampleVcfs.cohort_vcf": "workspace.backbone_phased_vcf",
+            "ExtractSampleVcfs.cohort_vcf_idx": "workspace.backbone_phased_vcf_idx",
+            "ExtractSampleVcfs.contigs": "workspace.contigs",
+            "ExtractSampleVcfs.min_sv_length": "50",
+            "ExtractSampleVcfs.prefix": "this.sample_id",
+            "ExtractSampleVcfs.sample_id": "this.sample_id",
+            "ExtractSampleVcfs.utils_docker": "workspace.utils_docker"
+        },
+        "outputs": {
+            "ExtractSampleVcfs.snv_indel_vcf": "this.backbone_snv_indel_vcf",
+            "ExtractSampleVcfs.snv_indel_vcf_idx": "this.backbone_snv_indel_vcf_idx",
+            "ExtractSampleVcfs.sv_vcf": "this.backbone_sv_vcf",
+            "ExtractSampleVcfs.sv_vcf_idx": "this.backbone_sv_vcf_idx"
+        }
+    },
+    {
+        "name": "16-SubsetTsvToColumns",
+        "workflow": "SubsetTsvToColumns",
+        "root_entity_type": "contig",
+        "inputs": {
+            "SubsetTsvToColumns.annotations_header": "this.annotations_header_svan",
+            "SubsetTsvToColumns.annotations_tsv": "this.annotations_tsv_svan",
+            "SubsetTsvToColumns.prefix": "this.contig_id",
+            "SubsetTsvToColumns.subset_column_values": "[[\"COMPLEX_DUP\", \"DUP\", \"DUP_INTERSPERSED\", \"INV_DUP\", \"NUMT\"], [], []]",
+            "SubsetTsvToColumns.subset_columns": "[\"ITYPE_N\", \"DUP_COORD\", \"MT_COORD\"]",
+            "SubsetTsvToColumns.utils_docker": "workspace.utils_docker"
+        },
+        "outputs": {
+            "SubsetTsvToColumns.subset_tsv": "this.annotations_tsv_svan_dups"
+        }
+    },
+    {
+        "name": "17-AnnotateMEIs",
+        "workflow": "AnnotateMEIs",
+        "root_entity_type": "contig",
+        "inputs": {
+            "AnnotateMEIs.annotations_header_svan": "this.annotations_header_svan",
+            "AnnotateMEIs.annotations_tsv_l1meaid": "this.annotations_tsv_l1meaid",
+            "AnnotateMEIs.annotations_tsv_palmer": "this.annotations_tsv_palmer",
+            "AnnotateMEIs.annotations_tsv_svan": "this.annotations_tsv_svan",
+            "AnnotateMEIs.contigs": "[this.contig_id]",
+            "AnnotateMEIs.prefix": "this.contig_id",
+            "AnnotateMEIs.utils_docker": "workspace.utils_docker"
+        },
+        "outputs": {
+            "AnnotateMEIs.annotations_tsv_meis": "this.annotations_tsv_meis"
+        }
+    },
+    {
+        "name": "17-MethylationProfiling",
+        "workflow": "MethylationProfiling",
+        "root_entity_type": "sample",
+        "inputs": {
+            "MethylationProfiling.bai": "this.aligned_bai",
+            "MethylationProfiling.bam": "this.aligned_bam",
+            "MethylationProfiling.contigs": "workspace.contigs",
+            "MethylationProfiling.cpg_docker": "workspace.cpg_docker",
+            "MethylationProfiling.phased_vcf": "this.backbone_snv_indel_vcf",
+            "MethylationProfiling.phased_vcf_idx": "this.backbone_snv_indel_vcf_idx",
+            "MethylationProfiling.prefix": "this.sample_id",
+            "MethylationProfiling.ref_fa": "workspace.ref_fa",
+            "MethylationProfiling.ref_fai": "workspace.ref_fai",
+            "MethylationProfiling.utils_docker": "workspace.utils_docker",
+            "MethylationProfiling.whatshap_docker": "workspace.whatshap_docker"
+        },
+        "outputs": {
+            "MethylationProfiling.cpg_combined_bed": "this.cpg_combined_bed",
+            "MethylationProfiling.cpg_combined_bed_idx": "this.cpg_combined_bed_idx",
+            "MethylationProfiling.cpg_hap1_bed": "this.cpg_hap1_bed",
+            "MethylationProfiling.cpg_hap1_bed_idx": "this.cpg_hap1_bed_idx",
+            "MethylationProfiling.cpg_hap2_bed": "this.cpg_hap2_bed",
+            "MethylationProfiling.cpg_hap2_bed_idx": "this.cpg_hap2_bed_idx"
+        }
+    },
+    {
+        "name": "18-AnnotateAlleleType",
+        "workflow": "AnnotateAlleleType",
+        "root_entity_type": "contig",
+        "inputs": {
+            "AnnotateAlleleType.contigs": "[this.contig_id]",
+            "AnnotateAlleleType.dup_lowercase": "true",
+            "AnnotateAlleleType.dup_tsv": "this.annotations_tsv_svan_dups",
+            "AnnotateAlleleType.med_lowercase": "true",
+            "AnnotateAlleleType.med_suffix": "\"_DEL\"",
+            "AnnotateAlleleType.med_tsv": "this.annotations_tsv_meds",
+            "AnnotateAlleleType.mei_lowercase": "true",
+            "AnnotateAlleleType.mei_suffix": "\"_INS\"",
+            "AnnotateAlleleType.mei_tsv": "this.annotations_tsv_meis",
+            "AnnotateAlleleType.prefix": "this.contig_id",
+            "AnnotateAlleleType.utils_docker": "workspace.utils_docker",
+            "AnnotateAlleleType.vcf": "this.backbone_phased_vcf",
+            "AnnotateAlleleType.vcf_idx": "this.backbone_phased_vcf_idx"
+        },
+        "outputs": {
+            "AnnotateAlleleType.allele_type_annotated_vcf": "this.allele_type_annotated_vcf",
+            "AnnotateAlleleType.allele_type_annotated_vcf_idx": "this.allele_type_annotated_vcf_idx"
+        }
+    },
+    {
+        "name": "18-CreateCohortMethylationFile",
+        "workflow": "CreateCohortMethylationFile",
+        "root_entity_type": "sample_set",
+        "inputs": {
+            "CreateCohortMethylationFile.combined_bed_idxs": "this.samples.cpg_combined_bed_idx",
+            "CreateCohortMethylationFile.combined_beds": "this.samples.cpg_combined_bed",
+            "CreateCohortMethylationFile.contigs": "workspace.contigs",
+            "CreateCohortMethylationFile.hap1_bed_idxs": "this.samples.cpg_hap1_bed_idx",
+            "CreateCohortMethylationFile.hap1_beds": "this.samples.cpg_hap1_bed",
+            "CreateCohortMethylationFile.hap2_bed_idxs": "this.samples.cpg_hap2_bed_idx",
+            "CreateCohortMethylationFile.hap2_beds": "this.samples.cpg_hap2_bed",
+            "CreateCohortMethylationFile.prefix": "this.sample_set_id",
+            "CreateCohortMethylationFile.sample_ids": "this.samples.sample_id",
+            "CreateCohortMethylationFile.samples_per_shard": "20",
+            "CreateCohortMethylationFile.utils_docker": "workspace.utils_docker"
+        },
+        "outputs": {
+            "CreateCohortMethylationFile.combined_methylation_beds": "this.combined_methylation_beds",
+            "CreateCohortMethylationFile.haplotype_methylation_beds": "this.haplotype_methylation_beds"
+        }
+    },
+    {
+        "name": "19-AnnotateCallsetOverlap",
+        "workflow": "AnnotateCallsetOverlap",
+        "root_entity_type": "contig",
+        "inputs": {
+            "AnnotateCallsetOverlap.args_string_vcf": "\"INFO/allele_type!=\\\"trv\\\"\"",
+            "AnnotateCallsetOverlap.contig": "this.contig_id",
+            "AnnotateCallsetOverlap.convert_symbolic_truth_sv_vcf": "false",
+            "AnnotateCallsetOverlap.min_sv_length_bedtools_closest_truth_vcf": "50",
+            "AnnotateCallsetOverlap.min_sv_length_bedtools_closest_vcf": "30",
+            "AnnotateCallsetOverlap.min_sv_length_truvari_truth_snv_indel_vcf": "10",
+            "AnnotateCallsetOverlap.min_sv_length_truvari_vcf": "5",
+            "AnnotateCallsetOverlap.move_dup_to_origin": "true",
+            "AnnotateCallsetOverlap.prefix": "this.contig_id",
+            "AnnotateCallsetOverlap.ref_fa": "workspace.ref_fa",
+            "AnnotateCallsetOverlap.ref_fai": "workspace.ref_fai",
+            "AnnotateCallsetOverlap.rename_id_string_truth_snv_indel_vcf": "\"%CHROM-%POS-%REF-%ALT\"",
+            "AnnotateCallsetOverlap.rename_id_strip_chr_truth_snv_indel_vcf": "true",
+            "AnnotateCallsetOverlap.run_bedtools_closest_matching": "true",
+            "AnnotateCallsetOverlap.run_exact_matching": "true",
+            "AnnotateCallsetOverlap.run_truvari_matching": "true",
+            "AnnotateCallsetOverlap.shard_bin_size_exact_match": "5000000",
+            "AnnotateCallsetOverlap.shard_records_truvari_match": "5000",
+            "AnnotateCallsetOverlap.subset_contig_truth_sv_vcf": "true",
+            "AnnotateCallsetOverlap.truth_snv_indel_vcf": "this.gnomad_snv_indel_vcf",
+            "AnnotateCallsetOverlap.truth_snv_indel_vcf_idx": "this.gnomad_snv_indel_vcf_idx",
+            "AnnotateCallsetOverlap.truth_sv_vcf": "workspace.gnomad_sv_vcf",
+            "AnnotateCallsetOverlap.truth_sv_vcf_idx": "workspace.gnomad_sv_vcf_idx",
+            "AnnotateCallsetOverlap.utils_docker": "workspace.utils_docker",
+            "AnnotateCallsetOverlap.vcf": "this.allele_type_annotated_vcf",
+            "AnnotateCallsetOverlap.vcf_idx": "this.allele_type_annotated_vcf_idx"
+        },
+        "outputs": {
+            "AnnotateCallsetOverlap.annotations_header_overlap": "this.annotations_header_overlap",
+            "AnnotateCallsetOverlap.annotations_tsv_overlap": "this.annotations_tsv_overlap"
+        }
+    },
+    {
+        "name": "19-AnnotateDbVaR",
+        "workflow": "AnnotateDbVaR",
+        "root_entity_type": "contig",
+        "inputs": {
+            "AnnotateDbVaR.contigs": "[this.contig_id]",
+            "AnnotateDbVaR.dbvar_vcf": "this.dbvar_vcf",
+            "AnnotateDbVaR.dbvar_vcf_idx": "this.dbvar_vcf_idx",
+            "AnnotateDbVaR.min_length": "30",
+            "AnnotateDbVaR.prefix": "this.contig_id",
+            "AnnotateDbVaR.records_per_shard": "50000",
+            "AnnotateDbVaR.utils_docker": "workspace.utils_docker",
+            "AnnotateDbVaR.vcf": "this.allele_type_annotated_vcf",
+            "AnnotateDbVaR.vcf_idx": "this.allele_type_annotated_vcf_idx"
+        },
+        "outputs": {
+            "AnnotateDbVaR.annotations_tsv_dbvar": "this.annotations_tsv_dbvar"
+        }
+    },
+    {
+        "name": "19-AnnotateSVAnnotate",
+        "workflow": "AnnotateSVAnnotate",
+        "root_entity_type": "contig",
+        "inputs": {
+            "AnnotateSVAnnotate.coding_gtf": "workspace.coding_gtf",
+            "AnnotateSVAnnotate.contigs": "[this.contig_id]",
+            "AnnotateSVAnnotate.gatk_docker": "workspace.gatk_docker",
+            "AnnotateSVAnnotate.min_length": "50",
+            "AnnotateSVAnnotate.noncoding_bed": "workspace.noncoding_bed",
+            "AnnotateSVAnnotate.prefix": "this.contig_id",
+            "AnnotateSVAnnotate.records_per_shard": "50000",
+            "AnnotateSVAnnotate.utils_docker": "workspace.utils_docker",
+            "AnnotateSVAnnotate.vcf": "this.allele_type_annotated_vcf",
+            "AnnotateSVAnnotate.vcf_idx": "this.allele_type_annotated_vcf_idx"
+        },
+        "outputs": {
+            "AnnotateSVAnnotate.annotations_header_svannotate": "this.annotations_header_svannotate",
+            "AnnotateSVAnnotate.annotations_tsv_svannotate": "this.annotations_tsv_svannotate"
+        }
+    },
+    {
+        "name": "20-AnnotateVcf_Base",
+        "workflow": "AnnotateVcf",
+        "root_entity_type": "contig",
+        "inputs": {
+            "AnnotateVcf.annotations_tsvs": "[this.annotations_tsv_vep, this.annotations_tsv_svannotate, this.annotations_tsv_indel_trs, this.annotations_tsv_region, this.annotations_tsv_insilico, this.annotations_tsv_dbsnp, this.annotations_tsv_str_overlap, this.annotations_tsv_overlap, this.annotations_tsv_vrs, this.annotations_tsv_dbvar]",
+            "AnnotateVcf.contigs": "[this.contig_id]",
+            "AnnotateVcf.info_descriptions": "[[\"Consequence annotations from Ensembl VEP. Format: Allele|Consequence|IMPACT|SYMBOL|Gene|Feature_type|Feature|BIOTYPE|EXON|INTRON|HGVSc|HGVSp|cDNA_position|CDS_position|Protein_position|Amino_acids|Codons|Existing_variation|ALLELE_NUM|DISTANCE|STRAND|FLAGS|PICK|VARIANT_CLASS|MINIMISED|SYMBOL_SOURCE|HGNC_ID|CANONICAL|MANE_SELECT|MANE_PLUS_CLINICAL|TSL|APPRIS|CCDS|ENSP|SWISSPROT|TREMBL|UNIPARC|UNIPROT_ISOFORM|REFSEQ_MATCH|SOURCE|REFSEQ_OFFSET|GIVEN_REF|USED_REF|BAM_EDIT|GENE_PHENO|SIFT|PolyPhen|DOMAINS|miRNA|HGVS_OFFSET|AF|AFR_AF|AMR_AF|EAS_AF|EUR_AF|SAS_AF|AA_AF|EA_AF|gnomAD_AF|gnomAD_AFR_AF|gnomAD_AMR_AF|gnomAD_ASJ_AF|gnomAD_EAS_AF|gnomAD_FIN_AF|gnomAD_NFE_AF|gnomAD_OTH_AF|gnomAD_SAS_AF|MAX_AF|MAX_AF_POPS|CLIN_SIG|SOMATIC|PHENO|PUBMED|MOTIF_NAME|MOTIF_POS|HIGH_INF_POS|MOTIF_SCORE_CHANGE|TRANSCRIPTION_FACTORS\"], [\"Gene(s) for which the SV breakend is predicted to fall in an exon.\", \"Gene(s) on which the SV is predicted to have a copy-gain effect.\", \"Gene(s) which are partially overlapped by an SV's duplication, but the transcription start site is not duplicated.\", \"SV does not overlap any protein-coding genes.\", \"Gene(s) on which the SV is predicted to result in intragenic exonic duplication without breaking any coding sequences.\", \"Gene(s) where the SV was found to lie entirely within an intron.\", \"Gene(s) which are entirely spanned by an SV's inversion.\", \"Gene(s) on which the SV is predicted to have a loss-of-function effect.\", \"Gene(s) on which the multiallelic SV would be predicted to have a LOF, INTRAGENIC_EXON_DUP, COPY_GAIN, DUP_PARTIAL, TSS_DUP, or PARTIAL_EXON_DUP annotation if the SV were biallelic.\", \"Nearest transcription start site to an intergenic variant.\", \"Class(es) of noncoding elements disrupted by SV breakpoint.\", \"Class(es) of noncoding elements spanned by SV.\", \"Gene(s) overlapped partially by the duplicated interval involved in a dispersed duplication event in a complex SV.\", \"Gene(s) where the duplication SV has one breakpoint in the coding sequence.\", \"Gene(s) for which the SV is predicted to overlap the promoter region.\", \"Gene(s) for which the SV is predicted to duplicate the transcription start site.\", \"Gene(s) for which the SV is predicted to disrupt a UTR.\"], [\"Variant flagged as Tandem Repeat via VCF-based parser.\"], [\"Genomic context of variant.\"], [\"Raw CADD scores are interpretable as the extent to which the annotation profile for a given variant suggests that the variant is likely to be 'observed' (negative values) vs 'simulated' (positive values). Larger values are more deleterious.\", \"Cadd Phred-like scores ('scaled C-scores') ranging from 1 to 99, based on the rank of each variant relative to all possible 8.6 billion substitutions in the human reference genome. Larger values are more deleterious.\", \"Pangolin's largest delta score across 2 splicing consequences, which reflects the probability of the variant being splice-altering.\", \"The maximum REVEL score at a site's MANE Select or canonical transcript. It's an ensemble score for predicting the pathogenicity of missense variants (based on 13 other variant predictors). Scores ranges from 0 to 1. Variants with higher scores are predicted to be more likely to be deleterious.\", \"Base-wise conservation score across the 241 placental mammals in the Zoonomia project. Score ranges from -20 to 9.28, and reflects acceleration (faster evolution than expected under neutral drift, assigned negative scores) as well as conservation (slower than expected evolution, assigned positive scores).\", \"Illumina's SpliceAI max delta score; interpreted as the probability of the variant being splice-altering.\"], [\"Matched dbSNP variant ID.\"], [\"gnomAD STR ID overlapping this tandem repeat variant.\"], [\"Method for generating match with gnomAD V4.\", \"Variant ID of matched gnomAD V4 variant.\", \"Source of matched gnomAD V4 variant.\", \"FILTER associated with matched gnomAD V4 variant.\"], [\"The computed identifiers for the GA4GH VRS Alleles corresponding to the GT indexes of the REF and ALT alleles [VRS version=2.0.1;VRS-Python version=2.3.1]\", \"If an error occurred computing a VRS Identifier, the error message\", \"Interresidue coordinates used as the location starts for the GA4GH VRS Alleles corresponding to the GT indexes of the REF and ALT alleles\", \"Interresidue coordinates used as the location ends for the GA4GH VRS Alleles corresponding to the GT indexes of the REF and ALT alleles\", \"The literal sequence states used for the GA4GH VRS Alleles corresponding to the GT indexes of the REF and ALT alleles\", \"The length values from ReferenceLengthExpression states for the GA4GH VRS Alleles corresponding to the GT indexes of the REF and ALT alleles\", \"The repeatSubunitLength values from ReferenceLengthExpression states for the GA4GH VRS Alleles corresponding to the GT indexes of the REF and ALT alleles\"], [\"Variant ID from dbVaR for matched variants.\"]]",
+            "AnnotateVcf.info_names": "[[\"vep\"], [\"PREDICTED_BREAKEND_EXONIC\", \"PREDICTED_COPY_GAIN\", \"PREDICTED_DUP_PARTIAL\", \"PREDICTED_INTERGENIC\", \"PREDICTED_INTRAGENIC_EXON_DUP\", \"PREDICTED_INTRONIC\", \"PREDICTED_INV_SPAN\", \"PREDICTED_LOF\", \"PREDICTED_MSV_EXON_OVERLAP\", \"PREDICTED_NEAREST_TSS\", \"PREDICTED_NONCODING_BREAKPOINT\", \"PREDICTED_NONCODING_SPAN\", \"PREDICTED_PARTIAL_DISPERSED_DUP\", \"PREDICTED_PARTIAL_EXON_DUP\", \"PREDICTED_PROMOTER\", \"PREDICTED_TSS_DUP\", \"PREDICTED_UTR\"], [\"TR_PARSED\"], [\"REGION\"], [\"cadd_raw_score\", \"cadd_phred\", \"pangolin_largest\", \"revel_max\", \"phylop\", \"spliceai_ds_max\"], [\"dbSNP_ID\"], [\"gnomAD_STR\"], [\"gnomAD_V4_match_type\", \"gnomAD_V4_match_ID\", \"gnomAD_V4_match_source\", \"gnomAD_V4_match_filter\"], [\"VRS_Allele_IDs\", \"VRS_Error\", \"VRS_Starts\", \"VRS_Ends\", \"VRS_States\", \"VRS_Lengths\", \"VRS_RepeatSubunitLengths\"], [\"dbVaR_ID\"]]",
+            "AnnotateVcf.info_numbers": "[[\".\"], [\".\", \".\", \".\", \"0\", \".\", \".\", \".\", \".\", \".\", \".\", \".\", \".\", \".\", \".\", \".\", \".\", \".\"], [\"0\"], [\"1\"], [\"1\", \"1\", \"1\", \"1\", \"1\", \"1\"], [\"1\"], [\"1\"], [\"1\", \"1\", \"1\", \".\"], [\"R\", \".\", \"R\", \"R\", \".\", \".\", \".\"], [\".\"]]",
+            "AnnotateVcf.info_types": "[[\"String\"], [\"String\", \"String\", \"String\", \"Flag\", \"String\", \"String\", \"String\", \"String\", \"String\", \"String\", \"String\", \"String\", \"String\", \"String\", \"String\", \"String\", \"String\"], [\"Flag\"], [\"String\"], [\"Float\", \"Float\", \"Float\", \"Float\", \"Float\", \"Float\"], [\"String\"], [\"String\"], [\"String\", \"String\", \"String\", \"String\"], [\"String\", \"String\", \"Integer\", \"Integer\", \"String\", \"String\", \"String\"], [\"String\"]]",
+            "AnnotateVcf.prefix": "this.contig_id",
+            "AnnotateVcf.records_per_shard": "50000",
+            "AnnotateVcf.subset_tsv_columns": "[[], [], [], [], [], [], [], [6, 7, 8, 9], [], []]",
+            "AnnotateVcf.utils_docker": "workspace.utils_docker",
+            "AnnotateVcf.vcf": "this.allele_type_annotated_vcf",
+            "AnnotateVcf.vcf_idx": "this.allele_type_annotated_vcf_idx"
+        },
+        "outputs": {
+            "AnnotateVcf.annotated_vcf": "this.annotated_vcf",
+            "AnnotateVcf.annotated_vcf_idx": "this.annotated_vcf_idx"
+        }
+    },
+    {
+        "name": "21-PostprocessCallset",
+        "workflow": "PostprocessCallset",
+        "root_entity_type": "contig",
+        "inputs": {
+            "PostprocessCallset.contigs": "[this.contig_id]",
+            "PostprocessCallset.drop_variant_ids": "this.drop_variant_ids",
+            "PostprocessCallset.ped": "workspace.ped",
+            "PostprocessCallset.prefix": "this.contig_id",
+            "PostprocessCallset.run_clean_vcf_header": "false",
+            "PostprocessCallset.run_compute_allele_counts": "true",
+            "PostprocessCallset.run_decrement_trv_ids": "false",
+            "PostprocessCallset.run_drop_filters": "false",
+            "PostprocessCallset.run_filter_assembly_only_singletons": "true",
+            "PostprocessCallset.run_filter_single_read_singletons": "true",
+            "PostprocessCallset.run_flag_homopolymer_trvs": "true",
+            "PostprocessCallset.run_manually_drop_by_id": "true",
+            "PostprocessCallset.run_normalize_allele_types": "true",
+            "PostprocessCallset.run_normalize_ploidy": "true",
+            "PostprocessCallset.run_prune_meis": "true",
+            "PostprocessCallset.run_reassign_suffixes": "false",
+            "PostprocessCallset.run_resolve_haplotype_overlaps": "true",
+            "PostprocessCallset.run_sorting": "false",
+            "PostprocessCallset.run_transfer_genotypes": "false",
+            "PostprocessCallset.run_unphase_samples": "false",
+            "PostprocessCallset.shard_bin_size": "5000000",
+            "PostprocessCallset.utils_docker": "workspace.utils_docker",
+            "PostprocessCallset.vcf": "this.annotated_vcf",
+            "PostprocessCallset.vcf_idx": "this.annotated_vcf_idx"
+        },
+        "outputs": {
+            "PostprocessCallset.assembly_only_singletons_tsv": "this.assembly_only_singletons_tsv",
+            "PostprocessCallset.overlap_tsv": "this.overlap_tsv",
+            "PostprocessCallset.post_processed_vcf": "this.post_processed_vcf",
+            "PostprocessCallset.post_processed_vcf_idx": "this.post_processed_vcf_idx"
+        }
+    },
+    {
+        "name": "22-FilterLowCoverageRegions",
+        "workflow": "FilterLowCoverageRegions",
+        "root_entity_type": "contig",
+        "inputs": {
+            "FilterLowCoverageRegions.contigs": "[this.contig_id]",
+            "FilterLowCoverageRegions.low_coverage_regions_bed": "workspace.low_coverage_regions",
+            "FilterLowCoverageRegions.min_region_coverage_cutoff": "0.5",
+            "FilterLowCoverageRegions.prefix": "this.contig_id",
+            "FilterLowCoverageRegions.records_per_shard": "50000",
+            "FilterLowCoverageRegions.utils_docker": "workspace.utils_docker",
+            "FilterLowCoverageRegions.vcf": "this.post_processed_vcf",
+            "FilterLowCoverageRegions.vcf_idx": "this.post_processed_vcf_idx"
+        },
+        "outputs": {
+            "FilterLowCoverageRegions.low_coverage_region_filtered_vcf": "this.low_coverage_region_filtered_vcf",
+            "FilterLowCoverageRegions.low_coverage_region_filtered_vcf_idx": "this.low_coverage_region_filtered_vcf_idx"
+        }
+    },
+    {
+        "name": "23-FilterLowCoverageGenotypes",
+        "workflow": "FilterLowCoverageGenotypes",
+        "root_entity_type": "contig",
+        "inputs": {
+            "FilterLowCoverageGenotypes.ped": "workspace.ped",
+            "FilterLowCoverageGenotypes.prefix": "this.contig_id",
+            "FilterLowCoverageGenotypes.records_per_shard": "50000",
+            "FilterLowCoverageGenotypes.sample_cutoffs_tsv": "this.sample_set.sample_cutoffs_tsv",
+            "FilterLowCoverageGenotypes.subset_unfilled_vcf_field": "\"SOURCE\"",
+            "FilterLowCoverageGenotypes.subset_unfilled_vcf_value": "\"DeepVariant\"",
+            "FilterLowCoverageGenotypes.utils_docker": "workspace.utils_docker",
+            "FilterLowCoverageGenotypes.vcf": "this.low_coverage_region_filtered_vcf",
+            "FilterLowCoverageGenotypes.vcf_idx": "this.low_coverage_region_filtered_vcf_idx"
+        },
+        "outputs": {
+            "FilterLowCoverageGenotypes.filtered_genotypes_tsv": "this.filtered_genotypes_tsv",
+            "FilterLowCoverageGenotypes.filtered_vcf": "this.low_coverage_genotype_filtered_vcf",
+            "FilterLowCoverageGenotypes.filtered_vcf_idx": "this.low_coverage_genotype_filtered_vcf_idx"
+        }
+    },
+    {
+        "name": "24-AnnotateGQMetrics",
+        "workflow": "AnnotateGQMetrics",
+        "root_entity_type": "contig",
+        "inputs": {
+            "AnnotateGQMetrics.ab_annotation": "true",
+            "AnnotateGQMetrics.ab_bins": "[0.00, 0.05, 0.10, 0.15, 0.20, 0.25, 0.30, 0.35, 0.40, 0.45, 0.50, 0.55, 0.60, 0.65, 0.70, 0.75, 0.80, 0.85, 0.90, 0.95, 1.00]",
+            "AnnotateGQMetrics.contigs": "[this.contig_id]",
+            "AnnotateGQMetrics.gq_bins": "[[0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70, 75, 80, 85, 90, 95, 100], [0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70, 75, 80, 85, 90, 95, 100], [0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70, 75, 80, 85, 90, 95, 100]]",
+            "AnnotateGQMetrics.gq_fields": "[\"GQ\", \"DP\", \"SD\"]",
+            "AnnotateGQMetrics.gq_larger_field": "[false, true, false]",
+            "AnnotateGQMetrics.gq_variant_filters": "[\"INFO/allele_type!=\\\"trv\\\"\", \"INFO/allele_type!=\\\"trv\\\"\", \"INFO/allele_type=\\\"trv\\\"\"]",
+            "AnnotateGQMetrics.prefix": "this.contig_id",
+            "AnnotateGQMetrics.records_per_shard": "50000",
+            "AnnotateGQMetrics.utils_docker": "workspace.utils_docker",
+            "AnnotateGQMetrics.vcf": "this.low_coverage_genotype_filtered_vcf",
+            "AnnotateGQMetrics.vcf_idx": "this.low_coverage_genotype_filtered_vcf_idx"
+        },
+        "outputs": {
+            "AnnotateGQMetrics.annotations_tsv_gq": "this.annotations_tsv_gq"
+        }
+    },
+    {
+        "name": "24-AnnotateSQMetrics",
+        "workflow": "AnnotateSQMetrics",
+        "root_entity_type": "contig",
+        "inputs": {
+            "AnnotateSQMetrics.contigs": "[this.contig_id]",
+            "AnnotateSQMetrics.prefix": "this.contig_id",
+            "AnnotateSQMetrics.records_per_shard": "50000",
+            "AnnotateSQMetrics.utils_docker": "workspace.utils_docker",
+            "AnnotateSQMetrics.vcf": "this.low_coverage_genotype_filtered_vcf",
+            "AnnotateSQMetrics.vcf_idx": "this.low_coverage_genotype_filtered_vcf_idx"
+        },
+        "outputs": {
+            "AnnotateSQMetrics.annotations_tsv_sq": "this.annotations_tsv_sq"
+        }
+    },
+    {
+        "name": "25-AnnotateVcf_Quality",
+        "workflow": "AnnotateVcf",
+        "root_entity_type": "contig",
+        "inputs": {
+            "AnnotateVcf.annotations_tsvs": "[this.annotations_tsv_sq, this.annotations_tsv_gq]",
+            "AnnotateVcf.contigs": "[this.contig_id]",
+            "AnnotateVcf.info_descriptions": "[[\"Inbreeding coefficient, the excess heterozygosity at a variant site, computed as 1 - (the number of heterozygous genotypes)/(the number of heterozygous genotypes expected under Hardy-Weinberg equilibrium).\", \"Allele-specific maximum p-value over callset for binomial test of observed allele balance for a heterozygous genotype, given expectation of AB=0.5.\", \"Allele-specific sum of PL[0] values; used to approximate the QUAL score.\", \"Allele-specific variant call confidence normalized by depth of sample reads supporting a variant.\", \"Allele-specific depth over variant genotypes (does not include depth of reference samples).\", \"Hardy-Weinberg equilibrium p-value.\"], [\"Histogram for GQ calculated on high quality genotypes; bin edges are: 0|5|10|15|20|25|30|35|40|45|50|55|60|65|70|75|80|85|90|95|100.\", \"Histogram for GQ in heterozygous individuals calculated on high quality genotypes; bin edges are: 0|5|10|15|20|25|30|35|40|45|50|55|60|65|70|75|80|85|90|95|100.\", \"Histogram for DP calculated on high quality genotypes; bin edges are: 0|5|10|15|20|25|30|35|40|45|50|55|60|65|70|75|80|85|90|95|100.\", \"Histogram for DP in heterozygous individuals calculated on high quality genotypes; bin edges are: 0|5|10|15|20|25|30|35|40|45|50|55|60|65|70|75|80|85|90|95|100.\", \"Count of DP values falling above highest histogram bin edge DP calculated on high quality genotypes.\", \"Count of DP values falling above highest histogram bin edge DP in heterozygous individuals calculated on high quality genotypes.\", \"Histogram for SD calculated on high quality genotypes; bin edges are: 0|5|10|15|20|25|30|35|40|45|50|55|60|65|70|75|80|85|90|95|100.\", \"Histogram for SD in heterozygous individuals calculated on high quality genotypes; bin edges are: 0|5|10|15|20|25|30|35|40|45|50|55|60|65|70|75|80|85|90|95|100.\", \"Histogram for AB in heterozygous individuals calculated on high quality genotypes; bin edges are: 0.00|0.05|0.10|0.15|0.20|0.25|0.30|0.35|0.40|0.45|0.50|0.55|0.60|0.65|0.70|0.75|0.80|0.85|0.90|0.95|1.00.\"]]",
+            "AnnotateVcf.info_names": "[[\"inbreeding_coeff\", \"AS_pab_max\", \"AS_QUALapprox\", \"AS_QD\", \"AS_VarDP\", \"HWE\"], [\"gq_hist_all_bin_freq\", \"gq_hist_alt_bin_freq\", \"dp_hist_all_bin_freq\", \"dp_hist_alt_bin_freq\", \"dp_hist_all_n_larger\", \"dp_hist_alt_n_larger\", \"sd_hist_all_bin_freq\", \"sd_hist_alt_bin_freq\", \"ab_hist_alt_bin_freq\"]]",
+            "AnnotateVcf.info_numbers": "[[\"A\", \"A\", \"A\", \"A\", \"A\", \"1\"], [\"1\", \"1\", \"1\", \"1\", \"1\", \"1\", \"1\", \"1\", \"1\"]]",
+            "AnnotateVcf.info_types": "[[\"Float\", \"Float\", \"Integer\", \"Float\", \"Integer\", \"Float\"], [\"String\", \"String\", \"String\", \"String\", \"Integer\", \"Integer\", \"String\", \"String\", \"String\"]]",
+            "AnnotateVcf.prefix": "this.contig_id",
+            "AnnotateVcf.records_per_shard": "50000",
+            "AnnotateVcf.strip_info_fields_per_tsv": "[true, true]",
+            "AnnotateVcf.utils_docker": "workspace.utils_docker",
+            "AnnotateVcf.vcf": "this.low_coverage_genotype_filtered_vcf",
+            "AnnotateVcf.vcf_idx": "this.low_coverage_genotype_filtered_vcf_idx"
+        },
+        "outputs": {
+            "AnnotateVcf.annotated_vcf": "this.metrics_annotated_vcf",
+            "AnnotateVcf.annotated_vcf_idx": "this.metrics_annotated_vcf_idx"
+        }
+    },
+    {
+        "name": "26-AnnotateAF",
+        "workflow": "AnnotateAF",
+        "root_entity_type": "contig",
+        "inputs": {
+            "AnnotateAF.contigs": "[this.contig_id]",
+            "AnnotateAF.lps_tsv": "this.sample_set.trgt_lps_tsv",
+            "AnnotateAF.par_bed": "workspace.par_bed",
+            "AnnotateAF.ped": "workspace.ped",
+            "AnnotateAF.prefix": "this.contig_id",
+            "AnnotateAF.records_per_shard": "50000",
+            "AnnotateAF.sample_pop_assignments": "workspace.ancestry",
+            "AnnotateAF.utils_docker": "workspace.utils_docker",
+            "AnnotateAF.vcf": "this.metrics_annotated_vcf",
+            "AnnotateAF.vcf_idx": "this.metrics_annotated_vcf_idx"
+        },
+        "outputs": {
+            "AnnotateAF.af_annotated_vcf": "this.af_annotated_vcf",
+            "AnnotateAF.af_annotated_vcf_idx": "this.af_annotated_vcf_idx"
+        }
+    }
+]

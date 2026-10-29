@@ -13,7 +13,7 @@ workflow FilterLowCoverageRegions {
     parameter_meta {
         vcf: "VCF to filter."
         vcf_idx: "Index for VCF to filter."
-        low_coverage_regions_bed: "BED of low-coverage regions. It may include multiple contigs; the workflow subsets it to the requested `contigs`."
+        low_coverage_regions_bed: "BED of low-coverage regions - the `low_coverage_regions` reference, the `failed_bins_bed` output of `IdentifyLowCoverageRegions`, or both concatenated. It may include multiple contigs; the workflow subsets it to the requested `contigs`."
         contigs: "Contigs to process within the input VCF."
         min_region_coverage_cutoff: "Inclusive minimum fraction of a variant's reference span that must overlap a low-coverage region to add the filter."
         records_per_shard: "Number of variants per shard. When set, variants are processed in parallel shards and concatenated."

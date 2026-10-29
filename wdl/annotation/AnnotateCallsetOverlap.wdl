@@ -63,8 +63,8 @@ workflow AnnotateCallsetOverlap {
         rename_id_strip_chr_truth_sv_vcf: "Whether to strip the `chr` prefix when renaming SV truth variant IDs."
         ref_fa: "From references. Only needed when either VCF represents alleles symbolically, since Truvari uses it solely to resolve those alleles to sequence."
         ref_fai: "From references."
-        annotations_tsv_benchmark: "TSV mapping callset variants to their matched truth variants, match type, and the truth callset's AC/AF/AN and genotype-count fields, sorted by CHROM then POS."
-        annotations_header_benchmark: "Header listing the extra annotation columns present in `annotations_tsv_benchmark`."
+        annotations_tsv_overlap: "TSV mapping callset variants to their matched truth variants, match type, and the truth callset's AC/AF/AN and genotype-count fields, sorted by CHROM then POS."
+        annotations_header_overlap: "Header listing the extra annotation columns present in `annotations_tsv_overlap`."
     }
 
     input {
@@ -363,8 +363,8 @@ workflow AnnotateCallsetOverlap {
     }
 
     output {
-        File annotations_tsv_benchmark = BuildBenchmarkAnnotationTsv.merged_tsv
-        File annotations_header_benchmark = BuildBenchmarkAnnotationTsv.merged_header
+        File annotations_tsv_overlap = BuildBenchmarkAnnotationTsv.merged_tsv
+        File annotations_header_overlap = BuildBenchmarkAnnotationTsv.merged_header
     }
 }
 

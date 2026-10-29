@@ -2,6 +2,6 @@
     "MergeCohortSVCallsets.remote_indir": "gs://<cohort-bucket>/indir",
     "MergeCohortSVCallsets.remote_outdir": "gs://<cohort-bucket>/outdir",
     "MergeCohortSVCallsets.prefix": "cohort",
-    "MergeCohortSVCallsets.split_for_bcftools_merge_csv": "gs://<cohort-bucket>/split_for_bcftools_merge.csv",
+    "MergeCohortSVCallsets.split_for_bcftools_merge_csv": "gs://<references-bucket>/hg38_split_for_bcftools_merge.csv",
     "MergeCohortSVCallsets.sv_integration_docker": "us.gcr.io/broad-dsp-lrma/fcunial/callset_integration_phase2_workpackages"
 }

@@ -18,11 +18,11 @@
     "RegenotypeSVCallsets.remote_indir": "gs://<cohort-bucket>/indir",
     "RegenotypeSVCallsets.remote_outdir": "gs://<cohort-bucket>/outdir",
     "RegenotypeSVCallsets.prefix": "cohort",
-    "RegenotypeSVCallsets.split_for_bcftools_merge_csv": "gs://<cohort-bucket>/split_for_bcftools_merge.csv",
+    "RegenotypeSVCallsets.split_for_bcftools_merge_csv": "gs://<references-bucket>/hg38_split_for_bcftools_merge.csv",
     "RegenotypeSVCallsets.ref_fa": "gs://<references-bucket>/hg38.no_alt.fa",
     "RegenotypeSVCallsets.ref_fai": "gs://<references-bucket>/hg38.no_alt.fa.fai",
     "RegenotypeSVCallsets.ploidy_bed_female": "gs://<references-bucket>/grch38_female.bed",
     "RegenotypeSVCallsets.ploidy_bed_male": "gs://<references-bucket>/grch38_male.bed",
-    "RegenotypeSVCallsets.autosomes_bed": "gs://<references-bucket>/autosomes.bed",
+    "RegenotypeSVCallsets.autosomes_bed": "gs://<references-bucket>/grch38_autosomes.bed",
     "RegenotypeSVCallsets.sv_integration_docker": "us.gcr.io/broad-dsp-lrma/fcunial/callset_integration_phase2_workpackages"
 }

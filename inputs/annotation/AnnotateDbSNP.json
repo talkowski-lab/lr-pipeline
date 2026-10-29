@@ -1,8 +1,8 @@
 {
     "AnnotateDbSNP.vcf": "gs://<cohort-bucket>/cohort.vcf.gz",
     "AnnotateDbSNP.vcf_idx": "gs://<cohort-bucket>/cohort.vcf.gz.tbi",
-    "AnnotateDbSNP.dbsnp_vcf": "gs://<references-bucket>/GCF_000001405.40.vcf.gz",
-    "AnnotateDbSNP.dbsnp_vcf_idx": "gs://<references-bucket>/GCF_000001405.40.vcf.gz.tbi",
+    "AnnotateDbSNP.dbsnp_vcf": "gs://<references-bucket>/dbsnp_vcfs/chr22.vcf.gz",
+    "AnnotateDbSNP.dbsnp_vcf_idx": "gs://<references-bucket>/dbsnp_vcfs/chr22.vcf.gz.tbi",
     "AnnotateDbSNP.contigs": [
         "chr1",
         "chr2",

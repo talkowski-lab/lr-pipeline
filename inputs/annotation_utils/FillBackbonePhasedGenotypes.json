@@ -1,9 +1,0 @@
-{
-    "FillBackbonePhasedGenotypes.backbone_phased_vcf": "gs://<cohort-bucket>/backbone_phased.vcf.gz",
-    "FillBackbonePhasedGenotypes.backbone_phased_vcf_idx": "gs://<cohort-bucket>/backbone_phased.vcf.gz.tbi",
-    "FillBackbonePhasedGenotypes.backbone_phased_notrgt_vcf": "gs://<cohort-bucket>/backbone_phased_notrgt.vcf.gz",
-    "FillBackbonePhasedGenotypes.backbone_phased_notrgt_vcf_idx": "gs://<cohort-bucket>/backbone_phased_notrgt.vcf.gz.tbi",
-    "FillBackbonePhasedGenotypes.contig": "chr22",
-    "FillBackbonePhasedGenotypes.prefix": "cohort",
-    "FillBackbonePhasedGenotypes.utils_docker": "us-central1-docker.pkg.dev/talkowski-sv-gnomad/kj-dockers/utils:latest"
-}

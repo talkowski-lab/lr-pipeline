@@ -67,12 +67,12 @@ def overlap_inputs(subset_vcf, truth, utils_docker, **overrides):
 
 
 def overlap_rows(outputs):
-    header = [line[0] for line in read_table(outputs["AnnotateCallsetOverlap.annotations_header_benchmark"])]
+    header = [line[0] for line in read_table(outputs["AnnotateCallsetOverlap.annotations_header_overlap"])]
     assert header[:4] == ["match_type", "truth_ID", "source_tag", "filter"]
     assert header[-3:] == ["N_HOMREF", "N_HET", "N_HOMALT"]
     return [
         dict(zip(["CHROM", "POS", "REF", "ALT", "ID"] + header, row))
-        for row in read_table(outputs["AnnotateCallsetOverlap.annotations_tsv_benchmark"])
+        for row in read_table(outputs["AnnotateCallsetOverlap.annotations_tsv_overlap"])
     ]
 
 
@@ -361,7 +361,7 @@ def test_annotate_dbvar_matches_deletions_and_insertions_within_breakpoint_windo
         assert row[:4] == [CONTIG, str(record["pos"]), record["ref"], record["alts"][0]]
 
 
-def test_annotate_gnomad_str_matches_enveloped_loci_and_motif_matched_overlaps(run_workflow, run_dir, vcf_inputs, source):
+def test_annotate_gnomad_tr_overlap_matches_enveloped_loci_and_motif_matched_overlaps(run_workflow, run_dir, vcf_inputs, source):
     trvs = [r for r in source[1] if r["info"]["allele_type"] == "trv"]
     catalog, expected = [], {}
     for i, r in enumerate(trvs):
@@ -387,11 +387,11 @@ def test_annotate_gnomad_str_matches_enveloped_loci_and_motif_matched_overlaps(r
     catalog_json.write_text(json.dumps(catalog))
 
     outputs = run_workflow(
-        f"{ANNOTATION}/AnnotateGnomADSTR.wdl",
+        f"{ANNOTATION}/AnnotateGnomADTROverlap.wdl",
         {**vcf_inputs, "contigs": [CONTIG], "prefix": "str", "records_per_shard": 40, "gnomad_tr_json": str(catalog_json)},
     )
 
-    got = {row[4]: row for row in read_table(outputs["AnnotateGnomADSTR.annotations_tsv_gnomad_str"])}
+    got = {row[4]: row for row in read_table(outputs["AnnotateGnomADTROverlap.annotations_tsv_str_overlap"])}
     assert {k: v[5] for k, v in got.items()} == expected
     by_id = {r["id"]: r for r in trvs}
     for rid, row in got.items():

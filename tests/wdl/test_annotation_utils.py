@@ -1,5 +1,6 @@
 import collections
 import csv
+import filecmp
 import gzip
 import itertools
 import math
@@ -830,184 +831,6 @@ def test_fill_phased_genotypes_copies_from_the_same_id_and_handles_deepvariant_q
     a, b = sv.samples["a"], sv.samples["b"]
     assert (a["GT"][0], a["AD"], a["PL"][:2]) == (1, (0, 6), (30, 0))
     assert (b["GT"][0], b["AD"], b["PL"][:2]) == (0, (4, 0), (0, 25))
-
-
-def test_fill_backbone_phased_genotypes_pulls_phase_only_for_unphased_hets(
-    run_workflow, run_dir, subset_vcf, utils_docker, source
-):
-    sample, new_ps = "HG00096", 777
-
-    def unphase(record):
-        record.samples[sample].phased = False
-
-    def retag(record):
-        if record.samples[sample].phased:
-            record.samples[sample]["PS"] = new_ps
-
-    backbone = rewrite_vcf(subset_vcf, run_dir / "backbone.vcf.gz", [], unphase)
-    counter = itertools.count()
-    # The source for pulling is the same callset with a recognisable PS, lacking every third record
-    full = rewrite_vcf(subset_vcf, run_dir / "full.vcf.gz", [], retag)
-    notrgt = write_vcf(full, run_dir / "notrgt.vcf.gz", lambda r: next(counter) % 3 != 0)
-    present = {site_key(r) for r in load_records(notrgt)[1]}
-
-    inputs = {
-        "backbone_phased_vcf": str(backbone),
-        "backbone_phased_vcf_idx": f"{backbone}.tbi",
-        "backbone_phased_notrgt_vcf": str(notrgt),
-        "backbone_phased_notrgt_vcf_idx": f"{notrgt}.tbi",
-        "contig": CONTIG,
-        "prefix": "pulled",
-        "shard_bin_size": 25000000,
-        "utils_docker": utils_docker,
-    }
-    outputs = run_workflow(f"{UTILS}/FillBackbonePhasedGenotypes.wdl", inputs)
-
-    n_het = n_unphased = n_post_pull = 0
-    _, got = load_records(outputs["FillBackbonePhasedGenotypes.backbone_merged_vcf"])
-    assert [site_key(r) for r in got] == [site_key(r) for r in source[1]]
-    with pysam.VariantFile(str(outputs["FillBackbonePhasedGenotypes.backbone_merged_vcf"])) as vcf:
-        phased_after = [r.samples[sample].phased for r in vcf]
-    for new, old, is_phased in zip(got, source[1], phased_after):
-        gt = old["gts"][sample]
-        if None in gt or gt[0] == gt[1]:
-            assert new["gts"][sample] == gt
-            continue
-        n_het += 1
-        n_unphased += 1
-        was_phased = old["phased"][sample]
-        if was_phased and site_key(old) in present:
-            assert is_phased and new["gts"][sample] == gt
-            assert new["format"][sample]["PS"] == new_ps
-        else:
-            assert not is_phased
-            n_post_pull += 1
-    stats = {row["SAMPLE"]: row for row in read_dicts(outputs["FillBackbonePhasedGenotypes.backbone_merged_tsv"])}
-    assert set(stats) == set(SAMPLES)
-    row = stats[sample]
-    assert (int(row["N_HET"]), int(row["N_HET_UNPHASED"]), int(row["N_HET_UNPHASED_POST_PULL"])) == (
-        n_het,
-        n_unphased,
-        n_post_pull,
-    )
-    assert row["PROP_HET_UNPHASED_POST_PULL"] == f"{n_post_pull / n_het:.6f}"
-    assert 0 < n_post_pull < n_het
-
-
-def fill_format_inputs(unfilled, filled, utils_docker, **overrides):
-    return {
-        "unfilled_vcf": str(unfilled),
-        "unfilled_vcf_idx": f"{unfilled}.tbi",
-        "filled_vcf": str(filled),
-        "filled_vcf_idx": f"{filled}.tbi",
-        "contig": CONTIG,
-        "prefix": "refilled",
-        "transfer_format_fields": ["DP"],
-        "drop_format_fields": [],
-        "fill_alt_gts": False,
-        "fill_ref_gts": False,
-        "match_by_id": False,
-        "unphase_gts": False,
-        "add_missing_pl_via_ad": False,
-        "expand_ad_across_alleles": False,
-        "split_rnc_across_alleles": False,
-        "normalize_unfilled_vcf": False,
-        "normalize_filled_vcf": False,
-        "utils_docker": utils_docker,
-        **overrides,
-    }
-
-
-@pytest.mark.parametrize("match_by_id", [False, True])
-def test_fill_format_fields_transfers_fields_and_alt_genotypes_for_the_subset(
-    run_workflow, run_dir, subset_vcf, utils_docker, source, match_by_id
-):
-    degraded_sample = "HG00096"
-
-    def degrade(record):
-        record.samples[degraded_sample]["GT"] = (0, 0)
-        record.samples[degraded_sample].phased = True
-        record.samples[degraded_sample]["DP"] = 0
-
-    unfilled = rewrite_vcf(subset_vcf, run_dir / "unfilled.vcf.gz", [], degrade)
-    outputs = run_workflow(
-        f"{UTILS}/FillFormatFields.wdl",
-        fill_format_inputs(
-            unfilled,
-            subset_vcf,
-            utils_docker,
-            match_by_id=match_by_id,
-            fill_alt_gts=True,
-            unphase_gts=True,
-            drop_format_fields=["PL"],
-            shard_bin_size_fill=25000000,
-            subset_unfilled_vcf_field="allele_type",
-            subset_unfilled_vcf_value="snv",
-        ),
-    )
-
-    samples, got = load_records(outputs["FillFormatFields.refilled_vcf"])
-    assert [site_key(r) for r in got] == [site_key(r) for r in source[1]]
-    refilled = 0
-    for new, old in zip(got, source[1]):
-        assert all("PL" not in fmt for fmt in new["format"].values())
-        in_subset = old["info"]["allele_type"] == "snv"
-        for sample in SAMPLES:
-            src_gt = tuple(sorted(old["gts"][sample], key=lambda a: (a is None, a or 0)))
-            if sample != degraded_sample:
-                assert new["gts"][sample] == src_gt
-                continue
-            if in_subset and any(a for a in old["gts"][sample] if a):
-                assert new["gts"][sample] == src_gt
-                refilled += 1
-            else:
-                assert new["gts"][sample] == (0, 0)
-            expected_dp = old["format"][sample].get("DP") if in_subset else 0
-            assert new["format"][sample].get("DP") == expected_dp
-    assert refilled > 0
-
-
-def phred_likelihoods(ref_reads, alt_reads):
-    if ref_reads + alt_reads == 0:
-        return (0, 0, 0)
-    log_likelihoods = [(alt_reads * math.log10(p) + ref_reads * math.log10(1 - p)) for p in (0.05, 0.5, 0.95)]
-    return tuple(int(round(-10 * (x - max(log_likelihoods)))) for x in log_likelihoods)
-
-
-def test_fill_format_fields_derives_missing_pl_from_allele_depths(run_workflow, run_dir, subset_vcf, utils_docker, source):
-    plain = run_dir / "no_pl.vcf"
-    with gzip.open(subset_vcf, "rt") as handle, open(plain, "w") as out:
-        for line in handle:
-            if line.startswith("##FORMAT=<ID=PL,"):
-                continue
-            if not line.startswith("#"):
-                fields = line.rstrip("\n").split("\t")
-                keep = [i for i, key in enumerate(fields[8].split(":")) if key != "PL"]
-                for column in range(8, len(fields)):
-                    values = fields[column].split(":")
-                    fields[column] = ":".join(values[i] for i in keep)
-                line = "\t".join(fields) + "\n"
-            out.write(line)
-    pysam.tabix_index(str(plain), preset="vcf", force=True)
-    no_pl = run_dir / "no_pl.vcf.gz"
-    assert "PL" not in pysam.VariantFile(str(no_pl)).header.formats
-
-    outputs = run_workflow(
-        f"{UTILS}/FillFormatFields.wdl",
-        fill_format_inputs(no_pl, subset_vcf, utils_docker, transfer_format_fields=[], add_missing_pl_via_ad=True),
-    )
-
-    _, got = load_records(outputs["FillFormatFields.refilled_vcf"])
-    derived = 0
-    for new, old in zip(got, source[1]):
-        if len(old["alts"]) != 1:
-            continue
-        for sample in SAMPLES:
-            ad = old["format"][sample].get("AD")
-            if ad is not None and None not in ad and len(old["gts"][sample]) == 2:
-                assert new["format"][sample]["PL"] == phred_likelihoods(*ad)
-                derived += 1
-    assert derived > 100
 
 
 def test_evaluate_backbone_phasing_counts_switch_and_flip_errors_against_base_phasing(
@@ -2357,6 +2180,9 @@ def test_split_vcf_per_contig_splits_adds_no_geno_copy_and_rewrites_snv_ids(run_
     samples, records = load_records(outputs["SplitVcfPerContig.contig_vcfs"][0])
     assert samples == SAMPLES
     assert [site_key(r) for r in records] == [site_key(r) for r in source[1]]
+    # A single requested contig is also exposed as one file, for a per-contig data table row
+    for single, array in [("contig_vcf", "contig_vcfs"), ("contig_vcf_idx", "contig_vcf_idxs")]:
+        assert filecmp.cmp(outputs[f"SplitVcfPerContig.{single}"], outputs[f"SplitVcfPerContig.{array}"][0], shallow=False)
     for got, original in zip(records, source[1]):
         if original["info"]["allele_type"] == "snv":
             assert got["id"] == f"{original['contig']}-{original['pos']}-{original['ref']}-{original['alts'][0]}"
@@ -2454,13 +2280,13 @@ def test_extract_sample_vcfs_routes_carried_variants_by_length_and_source(run_wo
     assert all(is_carrier(r, sample) for r in snv_records + sv_records)
 
 
-def test_annotate_tr_end_tags_sets_end_from_ref_length(run_workflow, vcf_inputs, source):
-    outputs = run_workflow(f"{UTILS}/AnnotateTREndTags.wdl", {**vcf_inputs, "prefix": "end", "contigs": [CONTIG]})
+def test_fill_tr_end_tags_sets_end_from_ref_length(run_workflow, vcf_inputs, source):
+    outputs = run_workflow(f"{UTILS}/FillTREndTags.wdl", {**vcf_inputs, "prefix": "end", "contigs": [CONTIG]})
 
-    samples, records = load_records(outputs["AnnotateTREndTags.vcf_with_end"])
+    samples, records = load_records(outputs["FillTREndTags.vcf_with_end"])
     assert samples == SAMPLES
     assert [site_key(r) for r in records] == [site_key(r) for r in source[1]]
-    ends = raw_info_end(outputs["AnnotateTREndTags.vcf_with_end"])
+    ends = raw_info_end(outputs["FillTREndTags.vcf_with_end"])
     assert len(ends) == len(records)
     assert all(end == str(pos + ref_length - 1) for pos, ref_length, end in ends)
     assert [r["gts"] for r in records] == [r["gts"] for r in source[1]]

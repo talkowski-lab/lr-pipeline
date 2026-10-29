@@ -3,10 +3,10 @@ version 1.0
 import "../utils/Helpers.wdl"
 import "../utils/Structs.wdl"
 
-workflow AnnotateTREndTags {
+workflow FillTREndTags {
     meta {
         description: [
-            "This utility adds an `END` INFO tag to the tandem-repeat records of a VCF, computed per contig, so that downstream tools correctly interpret the span of each TR call. It outputs the updated VCF."
+            "This utility fills the `END` INFO tag on the tandem-repeat records of a VCF, computed per contig, so that downstream tools correctly interpret the span of each TR call. It outputs the updated VCF."
         ]
     }
 

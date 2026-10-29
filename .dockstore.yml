@@ -74,8 +74,8 @@ workflows:
         - /.*/
 
   - subclass: WDL
-    name: AnnotateGnomADSTR
-    primaryDescriptorPath: /wdl/annotation/AnnotateGnomADSTR.wdl
+    name: AnnotateGnomADTROverlap
+    primaryDescriptorPath: /wdl/annotation/AnnotateGnomADTROverlap.wdl
     publish: true
     filters:
       branches:
@@ -174,8 +174,8 @@ workflows:
         - /.*/
 
   - subclass: WDL
-    name: AnnotateVEPHail
-    primaryDescriptorPath: /wdl/annotation/AnnotateVEPHail.wdl
+    name: AnnotateVEP
+    primaryDescriptorPath: /wdl/annotation/AnnotateVEP.wdl
     publish: true
     filters:
       branches:
@@ -218,8 +218,8 @@ workflows:
   # --------------------
 
   - subclass: WDL
-    name: AnnotateTREndTags
-    primaryDescriptorPath: /wdl/annotation_utils/AnnotateTREndTags.wdl
+    name: FillTREndTags
+    primaryDescriptorPath: /wdl/annotation_utils/FillTREndTags.wdl
     publish: true
     filters:
       branches:
@@ -490,16 +490,6 @@ workflows:
 
 
   - subclass: WDL
-    name: FillFormatFields
-    primaryDescriptorPath: /wdl/annotation_utils/FillFormatFields.wdl
-    publish: true
-    filters:
-      branches:
-        - main
-      tags:
-        - /.*/
-
-  - subclass: WDL
     name: FillPhasedGenotypes
     primaryDescriptorPath: /wdl/annotation_utils/FillPhasedGenotypes.wdl
     publish: true
@@ -530,6 +520,16 @@ workflows:
         - /.*/
 
   - subclass: WDL
+    name: MergeHiPhaseCallsets
+    primaryDescriptorPath: /wdl/annotation_utils/MergeHiPhaseCallsets.wdl
+    publish: true
+    filters:
+      branches:
+        - main
+      tags:
+        - /.*/
+
+  - subclass: WDL
     name: MergeVcfs
     primaryDescriptorPath: /wdl/annotation_utils/MergeVcfs.wdl
     publish: true
@@ -542,16 +542,6 @@ workflows:
   - subclass: WDL
     name: PreprocessVcfs
     primaryDescriptorPath: /wdl/annotation_utils/PreprocessVcfs.wdl
-    publish: true
-    filters:
-      branches:
-        - main
-      tags:
-        - /.*/
-
-  - subclass: WDL
-    name: FillBackbonePhasedGenotypes
-    primaryDescriptorPath: /wdl/annotation_utils/FillBackbonePhasedGenotypes.wdl
     publish: true
     filters:
       branches:
@@ -717,16 +707,6 @@ workflows:
   - subclass: WDL
     name: HiPhase
     primaryDescriptorPath: /wdl/tools/HiPhase.wdl
-    publish: true
-    filters:
-      branches:
-        - main
-      tags:
-        - /.*/
-
-  - subclass: WDL
-    name: MergeHiPhaseCallsets
-    primaryDescriptorPath: /wdl/tools/MergeHiPhaseCallsets.wdl
     publish: true
     filters:
       branches:

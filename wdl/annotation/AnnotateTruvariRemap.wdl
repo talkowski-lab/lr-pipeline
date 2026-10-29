@@ -23,7 +23,7 @@ workflow AnnotateTruvariRemap {
         max_length: "Maximum insertion length to remap."
         mm2_threshold: "Minimum minimap2 alignment score to flag an insertion."
         cov_threshold: "Minimum alignment coverage to flag an insertion."
-        annotations_tsv_remap: "TSV of insertion remap results."
+        annotations_tsv_truvari_remap: "TSV of insertion remap results."
     }
 
     input {
@@ -129,7 +129,7 @@ workflow AnnotateTruvariRemap {
     }
 
     output {
-        File annotations_tsv_remap = select_first([ConcatTsvs.concatenated_tsv, final_annotations_tsv[0]])
+        File annotations_tsv_truvari_remap = select_first([ConcatTsvs.concatenated_tsv, final_annotations_tsv[0]])
     }
 }
 

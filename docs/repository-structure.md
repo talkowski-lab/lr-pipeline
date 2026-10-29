@@ -22,7 +22,7 @@ tests/
   wdl/               # miniwdl smoke tests of utils-image workflows
   data/              # Small open-access test inputs, e.g. an HPRC/HGSVC V10 chr22 VCF subset
 data/                # Local-only analysis inputs, outputs and scratch work; gitignored, so not in the repository, and never referenced by WDL
-docs/                # Extended documentation (this file included)
+docs/                # Extended documentation (this file included), plus method_configs.json, the template workspace's method configs that the Run Order graph in pipeline.md is generated from
 .github/
   workflows/         # Active GitHub Actions CI
   CODEOWNERS         # Default reviewers requested on every pull request
@@ -84,7 +84,7 @@ Scripts reach a running task baked into an image, never fetched by URL. The `uti
 | `helper/estimated_CN_denoising.py` | CreateCohortDepthFiles | Denoise estimated copy number across samples. Vendored from GATK-SV; preserve its license header. |
 | `helper/medianCoverage.R` | CreateCohortDepthFiles | Calculate median bin coverage per sample from a bincov matrix. Loads the matrix into memory, so split large inputs by contig. |
 | `helper/split_vcf_hail.py` | ScatterVcf | Split a VCF into a fixed number of shards, or shards of a fixed record count, using Hail. |
-| `helper/vep_annotate_hail.py` | AnnotateVEPHail | Run VEP over a VCF via Hail and emit the annotated result. |
+| `helper/vep_annotate_hail.py` | AnnotateVEP | Run VEP over a VCF via Hail and emit the annotated result. |
 | `mei/PALMER_to_vcf.py` | Helpers.wdl | Convert raw PALMER mobile-element calls into a VCF. |
 | `mei/PALMER_transfer_annotations.py` | AnnotatePALMER | Transfer PALMER annotations onto matching callset records, using edit distance to resolve near-matches. |
 | `qc/plot_annotation_summaries.py` | CreateAnnotationPlots | Plot site, per-genome, inheritance and variant-list summaries from the SummarizeAnnotations parquet tables, one plot group per task. |
