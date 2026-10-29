@@ -708,13 +708,13 @@ task CollectVidsPerSample {
 
         mkdir -p ~{outdirprefix}
 
-        # Write each carrier's variant IDs, collapsed genotypes and GQs to a per-sample list
+        # Write each carrier's variant IDs, collapsed genotypes and GQs to a per-sample list, with %ID outside the per-sample block so a FORMAT/ID can't shadow it
         gq_fmt=$(bcftools view -h ~{vcf} | grep -q '##FORMAT=<ID=GQ' && echo '%GQ' || echo 'NA')
         bcftools view -S ~{samples_list} ~{vcf} \
             | bcftools +fill-tags -- -t AC \
             | bcftools view -i 'AC>0' \
-            | bcftools query -f "[%SAMPLE\t%ID\t%GT\t${gq_fmt}\n]" \
-            | awk '{OFS="\t"; gt=$3; gsub(/\|/,"/",gt); gq=$4; if(gq=="."){gq=99}; split(gt,a,"/"); x_miss=(a[1]=="."); y_miss=(a[2]=="."); if(x_miss&&y_miss){gt="./."}else if(x_miss){if(a[2]+0>0) gt="0/1"; else gt="0/0"}else if(y_miss){if(a[1]+0>0) gt="0/1"; else gt="0/0"}else{x=a[1]+0;y=a[2]+0; if(x==0&&y==0) gt="0/0"; else if(x==0||y==0) gt="0/1"; else gt="1/1"}; print $1,$2,gt,gq}' \
+            | bcftools query -f "%ID[\t%SAMPLE\t%GT\t${gq_fmt}]\n" \
+            | awk '{OFS="\t"; for(i=2;i<=NF;i+=3){gt=$(i+1); gsub(/\|/,"/",gt); gq=$(i+2); if(gq=="."){gq=99}; split(gt,a,"/"); x_miss=(a[1]=="."); y_miss=(a[2]=="."); if(x_miss&&y_miss){gt="./."}else if(x_miss){if(a[2]+0>0) gt="0/1"; else gt="0/0"}else if(y_miss){if(a[1]+0>0) gt="0/1"; else gt="0/0"}else{x=a[1]+0;y=a[2]+0; if(x==0&&y==0) gt="0/0"; else if(x==0||y==0) gt="0/1"; else gt="1/1"}; print $i,$1,gt,gq}}' \
             | awk -v outprefix="~{outdirprefix}" '$3 != "0/0" && $3 != "./." {OFS="\t"; print $2, $3, $4 >> outprefix"/"$1".VIDs_genotypes.txt" }'
 
         for FILE in ~{outdirprefix}/*.VIDs_genotypes.txt; do

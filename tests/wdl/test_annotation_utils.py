@@ -2619,12 +2619,26 @@ def test_extract_random_calls_keeps_records_sharing_a_span(run_workflow, vcf_inp
 
 
 def test_summarize_annotations_gatksv_splits_alleles_and_draws_the_cohort_plots(run_workflow, run_dir, window_vcf, utils_docker):
-    ped = write_table(run_dir / "cohort.ped", [[s, s, 0, 0, 1 + i % 2, 0] for i, s in enumerate(SAMPLES)])
+    # One trio, so the per-family plots read the per-sample variant ID lists
+    father, mother, child = SAMPLES[:3]
+    ped = write_table(
+        run_dir / "cohort.ped",
+        [["fam1", father, 0, 0, 1, 0], ["fam1", mother, 0, 0, 2, 0], ["fam1", child, father, mother, 1, 0]]
+        + [[s, s, 0, 0, 1, 0] for s in SAMPLES[3:]],
+    )
+    # Merged-caller VCFs declare a FORMAT/ID, which bcftools query reads for %ID inside a per-sample block
+    plain = run_dir / "format_id.vcf"
+    with pysam.VariantFile(str(window_vcf)) as vcf_in:
+        vcf_in.header.add_line('##FORMAT=<ID=ID,Number=1,Type=String,Description="Per-sample caller ID">')
+        with pysam.VariantFile(str(plain), "w", header=vcf_in.header) as vcf_out:
+            for record in vcf_in:
+                vcf_out.write(record)
+    pysam.tabix_index(str(plain), preset="vcf", force=True)
     outputs = run_workflow(
         f"{UTILS}/SummarizeAnnotationsGATKSV.wdl",
         {
-            "vcfs": [str(window_vcf)],
-            "vcf_idxs": [f"{window_vcf}.tbi"],
+            "vcfs": [f"{plain}.gz"],
+            "vcf_idxs": [f"{plain}.gz.tbi"],
             "prefix": "qc",
             "ped": str(ped),
             "ref_fa": str(WINDOW_FASTA),
@@ -2654,3 +2668,12 @@ def test_summarize_annotations_gatksv_splits_alleles_and_draws_the_cohort_plots(
     assert {"qc.VCF_sites.stats.bed.gz", "qc.VCF_sites.stats.bed.gz.tbi"} <= names
     plots = {"size_distribution.pdf", "af_distribution.pdf", "gt_overall_distribution.png", "counts_per_genome_distribution.png"}
     assert plots <= names
+    assert "trio_inheritance_distribution.pdf" in names
+
+    # Each sample's variant ID list holds the IDs of the records it carries, which the per-family plots join on
+    (vid_tarball,) = (run_dir / "run1/call-MergeShardedPerSampleVidLists/out/merged_tarball").glob("*.tar.gz")
+    with tarfile.open(vid_tarball) as tar:
+        for sample in SAMPLES:
+            member = next(m for m in tar.getmembers() if m.name.endswith(f"/{sample}.VIDs_genotypes.txt.gz"))
+            vids = {line.split("\t")[0] for line in gzip.decompress(tar.extractfile(member).read()).decode().splitlines()}
+            assert vids == {r["id"] for r in records if is_carrier(r, sample)}

@@ -304,6 +304,7 @@ workflows:
     filters:
       branches:
         - main
+        - kj-gatksv-per-sample-vids
       tags:
         - /.*/
 
