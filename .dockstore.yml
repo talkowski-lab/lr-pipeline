@@ -701,7 +701,6 @@ workflows:
     filters:
       branches:
         - main
-        - kj-cnv-exclude-intervals
       tags:
         - /.*/
 
@@ -862,7 +861,6 @@ workflows:
     filters:
       branches:
         - main
-        - kj-cnv-exclude-intervals
       tags:
         - /.*/
 
