@@ -601,6 +601,7 @@ POSTPROCESS_RUN_FLAGS = [
     "filter_assembly_only_singletons",
     "filter_single_read_singletons",
     "flag_homopolymer_trvs",
+    "manually_drop_by_id",
     "normalize_allele_types",
     "normalize_ploidy",
     "prune_meis",
@@ -690,6 +691,28 @@ def test_postprocess_callset_resolves_overlaps_by_clearing_the_losing_call_of_ea
             for start, end in spans:
                 assert start > reach
                 reach = max(reach, end)
+
+
+@pytest.mark.parametrize("shard_bin_size", [None, 20000000])
+def test_postprocess_callset_drops_listed_variant_ids(run_workflow, subset_vcf, utils_docker, shard_bin_size):
+    _, before = load_records(subset_vcf)
+    dropped = {before[0]["id"], before[len(before) // 2]["id"]}
+    inputs = {
+        "vcf": str(subset_vcf),
+        "vcf_idx": f"{subset_vcf}.tbi",
+        "contigs": [CONTIG],
+        "prefix": "dropped",
+        **{f"run_{flag}": False for flag in POSTPROCESS_RUN_FLAGS},
+        "run_manually_drop_by_id": True,
+        "drop_variant_ids": sorted(dropped),
+        "utils_docker": utils_docker,
+    }
+    if shard_bin_size:
+        inputs["shard_bin_size"] = shard_bin_size
+    outputs = run_workflow(f"{UTILS}/PostprocessCallset.wdl", inputs)
+
+    _, after = load_records(outputs["PostprocessCallset.post_processed_vcf"])
+    assert [site_key(r) for r in after] == [site_key(r) for r in before if r["id"] not in dropped]
 
 
 def test_fill_phased_genotypes_restores_missing_genotypes_and_format_fields_from_unphased_vcf(
@@ -2483,6 +2506,7 @@ def test_postprocess_callset_recomputes_allele_counts_for_singleton_filter(
         "drop_filters",
         "filter_single_read_singletons",
         "flag_homopolymer_trvs",
+        "manually_drop_by_id",
         "normalize_allele_types",
         "normalize_ploidy",
         "prune_meis",
@@ -2536,6 +2560,7 @@ def test_postprocess_callset_normalizes_allele_types_to_the_released_types(
         "filter_assembly_only_singletons",
         "filter_single_read_singletons",
         "flag_homopolymer_trvs",
+        "manually_drop_by_id",
         "normalize_ploidy",
         "prune_meis",
         "reassign_suffixes",

@@ -35,6 +35,7 @@
     "PostprocessCallset.run_filter_assembly_only_singletons": false,
     "PostprocessCallset.run_filter_single_read_singletons": false,
     "PostprocessCallset.run_flag_homopolymer_trvs": false,
+    "PostprocessCallset.run_manually_drop_by_id": false,
     "PostprocessCallset.run_normalize_allele_types": false,
     "PostprocessCallset.run_normalize_ploidy": false,
     "PostprocessCallset.run_prune_meis": false,
