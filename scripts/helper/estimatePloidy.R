@@ -599,6 +599,13 @@ normalizeContigsPerMatrix <- function(dat, exclude=NA, scale.exclude=NA,
 testCNs <- function(dat, FDR=T){
   dat.out <- dat
 
+  #A sex with fewer than two samples has no spread to test against, so its p-values are NA
+  #(upstream fails here, since apply() collapses the single row to a vector)
+  if(nrow(dat) < 2){
+    dat.out[, -1] <- NA
+    return(dat.out)
+  }
+
   #Iterate over contigs
   left.p <- apply((apply(dat[, -1], 2, scale, center=T, scale=T)), 2, pnorm)
   right.p <- apply((apply(dat[, -1], 2, scale, center=T, scale=T)), 2, pnorm, lower.tail=F)
@@ -833,8 +840,8 @@ boxplotsPerContig <- function(dat, exclude, genome.ploidy=2, contig.ploidy,
     #Calculate p-values
     pvals <- testCNs(dat, FDR=T)
 
-    #Iterate over pvalue matrix & compute plot color
-    colMat <- sapply(2:ncol(pvals), function(col){
+    #Iterate over pvalue matrix & compute plot color, kept a matrix when there is a single sample
+    colMat <- matrix(nrow=nrow(pvals), sapply(2:ncol(pvals), function(col){
       sapply(1:nrow(pvals), function(row){
         if(is.na(pvals[row, col])){
           return(NA)
@@ -850,7 +857,7 @@ boxplotsPerContig <- function(dat, exclude, genome.ploidy=2, contig.ploidy,
           }
         }
       })
-    })
+    }))
   }else{
     colMat <- dat[, -1]
     colMat <- "#838393"
@@ -1233,11 +1240,12 @@ sapply(setdiff(unique(dat[, 1]), c("X", "Y")), function(contig){
 })
 
 #Plot binwise CN estimates per sex chromosome -- all samples
-binwise.dat.males <- data.frame(chr.dat.males$sample_id, 
-                                t(dat[, which(colnames(dat) %in% chr.dat.males$sample_id)]))
+#drop=F keeps a sex with a single sample a named column, so its row keeps the sample ID
+binwise.dat.males <- data.frame(chr.dat.males$sample_id,
+                                t(dat[, which(colnames(dat) %in% chr.dat.males$sample_id), drop=F]))
 colnames(binwise.dat.males) <- c("sample_id", bin.IDs)
-binwise.dat.females <- data.frame(chr.dat.females$sample_id, 
-                                t(dat[, which(colnames(dat) %in% chr.dat.females$sample_id)]))
+binwise.dat.females <- data.frame(chr.dat.females$sample_id,
+                                t(dat[, which(colnames(dat) %in% chr.dat.females$sample_id), drop=F]))
 colnames(binwise.dat.females) <- c("sample_id", bin.IDs)
 sapply(intersect(unique(dat[, 1]), c("X", "Y")), function(contig){
   #Males
