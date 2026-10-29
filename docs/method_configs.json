@@ -1181,6 +1181,7 @@
         "inputs": {
             "PostprocessCallset.contigs": "[this.contig_id]",
             "PostprocessCallset.drop_variant_ids": "this.drop_variant_ids",
+            "PostprocessCallset.par_bed": "workspace.par_bed",
             "PostprocessCallset.ped": "workspace.ped",
             "PostprocessCallset.prefix": "this.contig_id",
             "PostprocessCallset.run_clean_vcf_header": "false",
@@ -1196,6 +1197,7 @@
             "PostprocessCallset.run_prune_meis": "true",
             "PostprocessCallset.run_reassign_suffixes": "false",
             "PostprocessCallset.run_resolve_haplotype_overlaps": "true",
+            "PostprocessCallset.run_set_missing_filters_to_pass": "true",
             "PostprocessCallset.run_sorting": "false",
             "PostprocessCallset.run_transfer_genotypes": "false",
             "PostprocessCallset.run_unphase_samples": "false",
@@ -1318,6 +1320,7 @@
         "root_entity_type": "contig",
         "inputs": {
             "AnnotateAF.contigs": "[this.contig_id]",
+            "AnnotateAF.drop_ac_zero_records": "true",
             "AnnotateAF.lps_tsv": "this.sample_set.trgt_lps_tsv",
             "AnnotateAF.par_bed": "workspace.par_bed",
             "AnnotateAF.ped": "workspace.ped",
@@ -1331,6 +1334,46 @@
         "outputs": {
             "AnnotateAF.af_annotated_vcf": "this.af_annotated_vcf",
             "AnnotateAF.af_annotated_vcf_idx": "this.af_annotated_vcf_idx"
+        }
+    },
+    {
+        "name": "27-EvaluateNCRCutoffs",
+        "workflow": "EvaluateNCRCutoffs",
+        "root_entity_type": "contig_set",
+        "inputs": {
+            "EvaluateNCRCutoffs.args_string_vcf": "\"INFO/allele_type!=\\\"trv\\\" && GT~\\\"[1-9]\\\"\"",
+            "EvaluateNCRCutoffs.fallback_cutoff": "0.5",
+            "EvaluateNCRCutoffs.ped": "workspace.ped",
+            "EvaluateNCRCutoffs.prefix": "\"cohort\"",
+            "EvaluateNCRCutoffs.records_per_shard": "50000",
+            "EvaluateNCRCutoffs.utils_docker": "workspace.utils_docker",
+            "EvaluateNCRCutoffs.vcf_idxs": "this.contigs.af_annotated_vcf_idx",
+            "EvaluateNCRCutoffs.vcfs": "this.contigs.af_annotated_vcf"
+        },
+        "outputs": {
+            "EvaluateNCRCutoffs.ncr_cutoff_plots_tar": "this.ncr_cutoff_plots_tar",
+            "EvaluateNCRCutoffs.ncr_cutoff_summary_tsv": "this.ncr_cutoff_summary_tsv",
+            "EvaluateNCRCutoffs.ncr_cutoffs_tsv": "this.ncr_cutoffs_tsv",
+            "EvaluateNCRCutoffs.recommended_ncr_cutoffs_tsv": "workspace.recommended_ncr_cutoffs_tsv"
+        }
+    },
+    {
+        "name": "28-FilterNCRCutoffs",
+        "workflow": "FilterNCRCutoffs",
+        "root_entity_type": "contig",
+        "inputs": {
+            "FilterNCRCutoffs.ncr_cutoffs_tsv": "workspace.recommended_ncr_cutoffs_tsv",
+            "FilterNCRCutoffs.ncr_filter_pass_only": "true",
+            "FilterNCRCutoffs.prefix": "this.contig_id",
+            "FilterNCRCutoffs.records_per_shard": "50000",
+            "FilterNCRCutoffs.remove_no_calls": "true",
+            "FilterNCRCutoffs.utils_docker": "workspace.utils_docker",
+            "FilterNCRCutoffs.vcf": "this.af_annotated_vcf",
+            "FilterNCRCutoffs.vcf_idx": "this.af_annotated_vcf_idx"
+        },
+        "outputs": {
+            "FilterNCRCutoffs.filtered_vcf": "this.ncr_filtered_vcf",
+            "FilterNCRCutoffs.filtered_vcf_idx": "this.ncr_filtered_vcf_idx"
         }
     }
 ]

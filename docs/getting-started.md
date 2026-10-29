@@ -3,7 +3,7 @@ This document covers what you need to run the pipeline on a new cohort, from raw
 
 
 ## Template Workspace
-Clone [LR_GNOMAD-AoU_TALK_Pipeline-Template](https://app.terra.bio/#workspaces/LR_GNOMAD_1_CO-AoU_TALK/LR_GNOMAD-AoU_TALK_Pipeline-Template) into your own billing project. It runs the whole pipeline on three CEPH 1463 Platinum Pedigree samples - NA12877, NA12878 and NA12882 - treated as unrelated, so every data table column is filled in for reference. The clone holds:
+Clone [LR_GNOMAD-AoU_TALK_Pipeline-Template](https://app.terra.bio/#workspaces/LR_GNOMAD_1_CO-AoU_TALK/LR_GNOMAD-AoU_TALK_Pipeline-Template) into your own billing project. It runs the whole pipeline on three CEPH 1463 Platinum Pedigree samples - NA12877 and NA12878 and their child NA12882 - so every data table column is filled in for reference. The clone holds:
 - **Method configs** - one per workflow run, numbered by the step it runs in, as listed in [Run Order](pipeline.md#run-order). Configs sharing a number can be launched together once the previous step finishes. `SplitVcfPerContig` runs twice, as `13-SplitVcfPerContig_Phased` and `13-SplitVcfPerContig_PALMER`, `AnnotateVcf` twice, as `20-AnnotateVcf_Base` and `25-AnnotateVcf_Quality`, and `TRGT` once per repeat catalog.
 - **Workspace data** - every reference file in [References](references.md) apart from the per-contig ones on the `contig` table, every `*_docker` image in [Docker images](dockers.md), and the cohort-wide inputs below.
 - **Data tables**:
@@ -17,7 +17,7 @@ Outside the lab, most reference files and the repository images are not publicly
 ## Inputs
 Everything below is cohort-specific and must be supplied per run. Reference files, repeat catalogs and Docker images are shared across cohorts and supplied separately - see [References](references.md) and [Docker images](dockers.md).
 - **Unaligned lrGS reads** - one unaligned BAM per sample, plus the sample IDs. On Terra these are the `sample` table's `unaligned_bam` and `sample_id` columns.
-- **PED** - six-column pedigree covering every sample, providing each sample's sex (`1` male, `2` female). Every sample is treated as unrelated, so the family and parent columns are not used. Required by the coverage, post-processing and allele frequency steps. On Terra this is the `ped` workspace data.
+- **PED** - six-column pedigree covering every sample, providing each sample's sex (`1` male, `2` female). Its family and parent columns are read only by the trio-based workflows - `EvaluateNCRCutoffs` in step 27 and the inheritance summaries in [Optional Analyses](pipeline.md#optional-analyses) - so a cohort of unrelated samples can leave them `0`. Required by the coverage, post-processing and allele frequency steps. On Terra this is the `ped` workspace data.
 - **Ancestry** - per-sample genetic similarity group assignments, used for allele frequency annotation. On Terra this is the `ancestry` workspace data.
 - **Cohort metadata TSV** - PED and ancestry combined into the single table the TR histograms consume. [CreateCohortMetadata](../wdl/annotation_utils/CreateCohortMetadata.wdl) builds it in step 01 if you only have the two files separately.
 - **Phased truth base VCFs** _(optional)_ - haplotype-resolved VCFs covering the cohort's samples. Supplying these enables backbone phasing in step 14; the template uses `truth_platinum_pedigree_vcf`.
