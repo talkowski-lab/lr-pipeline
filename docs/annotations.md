@@ -9,7 +9,8 @@ Some names below depend on the inputs of the released callsets rather than being
 - `HIGH_NCR`: Variant whose `INFO/NCR` is above the no-call rate cutoff for its allele type, length and `REGION` in the cutoff table passed to `FilterNCRCutoffs`.
 - `LARGE_SNV_INDEL`: Variant with `SOURCE = "DeepVariant"` that has `INFO/allele_length ≥ 50`. Set by `PreprocessVcfs`.
 - `LOW_COVERAGE_REGION`: Variant region determined to have low coverage relative to entire genome.
-- `MONOALLELIC`: Variant in a region with multiple variants that could not be unified into non-overlapping multi-allelic sites. Not set by any workflow in this repository; it arrives with the input SV callset.
+- `MONOALLELIC`: Variant in a region with multiple variants that could not be unified into non-overlapping multi-allelic sites. Not set by any workflow in this repository; GLnexus sets it on the joint-called SNV/indel callset.
+- `PASS`: Variant that no filter flagged. `PreprocessVcfs` and the TR integration set it on records that arrive without a FILTER value, as GLnexus writes them, so every record carries at least one value.
 - `SINGLE_READ_SUPPORT`: Variant with `AC = 1` whose sole carrier has support from just a single read.
 - `SMALL_SV`: Variant with `SOURCE = "HPRC_SV_Integration"` that has `INFO/allele_length < 50`. Set by `PreprocessVcfs`.
 

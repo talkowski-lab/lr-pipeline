@@ -6,7 +6,7 @@ import "../utils/Helpers.wdl"
 workflow PreprocessVcfs {
     meta {
         description: [
-            "This utility preprocesses and integrates one or more cohort VCFs into a single VCF. It first optionally converts the symbolic `<DEL>` and `<DUP>` alleles of an All of Us Phase 2 VCF to sequence alleles and drops its remaining symbolic records, then applies any per-VCF sample-ID swaps, optionally subsets every VCF to the requested samples, and validates that the resulting sample sets are identical. Each VCF is then optionally normalized and reduced to its SNV, insertion and deletion records: symbolic, breakend, spanning-deletion (`*`) and `SVTYPE=INV` records are dropped, and any other record whose trimmed REF and ALT have the same multi-base length fails the run. Kept alleles are uppercased, since normalizing against a soft-masked reference writes lowercase bases. The remaining records are annotated with core variant attributes and an optional source label, and length-filtered: records outside a VCF's length cutoffs are flagged, or dropped when `drop_out_of_range_lengths` is set, so that several callsets can each keep only their own length range. Per-VCF controls are required arrays: an empty array disables that control for every VCF; a non-empty array must align with `vcfs`."
+            "This utility preprocesses and integrates one or more cohort VCFs into a single VCF. It first optionally converts the symbolic `<DEL>` and `<DUP>` alleles of an All of Us Phase 2 VCF to sequence alleles and drops its remaining symbolic records, then applies any per-VCF sample-ID swaps, optionally subsets every VCF to the requested samples, and validates that the resulting sample sets are identical. Each VCF is then optionally normalized and reduced to its SNV, insertion and deletion records: symbolic, breakend, spanning-deletion (`*`) and `SVTYPE=INV` records are dropped, and any other record whose trimmed REF and ALT have the same multi-base length fails the run. Kept alleles are uppercased, since normalizing against a soft-masked reference writes lowercase bases, and records without a FILTER value, as GLnexus writes them, are set to `PASS`. The remaining records are annotated with core variant attributes and an optional source label, and length-filtered: records outside a VCF's length cutoffs are flagged, or dropped when `drop_out_of_range_lengths` is set, so that several callsets can each keep only their own length range. Per-VCF controls are required arrays: an empty array disables that control for every VCF; a non-empty array must align with `vcfs`."
         ]
     }
 
@@ -570,6 +570,9 @@ for record in input_vcf:
     else:
         # Normalizing against a soft-masked reference writes lowercase bases, which HiPhase rejects as a reference mismatch
         record.alleles = tuple(allele.upper() for allele in record.alleles)
+        # GLnexus writes no FILTER value; PASS lets later filters replace it like any other passing record
+        if not record.filter.keys():
+            record.filter.add("PASS")
         output_vcf.write(record)
 input_vcf.close()
 output_vcf.close()

@@ -61,6 +61,7 @@ This file is generated from the `meta` and `parameter_meta` blocks of each workf
   - [MergeHiPhaseCallsets](#mergehiphasecallsets)
   - [MergeVcfs](#mergevcfs)
   - [PreprocessVcfs](#preprocessvcfs)
+  - [SetMissingFiltersToPass](#setmissingfilterstopass)
   - [EvaluateBackbonePhasing](#evaluatebackbonephasing)
   - [EvaluateCallsetAccuracy](#evaluatecallsetaccuracy)
   - [EvaluateOverlappingTRLoci](#evaluateoverlappingtrloci)
@@ -1325,7 +1326,7 @@ Outputs:
 - `File merge_summary_tsv`: TSV with one row per allele type and size bin, tandem repeats sharing a single row without a bin, and three columns per entry of `vcf_names` holding how many of that callset's records went in, how many came out merged with another record, and how many came out on their own. The merged and unmerged counts sum to the input count.
 
 ### [PreprocessVcfs](../wdl/annotation_utils/PreprocessVcfs.wdl)
-This utility preprocesses and integrates one or more cohort VCFs into a single VCF. It first optionally converts the symbolic `<DEL>` and `<DUP>` alleles of an All of Us Phase 2 VCF to sequence alleles and drops its remaining symbolic records, then applies any per-VCF sample-ID swaps, optionally subsets every VCF to the requested samples, and validates that the resulting sample sets are identical. Each VCF is then optionally normalized and reduced to its SNV, insertion and deletion records: symbolic, breakend, spanning-deletion (`*`) and `SVTYPE=INV` records are dropped, and any other record whose trimmed REF and ALT have the same multi-base length fails the run. Kept alleles are uppercased, since normalizing against a soft-masked reference writes lowercase bases. The remaining records are annotated with core variant attributes and an optional source label, and length-filtered: records outside a VCF's length cutoffs are flagged, or dropped when `drop_out_of_range_lengths` is set, so that several callsets can each keep only their own length range. Per-VCF controls are required arrays: an empty array disables that control for every VCF; a non-empty array must align with `vcfs`.
+This utility preprocesses and integrates one or more cohort VCFs into a single VCF. It first optionally converts the symbolic `<DEL>` and `<DUP>` alleles of an All of Us Phase 2 VCF to sequence alleles and drops its remaining symbolic records, then applies any per-VCF sample-ID swaps, optionally subsets every VCF to the requested samples, and validates that the resulting sample sets are identical. Each VCF is then optionally normalized and reduced to its SNV, insertion and deletion records: symbolic, breakend, spanning-deletion (`*`) and `SVTYPE=INV` records are dropped, and any other record whose trimmed REF and ALT have the same multi-base length fails the run. Kept alleles are uppercased, since normalizing against a soft-masked reference writes lowercase bases, and records without a FILTER value, as GLnexus writes them, are set to `PASS`. The remaining records are annotated with core variant attributes and an optional source label, and length-filtered: records outside a VCF's length cutoffs are flagged, or dropped when `drop_out_of_range_lengths` is set, so that several callsets can each keep only their own length range. Per-VCF controls are required arrays: an empty array disables that control for every VCF; a non-empty array must align with `vcfs`.
 
 Inputs:
 - `Array[File] vcfs`: Cohort VCFs to preprocess and merge.
@@ -1348,6 +1349,20 @@ Inputs:
 Outputs:
 - `File preprocessed_vcf`: Preprocessed and merged cohort VCF.
 - `File preprocessed_vcf_idx`: Index for the preprocessed VCF.
+
+### [SetMissingFiltersToPass](../wdl/annotation_utils/SetMissingFiltersToPass.wdl)
+This one-off utility sets the FILTER of every record without a FILTER value to `PASS`, for callsets built before `PreprocessVcfs` did so for the GLnexus records.
+
+Inputs:
+- `File vcf`: VCF to update.
+- `File vcf_idx`: Index for `vcf`.
+- `String prefix`: Prefix for output file names.
+- `String utils_docker`: Container image.
+- `RuntimeAttr? runtime_attr_*`: Optional per-task runtime overrides.
+
+Outputs:
+- `File pass_filled_vcf`: `vcf` with every missing FILTER value set to `PASS`.
+- `File pass_filled_vcf_idx`: Index for `pass_filled_vcf`.
 
 ### [EvaluateBackbonePhasing](../wdl/annotation_utils/EvaluateBackbonePhasing.wdl)
 This utility evaluates backbone-phasing accuracy by comparing backbone-phased VCFs against base (truth) VCFs. It assigns samples to their base VCFs, compares phased genotypes per contig and aggregates the results into tables broken down by variants outside tandem repeats, TR-enveloped variants and TR variants. It outputs these summary tables plus per-VCF status tables.

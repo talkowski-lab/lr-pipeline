@@ -1770,8 +1770,12 @@ def test_preprocess_vcfs_splits_multiallelics_types_alleles_filters_by_length_an
     snv_ins_del = write_vcf(
         window_vcf, run_dir / "snv_ins_del.vcf.gz", lambda r: all(is_snv_ins_or_del(r.ref, a) for a in r.alts)
     )
+    # GLnexus writes no FILTER value
     stripped = rewrite_vcf(
-        snv_ins_del, run_dir / "input.vcf.gz", ["allele_type", "allele_length", "allele_subtype", "SOURCE"], lambda r: None
+        snv_ins_del,
+        run_dir / "input.vcf.gz",
+        ["allele_type", "allele_length", "allele_subtype", "SOURCE"],
+        lambda r: r.filter.clear(),
     )
     swaps = write_table(run_dir / "swap.tsv", [["HG00096", "SWAPPED"]])
     samples = ["SWAPPED", *SAMPLES[1:]]
@@ -1819,7 +1823,7 @@ def test_preprocess_vcfs_splits_multiallelics_types_alleles_filters_by_length_an
     for r in got:
         assert r["info"]["SOURCE"] == "HPRC"
         length = abs(r["info"]["allele_length"])
-        assert ("SMALL_HPRC" in r["filter"]) == (length < 5) and ("LARGE_HPRC" in r["filter"]) == (length > 100)
+        assert r["filter"] == (("SMALL_HPRC",) if length < 5 else ("LARGE_HPRC",) if length > 100 else ("PASS",))
 
     # Biallelic calls keep their genotypes under the swapped sample name, unless left-alignment moved the record
     by_site = {site_key(r): r for r in got}
@@ -1833,8 +1837,12 @@ def test_preprocess_vcfs_drops_out_of_range_lengths_when_asked(run_workflow, run
     snv_ins_del = write_vcf(
         window_vcf, run_dir / "snv_ins_del.vcf.gz", lambda r: all(is_snv_ins_or_del(r.ref, a) for a in r.alts)
     )
+    # GLnexus writes no FILTER value
     stripped = rewrite_vcf(
-        snv_ins_del, run_dir / "input.vcf.gz", ["allele_type", "allele_length", "allele_subtype", "SOURCE"], lambda r: None
+        snv_ins_del,
+        run_dir / "input.vcf.gz",
+        ["allele_type", "allele_length", "allele_subtype", "SOURCE"],
+        lambda r: r.filter.clear(),
     )
 
     outputs = run_workflow(
@@ -1863,7 +1871,7 @@ def test_preprocess_vcfs_drops_out_of_range_lengths_when_asked(run_workflow, run
     assert in_range and len(got) == len(in_range)
     for r in got:
         assert 5 <= abs(r["info"]["allele_length"]) <= 100
-        assert not {"SMALL_HPRC", "LARGE_HPRC"} & set(r["filter"])
+        assert r["filter"] == ("PASS",)
 
 
 def write_window_type_vcf(path, rows, sv_info=True):

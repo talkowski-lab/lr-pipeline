@@ -1,0 +1,6 @@
+{
+    "SetMissingFiltersToPass.vcf": "gs://<cohort-bucket>/cohort.vcf.gz",
+    "SetMissingFiltersToPass.vcf_idx": "gs://<cohort-bucket>/cohort.vcf.gz.tbi",
+    "SetMissingFiltersToPass.prefix": "cohort",
+    "SetMissingFiltersToPass.utils_docker": "us-central1-docker.pkg.dev/talkowski-sv-gnomad/kj-dockers/utils:latest"
+}

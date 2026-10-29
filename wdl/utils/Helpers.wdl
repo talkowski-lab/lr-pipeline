@@ -3501,7 +3501,7 @@ task SetMissingFiltersToPass {
         set -euo pipefail
 
         bcftools view ~{vcf} \
-            | awk 'BEGIN{OFS="\t"} /^#/ {print; next} $7=="." {$7="PASS"} {print}' \
+            | awk 'BEGIN{FS=OFS="\t"} /^#/ {print; next} $7=="." {$7="PASS"} {print}' \
             | bgzip -c > ~{prefix}.vcf.gz
 
         tabix -p vcf ~{prefix}.vcf.gz
