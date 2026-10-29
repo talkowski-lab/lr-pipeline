@@ -606,7 +606,6 @@ workflows:
     filters:
       branches:
         - main
-        - kj-postprocess-merge-overlaps
       tags:
         - /.*/
 
