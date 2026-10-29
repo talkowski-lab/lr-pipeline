@@ -1674,6 +1674,8 @@ Outputs:
 ### [HiFiCNV](../wdl/tools/HiFiCNV.wdl)
 This tool runs PacBio HiFiCNV (https://github.com/PacificBiosciences/HiFiCNV) on a sample's aligned HiFi BAM to call copy number variants from read depth. It outputs the CNV VCF, a copy-number bedgraph, a depth BigWig track and the tool's log.
 
+Regions are excluded in two stages, as in LongReadCNVs. `exclude_bed` is masked from calling, and when `exclude_intervals` is set, calls a single interval of it covers by at least `exclude_overlap_fraction` are then dropped from the VCF.
+
 Inputs:
 - `File bam`: Aligned reads for the sample.
 - `File bai`: Index for `bam`.
@@ -1687,12 +1689,14 @@ Inputs:
 - `File? maf`: Optional minor-allele-frequency track passed to HiFiCNV as `--maf`.
 - `String? cov_regex`: Optional regular expression passed to HiFiCNV as `--cov-regex`, selecting the contigs used to estimate expected coverage.
 - `Boolean disable_vcf_filters`: Whether to pass `--disable-vcf-filters`, emitting every call rather than only those HiFiCNV would keep. (default `false`)
+- `File? exclude_intervals`: Optional intervals whose overlapping calls are dropped after calling.
+- `Float exclude_overlap_fraction`: Share of a call a single interval of `exclude_intervals` must cover for the call to be dropped. (default `0.5`)
 - `String prefix`: Prefix for output file names.
-- `String hificnv_docker`: Container image.
-- `RuntimeAttr? runtime_attr_*`: Optional per-task runtime overrides.
+- `String hificnv_docker`, `String utils_docker`: Container images.
+- `RuntimeAttr? runtime_attr_*`: Optional per-task runtime overrides (2).
 
 Outputs:
-- `File hificnv_vcf`: CNV calls VCF.
+- `File hificnv_vcf`: CNV calls VCF, without the calls dropped by `exclude_intervals` when it is set.
 - `File hificnv_vcf_idx`: Index for the CNV calls VCF.
 - `File hificnv_bedgraph`: Per-window copy number bedgraph.
 - `File hificnv_depth_bw`: Depth BigWig track.
@@ -2182,6 +2186,8 @@ Outputs:
 ### [Sawfish](../wdl/tools/Sawfish.wdl)
 This tool calls structural variants and copy-number variants from aligned long reads with sawfish. It runs the per-sample discover step in a scatter, then joint-calls across the cohort, using per-sample sex to select the expected copy-number track.
 
+Regions are excluded in two stages, as in LongReadCNVs. `exclude_bed` is masked from calling, and when `exclude_intervals` is set, DEL and DUP records of at least `exclude_min_cnv_size` that a single interval of it covers by at least `exclude_overlap_fraction` are then dropped from the VCF. Shorter DEL and DUP records and every other SV type are kept.
+
 Inputs:
 - `Array[File] bams`: Per-sample aligned reads.
 - `Array[File] bais`: Indexes for `bams`.
@@ -2199,12 +2205,15 @@ Inputs:
 - `Boolean disable_cnv`: Skip CNV calling entirely. (default `false`)
 - `Boolean treat_single_copy_as_haploid`: Emit haploid genotypes on single-copy contigs. (default `false`)
 - `Boolean report_supporting_reads`: Also emit the reads supporting each call. (default `false`)
+- `File? exclude_intervals`: Optional intervals whose overlapping DEL and DUP records are dropped after joint calling.
+- `Float exclude_overlap_fraction`: Share of a record a single interval of `exclude_intervals` must cover for the record to be dropped. (default `0.5`)
+- `Int exclude_min_cnv_size`: Minimum length of a DEL or DUP record for `exclude_intervals` to apply. (default `4000`)
 - `String prefix`: Prefix for output file names.
-- `String sawfish_docker`: Container image.
-- `RuntimeAttr? runtime_attr_*`: Optional per-task runtime overrides (2).
+- `String sawfish_docker`, `String utils_docker`: Container images.
+- `RuntimeAttr? runtime_attr_*`: Optional per-task runtime overrides (3).
 
 Outputs:
-- `File sawfish_vcf`: Joint-called SV and CNV VCF.
+- `File sawfish_vcf`: Joint-called SV and CNV VCF, without the records dropped by `exclude_intervals` when it is set.
 - `File sawfish_vcf_idx`: Index for `sawfish_vcf`.
 - `Array[File] sawfish_bedgraphs`: Per-sample depth bedGraph files.
 - `Array[File] sawfish_depth_bws`: Per-sample depth bigWig files.
