@@ -251,10 +251,20 @@ def calc_allele_freq(record, samples, prefix=None, hemi=False, lps_dict=None):
         n_alt_count_0 = 0
         n_alt_count_1 = 0
         n_alt_count_2 = 0
-        n_gts_with_gt_0_alts = 0  # Used specifically for hemizygous sites
+        n_hemi_ref = 0
         for GT in GTs:
-            AN += len([allele for allele in GT if allele != "." and allele is not None])
-            AC += len([allele for allele in GT if allele != "." and allele != 0 and allele is not None])
+            called = [allele for allele in GT if allele != "." and allele is not None]
+            if hemi:
+                # A hemizygous call is one allele, written as ./0 or ./1 after ploidy normalization or as 0/0 or 1/1 before it
+                if called:
+                    AN += 1
+                    if any(allele != 0 for allele in called):
+                        AC += 1
+                    else:
+                        n_hemi_ref += 1
+            else:
+                AN += len(called)
+                AC += len([allele for allele in called if allele != 0])
             if GT == (0, 0):
                 n_alt_count_0 += 1
             if (
@@ -262,16 +272,8 @@ def calc_allele_freq(record, samples, prefix=None, hemi=False, lps_dict=None):
                 and len([allele for allele in GT if allele != 0 and allele != "." and allele is not None]) == 1
             ):
                 n_alt_count_1 += 1
-                n_gts_with_gt_0_alts += 1
             if len([allele for allele in GT if allele != 0 and allele != "." and allele is not None]) == 2:
                 n_alt_count_2 += 1
-                n_gts_with_gt_0_alts += 1
-
-        # Adjust hemizygous allele number and allele count, if optioned
-        if hemi:
-            AN = AN // 2
-            # For hemizygous sites, AC must be the sum of all non-reference *genotypes*, not alleles
-            AC = n_gts_with_gt_0_alts
 
         # Calculate allele frequency
         if AN > 0:
@@ -307,16 +309,14 @@ def calc_allele_freq(record, samples, prefix=None, hemi=False, lps_dict=None):
             freq_homref = 0
             freq_het = 0
             freq_homalt = 0
-        if hemi:
-            freq_hemialt = freq_het + freq_homalt
 
         # Add n_bi_genos, n_homref, nhet, nhomalt, freq_homref, freq_het, and freq_homalt to INFO field
         record.info["n_bi_genos" + ("_" + prefix if prefix else "")] = n_bi_genos
         if hemi:
-            record.info["nhemiref" + ("_" + prefix if prefix else "")] = n_alt_count_0
-            record.info["nhemialt" + ("_" + prefix if prefix else "")] = n_gts_with_gt_0_alts
-            record.info["freq_hemiref" + ("_" + prefix if prefix else "")] = freq_homref
-            record.info["freq_hemialt" + ("_" + prefix if prefix else "")] = freq_hemialt
+            record.info["nhemiref" + ("_" + prefix if prefix else "")] = n_hemi_ref
+            record.info["nhemialt" + ("_" + prefix if prefix else "")] = AC
+            record.info["freq_hemiref" + ("_" + prefix if prefix else "")] = n_hemi_ref / AN if AN else 0
+            record.info["freq_hemialt" + ("_" + prefix if prefix else "")] = AC / AN if AN else 0
         record.info["nhomref" + ("_" + prefix if prefix else "")] = n_alt_count_0
         record.info["nhet" + ("_" + prefix if prefix else "")] = n_alt_count_1
         record.info["nhomalt" + ("_" + prefix if prefix else "")] = n_alt_count_2

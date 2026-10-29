@@ -166,8 +166,9 @@ def allele_stats(genotypes, hemi=False):
     het = sum(sorted(g for g in gt if g is not None) == [0, 1] for gt in genotypes)
     homalt = sum(len([a for a in gt if a is not None and a > 0]) == 2 for gt in genotypes)
     if hemi:
-        an //= 2
-        ac = het + homalt
+        # One allele per called genotype, alternate when any called allele is
+        an = sum(bool(gt) for gt in called)
+        ac = sum(any(a > 0 for a in gt) for gt in called)
     ncr = round(1 - an / (len(genotypes) * (1 if hemi else 2)), 6) if genotypes else 1.0
     return {
         "AN": an,
@@ -273,7 +274,7 @@ def test_annotate_af_uses_hemizygous_counts_for_males_outside_par(run_workflow, 
             # Outside the PAR the total is rebuilt from the hemizygous male and diploid female counts
             assert new["info"]["AN"] == male["AN"] + female["AN"]
             assert new["info"]["AC"] == (male["AC"] + female["AC"],)
-            assert new["info"]["nhemialt_XY"] == male["nhet"] + male["nhomalt"]
+            assert new["info"]["nhemialt_XY"] == male["AC"]
             outside += 1
     assert in_par > 50 and outside > 50
 
