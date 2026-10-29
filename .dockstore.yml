@@ -566,7 +566,6 @@ workflows:
     filters:
       branches:
         - main
-        - kj-eval-dup-as-ins
       tags:
         - /.*/
 
