@@ -9,7 +9,7 @@ workflow EvaluateCallsetAccuracy {
         description: [
             "This utility benchmarks one contig of a cohort VCF against a truth set combined from an SNV & indel truth VCF and an SV truth VCF, reporting precision and recall at the site and call level. Each truth VCF is cut to the callset's samples and contig, split into biallelic records and left-aligned, and the SNV & indel truth is restricted to `truth_snv_indel_bed` when given. SV truth records identical in CHROM, POS, REF and ALT to an SNV & indel truth record are dropped before the two are combined, so each variant is counted once. The BED also restricts callset records shorter than `sv_min_length`, matching the truth records it bounds; longer callset records are kept genome-wide like the SV truth. Only records with at least one non-reference call are kept on either side.",
             "Matching reuses the first round of `AnnotateCallsetOverlap`, an exact match on CHROM, POS, REF and ALT, followed by a single Truvari pass at 0.5 sequence similarity, size similarity and overlap between the callset records left unmatched, with `abs(INFO/allele_length)` of at least `min_sv_length_truvari_vcf`, and every truth record of at least `min_sv_length_truvari_truth_vcf`. The Truvari pass keeps every pair that passes these thresholds rather than one partner per record, so a record can match several records on the other side, and each record still counts once in its own side's totals. Truvari skips records longer than 50 kb, so those count only through the exact match.",
-            "A site is one record and a call is one sample's non-reference genotype at it, with phasing and zygosity ignored. A callset site is a true positive when it matched any truth record and a callset call when that sample is also non-reference in any matched truth record; a truth site or call is recovered the same way from the other side. Precision counts callset sites and calls, stratified by `INFO/allele_type` and `abs(INFO/allele_length)`, and recall counts truth sites and calls, stratified by the type and length of the truth record - `SVTYPE` and `SVLEN` when present, otherwise REF and ALT. A matched pair can therefore fall in different strata on the two sides. Truth records that are not an SNV, insertion or deletion, such as multi-nucleotide variants and inversions, are left out of recall.",
+            "A site is one record and a call is one sample's non-reference genotype at it, with phasing and zygosity ignored. A callset site is a true positive when it matched any truth record and a callset call when that sample is also non-reference in any matched truth record; a truth site or call is recovered the same way from the other side. Precision counts callset sites and calls, stratified by `INFO/allele_type` and `abs(INFO/allele_length)`, with a duplication written as an insertion (`allele_type=dup` or `SVTYPE=DUP` and an ALT longer than its REF) counted and matched as an insertion, and recall counts truth sites and calls, stratified by the type and length of the truth record - `SVTYPE` and `SVLEN` when present, otherwise REF and ALT. A matched pair can therefore fall in different strata on the two sides. Truth records that are not an SNV, insertion or deletion, such as multi-nucleotide variants and inversions, are left out of recall.",
             "Each record is also assigned the genomic region of `AnnotateRegion` - simple repeat, segmental duplication, RepeatMasker or unique sequence - and rows are stratified into `US/RM` and `SD/SR`, by the callset record's region for precision and the truth record's for recall.",
             "Every row is reported at both matching stages, cumulatively, so the `truvari` rows give the totals. All count columns sum across contigs."
         ]
@@ -250,10 +250,17 @@ task PrepareAccuracyEvalVcf {
         tabix -p vcf short.vcf.gz
         tabix -p vcf long.vcf.gz
 
-        # Drop the cohort-wide AC/AN so --min-ac counts the genotypes themselves
+        # Drop the cohort-wide AC/AN so --min-ac counts the genotypes themselves, and benchmark a duplication written as an insertion as one
         bcftools concat -a short.vcf.gz long.vcf.gz -Ou \
             | bcftools annotate -x INFO/AC,INFO/AN,INFO/AF -Ou \
-            | bcftools view --min-ac 1 -Oz -o ~{prefix}.vcf.gz
+            | bcftools view --min-ac 1 \
+            | awk 'BEGIN{FS=OFS="\t"} !/^#/ && length($5) > length($4) {
+                $8 = ";" $8 ";"
+                gsub(/;allele_type=dup;/, ";allele_type=ins;", $8)
+                gsub(/;SVTYPE=DUP;/, ";SVTYPE=INS;", $8)
+                $8 = substr($8, 2, length($8) - 2)
+            } {print}' \
+            | bgzip -c > ~{prefix}.vcf.gz
 
         tabix -p vcf -f ~{prefix}.vcf.gz
     >>>

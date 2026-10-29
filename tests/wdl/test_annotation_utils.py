@@ -1207,7 +1207,16 @@ def trio_outcome(record, child, parents):
 def test_evaluate_callset_accuracy_counts_site_and_call_matches_against_deduplicated_combined_truth_by_region(
     run_workflow, run_dir, window_vcf, utils_docker
 ):
-    callset = write_vcf(window_vcf, run_dir / "callset.vcf.gz", lambda r: len(r.alts) == 1 and r.info["allele_type"] != "trv")
+    biallelic = write_vcf(window_vcf, run_dir / "biallelic.vcf.gz", lambda r: len(r.alts) == 1 and r.info["allele_type"] != "trv")
+
+    # Allele-type normalization writes tandem duplications in insertion form, which must still count and match as insertions
+    def type_long_insertions_as_dups(record):
+        if len(record.alts[0]) - len(record.ref) >= 50:
+            record.info["allele_type"] = "dup"
+            record.info["SVTYPE"] = "DUP"
+
+    callset = rewrite_vcf(biallelic, run_dir / "callset.vcf.gz", [], type_long_insertions_as_dups)
+    assert any(r["info"]["allele_type"] == "dup" for r in load_records(callset)[1])
     counter = itertools.count()
 
     # Every fifth truth record trades a callset carrier for a non-carrier, giving one false-positive and one missed call
@@ -1271,6 +1280,7 @@ def test_evaluate_callset_accuracy_counts_site_and_call_matches_against_deduplic
     assert expected["site"][0] > 0 and expected["call"][1] > 0
 
     rows = read_dicts(outputs["EvaluateCallsetAccuracy.accuracy_tsv"])
+    assert "dup" not in {r["allele_type"] for r in rows}
 
     def total_row(level, stage):
         (row,) = [
