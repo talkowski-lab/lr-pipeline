@@ -1600,7 +1600,6 @@ This tool runs `mop` (via FISS) to clean up unreferenced intermediate files in a
 Inputs:
 - `String workspace_namespace`: Terra workspace namespace to clean.
 - `String workspace_name`: Terra workspace name to clean.
-- `String user`: User running the cleanup.
 - `Boolean dry_run`: Whether to report rather than perform deletions.
 - `String prefix`: Prefix for output file names.
 - `String automop_docker`: Container image.

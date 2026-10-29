@@ -1,7 +1,6 @@
 {
     "Automop.workspace_namespace": "workspace_namespace",
     "Automop.workspace_name": "workspace_name",
-    "Automop.user": "user",
     "Automop.prefix": "cohort",
     "Automop.dry_run": false,
     "Automop.automop_docker": "us.gcr.io/broad-dsde-methods/automop:0.1"
