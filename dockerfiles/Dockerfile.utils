@@ -65,6 +65,7 @@ ARG PANDAS_VERSION
 ARG PYARROW_VERSION
 ARG MATPLOTLIB_VERSION
 ARG NUMPY_VERSION
+ARG BROKENAXES_VERSION
 # truvari's pyabpoa and pywfa ship only sources, which build with -march=native by default and so crash (SIGILL) on a
 # host CPU older than the build machine's; SSE4 and PYWFA_MARCH build them for any x86-64-v2 CPU instead
 RUN python3 -m pip install --no-cache-dir "pip==${SETUP_PIP_VERSION}" && \
@@ -77,7 +78,8 @@ RUN python3 -m pip install --no-cache-dir "pip==${SETUP_PIP_VERSION}" && \
         "pandas==${PANDAS_VERSION}" \
         "pyarrow==${PYARROW_VERSION}" \
         "matplotlib==${MATPLOTLIB_VERSION}" \
-        "numpy==${NUMPY_VERSION}"
+        "numpy==${NUMPY_VERSION}" \
+        "brokenaxes==${BROKENAXES_VERSION}"
 
 # Install R packages from a dated CRAN snapshot so versions are reproducible
 ARG CRAN_SNAPSHOT

@@ -6,27 +6,31 @@ import "../utils/Structs.wdl"
 workflow EvaluateNCRCutoffs {
     meta {
         description: [
-            "This utility counts the precision and recall of a callset across a sweep of `INFO/NCR` (no-call rate) cutoffs, so a cutoff can be chosen from the resulting curve. Only sites passing `args_string_vcf` are considered, and a site passes a cutoff when its `NCR` is at or below it. Both metrics are counted in non-reference calls: each site where a sample has any called non-reference allele is one call, tagged with the site's `NCR`, so phasing and zygosity are ignored. Every row is stratified by `INFO/allele_type` and by size bin of `abs(INFO/allele_length)` over `length_bins`, with sites missing either field binned as `missing`, then by the site's FILTER and by `INFO/REGION`. FILTER values are sorted, so one set of filters in any order forms one stratum, and an unset FILTER is labelled `missing`. Every dimension also has an `all` marginal, and the full cross product of the four dimensions is written. Every site must carry `INFO/REGION`; `CountTrioTransmission` fails naming the first site without it. Calls at sites without `INFO/NCR` are kept out of the sweep and reported in a separate row per stratum whose `cutoff` is `missing`. Each row also counts sites, so a cutoff's effect on the number of variants can be read alongside the call-based metrics.",
-            "Recall is the calls of every VCF sample at sites passing the cutoff over all their calls at sites with `INFO/NCR`. Precision uses only the calls of trio probands, from trios whose child and both parents are VCF samples in the PED. A proband call is inherited when a relevant parent has any called non-reference allele at the site, skipped when no relevant parent carries it but a relevant parent has a missing allele, and uninherited otherwise. Both parents are relevant everywhere except chrY, where only the father is. Only the genotypes are consulted, so haploid calls such as a father's `1` on chrX need no special handling. Precision is inherited over inherited plus uninherited proband calls."
+            "This utility counts the precision and recall of a callset across a sweep of `INFO/NCR` (no-call rate) cutoffs, plots the resulting curves and recommends a cutoff per stratum in the table `FilterNCRCutoffs` reads. Every VCF is counted, so one run over a cohort's contig VCFs evaluates the whole callset. Only sites passing `args_string_vcf` are considered, and a site passes a cutoff when its `NCR` is at or below it. Both metrics are counted in non-reference calls: each site where a sample has any called non-reference allele is one call, tagged with the site's `NCR`, so phasing and zygosity are ignored. Every row is stratified by `INFO/allele_type` and by size bin of `abs(INFO/allele_length)` over `length_bins`, with sites missing either field binned as `missing`, then by the site's FILTER and by `INFO/REGION`. FILTER values are sorted, so one set of filters in any order forms one stratum, and an unset FILTER is labelled `missing`. Every dimension also has an `all` marginal, and the full cross product of the four dimensions is written. Every site must carry `INFO/REGION`; `CountTrioTransmission` fails naming the first site without it. Calls at sites without `INFO/NCR` are kept out of the sweep and reported in a separate row per stratum whose `cutoff` is `missing`. Each row also counts sites, so a cutoff's effect on the number of variants can be read alongside the call-based metrics.",
+            "Recall is the calls of every VCF sample at sites passing the cutoff over all their calls at sites with `INFO/NCR`. Precision uses only the calls of trio probands, from trios whose child and both parents are samples of the first VCF in the PED. A proband call is inherited when a relevant parent has any called non-reference allele at the site, skipped when no relevant parent carries it but a relevant parent has a missing allele, and uninherited otherwise. Both parents are relevant everywhere except chrY, where only the father is. Only the genotypes are consulted, so haploid calls such as a father's `1` on chrX need no special handling. Precision is inherited over inherited plus uninherited proband calls.",
+            "`RecommendNCRCutoffs` plots the curves with `plot_ncr_cutoffs.py` and suggests three cutoffs per allele type, size bin and region of PASS sites: the knee of the precision-recall curve, the smallest cutoff reaching the maximum F1, and the smallest reaching the maximum Youden J. A suggestion needs 30 classified proband calls, and the knee and Youden J also need 10 uninherited ones. The `recommendation_method` suggestion is written per region for every PASS stratum with sites; a stratum too sparse for it takes the suggestion across every region, then `fallback_cutoff`, and is otherwise left out, so `FilterNCRCutoffs` leaves its sites untouched. Sites missing `INFO/allele_length` get no recommendation."
         ]
     }
 
     parameter_meta {
-        vcf: "VCF carrying `INFO/NCR`, `INFO/allele_type`, `INFO/allele_length` and `INFO/REGION` to evaluate; its FILTER column is also stratified."
-        vcf_idx: "Index for `vcf`."
-        contig: "Contig to evaluate."
+        vcfs: "VCFs carrying `INFO/NCR`, `INFO/allele_type`, `INFO/allele_length` and `INFO/REGION` to evaluate together; their FILTER column is also stratified."
+        vcf_idxs: "Indexes for `vcfs`."
         records_per_shard: "Number of variants to keep within a single shard during evaluation."
         ped: "Six-column PED used to identify trios."
-        args_string_vcf: "`bcftools view` include expression applied to the VCF before evaluation; sites failing it enter no count. An expression on FILTER, such as `FILTER='PASS'`, also removes the other FILTER strata."
+        args_string_vcf: "`bcftools view` include expression applied to the VCFs before evaluation; sites failing it enter no count. An expression on FILTER, such as `FILTER='PASS'`, also removes the other FILTER strata."
         length_bins: "Size-bin edges for stratifying sites by `abs(INFO/allele_length)`."
         cutoff_step: "Spacing of the `NCR` cutoffs evaluated from `0` to `1` inclusive."
+        recommendation_method: "Suggestion written to `recommended_ncr_cutoffs_tsv`: `knee`, `max_f1` or `youden`."
+        fallback_cutoff: "Cutoff recommended for strata too sparse for `recommendation_method` in their region and across regions; unset leaves them out."
         ncr_cutoffs_tsv: "One row per `allele_type`, `size_bin`, `filter`, `region` and `cutoff`, plus a `missing` cutoff row per stratum for sites without `INFO/NCR`, with proband call counts `prec_numerator` (inherited), `prec_denominator` (inherited and uninherited) and `prec_skipped` (skipped), all-sample call counts `rec_numerator` (calls in the row) and `rec_denominator` (calls at sites with `INFO/NCR`, or the row's own calls in the `missing` row), and site counts `sites_passing` (sites in the row) and `sites_total` (sites with `INFO/NCR`, or the row's own sites in the `missing` row)."
+        ncr_cutoff_summary_tsv: "One row per PASS allele type, size bin and region (`all`, then each region), with its input sites and calls, proband call counts, unfiltered precision and recall, and each suggestion's cutoff, precision, recall, failed sites and calls, and change in precision and recall."
+        ncr_cutoff_plots_tar: "Tarball of the plots per allele type: precision-recall, ROC and both metrics against the cutoff for PASS sites, by region and by FILTER, and NCR distributions of sites and calls; also holds `cutoffs.tsv`, the same table as `ncr_cutoff_summary_tsv`."
+        recommended_ncr_cutoffs_tsv: "Recommended cutoffs in the `ncr_cutoffs_tsv` format of `FilterNCRCutoffs`: `allele_type`, `min_length`, `max_length`, `region` and `cutoff`, plus `method` and `source`, which is `region`, `all_regions` or `fallback`."
     }
 
     input {
-        File vcf
-        File vcf_idx
-        String contig
+        Array[File] vcfs
+        Array[File] vcf_idxs
         Int? records_per_shard
         String prefix
 
@@ -34,6 +38,8 @@ workflow EvaluateNCRCutoffs {
         String? args_string_vcf
         Array[Int] length_bins = [0, 1, 50, 500]
         Float cutoff_step = 0.01
+        String recommendation_method = "knee"
+        Float? fallback_cutoff
 
         String utils_docker
 
@@ -41,43 +47,49 @@ workflow EvaluateNCRCutoffs {
         RuntimeAttr? runtime_attr_shard
         RuntimeAttr? runtime_attr_count_trio_transmission
         RuntimeAttr? runtime_attr_summarize_ncr_cutoffs
+        RuntimeAttr? runtime_attr_recommend_ncr_cutoffs
     }
 
     call Helpers.FindTrios {
         input:
-            vcf = vcf,
-            vcf_idx = vcf_idx,
+            vcf = vcfs[0],
+            vcf_idx = vcf_idxs[0],
             ped = ped,
             prefix = prefix,
             docker = utils_docker,
             runtime_attr_override = runtime_attr_find_trios
     }
 
-    if (defined(records_per_shard)) {
-        call Helpers.ShardVcfByRecords {
-            input:
-                vcf = vcf,
-                vcf_idx = vcf_idx,
-                records_per_shard = select_first([records_per_shard]),
-                prefix = "~{prefix}.~{contig}",
-                docker = utils_docker,
-                runtime_attr_override = runtime_attr_shard
+    scatter (i in range(length(vcfs))) {
+        if (defined(records_per_shard)) {
+            call Helpers.ShardVcfByRecords {
+                input:
+                    vcf = vcfs[i],
+                    vcf_idx = vcf_idxs[i],
+                    records_per_shard = select_first([records_per_shard]),
+                    prefix = "~{prefix}.~{i}",
+                    docker = utils_docker,
+                    runtime_attr_override = runtime_attr_shard
+            }
         }
+
+        Array[File] vcf_shards = select_first([ShardVcfByRecords.shards, [vcfs[i]]])
+        Array[File] vcf_shard_idxs = select_first([ShardVcfByRecords.shard_idxs, [vcf_idxs[i]]])
     }
 
-    Array[File] vcfs_to_process = select_first([ShardVcfByRecords.shards, [vcf]])
-    Array[File] vcf_idxs_to_process = select_first([ShardVcfByRecords.shard_idxs, [vcf_idx]])
+    # Count every shard in one flat scatter, since Cromwell can't read unset optional inputs inside a nested scatter
+    Array[File] vcfs_to_process = flatten(vcf_shards)
+    Array[File] vcf_idxs_to_process = flatten(vcf_shard_idxs)
 
     scatter (shard_i in range(length(vcfs_to_process))) {
         call CountTrioTransmission {
             input:
                 vcf = vcfs_to_process[shard_i],
                 vcf_idx = vcf_idxs_to_process[shard_i],
-                contig = contig,
                 trio_definitions = FindTrios.trio_definitions,
                 include_args = args_string_vcf,
                 length_bins = length_bins,
-                prefix = "~{prefix}.~{contig}.shard_~{shard_i}",
+                prefix = "~{prefix}.shard_~{shard_i}",
                 docker = utils_docker,
                 runtime_attr_override = runtime_attr_count_trio_transmission
         }
@@ -93,8 +105,21 @@ workflow EvaluateNCRCutoffs {
             runtime_attr_override = runtime_attr_summarize_ncr_cutoffs
     }
 
+    call RecommendNCRCutoffs {
+        input:
+            ncr_cutoffs_tsv = SummarizeNCRCutoffs.ncr_cutoffs_tsv,
+            recommendation_method = recommendation_method,
+            fallback_cutoff = fallback_cutoff,
+            prefix = prefix,
+            docker = utils_docker,
+            runtime_attr_override = runtime_attr_recommend_ncr_cutoffs
+    }
+
     output {
         File ncr_cutoffs_tsv = SummarizeNCRCutoffs.ncr_cutoffs_tsv
+        File ncr_cutoff_summary_tsv = RecommendNCRCutoffs.ncr_cutoff_summary_tsv
+        File ncr_cutoff_plots_tar = RecommendNCRCutoffs.ncr_cutoff_plots_tar
+        File recommended_ncr_cutoffs_tsv = RecommendNCRCutoffs.recommended_ncr_cutoffs_tsv
     }
 }
 
@@ -102,7 +127,6 @@ task CountTrioTransmission {
     input {
         File vcf
         File vcf_idx
-        String contig
         File trio_definitions
         String? include_args
         Array[Int] length_bins
@@ -124,7 +148,6 @@ task CountTrioTransmission {
         fi
 
         bcftools view \
-            -r ~{contig} \
             ~{if defined(include_args) then "-i '~{include_args}'" else ""} \
             -Ou \
             ~{vcf} \
@@ -147,8 +170,6 @@ OUTCOMES = ['inherited', 'uninherited', 'skipped']
 COUNT_COLUMNS = [f'n_{outcome}' for outcome in OUTCOMES] + ['n_calls', 'n_sites']
 # The fields before the genotypes in each query line
 SITE_FIELDS = 7
-# A Y chromosome comes from the father alone, so the mother's genotype there is never consulted
-FATHER_ONLY = re.sub(r'^chr', '', "~{contig}", flags=re.IGNORECASE).upper() == 'Y'
 
 def has_nonref(gt):
     return NONREF_ALLELE.search(gt) is not None
@@ -185,8 +206,7 @@ counts = defaultdict(lambda: [0] * len(COUNT_COLUMNS))
 with open('genotypes.tsv') as handle:
     header = next(handle).lstrip('#').rstrip('\n').split('\t')
     columns = {re.sub(r'^\s*\[\d+\]|:GT$', '', name): i for i, name in enumerate(header)}
-    trio_columns = [(columns[child], [columns[father]] if FATHER_ONLY else [columns[father], columns[mother]])
-                    for child, father, mother in trios]
+    trio_columns = [(columns[child], [columns[father], columns[mother]]) for child, father, mother in trios]
     for line in handle:
         fields = line.rstrip('\n').split('\t')
         chrom, pos, filter_value, region, ncr, allele_type, allele_length = fields[:SITE_FIELDS]
@@ -194,9 +214,11 @@ with open('genotypes.tsv') as handle:
         if region in ('.', ''):
             sys.exit(f'INFO/REGION is missing at {chrom}:{pos}')
         allele_type = allele_type.lower() if allele_type != '.' else 'missing'
+        # A Y chromosome comes from the father alone, so the mother's genotype there is never consulted
+        father_only = re.sub(r'^chr', '', chrom, flags=re.IGNORECASE).upper() == 'Y'
         row = counts[(allele_type, size_bin(allele_length), normalize_filter(filter_value), region, ncr)]
         for child_col, parent_cols in trio_columns:
-            outcome = classify(fields[child_col], [fields[col] for col in parent_cols])
+            outcome = classify(fields[child_col], [fields[col] for col in parent_cols[:1 if father_only else 2]])
             if outcome is not None:
                 row[OUTCOMES.index(outcome)] += 1
         row[-2] += sum(1 for gt in fields[SITE_FIELDS:] if has_nonref(gt))
@@ -338,6 +360,56 @@ CODE
         cpu_cores: 1,
         mem_gb: 8,
         disk_gb: ceil(size(count_tsvs, "GB")) + 10,
+        boot_disk_gb: 10,
+        preemptible_tries: 1,
+        max_retries: 0
+    }
+    RuntimeAttr runtime_attr = select_first([runtime_attr_override, default_attr])
+    runtime {
+        cpu: select_first([runtime_attr.cpu_cores, default_attr.cpu_cores])
+        memory: select_first([runtime_attr.mem_gb, default_attr.mem_gb]) + " GiB"
+        disks: "local-disk " + select_first([runtime_attr.disk_gb, default_attr.disk_gb]) + " HDD"
+        bootDiskSizeGb: select_first([runtime_attr.boot_disk_gb, default_attr.boot_disk_gb])
+        docker: docker
+        preemptible: select_first([runtime_attr.preemptible_tries, default_attr.preemptible_tries])
+        maxRetries: select_first([runtime_attr.max_retries, default_attr.max_retries])
+    }
+}
+
+task RecommendNCRCutoffs {
+    input {
+        File ncr_cutoffs_tsv
+        String recommendation_method
+        Float? fallback_cutoff
+        String prefix
+        String docker
+        RuntimeAttr? runtime_attr_override
+    }
+
+    command <<<
+        set -euo pipefail
+
+        python3 /opt/scripts/qc/plot_ncr_cutoffs.py \
+            --tsv ~{ncr_cutoffs_tsv} \
+            --output_dir ~{prefix}.ncr_cutoff_plots \
+            --recommended_tsv ~{prefix}.recommended_ncr_cutoffs.tsv \
+            --method ~{recommendation_method} \
+            ~{"--fallback_cutoff " + fallback_cutoff}
+
+        cp ~{prefix}.ncr_cutoff_plots/cutoffs.tsv ~{prefix}.ncr_cutoff_summary.tsv
+        tar -czf ~{prefix}.ncr_cutoff_plots.tar.gz ~{prefix}.ncr_cutoff_plots
+    >>>
+
+    output {
+        File ncr_cutoff_summary_tsv = "~{prefix}.ncr_cutoff_summary.tsv"
+        File ncr_cutoff_plots_tar = "~{prefix}.ncr_cutoff_plots.tar.gz"
+        File recommended_ncr_cutoffs_tsv = "~{prefix}.recommended_ncr_cutoffs.tsv"
+    }
+
+    RuntimeAttr default_attr = object {
+        cpu_cores: 1,
+        mem_gb: 8,
+        disk_gb: ceil(size(ncr_cutoffs_tsv, "GB")) + 10,
         boot_disk_gb: 10,
         preemptible_tries: 1,
         max_retries: 0

@@ -188,15 +188,18 @@ def gather_allele_freqs(record, samples, males_set, females_set, par_regions, po
     else:
         rec_in_par = False
 
+    # Outside the PAR, males carry one allele and females none on chrY, so no-call rates expect fewer alleles there
+    ploidy = sex_chrom_ploidy(record, males_set, females_set) if record.chrom in sex_chroms and not rec_in_par else None
+
     # Get allele frequencies for all populations
-    calc_allele_freq(record, samples, lps_dict=lps_dict)
+    calc_allele_freq(record, samples, lps_dict=lps_dict, ploidy=ploidy)
     if len(males_set) > 0:
         if record.chrom in sex_chroms and not rec_in_par:
-            calc_allele_freq(record, males_set, prefix="XY", hemi=True, lps_dict=lps_dict)
+            calc_allele_freq(record, males_set, prefix="XY", hemi=True, lps_dict=lps_dict, ploidy=ploidy)
         else:
             calc_allele_freq(record, males_set, prefix="XY", lps_dict=lps_dict)
     if len(females_set) > 0:
-        calc_allele_freq(record, females_set, prefix="XX", lps_dict=lps_dict)
+        calc_allele_freq(record, females_set, prefix="XX", lps_dict=lps_dict, ploidy=ploidy)
 
     # Adjust global allele frequencies on sex chromosomes, if famfile provided
     if record.chrom in sex_chroms and not rec_in_par and is_biallelic(record) and len(males_set) + len(females_set) > 0:
@@ -206,18 +209,25 @@ def gather_allele_freqs(record, samples, males_set, females_set, par_regions, po
     if len(pops) > 0:
         for pop in pops:
             pop_samps = [s for s in samples if pop_dict.get(s, None) == pop]
-            calc_allele_freq(record, pop_samps, prefix=pop, lps_dict=lps_dict)
+            calc_allele_freq(record, pop_samps, prefix=pop, lps_dict=lps_dict, ploidy=ploidy)
             if len(males_set) > 0:
                 if record.chrom in sex_chroms and not rec_in_par:
                     calc_allele_freq(
-                        record, list([s for s in pop_samps if s in males_set]), prefix=pop + "_XY", hemi=True, lps_dict=lps_dict
+                        record,
+                        list([s for s in pop_samps if s in males_set]),
+                        prefix=pop + "_XY",
+                        hemi=True,
+                        lps_dict=lps_dict,
+                        ploidy=ploidy,
                     )
                 else:
                     calc_allele_freq(
                         record, list([s for s in pop_samps if s in males_set]), prefix=pop + "_XY", lps_dict=lps_dict
                     )
             if len(females_set) > 0:
-                calc_allele_freq(record, list([s for s in pop_samps if s in females_set]), prefix=pop + "_XX", lps_dict=lps_dict)
+                calc_allele_freq(
+                    record, list([s for s in pop_samps if s in females_set]), prefix=pop + "_XX", lps_dict=lps_dict, ploidy=ploidy
+                )
 
             # Adjust per-pop allele frequencies on sex chromosomes, if famfile provided
             if record.chrom in sex_chroms and not rec_in_par and is_biallelic(record) and len(males_set) + len(females_set) > 0:
@@ -239,7 +249,33 @@ def gather_allele_freqs(record, samples, males_set, females_set, par_regions, po
     return record
 
 
-def calc_allele_freq(record, samples, prefix=None, hemi=False, lps_dict=None):
+def sex_chrom_ploidy(record, males_set, females_set):
+    """
+    Expected alleles per sample outside the PAR on chrX and chrY: one for males, and none for females on chrY.
+    """
+    ploidy = {sample: 1 for sample in males_set}
+    if record.chrom.upper().endswith("Y"):
+        ploidy.update({sample: 0 for sample in females_set})
+    return ploidy
+
+
+def no_call_rate(record, samples, ploidy=None, default_ploidy=2):
+    """
+    Proportion of the expected alleles without a call, expecting `ploidy[sample]` alleles from each sample and
+    `default_ploidy` from any sample not in `ploidy`.
+    """
+    expected = 0
+    called = 0
+    for sample in samples:
+        sample_ploidy = default_ploidy if ploidy is None else ploidy.get(sample, default_ploidy)
+        GT = record.samples[sample]["GT"] or ()
+        expected += sample_ploidy
+        # A hemizygous call written diploid before ploidy normalization, such as 1/1, still counts once
+        called += min(sample_ploidy, len([allele for allele in GT if allele is not None]))
+    return round(1 - called / expected, 6) if expected > 0 else 1.0
+
+
+def calc_allele_freq(record, samples, prefix=None, hemi=False, lps_dict=None, ploidy=None):
     """
     Computes allele frequencies for a single record based on a list of samples.
     """
@@ -288,16 +324,9 @@ def calc_allele_freq(record, samples, prefix=None, hemi=False, lps_dict=None):
         record.info[("AF" if prefix is None else "AF_" + prefix)] = (AF,)
 
         # Add NCR to INFO field
-        n_samples = len(samples)
-        if n_samples > 0:
-            if hemi:
-                ncr = 1 - (AN / n_samples)
-            else:
-                ncr = 1 - (AN / (2 * n_samples))
-            ncr = round(ncr, 6)
-        else:
-            ncr = 1.0
-        record.info[("NCR" if prefix is None else "NCR_" + prefix)] = ncr
+        record.info[("NCR" if prefix is None else "NCR_" + prefix)] = no_call_rate(
+            record, samples, ploidy, default_ploidy=1 if hemi else 2
+        )
 
         # Calculate genotype frequencies
         n_bi_genos = n_alt_count_0 + n_alt_count_1 + n_alt_count_2
@@ -346,13 +375,7 @@ def calc_allele_freq(record, samples, prefix=None, hemi=False, lps_dict=None):
         record.info[("AF" if prefix is None else "AF_" + prefix)] = tuple(af_allele[1:])
 
         # Add NCR to INFO field
-        n_samples = len(samples)
-        if n_samples > 0:
-            ncr = 1 - (AN / (2 * n_samples))
-            ncr = round(ncr, 6)
-        else:
-            ncr = 1.0
-        record.info[("NCR" if prefix is None else "NCR_" + prefix)] = ncr
+        record.info[("NCR" if prefix is None else "NCR_" + prefix)] = no_call_rate(record, samples, ploidy)
 
         if prefix is None:
             # Calculate AP_allele for each allele

@@ -275,6 +275,8 @@ Every workflow below, in dependency order. Workflows that share a step number ne
 | 24 | - | - | AnnotateSQMetrics, AnnotateGQMetrics |
 | 25 | - | - | AnnotateVcf_Quality |
 | 26 | - | - | AnnotateAF |
+| 27 | - | EvaluateNCRCutoffs | - |
+| 28 | - | - | FilterNCRCutoffs |
 
 
 ## 1. Variant Calling
@@ -410,9 +412,11 @@ Each step takes the previous step's VCF, starting from the allele-type-annotated
       - **[AnnotateSQMetrics](../wdl/annotation/AnnotateSQMetrics.wdl)** - site-level quality metrics (HWE, inbreeding coefficient, AS fields).
       - **[AnnotateGQMetrics](../wdl/annotation/AnnotateGQMetrics.wdl)** - binned genotype quality and allele balance distributions.
    2. **[AnnotateVcf](../wdl/annotation_utils/AnnotateVcf.wdl)** (`AnnotateVcf_Quality` on Terra) - write the two metric TSVs into the VCF.
-6. **[AnnotateAF](../wdl/annotation/AnnotateAF.wdl)** - annotate allele frequencies, including `INFO/NCR`, from the cohort ancestry and PED files, the PAR BED reference and the TRGT LPS TSV, overwriting the interim `AC` and `AN` from step 2. Runs after the last genotype-changing step so that the frequencies reflect the filtered genotypes.
+6. **[AnnotateAF](../wdl/annotation/AnnotateAF.wdl)** - annotate allele frequencies, including `INFO/NCR`, from the cohort ancestry and PED files, the PAR BED reference and the TRGT LPS TSV, overwriting the interim `AC` and `AN` from step 2. Runs after the last genotype-changing step so that the frequencies reflect the filtered genotypes. `NCR` counts one expected allele per male outside the PAR on chrX and chrY, and none per female on chrY.
+7. **[EvaluateNCRCutoffs](../wdl/annotation_utils/EvaluateNCRCutoffs.wdl)** - count trio-based precision and all-sample recall across a sweep of `INFO/NCR` cutoffs over every contig's VCF at once, plot the curves, and recommend a cutoff per allele type, size bin and `REGION` of PASS sites. On Terra this runs on a contig set holding every contig row, and writes the recommended table to the workspace attribute `recommended_ncr_cutoffs_tsv`. Set `args_string_vcf` to `INFO/allele_type!="trv" && GT~"[1-9]"`, which keeps the half-called male `./1` genotypes that `INFO/AC>0` and `GT="alt"` would miss, and leave FILTER unrestricted so the plots compare FILTER sets. A stratum with too few trio calls for its own suggestion takes the suggestion across every region, then `fallback_cutoff`.
+8. **[FilterNCRCutoffs](../wdl/annotation_utils/FilterNCRCutoffs.wdl)** - remove sites without an alternate allele call and flag PASS sites whose `NCR` is above their stratum's recommended cutoff as `HIGH_NCR`, with `remove_no_calls` and `ncr_filter_pass_only` set and `ncr_cutoffs_tsv` read from the workspace attribute.
 
-Step 3 ends with the annotated, filtered, allele-frequency-annotated VCF for each contig, with normalized allele types, for release. [Annotations](annotations.md) defines every FILTER value and INFO and FORMAT field it carries.
+Step 3 ends with the annotated, filtered, allele-frequency-annotated and no-call-rate-filtered VCF for each contig, with normalized allele types, for release. [Annotations](annotations.md) defines every FILTER value and INFO and FORMAT field it carries.
 
 
 ## Optional Analyses
@@ -422,7 +426,7 @@ These workflows are not needed to produce the release VCF. They run on it, or on
   - **[AnnotateTruvariRemap](../wdl/annotation/AnnotateTruvariRemap.wdl)** - flag insertions whose inserted sequence aligns elsewhere in the reference.
 - Callset summaries: [SummarizeAnnotations](../wdl/annotation_utils/SummarizeAnnotations.wdl), which also draws the summary plots when `create_plotting = true`, [SummarizeAnnotationsGATKSV](../wdl/annotation_utils/SummarizeAnnotationsGATKSV.wdl) for the GATK-SV VCF QC plots, [SummarizeSingletonCalls](../wdl/annotation_utils/SummarizeSingletonCalls.wdl), [SummarizeVariantBases](../wdl/annotation_utils/SummarizeVariantBases.wdl) with [MergeVariantBaseTables](../wdl/annotation_utils/MergeVariantBaseTables.wdl), and [SummarizeTRVAllelesPerGenome](../wdl/annotation_utils/SummarizeTRVAllelesPerGenome.wdl).
 - Tandem repeat analysis: [ExtractTRVLengthDeltas](../wdl/annotation_utils/ExtractTRVLengthDeltas.wdl) with [MergeTRVLengthDeltas](../wdl/annotation_utils/MergeTRVLengthDeltas.wdl), [EvaluateOverlappingTRLoci](../wdl/annotation_utils/EvaluateOverlappingTRLoci.wdl) and [ExtractDisparateTRLoci](../wdl/annotation_utils/ExtractDisparateTRLoci.wdl).
-- Release variants: [StripGenotypes](../wdl/annotation_utils/StripGenotypes.wdl), for a sites-only VCF where only site-level data may be released, and [EvaluateNCRCutoffs](../wdl/annotation_utils/EvaluateNCRCutoffs.wdl) with [FilterNCRCutoffs](../wdl/annotation_utils/FilterNCRCutoffs.wdl), to choose and apply no-call rate cutoffs that flag sites as `HIGH_NCR`.
+- Release variants: [StripGenotypes](../wdl/annotation_utils/StripGenotypes.wdl), for a sites-only VCF where only site-level data may be released.
 - Callset comparison and export: [MergeVcfs](../wdl/annotation_utils/MergeVcfs.wdl), [ExtractRandomCalls](../wdl/annotation_utils/ExtractRandomCalls.wdl) and [ConvertVcfToBed](../wdl/annotation_utils/ConvertVcfToBed.wdl).
 - Alternative callers, for benchmarking: [HiFiCNV](../wdl/tools/HiFiCNV.wdl), [Sawfish](../wdl/tools/Sawfish.wdl) and [Vamos](../wdl/tools/Vamos.wdl).
 - Terra workspace cleanup: [Automop](../wdl/tools/Automop.wdl) deletes intermediate files no data table references.

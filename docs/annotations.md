@@ -43,7 +43,7 @@ Some names below depend on the inputs of the released callsets rather than being
   - `LPS_allele`: Longest polymer sequence per-allele, from the TRGT LPS table, at single-motif TR sites; missing for alleles no carrier resolves (multiallelic sites only).
   - `MC_allele`: Motif count per-allele (multiallelic sites only).
   - `n_bi_genos`: Total number of samples with complete genotypes (biallelic sites only).
-  - `NCR`: Proportion of alleles that don't have a genotype call.
+  - `NCR`: Proportion of expected alleles that don't have a genotype call. Outside the PAR, each male is expected to carry one allele on chrX and chrY and each female none on chrY.
   - `nhet`: Number of samples with heterozygous genotypes (biallelic sites only).
   - `nhomalt`: Number of samples with homozygous alternate genotypes (biallelic sites only).
   - `nhomref`: Number of samples with homozygous reference genotypes (biallelic sites only).

@@ -1317,7 +1317,15 @@ def test_evaluate_ncr_cutoffs_tabulates_trio_transmission_cumulatively_by_ncr_cu
 
     outputs = run_workflow(
         f"{UTILS}/EvaluateNCRCutoffs.wdl",
-        {**vcf_inputs, "contig": CONTIG, "prefix": "ncr", "ped": str(ped), "records_per_shard": 150},
+        {
+            "vcfs": [vcf_inputs["vcf"]],
+            "vcf_idxs": [vcf_inputs["vcf_idx"]],
+            "utils_docker": vcf_inputs["utils_docker"],
+            "prefix": "ncr",
+            "ped": str(ped),
+            "records_per_shard": 150,
+            "fallback_cutoff": 0.5,
+        },
     )
 
     cutoffs = [round(i * 0.01, 10) for i in range(101)]
@@ -1367,6 +1375,34 @@ def test_evaluate_ncr_cutoffs_tabulates_trio_transmission_cumulatively_by_ncr_cu
         assert by_stratum[stratum] == expected, stratum
     assert any(int(row[1]) > 0 for row in by_stratum[("all", "all", "all", "all")])
     assert any(int(row[3]) > 0 for row in by_stratum[("all", "all", "all", "all")])
+
+    # Every PASS stratum with sites gets one cutoff per region, from the region, every region or the fallback
+    recommended = read_table(outputs["EvaluateNCRCutoffs.recommended_ncr_cutoffs_tsv"])
+    assert recommended[0] == ["allele_type", "min_length", "max_length", "region", "cutoff", "method", "source"]
+    expected_keys = {
+        (allele_type, size_bin, region)
+        for allele_type, size_bin, filter_value, region in by_stratum
+        if "all" not in (allele_type, size_bin, region)
+        and size_bin != "missing"
+        and filter_value == "PASS"
+        and int(by_stratum[(allele_type, size_bin, filter_value, region)][-1][-1]) > 0
+    }
+    keys = set()
+    for allele_type, min_length, max_length, region, cutoff, method, source in recommended[1:]:
+        size_bin = f"{min_length}-{max_length}" if int(max_length) < 1000000000 else f"{min_length}+"
+        keys.add((allele_type, size_bin, region))
+        assert method == "knee" and source in ("region", "all_regions", "fallback")
+        assert 0 <= float(cutoff) <= 1 and (source != "fallback" or float(cutoff) == 0.5)
+    assert keys == expected_keys
+    with tarfile.open(outputs["EvaluateNCRCutoffs.ncr_cutoff_plots_tar"]) as tar:
+        names = tar.getnames()
+    assert "ncr.ncr_cutoff_plots/SNV.combined.png" in names and "ncr.ncr_cutoff_plots/cutoffs.tsv" in names
+    assert read_table(outputs["EvaluateNCRCutoffs.ncr_cutoff_summary_tsv"])[0][:4] == [
+        "allele_type",
+        "size_bin",
+        "region",
+        "input_pass_sites",
+    ]
 
 
 @pytest.mark.parametrize("pass_only", [False, True])

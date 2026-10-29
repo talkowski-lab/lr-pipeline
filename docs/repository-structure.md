@@ -88,6 +88,7 @@ Scripts reach a running task baked into an image, never fetched by URL. The `uti
 | `mei/PALMER_to_vcf.py` | Helpers.wdl | Convert raw PALMER mobile-element calls into a VCF. |
 | `mei/PALMER_transfer_annotations.py` | AnnotatePALMER | Transfer PALMER annotations onto matching callset records, using edit distance to resolve near-matches. |
 | `qc/plot_annotation_summaries.py` | CreateAnnotationPlots | Plot site, per-genome, inheritance and variant-list summaries from the SummarizeAnnotations parquet tables, one plot group per task. |
+| `qc/plot_ncr_cutoffs.py` | EvaluateNCRCutoffs | Plot precision and recall across NCR cutoffs per allele type, size bin, region and FILTER, suggest a cutoff per stratum, and write the recommended cutoffs `FilterNCRCutoffs` reads. |
 | `qc/vcf_qc/collectQC.vcf_wide.sh` | SummarizeAnnotationsGATKSV | Collect per-site genotype counts and frequencies from a symbolic-allele VCF shard into the site statistics BED, via `vcf2bed.py` and `clean_vcf2bed_output.R`. |
 | `qc/vcf_qc/vcf2bed.py` | SummarizeAnnotationsGATKSV, ConvertVcfToBed, AnnotateCallsetOverlap | Convert a VCF to a BED with its called samples and chosen INFO fields; a pysam-only port of `svtk vcf2bed`. |
 | `qc/vcf_qc/clean_vcf2bed_output.R` | SummarizeAnnotationsGATKSV | Join the BED and genotype counts into the site statistics table. |

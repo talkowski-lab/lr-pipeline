@@ -71,3 +71,35 @@ def test_males_count_one_allele_outside_par_in_either_genotype_form(tmp_path):
     assert (second.info["AN_XY"], second.info["AC_XY"], second.info["nhemiref_XY"]) == (3, (2,), 1)
     assert (second.info["AN"], second.info["AC"]) == (5, (4,))
     assert second.info["NCR_XY"] == pytest.approx(0.25)
+
+
+def test_no_call_rate_expects_one_allele_per_male_outside_par(tmp_path):
+    # Fully called males and a cleared female carry no missing alleles on chrY; one missing male allele is one of two
+    vcf_path = tmp_path / "in.vcf"
+    vcf_path.write_text(
+        "##fileformat=VCFv4.2\n"
+        "##contig=<ID=chrX,length=156040895>\n"
+        "##contig=<ID=chrY,length=57227415>\n"
+        '##FORMAT=<ID=GT,Number=1,Type=String,Description="Genotype">\n'
+        "#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT\tM1\tM2\tF1\n"
+        "chrY\t5000000\tv1\tA\tG\t.\t.\t.\tGT\t./1\t1/1\t./.\n"
+        "chrY\t5000100\tv2\tA\tG\t.\t.\t.\tGT\t./1\t./.\t./.\n"
+        "chrX\t5000000\tv3\tA\tG\t.\t.\t.\tGT\t./0\t./1\t0/.\n"
+        "chrX\t1000000\tv4\tA\tG\t.\t.\t.\tGT\t0/0\t0/1\t./.\n"
+    )
+    ped_path = tmp_path / "samples.ped"
+    ped_path.write_text("".join(f"fam\t{s}\t0\t0\t{sex}\t0\n" for s, sex in [("M1", 1), ("M2", 1), ("F1", 2)]))
+    par_path = tmp_path / "par.bed"
+    par_path.write_text("chrX\t10000\t2781479\n")
+    out_path = tmp_path / "out.vcf"
+    subprocess.run(
+        [sys.executable, str(REPO_ROOT / SCRIPT), str(vcf_path), str(out_path), "-f", str(ped_path), "--par", str(par_path)],
+        check=True,
+    )
+
+    y_called, y_missing, x_nonpar, x_par = pysam.VariantFile(str(out_path))
+    assert (y_called.info["NCR"], y_called.info["NCR_XY"]) == (0, 0)
+    assert y_missing.info["NCR"] == pytest.approx(0.5)
+    assert x_nonpar.info["NCR"] == pytest.approx(0.25)
+    # Inside the PAR every sample is diploid
+    assert x_par.info["NCR"] == pytest.approx(2 / 6, abs=1e-6)
