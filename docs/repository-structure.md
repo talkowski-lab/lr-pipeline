@@ -22,7 +22,7 @@ tests/
   wdl/               # miniwdl smoke tests of utils-image workflows
   data/              # Small open-access test inputs, e.g. an HPRC/HGSVC V10 chr22 VCF subset
 data/                # Local-only analysis inputs, outputs and scratch work; gitignored, so not in the repository, and never referenced by WDL
-docs/                # Extended documentation (this file included), plus method_configs.json, the template workspace's method configs that the Run Order graph in pipeline.md is generated from
+docs/                # Extended documentation (this file included), plus method_configs.json, the template workspace's method configs, whose numbered ones the Run Order graph in pipeline.md is generated from
 .github/
   workflows/         # Active GitHub Actions CI
   CODEOWNERS         # Default reviewers requested on every pull request

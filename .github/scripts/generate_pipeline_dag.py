@@ -74,6 +74,11 @@ def resolve(expression, root):
     return table, parts[-1]
 
 
+def run_order_configs():
+    """Numbered configs of the snapshot; the unnumbered ones run optional analyses outside the Run Order."""
+    return [c for c in json.loads(SNAPSHOT.read_text()) if STEP_RE.match(c["name"])]
+
+
 def step(name):
     return int(STEP_RE.match(name).group(1))
 
@@ -174,7 +179,7 @@ def main():
 
     markdown = PIPELINE_MD.read_text()
     try:
-        expected = render(markdown, json.loads(SNAPSHOT.read_text()))
+        expected = render(markdown, run_order_configs())
     except ValueError as error:
         print(error)
         return 1

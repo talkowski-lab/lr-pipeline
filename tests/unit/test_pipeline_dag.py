@@ -1,5 +1,3 @@
-import json
-
 from conftest import load_script
 
 dag = load_script(".github/scripts/generate_pipeline_dag.py")
@@ -21,9 +19,7 @@ def wiring():
 
 def test_committed_graph_matches_generator():
     markdown = dag.PIPELINE_MD.read_text()
-    assert dag.render(markdown, json.loads(dag.SNAPSHOT.read_text())) == markdown, (
-        "run python .github/scripts/generate_pipeline_dag.py"
-    )
+    assert dag.render(markdown, dag.run_order_configs()) == markdown, "run python .github/scripts/generate_pipeline_dag.py"
 
 
 def test_resolve_follows_entity_hops():

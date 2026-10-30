@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
-"""Export the template Terra workspace's numbered method configs into docs/method_configs.json.
+"""Export the template Terra workspace's method configs into docs/method_configs.json.
 
-Keeps each config's name, workflow, root entity type, inputs and outputs - the wiring that
+Keeps each config's name, workflow, root entity type (null for a config run without one), inputs and outputs - the wiring that
 generate_pipeline_dag.py turns into the Run Order graph in docs/pipeline.md. Method versions are left out,
-so repointing a config between a branch and `main` never changes the snapshot. Step 00 is a template-only
-downsampling step and is left out too. Needs `gcloud` authenticated with read access to the workspace.
+so repointing a config between a branch and `main` never changes the snapshot. The unnumbered configs, for the
+optional analyses, are kept so a clone can be rebuilt from the snapshot; step 00 is a template-only downsampling step
+and is left out. Needs `gcloud` authenticated with read access to the workspace.
 """
 
 import argparse
@@ -19,7 +20,7 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SNAPSHOT = REPO_ROOT / "docs" / "method_configs.json"
 RAWLS = "https://api.firecloud.org/api/workspaces"
-STEP_CONFIG_RE = re.compile(r"^(0[1-9]|[1-9]\d)-")
+TEMPLATE_ONLY_RE = re.compile(r"^00-")
 
 
 def get(url, token):
@@ -33,7 +34,7 @@ def export(namespace, name):
     base = f"{RAWLS}/{urllib.parse.quote(namespace)}/{urllib.parse.quote(name)}"
     configs = []
     for listed in get(f"{base}/methodconfigs?allRepos=true", token):
-        if not STEP_CONFIG_RE.match(listed["name"]):
+        if TEMPLATE_ONLY_RE.match(listed["name"]):
             continue
         config = get(
             f"{base}/method_configs/{urllib.parse.quote(listed['namespace'])}/{urllib.parse.quote(listed['name'])}", token
@@ -42,7 +43,7 @@ def export(namespace, name):
             {
                 "name": config["name"],
                 "workflow": config["methodRepoMethod"]["methodPath"].rsplit("/", 1)[-1],
-                "root_entity_type": config["rootEntityType"],
+                "root_entity_type": config.get("rootEntityType"),
                 "inputs": dict(sorted(config["inputs"].items())),
                 "outputs": dict(sorted(config["outputs"].items())),
             }

@@ -80,7 +80,7 @@ Every Dockerfile in `dockerfiles/` maps to exactly one argument above; retired o
 
 
 ## Collaborators
-Built and maintained outside this repository. The Digest column records the manifest digest of every image that is untagged or whose tag is moved, so the exact image behind a callset can be recovered; workspace data should pin such images by digest (`<image>@sha256:...`) rather than by tag. Digests were read from the registries on 2026-10-23.
+Built and maintained outside this repository. The Digest column records the manifest digest of every image that is untagged or whose tag is moved, so the exact image behind a callset can be recovered; a production or publication run can pin them by digest (`<image>@sha256:...`) in the workspace data, while development workspaces such as the template refer to them by tag. Digests were read from the registries on 2026-10-23.
 
 | Argument Name | Image | Source | Digest |
 |---|---|---|---|

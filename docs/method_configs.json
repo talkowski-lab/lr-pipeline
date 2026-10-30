@@ -1375,5 +1375,140 @@
             "FilterNCRCutoffs.filtered_vcf": "this.ncr_filtered_vcf",
             "FilterNCRCutoffs.filtered_vcf_idx": "this.ncr_filtered_vcf_idx"
         }
+    },
+    {
+        "name": "Automop",
+        "workflow": "Automop",
+        "root_entity_type": null,
+        "inputs": {
+            "Automop.automop_docker": "workspace.automop_docker",
+            "Automop.dry_run": "true",
+            "Automop.prefix": "\"cohort\"",
+            "Automop.workspace_name": "\"LR_GNOMAD-AoU_TALK_Pipeline-Template\"",
+            "Automop.workspace_namespace": "\"LR_GNOMAD_1_CO-AoU_TALK\""
+        },
+        "outputs": {}
+    },
+    {
+        "name": "CreateCNVDepthPlots",
+        "workflow": "CreateCNVDepthPlots",
+        "root_entity_type": "sample_set",
+        "inputs": {
+            "CreateCNVDepthPlots.genotyped_depth_vcf": "this.genotyped_depth_vcf",
+            "CreateCNVDepthPlots.genotyped_depth_vcf_idx": "this.genotyped_depth_vcf_idx",
+            "CreateCNVDepthPlots.median_coverage": "this.median_coverage",
+            "CreateCNVDepthPlots.merged_bincov": "this.binned_coverage",
+            "CreateCNVDepthPlots.merged_bincov_idx": "this.binned_coverage_idx",
+            "CreateCNVDepthPlots.prefix": "this.sample_set_id",
+            "CreateCNVDepthPlots.records_per_shard": "100",
+            "CreateCNVDepthPlots.regions_bed": "this.cnv_plot_regions_bed",
+            "CreateCNVDepthPlots.repeat_masked_bed": "workspace.repeat_masked_bed",
+            "CreateCNVDepthPlots.seg_dup_bed": "workspace.seg_dup_bed",
+            "CreateCNVDepthPlots.simple_repeats_bed": "workspace.simple_repeats_bed",
+            "CreateCNVDepthPlots.utils_docker": "workspace.utils_docker"
+        },
+        "outputs": {
+            "CreateCNVDepthPlots.cnv_depth_plots_tar": "this.cnv_depth_plots_tar",
+            "CreateCNVDepthPlots.cnv_variants_tsv": "this.cnv_variants_tsv"
+        }
+    },
+    {
+        "name": "CreateCohortDepthFiles",
+        "workflow": "CreateCohortDepthFiles",
+        "root_entity_type": "sample_set",
+        "inputs": {
+            "CreateCohortDepthFiles.mosdepth_bed_files": "this.samples.mosdepth_per_base_combined",
+            "CreateCohortDepthFiles.prefix": "this.sample_set_id",
+            "CreateCohortDepthFiles.sample_ids": "this.samples.sample_id",
+            "CreateCohortDepthFiles.utils_docker": "workspace.utils_docker"
+        },
+        "outputs": {
+            "CreateCohortDepthFiles.binned_coverage": "this.binned_coverage",
+            "CreateCohortDepthFiles.binned_coverage_idx": "this.binned_coverage_idx",
+            "CreateCohortDepthFiles.binned_estimated_ecn": "this.binned_estimated_ecn",
+            "CreateCohortDepthFiles.estimated_cn": "this.estimated_cn",
+            "CreateCohortDepthFiles.median_coverage": "this.median_coverage",
+            "CreateCohortDepthFiles.ploidy_plots": "this.ploidy_plots"
+        }
+    },
+    {
+        "name": "CreateIGVPlots",
+        "workflow": "CreateIGVPlots",
+        "root_entity_type": "sample_set",
+        "inputs": {
+            "CreateIGVPlots.annotation_beds": "[workspace.seg_dup_bed, workspace.simple_repeats_bed]",
+            "CreateIGVPlots.annotation_names": "[\"SegDup\", \"SimpleRepeats\"]",
+            "CreateIGVPlots.bais": "this.samples.aligned_bai",
+            "CreateIGVPlots.bams": "this.samples.aligned_bam",
+            "CreateIGVPlots.igv_docker": "workspace.igv_docker",
+            "CreateIGVPlots.ped": "workspace.ped",
+            "CreateIGVPlots.prefix": "this.sample_set_id",
+            "CreateIGVPlots.sample_ids": "this.samples.sample_id",
+            "CreateIGVPlots.utils_docker": "workspace.utils_docker",
+            "CreateIGVPlots.variant_list": "this.igv_variant_list"
+        },
+        "outputs": {
+            "CreateIGVPlots.igv_plots_tar": "this.igv_plots_tar"
+        }
+    },
+    {
+        "name": "SummarizeAnnotations",
+        "workflow": "SummarizeAnnotations",
+        "root_entity_type": "contig_set",
+        "inputs": {
+            "SummarizeAnnotations.create_functional": "true",
+            "SummarizeAnnotations.create_per_allele": "true",
+            "SummarizeAnnotations.create_per_sample": "true",
+            "SummarizeAnnotations.create_plotting": "true",
+            "SummarizeAnnotations.ped": "workspace.ped",
+            "SummarizeAnnotations.prefix": "\"cohort\"",
+            "SummarizeAnnotations.records_per_shard": "50000",
+            "SummarizeAnnotations.split_by_region": "true",
+            "SummarizeAnnotations.subset_vcf_string": "\"-i 'FILTER=\\\"PASS\\\" & GT~\\\"[1-9]\\\"'\"",
+            "SummarizeAnnotations.utils_docker": "workspace.utils_docker",
+            "SummarizeAnnotations.vcf_idxs": "this.contigs.ncr_filtered_vcf_idx",
+            "SummarizeAnnotations.vcfs": "this.contigs.ncr_filtered_vcf"
+        },
+        "outputs": {
+            "SummarizeAnnotations.plots_tarball": "this.plots_tarball",
+            "SummarizeAnnotations.plotting_alleles_parquet": "this.plotting_alleles_parquet",
+            "SummarizeAnnotations.plotting_denovo_parquet": "this.plotting_denovo_parquet",
+            "SummarizeAnnotations.plotting_samples_parquet": "this.plotting_samples_parquet",
+            "SummarizeAnnotations.plotting_sites_parquet": "this.plotting_sites_parquet",
+            "SummarizeAnnotations.plotting_variant_list_parquet": "this.plotting_variant_list_parquet",
+            "SummarizeAnnotations.summary_alleles_tsv": "this.summary_alleles_tsv",
+            "SummarizeAnnotations.summary_functional_alleles_tsv": "this.summary_functional_alleles_tsv",
+            "SummarizeAnnotations.summary_functional_samples_tsv": "this.summary_functional_samples_tsv",
+            "SummarizeAnnotations.summary_functional_tsv": "this.summary_functional_tsv",
+            "SummarizeAnnotations.summary_list_tsv": "this.summary_list_tsv",
+            "SummarizeAnnotations.summary_samples_tsv": "this.summary_samples_tsv",
+            "SummarizeAnnotations.summary_sites_tsv": "this.summary_sites_tsv"
+        }
+    },
+    {
+        "name": "SummarizeAnnotationsGATKSV",
+        "workflow": "SummarizeAnnotationsGATKSV",
+        "root_entity_type": "contig_set",
+        "inputs": {
+            "SummarizeAnnotationsGATKSV.ped": "workspace.ped",
+            "SummarizeAnnotationsGATKSV.prefix": "\"cohort\"",
+            "SummarizeAnnotationsGATKSV.records_per_shard": "50000",
+            "SummarizeAnnotationsGATKSV.ref_fa": "workspace.ref_fa",
+            "SummarizeAnnotationsGATKSV.ref_fai": "workspace.ref_fai",
+            "SummarizeAnnotationsGATKSV.run_per_sample": "true",
+            "SummarizeAnnotationsGATKSV.runtime_attr_merge_vcf2bed": "{\"mem_gb\": 16, \"disk_gb\": 300}",
+            "SummarizeAnnotationsGATKSV.runtime_attr_plot_per_family": "{\"mem_gb\": 32}",
+            "SummarizeAnnotationsGATKSV.runtime_attr_plot_per_sample": "{\"mem_gb\": 32}",
+            "SummarizeAnnotationsGATKSV.runtime_attr_plot_vcf_wide": "{\"mem_gb\": 64}",
+            "SummarizeAnnotationsGATKSV.samples_per_shard": "100",
+            "SummarizeAnnotationsGATKSV.subset_vcf_string": "\"-i 'FILTER=\\\"PASS\\\" & GT~\\\"[1-9]\\\"'\"",
+            "SummarizeAnnotationsGATKSV.utils_docker": "workspace.utils_docker",
+            "SummarizeAnnotationsGATKSV.vcf_idxs": "this.contigs.ncr_filtered_vcf_idx",
+            "SummarizeAnnotationsGATKSV.vcfs": "this.contigs.ncr_filtered_vcf"
+        },
+        "outputs": {
+            "SummarizeAnnotationsGATKSV.vcf2bed_bed": "this.vcf2bed_bed",
+            "SummarizeAnnotationsGATKSV.vcf_qc_tarball": "this.vcf_qc_tarball"
+        }
     }
 ]
