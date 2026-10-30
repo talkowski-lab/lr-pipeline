@@ -1,0 +1,19 @@
+{
+    "CreateIGVPlots.variant_list": "gs://<cohort-bucket>/variant_list",
+    "CreateIGVPlots.ped": "gs://<cohort-bucket>/cohort.ped",
+    "CreateIGVPlots.sample_ids": [
+        "sample1",
+        "sample2"
+    ],
+    "CreateIGVPlots.bams": [
+        "gs://<cohort-bucket>/sample_1.bam",
+        "gs://<cohort-bucket>/sample_2.bam"
+    ],
+    "CreateIGVPlots.bais": [
+        "gs://<cohort-bucket>/sample_1.bam.bai",
+        "gs://<cohort-bucket>/sample_2.bam.bai"
+    ],
+    "CreateIGVPlots.prefix": "cohort",
+    "CreateIGVPlots.utils_docker": "us-central1-docker.pkg.dev/talkowski-sv-gnomad/kj-dockers/utils:latest",
+    "CreateIGVPlots.igv_docker": "us-central1-docker.pkg.dev/talkowski-sv-gnomad/kj-dockers/igv:latest"
+}

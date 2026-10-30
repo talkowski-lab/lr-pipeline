@@ -18,6 +18,7 @@ EXEMPT = {
     "AnnotateVRS": "needs the VRS image and a SeqRepo database",
     "AnnotatePALMER": "needs PALMER output VCFs from the palmer image",
     "CreateCohortDepthFiles": "needs mosdepth-sized inputs for all 24 contigs",
+    "CreateIGVPlots": "needs IGV image, aligned BAMs and an IGV-hosted genome",
     "CreateCNVDepthPlots": "needs depth matrices for all 24 contigs and the plotting image",
     "CreateTRGTHistograms": "needs the stranalysis image",
     "Automop": "cleans up a Terra workspace through FISS (automop image)",

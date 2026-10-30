@@ -45,6 +45,7 @@ This file is generated from the `meta` and `parameter_meta` blocks of each workf
   - [CreateDepthIntervals](#createdepthintervals)
   - [CreateCohortDepthFiles](#createcohortdepthfiles)
   - [CreateCNVDepthPlots](#createcnvdepthplots)
+  - [CreateIGVPlots](#createigvplots)
   - [CreateCohortMetadata](#createcohortmetadata)
   - [CreateSampleReadCounts](#createsamplereadcounts)
   - [SummarizeSingletonCalls](#summarizesingletoncalls)
@@ -1013,6 +1014,34 @@ Inputs:
 Outputs:
 - `File cnv_variants_tsv`: One row per selected CNV, with its `variant_id`, `contig`, `pos`, `end`, `svtype`, `svlen`, genomic `context` (US, RM, SD or SR), plot window `window_start` and `window_end`, `n_carriers` non-reference samples, `plotted` (1, or 0 when skipped by `max_carriers_per_variant`) and `carriers` as comma-separated `sample:RD_CN:ECN`.
 - `File cnv_depth_plots_tar`: Tarball of `cnv_depth_plots/<variant_id>/<sample>.<context>.png`, one plot per non-reference sample of each plotted CNV.
+
+### [CreateIGVPlots](../wdl/annotation_utils/CreateIGVPlots.wdl)
+This utility takes IGV snapshots of the long reads at a curated list of variants, so calls can be reviewed by eye, and packs them into one tarball with one PNG per variant per family.
+
+A family is plotted when any of its members carries at least one listed variant, and each of its plots shows every family member's reads, labelled and ordered by carrier and affected status from `ped`. Only the reads around the listed variants are streamed from each BAM. A variant whose window, its length plus 1.5 times its length, is shorter than `igv_max_window` gets one snapshot spanning it; a longer one gets a snapshot of each breakpoint, placed side by side. A DEL or DUP also gets a read-depth track below the snapshot, each family member's mosdepth depth normalized to its median over the flanks, with carriers in red. A header on each plot gives the variant ID, length, type and location.
+
+This is a port of the long-read visualization workflow of variant-interpretation (https://github.com/yuliamostovoy/variant-interpretation), by Yulia Mostovoy and the Talkowski lab.
+
+Inputs:
+- `File variant_list`: Tab-separated list of variants to plot, with columns `chrom`, 0-based `start`, `end`, `ID`, `svtype` and comma-separated carrier `samples`; a header line is optional. Generate it with `bcftools query -f '%CHROM\t%POS0\t%END\t%ID\t%INFO/SVTYPE\t[%SAMPLE,]\n'` over the carriers' records.
+- `File ped`: Pedigree file for the cohort, without a header; families and carrier labels come from it.
+- `Array[String] sample_ids`: Sample IDs, matching `ped` and the `samples` column of `variant_list`.
+- `Array[File] bams`: Aligned BAMs, in `sample_ids` order; only the plotted regions are streamed.
+- `Array[File] bais`: Indexes for `bams`.
+- `String igv_genome`: IGV-hosted genome ID that IGV loads for its reference sequence and gene track. (default `hg38`)
+- `Int igv_max_window`: Longest window, in bp, shown in a single snapshot; longer variants get one snapshot per breakpoint. (default `150000`)
+- `Int breakpoint_window`: Span, in bp, shown on each side of a breakpoint in a breakpoint snapshot. (default `500`)
+- `Int depth_flank`: Minimum flank, in bp, shown on each side of a DEL or DUP in its depth track. (default `5000`)
+- `Float depth_flank_fraction`: Flank shown on each side of a DEL or DUP in its depth track, as a share of its length, when above `depth_flank`. (default `0.1`)
+- `Int depth_window`: Window size, in bp, of the depth track. (default `250`)
+- `Array[File] annotation_beds`: BED files drawn as feature tracks under the reads and shaded on the depth tracks, such as segmental duplications. (default `[]`)
+- `Array[String] annotation_names`: Track names for `annotation_beds`, in the same order. (default `[]`)
+- `String prefix`: Prefix for output file names.
+- `String utils_docker`, `String igv_docker`: Container images.
+- `RuntimeAttr? runtime_attr_*`: Optional per-task runtime overrides (3).
+
+Outputs:
+- `File igv_plots_tar`: Tarball of `igv_plots/<family>/<variant_id>_<family>.png`, one plot per family per variant it carries.
 
 ### [CreateCohortMetadata](../wdl/annotation_utils/CreateCohortMetadata.wdl)
 This utility builds a cohort metadata file by combining a pedigree file with an ancestry-assignment file. It outputs the merged metadata file.

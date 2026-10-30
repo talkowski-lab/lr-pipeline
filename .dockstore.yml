@@ -388,6 +388,15 @@ workflows:
         - /.*/
 
   - subclass: WDL
+    name: CreateIGVPlots
+    primaryDescriptorPath: /wdl/annotation_utils/CreateIGVPlots.wdl
+    publish: true
+    filters:
+      branches:
+        - main
+      tags:
+        - /.*/
+  - subclass: WDL
     name: CreateCohortMetadata
     primaryDescriptorPath: /wdl/annotation_utils/CreateCohortMetadata.wdl
     publish: true

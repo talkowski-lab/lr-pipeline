@@ -52,6 +52,7 @@ Built from [dockerfiles/](../dockerfiles/) in this repository and pushed to the 
 | `hail_docker` | `hail` | [`Dockerfile.hail`](../dockerfiles/Dockerfile.hail) |
 | `hifiasm_docker` | `hifiasm` | [`Dockerfile.hifiasm`](../dockerfiles/Dockerfile.hifiasm) |
 | `hificnv_docker` | `hificnv` | [`Dockerfile.hificnv`](../dockerfiles/Dockerfile.hificnv) |
+| `igv_docker` | `igv` | [`Dockerfile.igv`](../dockerfiles/Dockerfile.igv) |
 | `intact_mei_docker` | `intactmei` | [`Dockerfile.intactmei`](../dockerfiles/Dockerfile.intactmei) |
 | `kanpig_docker` | `kanpig` | [`Dockerfile.kanpig`](../dockerfiles/Dockerfile.kanpig) |
 | `l1meaid_docker` | `l1meaid` | [`Dockerfile.l1meaid`](../dockerfiles/Dockerfile.l1meaid) |
@@ -72,6 +73,8 @@ Built from [dockerfiles/](../dockerfiles/) in this repository and pushed to the 
 | `vep_hail_docker` | `vephail` | [`Dockerfile.vephail`](../dockerfiles/Dockerfile.vephail) |
 | `vrs_docker` | `vrs` | [`Dockerfile.vrs`](../dockerfiles/Dockerfile.vrs) |
 | `whatshap_docker` | `whatshap` | [`Dockerfile.whatshap`](../dockerfiles/Dockerfile.whatshap) |
+
+The `igv` image ports the `lr-visualize` image of [variant-interpretation](https://github.com/yuliamostovoy/variant-interpretation/tree/main/dockerfiles/long_read_visualize) (`quay.io/ymostovoy/lr-visualize`) by Yulia Mostovoy onto `utils`, which already carries samtools, bedtools and the plotting libraries, adding mosdepth and IGV with its bundled Java runtime; its scripts are baked in from `scripts/qc/igv/` rather than cloned.
 
 Every Dockerfile in `dockerfiles/` maps to exactly one argument above; retired ones live in [`archive/dockerfiles/`](../archive/dockerfiles/) and are not built.
 

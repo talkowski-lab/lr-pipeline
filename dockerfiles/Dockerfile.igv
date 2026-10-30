@@ -1,0 +1,40 @@
+ARG BASE_IMAGE=us-central1-docker.pkg.dev/talkowski-sv-gnomad/kj-dockers/utils:latest
+FROM ${BASE_IMAGE}
+
+MAINTAINER Karan Jaisingh
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Virtual display and fonts, so IGV can take snapshots without a screen
+RUN apt-get update && apt-get install -y \
+    unzip \
+    xvfb \
+    xauth \
+    fontconfig \
+    fonts-dejavu-core \
+    libxrender1 \
+    libxtst6 \
+    libxi6 \
+    libxext6 \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install mosdepth
+ARG MOSDEPTH_VERSION
+RUN wget -q https://github.com/brentp/mosdepth/releases/download/${MOSDEPTH_VERSION}/mosdepth \
+    -O /usr/local/bin/mosdepth \
+    && chmod +x /usr/local/bin/mosdepth \
+    && mosdepth -h
+
+# Install IGV, bundled with its own Java runtime
+ARG IGV_VERSION
+RUN wget -q https://data.broadinstitute.org/igv/projects/downloads/${IGV_VERSION%.*}/IGV_Linux_${IGV_VERSION}_WithJava.zip \
+    && unzip -q IGV_Linux_${IGV_VERSION}_WithJava.zip -d /opt \
+    && mv /opt/IGV_Linux_${IGV_VERSION} /opt/igv \
+    && rm IGV_Linux_${IGV_VERSION}_WithJava.zip \
+    && test -x /opt/igv/igv.sh
+
+# Start IGV on hg38 rather than its hg19 default
+RUN mkdir -p /root/igv \
+    && printf 'DEFAULT_GENOME_KEY=hg38\n' > /root/igv/prefs.properties
+
+ENV MPLBACKEND=Agg
