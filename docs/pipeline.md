@@ -436,5 +436,6 @@ These workflows are not needed to produce the release VCF. They run on it, or on
 - Release variants: [StripGenotypes](../wdl/annotation_utils/StripGenotypes.wdl), for a sites-only VCF where only site-level data may be released.
 - Variant review: [CreateIGVPlots](../wdl/annotation_utils/CreateIGVPlots.wdl), IGV snapshots of each family's long reads at a curated list of variants, with a read-depth track under each DEL and DUP. Depth plots of CNV calls are drawn by `CreateCNVDepthPlots` in the [CNV pipeline](pipeline_cnvs.md).
 - Callset comparison and export: [MergeVcfs](../wdl/annotation_utils/MergeVcfs.wdl), [ExtractRandomCalls](../wdl/annotation_utils/ExtractRandomCalls.wdl) and [ConvertVcfToBed](../wdl/annotation_utils/ConvertVcfToBed.wdl).
+- Benchmarking: [EvaluateCallsetAccuracy](../wdl/annotation_utils/EvaluateCallsetAccuracy.wdl), per-contig precision and recall of the callset's sites and calls against truth SNV/indel and SV VCFs, stratified by allele type, size and genomic context.
 - Alternative callers, for benchmarking: [HiFiCNV](../wdl/tools/HiFiCNV.wdl), [Sawfish](../wdl/tools/Sawfish.wdl) and [Vamos](../wdl/tools/Vamos.wdl).
-- Terra workspace cleanup: [Automop](../wdl/tools/Automop.wdl) deletes intermediate files no data table references.
+- Terra workspace cleanup: [Automop](../wdl/tools/Automop.wdl) deletes intermediate files no data table references, or with `dry_run = true` only lists them.
