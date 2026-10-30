@@ -690,6 +690,91 @@ task CheckSampleConsistency {
     }
 }
 
+task CleanVcfHeader {
+    input {
+        File vcf
+        File vcf_idx
+        String prefix
+        String docker
+        RuntimeAttr? runtime_attr_override
+    }
+
+    command <<<
+        set -euo pipefail
+
+        bcftools view -h "~{vcf}" > old_header.vcf
+        bcftools view -H "~{vcf}" | cut -f1,5,7,8,9 > body_fields.tsv
+
+        # Keep only the definitions records use and the primary contigs, dropping tool provenance and caller leftovers
+        python3 <<CODE
+import re
+
+PRIMARY_CONTIG_RE = re.compile(r"^chr([0-9]+|X|Y|M)$")
+DEFINITION_RE = re.compile(r"^##(INFO|FILTER|FORMAT|ALT|contig)=<ID=([^,>]+)")
+STRUCTURED_KEYS = ("META", "SAMPLE", "PEDIGREE")
+
+used = {"INFO": set(), "FILTER": {"PASS"}, "FORMAT": set(), "ALT": set(), "contig": set()}
+with open("body_fields.tsv") as body:
+    for line in body:
+        chrom, alts, filters, info, fmt = (line.rstrip("\n").split("\t") + ["."])[:5]
+        used["contig"].add(chrom)
+        used["ALT"].update(re.findall(r"<([^>]+)>", alts))
+        used["FILTER"].update(f for f in filters.split(";") if f != ".")
+        used["INFO"].update(field.split("=", 1)[0] for field in info.split(";") if field != ".")
+        used["FORMAT"].update(key for key in fmt.split(":") if key != ".")
+
+groups = {key: [] for key in ("fileformat", "contig", "INFO", "FILTER", "FORMAT", "ALT", "structured")}
+with open("old_header.vcf") as header:
+    for line in header:
+        line = line.rstrip("\n")
+        if line.startswith("#CHROM"):
+            chrom_line = line
+        elif line.startswith("##fileformat="):
+            groups["fileformat"].append(line)
+        elif DEFINITION_RE.match(line):
+            kind, field_id = DEFINITION_RE.match(line).groups()
+            if field_id in used[kind] or (kind == "contig" and PRIMARY_CONTIG_RE.match(field_id)):
+                groups[kind].append(line)
+        elif line.startswith(tuple("##" + key + "=<" for key in STRUCTURED_KEYS)):
+            groups["structured"].append(line)
+
+with open("new_header.vcf", "w") as out:
+    for lines in groups.values():
+        out.writelines(line + "\n" for line in lines)
+    out.write(chrom_line + "\n")
+CODE
+
+        bcftools reheader -h new_header.vcf -o "~{prefix}.vcf.gz" "~{vcf}"
+        tabix -p vcf -f "~{prefix}.vcf.gz"
+
+        echo "Header lines: $(grep -c '' old_header.vcf) -> $(grep -c '' new_header.vcf)"
+    >>>
+
+    output {
+        File cleaned_vcf = "~{prefix}.vcf.gz"
+        File cleaned_vcf_idx = "~{prefix}.vcf.gz.tbi"
+    }
+
+    RuntimeAttr default_attr = object {
+        cpu_cores: 1,
+        mem_gb: 2,
+        disk_gb: 2 * ceil(size(vcf, "GB")) + 10,
+        boot_disk_gb: 10,
+        preemptible_tries: 1,
+        max_retries: 0
+    }
+    RuntimeAttr runtime_attr = select_first([runtime_attr_override, default_attr])
+    runtime {
+        cpu: select_first([runtime_attr.cpu_cores, default_attr.cpu_cores])
+        memory: select_first([runtime_attr.mem_gb, default_attr.mem_gb]) + " GiB"
+        disks: "local-disk " + select_first([runtime_attr.disk_gb, default_attr.disk_gb]) + " HDD"
+        bootDiskSizeGb: select_first([runtime_attr.boot_disk_gb, default_attr.boot_disk_gb])
+        docker: docker
+        preemptible: select_first([runtime_attr.preemptible_tries, default_attr.preemptible_tries])
+        maxRetries: select_first([runtime_attr.max_retries, default_attr.max_retries])
+    }
+}
+
 task CollapseMultiallelics {
     input {
         File tsv

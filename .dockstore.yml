@@ -493,6 +493,7 @@ workflows:
     filters:
       branches:
         - main
+        - kj-header-clean-hemizygous-overlaps
       tags:
         - /.*/
 
@@ -605,6 +606,7 @@ workflows:
     filters:
       branches:
         - main
+        - kj-header-clean-hemizygous-overlaps
       tags:
         - /.*/
 

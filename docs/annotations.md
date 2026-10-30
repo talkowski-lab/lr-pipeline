@@ -157,7 +157,7 @@ Which fields a call carries depends on its `INFO/SOURCE`.
 - `AL`: Allele length. On `HPRC_SV_Integration` calls, the unsigned length of the sample's SV allele; on tandem repeat calls, the length of each allele from TRGT.
 - `DP`: Approximate read depth. Set on `DeepVariant` and SV calls.
 - `GQ`: Genotype quality. Set on `DeepVariant` and SV calls.
-- `GT`: Genotype, written with `|` where phasing placed the call on a haplotype.
+- `GT`: Genotype, written with `|` where phasing placed the call on a haplotype. Every genotype has two alleles: a male call on chrX or chrY outside the pseudoautosomal regions is hemizygous, written with its first allele missing, such as `./1` or `./0`, and a female call on chrY is `./.`.
 - Phasing: Haplotype phasing from HiPhase and backbone phasing, set on `DeepVariant`, SV and tandem repeat calls. Homopolymer tandem repeat calls (`HOMOPOLYMER_TRV`) are left out of phasing, so their genotypes stay unphased.
   - `PF`: Phasing flag set by HiPhase on a call it deliberately excluded from phasing. The only value is `TR_OVERLAP`, for a call fully contained within a TRGT tandem repeat call.
   - `PS`: Phase set identifier, the `POS` of the first variant in the phase block. Backbone phasing fills it for some `PF = TR_OVERLAP` calls from its run without TRGT calls.

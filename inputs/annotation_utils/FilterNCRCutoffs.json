@@ -5,5 +5,6 @@
     "FilterNCRCutoffs.remove_no_calls": false,
     "FilterNCRCutoffs.ncr_filter_pass_only": false,
     "FilterNCRCutoffs.records_per_shard": 10000,
+    "FilterNCRCutoffs.clean_vcf_header": false,
     "FilterNCRCutoffs.utils_docker": "us-central1-docker.pkg.dev/talkowski-sv-gnomad/kj-dockers/utils:latest"
 }

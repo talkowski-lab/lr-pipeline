@@ -5,6 +5,7 @@ import gzip
 import itertools
 import math
 import random
+import re
 import statistics
 import subprocess
 import sys
@@ -763,6 +764,143 @@ def test_postprocess_callset_keeps_male_calls_diploid_in_par(run_workflow, run_d
                 assert len(called(new_gt)) <= 1, (old["id"], sample)
                 outside_hemizygous += len(called(old_gt)) == 2
     assert par_diploid and outside_hemizygous
+
+
+def test_postprocess_callset_resolves_overlaps_between_male_hemizygous_calls_outside_par(
+    run_workflow, run_dir, subset_vcf, utils_docker
+):
+    # Relabel the fixture as chrX, with the first half of its records inside a pseudoautosomal region
+    relabelled = run_dir / "chrx.vcf"
+    with gzip.open(subset_vcf, "rt") as handle, open(relabelled, "w") as out:
+        out.writelines(line.replace("chr22", "chrX") for line in handle)
+    pysam.tabix_index(str(relabelled), preset="vcf", force=True)
+    _, records = load_records(run_dir / "chrx.vcf.gz")
+    par_end = records[len(records) // 2]["pos"]
+    par_bed = write_table(run_dir / "par.bed", [["chrX", 0, par_end]])
+    sexes = {sample: 1 if i % 2 == 0 else 2 for i, sample in enumerate(SAMPLES)}
+    ped = write_table(run_dir / "samples.ped", [[f"fam{i}", s, 0, 0, sexes[s], 0] for i, s in enumerate(SAMPLES)])
+    males = {sample for sample, sex in sexes.items() if sex == 1}
+
+    # Add a copy of deletions a male carries outside the PAR, shifted by one base so it overlaps its original
+    plain = run_dir / "overlapping.vcf"
+    with pysam.VariantFile(str(run_dir / "chrx.vcf.gz")) as vcf_in:
+        records, copies = list(vcf_in), []
+        for record in records:
+            male_carrier = any(1 in record.samples[s]["GT"] for s in males)
+            if record.info["allele_type"] == "del" and "TR_ENVELOPED" not in record.info and record.pos > par_end:
+                if male_carrier and len(copies) < 30:
+                    copy = record.copy()
+                    copy.pos += 1
+                    copy.id = f"{record.id}_copy"
+                    copies.append(copy)
+        with pysam.VariantFile(str(plain), "w", header=vcf_in.header) as vcf_out:
+            for record in sorted(records + copies, key=lambda r: r.pos):
+                vcf_out.write(record)
+    pysam.tabix_index(str(plain), preset="vcf", force=True)
+    vcf = run_dir / "overlapping.vcf.gz"
+    assert copies
+
+    inputs = {
+        "vcf": str(vcf),
+        "vcf_idx": f"{vcf}.tbi",
+        "contigs": ["chrX"],
+        "prefix": "hemizygous",
+        **{f"run_{flag}": False for flag in POSTPROCESS_RUN_FLAGS},
+        "run_normalize_ploidy": True,
+        "run_resolve_haplotype_overlaps": True,
+        "ped": str(ped),
+        "par_bed": str(par_bed),
+        "utils_docker": utils_docker,
+    }
+    outputs = run_workflow(f"{UTILS}/PostprocessCallset.wdl", inputs)
+
+    _, before = load_records(vcf)
+    _, after = load_records(outputs["PostprocessCallset.post_processed_vcf"])
+    by_id = {r["id"]: r for r in before}
+    overlaps = read_dicts(outputs["PostprocessCallset.overlap_tsv"])
+    hemizygous_rows = [r for r in overlaps if r["sample"] in males and by_id[r["variant_id_cleared"]]["pos"] > par_end]
+    assert len({r["variant_id_cleared"] for r in hemizygous_rows}) >= len(copies)
+    assert {r["haplotype"] for r in hemizygous_rows} == {"2"}
+
+    cleared = {(r["variant_id_cleared"], r["sample"]) for r in overlaps}
+    assert [site_key(r) for r in after] == [site_key(r) for r in before]
+    for record in after:
+        for sample in SAMPLES:
+            if (record["id"], sample) in cleared:
+                assert record["gts"][sample] == (None, None)
+
+    # No two hemizygous male calls left outside the PAR overlap
+    for sample in males:
+        spans = sorted(
+            (r["pos"], r["pos"] + len(r["ref"]) - 1)
+            for r in after
+            if r["pos"] > par_end
+            and any((a or 0) > 0 for a in r["gts"][sample])
+            and r["info"]["allele_type"] != "trv"
+            and "TR_ENVELOPED" not in r["info"]
+        )
+        reach = 0
+        for start, end in spans:
+            assert start > reach
+            reach = max(reach, end)
+
+
+HEADER_CLUTTER = [
+    "##bcftools_viewCommand=view -o clutter.vcf.gz input.vcf.gz; Date=Thu Oct 30 00:00:00 2026\n",
+    "##source=clutter_caller\n",
+    '##INFO=<ID=UNUSED_INFO,Number=1,Type=Integer,Description="Unused INFO field">\n',
+    '##FILTER=<ID=UNUSED_FILTER,Description="Unused FILTER value">\n',
+    '##FORMAT=<ID=UNUSED_FORMAT,Number=1,Type=Integer,Description="Unused FORMAT field">\n',
+    "##contig=<ID=chrUn_clutter,length=1000>\n",
+]
+CLEAN_HEADER_KEYS = {"fileformat", "INFO", "FILTER", "FORMAT", "ALT", "contig", "META", "SAMPLE", "PEDIGREE"}
+PRIMARY_CONTIG_RE = re.compile(r"chr([0-9]+|X|Y|M)")
+
+
+def add_header_clutter(src, dst):
+    plain = dst.with_suffix("")
+    with gzip.open(src, "rt") as handle, open(plain, "w") as out:
+        out.write(next(handle))
+        out.writelines(HEADER_CLUTTER)
+        out.writelines(handle)
+    pysam.tabix_index(str(plain), preset="vcf", force=True)
+    return dst
+
+
+def assert_header_cleaned(vcf, source_vcf):
+    with gzip.open(vcf, "rt") as handle:
+        meta_lines = list(itertools.takewhile(lambda line: line.startswith("##"), handle))
+    assert {line[2:].split("=", 1)[0] for line in meta_lines} <= CLEAN_HEADER_KEYS
+    # Read the records as text, since pysam leaves END out of record.info
+    used_info, used_filters, used_formats = set(), {"PASS"}, set()
+    for line in bcftools.view("-H", str(vcf)).splitlines():
+        fields = line.split("\t")
+        used_filters.update(fields[6].split(";"))
+        used_info.update(entry.split("=", 1)[0] for entry in fields[7].split(";"))
+        used_formats.update(fields[8].split(":"))
+    with pysam.VariantFile(str(vcf)) as cleaned, pysam.VariantFile(str(source_vcf)) as source:
+        assert set(cleaned.header.info) <= used_info
+        assert set(cleaned.header.filters) <= used_filters
+        assert set(cleaned.header.formats) <= used_formats
+        assert set(cleaned.header.contigs) == {c for c in source.header.contigs if PRIMARY_CONTIG_RE.fullmatch(c)}
+
+
+def test_postprocess_callset_cleans_the_final_header_without_touching_records(run_workflow, run_dir, subset_vcf, utils_docker):
+    vcf = add_header_clutter(subset_vcf, run_dir / "clutter.vcf.gz")
+    inputs = {
+        "vcf": str(vcf),
+        "vcf_idx": f"{vcf}.tbi",
+        "contigs": [CONTIG],
+        "prefix": "cleaned",
+        **{f"run_{flag}": False for flag in POSTPROCESS_RUN_FLAGS},
+        "run_clean_vcf_header": True,
+        "utils_docker": utils_docker,
+    }
+    outputs = run_workflow(f"{UTILS}/PostprocessCallset.wdl", inputs)
+
+    cleaned = outputs["PostprocessCallset.post_processed_vcf"]
+    assert bcftools.view("-H", cleaned) == bcftools.view("-H", str(vcf))
+    assert_header_cleaned(cleaned, vcf)
 
 
 def test_postprocess_callset_sets_missing_filters_to_pass(run_workflow, run_dir, subset_vcf, utils_docker):
@@ -1551,8 +1689,10 @@ def test_filter_ncr_cutoffs_flags_sites_above_their_stratum_cutoff_and_drops_sit
                 sample["GT"] = (None, None)
 
     vcf = rewrite_vcf(subset_vcf, run_dir / "input.vcf.gz", [], drop_calls)
+    vcf = add_header_clutter(vcf, run_dir / "clutter.vcf.gz")
     _, records = load_records(vcf)
 
+    # The header clean is checked alongside the PASS-only filter, sparing a run of its own
     outputs = run_workflow(
         f"{UTILS}/FilterNCRCutoffs.wdl",
         {
@@ -1564,8 +1704,11 @@ def test_filter_ncr_cutoffs_flags_sites_above_their_stratum_cutoff_and_drops_sit
             "ncr_cutoffs_tsv": str(cutoffs),
             "ncr_filter_pass_only": pass_only,
             "records_per_shard": 150,
+            "clean_vcf_header": pass_only,
         },
     )
+    if pass_only:
+        assert_header_cleaned(outputs["FilterNCRCutoffs.filtered_vcf"], vcf)
 
     kept = [r for r in records if any(is_carrier(r, s) for s in SAMPLES)]
     assert 0 < len(kept) < len(records)

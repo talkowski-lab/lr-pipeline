@@ -9,7 +9,7 @@ workflow FilterNCRCutoffs {
             "This utility removes sites that carry no informative genotypes and flags the sites that are largely uncalled. When `remove_no_calls` is set, every variant whose samples carry no alternate allele - an allele count of zero - is removed. When `ncr_cutoffs_tsv` is given, every surviving variant is matched to a row by its lowercased `INFO/allele_type`, its absolute `INFO/allele_length` within the row's inclusive length bounds and its `INFO/REGION`, where a row's `ALL` region matches any region. A matched variant whose no-call rate is above the row's cutoff is given the `HIGH_NCR` FILTER value, whose header line the workflow adds; those variants are flagged rather than removed. A cutoff keeps the sites at or below it, as an `EvaluateNCRCutoffs` cutoff does, so a cutoff read off its curves keeps the same sites here. Variants matching no row are left untouched, so the table need not cover every stratum. When `ncr_filter_pass_only` is set, only variants whose FILTER is PASS are matched, and `ncr_cutoffs_tsv` must be given; otherwise variants of every FILTER are matched.",
             "A genotype counts as a carrier when any of its alleles is alternate, so a partially called genotype such as './1' keeps the site from being an allele count of zero. Carriers are counted from the genotypes rather than read from `INFO/AC`, so an allele count left stale by an upstream step does not affect which sites are removed.",
             "Variants are classified the way `EvaluateNCRCutoffs` strata are, so cutoffs chosen from its output apply to the same variants. Rows whose strata overlap are rejected when the table is read, and a variant checked against the table without `INFO/REGION` stops the task.",
-            "The no-call rate comes from `INFO/NCR`, which is a single value at biallelic and multiallelic sites alike and is used as it stands. A matched variant that carries no `INFO/NCR` falls back to counting the proportion of alleles without a call, which is what that field holds, and every such variant ID is printed to the task log. It optionally shards by record count and outputs the filtered VCF."
+            "The no-call rate comes from `INFO/NCR`, which is a single value at biallelic and multiallelic sites alike and is used as it stands. A matched variant that carries no `INFO/NCR` falls back to counting the proportion of alleles without a call, which is what that field holds, and every such variant ID is printed to the task log. It optionally shards by record count and outputs the filtered VCF, whose header, when `clean_vcf_header` is set, is cleaned last of all to keep only the primary contigs and the INFO, FILTER, FORMAT and ALT definitions that records use, dropping tool provenance lines such as command lines and program versions."
         ]
     }
 
@@ -20,6 +20,7 @@ workflow FilterNCRCutoffs {
         ncr_cutoffs_tsv: "Headed TSV of no-call rate cutoffs with columns `allele_type`, `min_length`, `max_length`, `region` and `cutoff`. Lengths are inclusive bounds on the absolute `INFO/allele_length`, `region` is `US`, `RM`, `SD`, `SR` or `ALL` for any region, and a matched site is given the `HIGH_NCR` FILTER value when its no-call rate is above `cutoff`. Rows may cover only some strata but may not overlap. When absent, no site is flagged."
         ncr_filter_pass_only: "Whether to check only sites whose FILTER is PASS against `ncr_cutoffs_tsv`, which must then be given. When false, sites of every FILTER are checked."
         records_per_shard: "Number of variants per shard. When set, variants are processed in parallel shards and concatenated."
+        clean_vcf_header: "Whether to clean the header of the filtered VCF, last of all, keeping only the primary contigs and the definitions that records use."
         filtered_vcf: "VCF with the sites carrying no alternate allele removed and the high no-call rate sites flagged."
         filtered_vcf_idx: "Index for `filtered_vcf`."
     }
@@ -34,12 +35,14 @@ workflow FilterNCRCutoffs {
         Boolean ncr_filter_pass_only
 
         Int? records_per_shard
+        Boolean clean_vcf_header
 
         String utils_docker
 
         RuntimeAttr? runtime_attr_shard
         RuntimeAttr? runtime_attr_filter
         RuntimeAttr? runtime_attr_concat_vcfs
+        RuntimeAttr? runtime_attr_clean_header
     }
 
     if (defined(records_per_shard)) {
@@ -84,9 +87,23 @@ workflow FilterNCRCutoffs {
         }
     }
 
+    File unclean_vcf = select_first([ConcatVcfs.concat_vcf, FilterNCRCutoffsShard.filtered_vcf[0]])
+    File unclean_vcf_idx = select_first([ConcatVcfs.concat_vcf_idx, FilterNCRCutoffsShard.filtered_vcf_idx[0]])
+
+    if (clean_vcf_header) {
+        call Helpers.CleanVcfHeader {
+            input:
+                vcf = unclean_vcf,
+                vcf_idx = unclean_vcf_idx,
+                prefix = "~{prefix}.cleaned",
+                docker = utils_docker,
+                runtime_attr_override = runtime_attr_clean_header
+        }
+    }
+
     output {
-        File filtered_vcf = select_first([ConcatVcfs.concat_vcf, FilterNCRCutoffsShard.filtered_vcf[0]])
-        File filtered_vcf_idx = select_first([ConcatVcfs.concat_vcf_idx, FilterNCRCutoffsShard.filtered_vcf_idx[0]])
+        File filtered_vcf = select_first([CleanVcfHeader.cleaned_vcf, unclean_vcf])
+        File filtered_vcf_idx = select_first([CleanVcfHeader.cleaned_vcf_idx, unclean_vcf_idx])
     }
 }
 
