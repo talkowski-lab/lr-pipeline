@@ -394,7 +394,6 @@ workflows:
     filters:
       branches:
         - main
-        - kj-igv-gene-track
       tags:
         - /.*/
   - subclass: WDL
