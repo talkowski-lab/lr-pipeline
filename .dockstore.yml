@@ -20,7 +20,6 @@ workflows:
     filters:
       branches:
         - main
-        - kj-review-fixes
       tags:
         - /.*/
 
@@ -606,7 +605,6 @@ workflows:
     filters:
       branches:
         - main
-        - kj-review-fixes
       tags:
         - /.*/
 
