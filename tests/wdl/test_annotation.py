@@ -194,6 +194,7 @@ def test_annotate_af_computes_global_population_and_sex_frequencies(run_workflow
             "sample_pop_assignments": str(pops),
             "ped": str(ped),
             "par_bed": str(par_bed),
+            "drop_ac_zero_records": False,
         },
     )
 
@@ -249,6 +250,7 @@ def test_annotate_af_uses_hemizygous_counts_for_males_outside_par(run_workflow, 
             "records_per_shard": 1000,
             "ped": str(ped),
             "par_bed": str(par_bed),
+            "drop_ac_zero_records": False,
             "utils_docker": utils_docker,
         },
     )
@@ -277,6 +279,42 @@ def test_annotate_af_uses_hemizygous_counts_for_males_outside_par(run_workflow, 
             assert new["info"]["nhemialt_XY"] == male["AC"]
             outside += 1
     assert in_par > 50 and outside > 50
+
+
+def test_annotate_af_drops_records_no_sample_carries(run_workflow, run_dir, subset_vcf, utils_docker):
+    # No-call every tenth record, and leave every multiallelic record with only its first ALT carried
+    counter = itertools.count()
+
+    def edit(record):
+        if next(counter) % 10 == 0:
+            for sample in record.samples.values():
+                sample["GT"] = (None, None)
+        elif len(record.alts) > 1:
+            for i, sample in enumerate(record.samples.values()):
+                sample["GT"] = (0, 1) if i == 0 else (0, 0)
+
+    edited = rewrite_vcf(subset_vcf, run_dir / "uncarried.vcf.gz", [], edit)
+    _, before = load_records(edited)
+    par_bed = write_table(run_dir / "par.bed", [["chrX", 10001, 2781479]])
+    outputs = run_workflow(
+        f"{ANNOTATION}/AnnotateAF.wdl",
+        {
+            "vcf": str(edited),
+            "vcf_idx": f"{edited}.tbi",
+            "contigs": [CONTIG],
+            "prefix": "carried",
+            "records_per_shard": 150,
+            "par_bed": str(par_bed),
+            "drop_ac_zero_records": True,
+            "utils_docker": utils_docker,
+        },
+    )
+
+    _, after = load_records(outputs["AnnotateAF.af_annotated_vcf"])
+    carried = [r for r in before if any(a for gt in r["gts"].values() for a in gt if a)]
+    assert len(carried) < len(before)
+    assert [site_key(r) for r in after] == [site_key(r) for r in carried]
+    assert any(len(r["alts"]) > 1 for r in after)
 
 
 def test_annotate_dbsnp_reports_rsids_for_variants_matching_on_position_and_alleles(run_workflow, run_dir, vcf_inputs, source):

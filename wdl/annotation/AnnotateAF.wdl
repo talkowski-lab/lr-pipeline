@@ -11,7 +11,7 @@ import "../utils/Structs.wdl"
 workflow AnnotateAF {
     meta {
         description: [
-            "This workflow annotates each variant with allele counts, allele frequencies, no-call rates and genotype counts, computed from its genotypes. Frequencies are computed across the whole cohort and, when the matching inputs are given, per sex from a PED and per population from an ancestry table, together with the population with the highest allele frequency (grpmax) at biallelic sites. Variants on chrX and chrY outside the pseudoautosomal regions are counted as hemizygous in XY samples.",
+            "This workflow annotates each variant with allele counts, allele frequencies, no-call rates and genotype counts, computed from its genotypes. Frequencies are computed across the whole cohort and, when the matching inputs are given, per sex from a PED and per population from an ancestry table, together with the population with the highest allele frequency (grpmax) at biallelic sites. Variants on chrX and chrY outside the pseudoautosomal regions are counted as hemizygous in XY samples. With `drop_ac_zero_records` set, records where no sample carries any ALT allele are then dropped, which suits the final callset, once every genotype-changing step has run.",
             "At multiallelic sites, per-allele allele purity (`AP_allele`) and motif count (`MC_allele`) are taken from the first carrier of each allele. When an LPS table is given, single-motif TR sites also get a per-allele longest polymer sequence (`LPS_allele`), matched on `INFO/TRID` and motif. Because the table's haplotype order needn't match the VCF genotypes, a value is only assigned when a carrier pins it down - a carrier whose two haplotypes share one value, or a heterozygous carrier whose other allele is already resolved - and is left missing otherwise. Each contig is sharded by record count, annotated in parallel and concatenated into one VCF."
         ]
     }
@@ -26,6 +26,7 @@ workflow AnnotateAF {
         lps_tsv: "TSV of longest polymer sequence values per TR locus and sample, from `TRGTLPS`. The `trid` header line may sit first or, as in older concatenated tables, last."
         strip_info_fields: "INFO fields to remove from each shard before annotation."
         par_bed: "From references."
+        drop_ac_zero_records: "Whether to drop records whose every ALT allele has `AC = 0` after annotation; multiallelic records with any carried ALT are kept whole."
         af_annotated_vcf: "VCF annotated with allele frequencies."
         af_annotated_vcf_idx: "Index for `af_annotated_vcf`."
     }
@@ -43,6 +44,7 @@ workflow AnnotateAF {
         Array[String]? strip_info_fields
 
         File par_bed
+        Boolean drop_ac_zero_records
 
         String utils_docker
 
@@ -125,6 +127,7 @@ workflow AnnotateAF {
                 ped = ped,
                 lps_tsv = contig_lps_tsvs[contig_idx],
                 par_bed = par_bed,
+                drop_ac_zero_records = drop_ac_zero_records,
                 prefix = "~{prefix}.~{i}.AF",
                 docker = utils_docker,
                 runtime_attr_override = runtime_attr_compute_afs
@@ -156,6 +159,7 @@ task ComputeAFs {
         File? ped
         File? lps_tsv
         File par_bed
+        Boolean drop_ac_zero_records
         String prefix
         String docker
         RuntimeAttr? runtime_attr_override
@@ -172,6 +176,7 @@ task ComputeAFs {
             ~{"-f " + ped} \
             ~{if defined(lps_tsv) then "-l lps.tsv" else ""} \
             --par ~{par_bed} \
+            ~{if drop_ac_zero_records then "| bcftools view -i 'MAX(INFO/AC)>0'" else ""} \
             | bgzip -c > "~{prefix}.vcf.gz"
 
         tabix -p vcf "~{prefix}.vcf.gz"

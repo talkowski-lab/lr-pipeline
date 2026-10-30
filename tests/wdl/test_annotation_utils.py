@@ -608,6 +608,7 @@ POSTPROCESS_RUN_FLAGS = [
     "prune_meis",
     "reassign_suffixes",
     "resolve_haplotype_overlaps",
+    "set_missing_filters_to_pass",
     "sorting",
     "transfer_genotypes",
     "unphase_samples",
@@ -714,6 +715,79 @@ def test_postprocess_callset_drops_listed_variant_ids(run_workflow, subset_vcf, 
 
     _, after = load_records(outputs["PostprocessCallset.post_processed_vcf"])
     assert [site_key(r) for r in after] == [site_key(r) for r in before if r["id"] not in dropped]
+
+
+@pytest.mark.parametrize("shard_bin_size", [None, 20000000])
+def test_postprocess_callset_keeps_male_calls_diploid_in_par(run_workflow, run_dir, subset_vcf, utils_docker, shard_bin_size):
+    # Relabel the fixture as chrX, with the first half of its records inside a pseudoautosomal region
+    plain = run_dir / "chrx.vcf"
+    with gzip.open(subset_vcf, "rt") as handle, open(plain, "w") as out:
+        out.writelines(line.replace("chr22", "chrX") for line in handle)
+    pysam.tabix_index(str(plain), preset="vcf", force=True)
+    chrx = run_dir / "chrx.vcf.gz"
+    _, before = load_records(chrx)
+    par_end = before[len(before) // 2]["pos"]
+    par_bed = write_table(run_dir / "par.bed", [["chrX", 0, par_end]])
+    sexes = {sample: 1 if i % 2 == 0 else 2 for i, sample in enumerate(SAMPLES)}
+    ped = write_table(run_dir / "samples.ped", [[f"fam{i}", s, 0, 0, sexes[s], 0] for i, s in enumerate(SAMPLES)])
+    inputs = {
+        "vcf": str(chrx),
+        "vcf_idx": f"{chrx}.tbi",
+        "contigs": ["chrX"],
+        "prefix": "ploidy",
+        **{f"run_{flag}": False for flag in POSTPROCESS_RUN_FLAGS},
+        "run_normalize_ploidy": True,
+        "ped": str(ped),
+        "par_bed": str(par_bed),
+        "utils_docker": utils_docker,
+    }
+    if shard_bin_size:
+        inputs["shard_bin_size"] = shard_bin_size
+    outputs = run_workflow(f"{UTILS}/PostprocessCallset.wdl", inputs)
+
+    _, after = load_records(outputs["PostprocessCallset.post_processed_vcf"])
+    assert [site_key(r) for r in after] == [site_key(r) for r in before]
+
+    def called(gt):
+        return sorted(a for a in gt if a is not None)
+
+    par_diploid = outside_hemizygous = 0
+    for old, new in zip(before, after):
+        in_par = old["pos"] <= par_end
+        for sample in SAMPLES:
+            old_gt, new_gt = old["gts"][sample], new["gts"][sample]
+            if sexes[sample] == 2 or (in_par and len(old_gt) == 2):
+                assert called(new_gt) == called(old_gt), (old["id"], sample)
+                par_diploid += sexes[sample] == 1 and len(called(new_gt)) == 2
+            elif not in_par:
+                assert len(called(new_gt)) <= 1, (old["id"], sample)
+                outside_hemizygous += len(called(old_gt)) == 2
+    assert par_diploid and outside_hemizygous
+
+
+def test_postprocess_callset_sets_missing_filters_to_pass(run_workflow, run_dir, subset_vcf, utils_docker):
+    # Clear the FILTER of every other record, as GLnexus leaves them
+    counter = itertools.count()
+    unfiltered = rewrite_vcf(
+        subset_vcf, run_dir / "unfiltered.vcf.gz", [], lambda r: r.filter.clear() if next(counter) % 2 == 0 else None
+    )
+    _, before = load_records(unfiltered)
+    assert any(not r["filter"] for r in before)
+    inputs = {
+        "vcf": str(unfiltered),
+        "vcf_idx": f"{unfiltered}.tbi",
+        "contigs": [CONTIG],
+        "prefix": "passed",
+        **{f"run_{flag}": False for flag in POSTPROCESS_RUN_FLAGS},
+        "run_set_missing_filters_to_pass": True,
+        "utils_docker": utils_docker,
+    }
+    outputs = run_workflow(f"{UTILS}/PostprocessCallset.wdl", inputs)
+
+    _, after = load_records(outputs["PostprocessCallset.post_processed_vcf"])
+    assert [site_key(r) for r in after] == [site_key(r) for r in before]
+    for old, new in zip(before, after):
+        assert new["filter"] == (old["filter"] or ("PASS",))
 
 
 def test_fill_phased_genotypes_restores_missing_genotypes_and_format_fields_from_unphased_vcf(
@@ -2392,6 +2466,7 @@ def test_postprocess_callset_recomputes_allele_counts_for_singleton_filter(
         "prune_meis",
         "reassign_suffixes",
         "resolve_haplotype_overlaps",
+        "set_missing_filters_to_pass",
         "sorting",
         "transfer_genotypes",
         "unphase_samples",
@@ -2445,6 +2520,7 @@ def test_postprocess_callset_normalizes_allele_types_to_the_released_types(
         "prune_meis",
         "reassign_suffixes",
         "resolve_haplotype_overlaps",
+        "set_missing_filters_to_pass",
         "sorting",
         "transfer_genotypes",
         "unphase_samples",
@@ -2468,6 +2544,10 @@ def test_postprocess_callset_normalizes_allele_types_to_the_released_types(
 
     assert [types(r) for r in records] == [types(r) for r in source[1]]
     assert {"dup_interspersed", "alu_ins", "alu_del"} <= {r["info"].get("allele_subtype") for r in records}
+    # SV records' SVTYPE follows the final type, including the fixture's tandem duplications typed INS by their caller
+    with_svtype = [r for r in records if r["info"].get("SVTYPE")]
+    assert with_svtype and all(r["info"]["SVTYPE"] == r["info"]["allele_type"].upper() for r in with_svtype)
+    assert "DUP" in {r["info"]["SVTYPE"] for r in with_svtype}
 
 
 def read_base_table(path):

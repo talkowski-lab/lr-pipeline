@@ -9,7 +9,8 @@ Clone [LR_GNOMAD-AoU_TALK_Pipeline-Template](https://app.terra.bio/#workspaces/L
 - **Data tables**:
   - `sample` - one row per sample, keyed by `sample_id`, with its `unaligned_bam`. Per-sample workflows read from and write to these rows.
   - `sample_set` - the `cohort` set, listing the samples to run. Per-cohort workflows run on this row.
-  - `contig` - one row per contig, keyed by `contig_id`, with a `sample_set` column linking to the cohort row, which lets contig-row configs read cohort-wide outputs as `this.sample_set.<column>`, and the contig's per-contig references - `gnomad_snv_indel_vcf`, `dbsnp_vcf` and `dbvar_vcf`, each with its `_idx`. Every workflow from step 13 runs on these rows, so the pipeline ends with one VCF per contig.
+  - `contig` - one row per contig, keyed by `contig_id`, with a `sample_set` column linking to the cohort row, which lets contig-row configs read cohort-wide outputs as `this.sample_set.<column>`, and the contig's per-contig references - `gnomad_snv_indel_vcf`, `dbsnp_vcf` and `dbvar_vcf`, each with its `_idx`. Every workflow from step 13 runs on these rows, apart from the methylation branch, so the pipeline ends with one VCF per contig.
+  - `contig_set` - `all_contigs`, every contig row, which `15-ConcatenateVcfsAcrossContigs` runs on to rebuild the cohort VCF for methylation.
 
 Outside the lab, most reference files and the repository images are not publicly readable. Copy each reference from the Source listed in [References](references.md) into your own bucket, build the repository images with `dockerfiles/build_docker.sh` as described in [Docker images](dockers.md), and point the workspace data at your copies.
 
@@ -29,6 +30,6 @@ Everything below is cohort-specific and must be supplied per run. Reference file
 2. Replace the `sample` rows with your samples and their unaligned BAMs, and the `cohort` set's members with their IDs.
 3. Upload your PED and ancestry files and set the `ped` and `ancestry` workspace data to them.
 4. Point `14-BackbonePhase` at your phased truth VCFs, or skip it and point every config that reads `backbone_phased_vcf` at `13-SplitVcfPerContig_Phased`'s `phased_vcf` column instead.
-5. Launch the configs in step order, waiting for every config of a step to finish before starting the next. Step 13 onward is launched on the `contig` rows, all 24 at once.
+5. Launch the configs in step order, waiting for every config of a step to finish before starting the next. Step 13 onward is launched on the `contig` rows, all 24 at once, except the methylation branch: `15-ConcatenateVcfsAcrossContigs` runs on the `all_contigs` set, `16-ExtractSampleVcfs_Backbone` and `17-MethylationProfiling` on the samples, and `18-CreateCohortMethylationFile` on the cohort.
 
 To run outside Terra, each workflow has an example input JSON with placeholder values in [`inputs/`](../inputs/), and [Workflows](workflows.md) describes every input and output. The smoke tests in [tests/README.md](../tests/README.md) check a local setup.

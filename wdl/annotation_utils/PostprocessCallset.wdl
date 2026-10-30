@@ -6,7 +6,7 @@ import "../utils/Structs.wdl"
 workflow PostprocessCallset {
     meta {
         description: [
-            "This utility bundles every genotype-update and post-processing step applied to a near-final callset into one workflow, with a required `run_` Boolean guarding each step so that the input VCF is left untouched when all are set to `false`. The per-record steps are applied in a single pass over the VCF: variants whose ID is listed in `drop_variant_ids` are first removed (when `run_manually_drop_by_id` is set), then each remaining variant is matched against `transfer_vcf` and has its genotypes transferred (when `run_transfer_genotypes` is set) using its unmodified properties, after which the remaining steps - unphasing, ploidy normalization, allele-count recomputation, TR-ID decrementing, MEI pruning, homopolymer flagging, singleton filtering and same-coordinate sorting - run in order. Some steps require an accompanying field - `run_manually_drop_by_id` needs `drop_variant_ids`, `run_transfer_genotypes` needs `transfer_vcf`, `run_unphase_samples` needs `unphase_samples`, and `run_normalize_ploidy` needs `ped`. Setting `run_compute_allele_counts` writes `INFO/AC` and `INFO/AN` from the genotypes as they stand after ploidy normalization, which the two singleton filters read, so they can run before `AnnotateAF`. The per-record pass can optionally be region-sharded via `shard_bin_size`. Two contig-wide steps then follow on the post-processed genotypes, in order. `run_resolve_haplotype_overlaps` scatters per sample over the sample's non-ref calls (excluding `allele_type='trv'` and `INFO/TR_ENVELOPED` variants), sweeps each haplotype for overlapping pairs and keeps the variant spanning more reference sequence (larger `len(REF)`), breaking ties by GQ, then `INFO/allele_length`, then type rank (DEL > INS > SNV), then QUAL, then input-file order; the loser's `GT`, `GQ`, `EV`, `BEV`, `AD` and `PL` are cleared and every pair is reported in `overlap_tsv`. `run_normalize_allele_types` then reclassifies `allele_type` and records the original type in a new `allele_subtype` field: `allele_type=dup` variants all get `allele_subtype=tandem_dup` and keep `allele_type=dup` only when tandem against their `INFO/ORIGIN` source - the insertion and ORIGIN lengths must meet `dup_size_similarity` and POS must fall within ORIGIN or within `dup_breakpoint_window` bases of its breakpoints - and otherwise become `ins`; `complex_dup`, `dup_interspersed`, `inv_dup`, `alu_ins`, `line_ins`, `sva_ins` and `numt` become `ins`, and `alu_del`, `line_del` and `sva_del` become `del`. REF/ALT/POS are never modified, and other `allele_type` values pass through unchanged."
+            "This utility bundles every genotype-update and post-processing step applied to a near-final callset into one workflow, with a required `run_` Boolean guarding each step so that the input VCF is left untouched when all are set to `false`. The per-record steps are applied in a single pass over the VCF: variants whose ID is listed in `drop_variant_ids` are first removed (when `run_manually_drop_by_id` is set), then each remaining variant is matched against `transfer_vcf` and has its genotypes transferred (when `run_transfer_genotypes` is set) using its unmodified properties, after which the remaining steps - filling a missing FILTER value with `PASS`, unphasing, ploidy normalization, allele-count recomputation, TR-ID decrementing, MEI pruning, homopolymer flagging, singleton filtering and same-coordinate sorting - run in order. Some steps require an accompanying field - `run_manually_drop_by_id` needs `drop_variant_ids`, `run_transfer_genotypes` needs `transfer_vcf`, `run_unphase_samples` needs `unphase_samples`, and `run_normalize_ploidy` needs `ped` and `par_bed`. Ploidy normalization clears female calls on chrY and makes male calls on chrX and chrY hemizygous, except in the pseudoautosomal regions of `par_bed`, where male calls stay diploid. Setting `run_compute_allele_counts` writes `INFO/AC` and `INFO/AN` from the genotypes as they stand after ploidy normalization, which the two singleton filters read, so they can run before `AnnotateAF`. The per-record pass can optionally be region-sharded via `shard_bin_size`. Two contig-wide steps then follow on the post-processed genotypes, in order. `run_resolve_haplotype_overlaps` scatters per sample over the sample's non-ref calls (excluding `allele_type='trv'` and `INFO/TR_ENVELOPED` variants), sweeps each haplotype for overlapping pairs and keeps the variant spanning more reference sequence (larger `len(REF)`), breaking ties by GQ, then `INFO/allele_length`, then type rank (DEL > INS > SNV), then QUAL, then input-file order; the loser's `GT`, `GQ`, `EV`, `BEV`, `AD` and `PL` are cleared and every pair is reported in `overlap_tsv`. `run_normalize_allele_types` then reclassifies `allele_type` and records the original type in a new `allele_subtype` field: `allele_type=dup` variants all get `allele_subtype=tandem_dup` and keep `allele_type=dup` only when tandem against their `INFO/ORIGIN` source - the insertion and ORIGIN lengths must meet `dup_size_similarity` and POS must fall within ORIGIN or within `dup_breakpoint_window` bases of its breakpoints - and otherwise become `ins`; `complex_dup`, `dup_interspersed`, `inv_dup`, `alu_ins`, `line_ins`, `sva_ins` and `numt` become `ins`, and `alu_del`, `line_del` and `sva_del` become `del`. A record carrying `INFO/SVTYPE`, as SV caller records do, then has it set to match its final `ins`, `del` or `dup` type. REF/ALT/POS are never modified, and other `allele_type` values pass through unchanged."
         ]
     }
 
@@ -23,11 +23,12 @@ workflow PostprocessCallset {
         run_filter_single_read_singletons: "Whether to apply the `SINGLE_READ_SUPPORT` filter to singleton calls."
         run_flag_homopolymer_trvs: "Whether to flag tandem repeats with a length-1 shortest motif as `HOMOPOLYMER_TRV`."
         run_manually_drop_by_id: "Whether to remove the variants whose IDs are listed in `drop_variant_ids`, before every other step."
-        run_normalize_allele_types: "Whether to reclassify `allele_type` values, recording the original type in `allele_subtype`; runs last."
-        run_normalize_ploidy: "Whether to normalize ploidy by sex - clearing chrY female calls, making chrX/chrY male calls hemizygous, enforcing diploidy and right-aligning unphased calls (requires `ped`)."
+        run_normalize_allele_types: "Whether to reclassify `allele_type` values, recording the original type in `allele_subtype` and setting any `INFO/SVTYPE` to match; runs last."
+        run_normalize_ploidy: "Whether to normalize ploidy by sex - clearing chrY female calls, making chrX/chrY male calls hemizygous outside the pseudoautosomal regions, enforcing diploidy and right-aligning unphased calls (requires `ped` and `par_bed`)."
         run_prune_meis: "Whether to reclassify mobile elements whose length falls outside the expected bounds back to plain insertions/deletions."
         run_reassign_suffixes: "Whether to run the variant-ID suffix reassignment step."
         run_resolve_haplotype_overlaps: "Whether to clear the losing call of each pair of non-TR variants overlapping on the same haplotype, after the per-record pass."
+        run_set_missing_filters_to_pass: "Whether to set `PASS` on records without a FILTER value, for a callset integrated before `PreprocessVcfs` set it; a later filter replaces it."
         run_sorting: "Whether to sort records sharing a coordinate by absolute allele length and variant ID."
         run_transfer_genotypes: "Whether to transfer genotypes from `transfer_vcf` onto heterozygous calls (run first; requires `transfer_vcf`)."
         run_unphase_samples: "Whether to unphase the samples in `unphase_samples` (requires `unphase_samples`)."
@@ -37,6 +38,7 @@ workflow PostprocessCallset {
         transfer_vcf: "VCF whose genotypes are transferred when `run_transfer_genotypes` is set."
         transfer_vcf_idx: "Index for `transfer_vcf`."
         ped: "Cohort pedigree file, used for ploidy normalization when `run_normalize_ploidy` is set."
+        par_bed: "BED of the pseudoautosomal regions, where ploidy normalization keeps male calls diploid; required when `run_normalize_ploidy` is set."
         dup_breakpoint_window: "Maximum distance (bp) between insertion POS and ORIGIN breakpoints to pass the breakpoint check."
         dup_size_similarity: "Minimum size similarity ratio (relative to the larger of the two lengths) between insertion and ORIGIN lengths."
         min_dup_size: "Minimum insertion size (bp) to consider for the tandem check."
@@ -67,6 +69,7 @@ workflow PostprocessCallset {
         Boolean run_prune_meis
         Boolean run_reassign_suffixes
         Boolean run_resolve_haplotype_overlaps
+        Boolean run_set_missing_filters_to_pass
         Boolean run_sorting
         Boolean run_transfer_genotypes
         Boolean run_unphase_samples
@@ -77,6 +80,7 @@ workflow PostprocessCallset {
         File? transfer_vcf
         File? transfer_vcf_idx
         File? ped
+        File? par_bed
 
         Int dup_breakpoint_window = 10
         Float dup_size_similarity = 0.9
@@ -99,6 +103,7 @@ workflow PostprocessCallset {
 
     # Cromwell rejects an undefined optional entering a nested scatter, so these cross as one-element arrays
     Array[File?] ped_wrapped = [ped]
+    Array[File?] par_bed_wrapped = [par_bed]
     Array[RuntimeAttr?] runtime_attr_subset_base_wrapped = [runtime_attr_subset_base]
     Array[RuntimeAttr?] runtime_attr_subset_transfer_wrapped = [runtime_attr_subset_transfer]
     Array[RuntimeAttr?] runtime_attr_post_process_wrapped = [runtime_attr_post_process]
@@ -191,6 +196,7 @@ workflow PostprocessCallset {
                         transfer_vcf = SubsetTransferShard.subset_vcf,
                         transfer_vcf_idx = SubsetTransferShard.subset_vcf_idx,
                         ped = ped_wrapped[0],
+                        par_bed = par_bed_wrapped[0],
                         unphase_samples = unphase_samples,
                         transfer_genotypes = do_transfer_genotypes,
                         unphase = do_unphase_samples,
@@ -205,6 +211,7 @@ workflow PostprocessCallset {
                         filter_assembly_only_singletons = run_filter_assembly_only_singletons,
                         filter_singletons = run_filter_single_read_singletons,
                         flag_homopolymer_trvs = run_flag_homopolymer_trvs,
+                        set_missing_filters_to_pass = run_set_missing_filters_to_pass,
                         prune_meis = run_prune_meis,
                         reassign_suffixes = run_reassign_suffixes,
                         sort_records = run_sorting,
@@ -249,6 +256,7 @@ workflow PostprocessCallset {
                     transfer_vcf = transfer_source_vcf,
                     transfer_vcf_idx = transfer_source_vcf_idx,
                     ped = ped,
+                    par_bed = par_bed,
                     unphase_samples = unphase_samples,
                     transfer_genotypes = do_transfer_genotypes,
                     unphase = do_unphase_samples,
@@ -263,6 +271,7 @@ workflow PostprocessCallset {
                     filter_assembly_only_singletons = run_filter_assembly_only_singletons,
                     filter_singletons = run_filter_single_read_singletons,
                     flag_homopolymer_trvs = run_flag_homopolymer_trvs,
+                    set_missing_filters_to_pass = run_set_missing_filters_to_pass,
                     prune_meis = run_prune_meis,
                     reassign_suffixes = run_reassign_suffixes,
                     sort_records = run_sorting,
@@ -438,6 +447,7 @@ task PostProcessTask {
         File? transfer_vcf
         File? transfer_vcf_idx
         File? ped
+        File? par_bed
         Array[String] unphase_samples = []
         Boolean transfer_genotypes
         Boolean unphase
@@ -446,6 +456,7 @@ task PostProcessTask {
         Boolean decrement_trv_ids
         Boolean prune_meis
         Boolean flag_homopolymer_trvs
+        Boolean set_missing_filters_to_pass
         Boolean sort_records
         Boolean filter_assembly_only_singletons
         Boolean filter_singletons
@@ -476,6 +487,7 @@ compute_allele_counts = ~{true="True" false="False" compute_allele_counts}
 decrement_trv_ids = ~{true="True" false="False" decrement_trv_ids}
 prune_meis = ~{true="True" false="False" prune_meis}
 flag_homopolymer_trvs = ~{true="True" false="False" flag_homopolymer_trvs}
+set_missing_filters_to_pass = ~{true="True" false="False" set_missing_filters_to_pass}
 sort_records = ~{true="True" false="False" sort_records}
 filter_assembly_only_singletons = ~{true="True" false="False" filter_assembly_only_singletons}
 filter_singletons = ~{true="True" false="False" filter_singletons}
@@ -510,6 +522,29 @@ def parse_ped(path):
             else:
                 sex_by_sample[sample_id] = None
     return sex_by_sample
+
+def load_par_regions(par_bed):
+    regions = []
+    with open(par_bed) as bed:
+        for line in bed:
+            fields = line.rstrip("\n").split("\t")
+            if len(fields) < 3 or line.startswith(("#", "track", "browser")):
+                continue
+            regions.append((fields[0], int(fields[1]), int(fields[2])))
+    return regions
+
+# Same overlap test as compute_AFs.py, so a male call kept diploid here is one AnnotateAF flags as `par`
+def in_par(record, par_regions):
+    sstart, send = sorted([record.start, record.stop])
+    for chrom, pstart, pend in par_regions:
+        if chrom != record.chrom:
+            continue
+        if sstart == send:
+            if pstart <= sstart <= pend:
+                return True
+        elif sstart < pend and send > pstart:
+            return True
+    return False
 
 def get_scalar(value):
     if isinstance(value, (list, tuple)):
@@ -776,6 +811,7 @@ def flush_buffer(buf, out_vcf, tsv_writer, assembly_alt_idx, reassign_suffixes, 
         write_assembly_only_singleton_rows(r, assembly_alt_idx.pop(id(r), []), tsv_writer)
 
 sex_by_sample = parse_ped("~{default="NONE" ped}") if normalize_ploidy else {}
+par_regions = load_par_regions("~{default="NONE" par_bed}") if normalize_ploidy else []
 
 base_reader = pysam.VariantFile("~{base_vcf}")
 transfer_reader = pysam.VariantFile("~{transfer_vcf}") if transfer_genotypes else None
@@ -823,6 +859,9 @@ for record in base_reader:
     if drop and drop_filters_set.intersection(record.filter.keys()):
         continue
 
+    if set_missing_filters_to_pass and not record.filter.keys():
+        record.filter.add("PASS")
+
     record.translate(output_writer.header)
 
     # Transfer genotypes first, matching on the unmodified variant properties
@@ -842,6 +881,8 @@ for record in base_reader:
             for sample in base_samples:
                 record.samples[sample].phased = False
 
+    record_in_par = normalize_ploidy and record.chrom in {"chrX", "chrY"} and in_par(record, par_regions)
+
     if unphase or normalize_ploidy:
         for sample in base_samples:
             sample_data = record.samples[sample]
@@ -860,8 +901,8 @@ for record in base_reader:
                     clear_format_fields(sample_data)
                     continue
 
-                # Make male calls hemizygous on chrX and chrY
-                if record.chrom in {"chrX", "chrY"} and sample_sex == "M":
+                # Make male calls hemizygous on chrX and chrY outside the pseudoautosomal regions
+                if record.chrom in {"chrX", "chrY"} and sample_sex == "M" and not record_in_par:
                     sample_data["GT"] = make_male_hemizygous(sample_data.get("GT"), sample_data.phased)
 
                 # Ensure diploidy
@@ -1188,6 +1229,7 @@ min_dup_size = ~{min_dup_size}
 
 INS_SUBTYPES = {"complex_dup", "dup_interspersed", "inv_dup", "alu_ins", "line_ins", "sva_ins", "numt"}
 DEL_SUBTYPES = {"alu_del", "line_del", "sva_del"}
+SVTYPES = {"ins": "INS", "del": "DEL", "dup": "DUP"}
 
 def parse_origin(origin):
     m = re.match(r'^(.+):(\d+)-(\d+)_?[+-]$', origin)
@@ -1263,6 +1305,11 @@ def normalize(record):
         record.info["allele_subtype"] = allele_type
         record.info["allele_type"] = "del"
 
+    # The SV callers' SVTYPE never sees the reclassification, so it follows the final type
+    final_type = record.info.get("allele_type")
+    if has_svtype and record.info.get("SVTYPE") is not None and final_type in SVTYPES:
+        record.info["SVTYPE"] = SVTYPES[final_type]
+
 to_clear = {}
 if resolve_overlaps:
     with open("~{cleared_calls_tsv}") as f:
@@ -1275,6 +1322,7 @@ if resolve_overlaps:
 
 vcf_in = pysam.VariantFile("~{vcf}")
 header = vcf_in.header.copy()
+has_svtype = "SVTYPE" in header.info
 if normalize_allele_types:
     header.info.add("allele_subtype", 1, "String", "Original allele_type subtype for reclassified variants: tandem_dup, dup_interspersed, complex_dup, inv_dup, alu_ins, line_ins, sva_ins, numt, alu_del, line_del or sva_del.")
 vcf_out = pysam.VariantFile("~{prefix}.vcf.gz", "wz", header=header)

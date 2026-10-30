@@ -31,5 +31,6 @@
     "AnnotateAF.records_per_shard": 10000,
     "AnnotateAF.ped": "gs://<cohort-bucket>/cohort.ped",
     "AnnotateAF.par_bed": "gs://<references-bucket>/hg38.par.bed",
+    "AnnotateAF.drop_ac_zero_records": false,
     "AnnotateAF.utils_docker": "us-central1-docker.pkg.dev/talkowski-sv-gnomad/kj-dockers/utils:latest"
 }

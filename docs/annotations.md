@@ -24,7 +24,7 @@ Some names below depend on the inputs of the released callsets rather than being
   - `dup`: Tandem duplication, where the duplicated sequence is adjacent to its origin.
   - `trv`: Tandem repeat.
 - `allele_subtype`: Original classification for reclassified variants, which is one of the below.
-  - `tandem_dup`: Tandem duplication, kept as `allele_type = "dup"` if it meets the tandem criteria, otherwise demoted to `allele_type = "ins"`.
+  - `tandem_dup`: Tandem duplication, kept as `allele_type = "dup"` if it meets the tandem criteria, otherwise demoted to `allele_type = "ins"`. The criteria need an insertion of at least `min_dup_size` (50 bp by default) with a single `ORIGIN` interval, so SVAN duplications below 50 bp, mostly DeepVariant indels, always read `ins`.
   - `dup_interspersed`: Interspersed duplication.
   - `complex_dup`: Complex duplication.
   - `inv_dup`: Inverted duplication.
@@ -47,6 +47,10 @@ Some names below depend on the inputs of the released callsets rather than being
   - `nhet`: Number of samples with heterozygous genotypes (biallelic sites only).
   - `nhomalt`: Number of samples with homozygous alternate genotypes (biallelic sites only).
   - `nhomref`: Number of samples with homozygous reference genotypes (biallelic sites only).
+  - `nhemialt`, `nhemiref`, `freq_hemialt`, `freq_hemiref`: Number and frequency of hemizygous alternate and reference genotypes, on chrX and chrY outside the pseudoautosomal regions (biallelic sites only, `_XY` only).
+  - `par`: Flag indicating the variant overlaps a pseudoautosomal region, where male genotypes stay diploid.
+  - Every count and frequency above is repeated per sex as `<field>_XX` and `<field>_XY`, per population as `<field>_<pop>` and `<field>_<pop>_XX/_XY`, and for the population with the highest frequency as `AC_grpmax`, `AF_grpmax`, `AN_grpmax` and `nhomalt_grpmax`. The population labels come from the cohort ancestry file.
+- `AQ`: Allele quality of each ALT allele (Phred scale), from GLnexus. Set on `DeepVariant` calls.
 - `dbSNP_ID`: Variant ID from dbSNP for matched variants.
 - `dbVaR_ID`: Variant ID from dbVaR for matched variants.
 - Genotype Quality Metrics: Binned distributions of per-variant genotype quality and allele balance across carriers.
@@ -119,8 +123,16 @@ Some names below depend on the inputs of the released callsets rather than being
 - `SOURCE`: Source of call, which is one of the below.
   - `DeepVariant`: SNV or indel call made by the DeepVariant pipeline.
   - `HPRC_SV_Integration`: Structural variant call made by the HPRC SV Integration pipeline.
+  - `SV_Integration`: Structural variant call of 50 bp to 2 kb from the SV callset, as tagged in the template workspace.
+  - `LongSV_Integration`: Structural variant call longer than 2 kb from the long-SV callset, as tagged in the template workspace.
   - `TRExplorer`: Tandem repeat loci from the TRExplorer v1.0.1 catalog.
   - `Vamos`: Tandem repeat loci from the Vamos v2.1 catalog.
+- SV Callset Fields: INFO fields carried over from the SV callers and the SV integration, on SV calls only. The VCF header defines each one.
+  - `SVTYPE`: SV type, `INS`, `DEL` or `DUP`. `PostprocessCallset` resets it to the final `allele_type` when it normalizes allele types, so the two always agree; a `DUP` is written as an insertion of the duplicated sequence.
+  - `SVLEN`, `SUPP_PAV`, `SUPP_PBSV`, `SUPP_SNIFFLES`, `N_DISCOVERY_SAMPLES`: Length, per-caller support and the number of samples the call was discovered in.
+  - `AD_ALL`, `AD_NON_ALT`, `GT_COUNT`, `KS_1`, `KS_2`, `SQ`, `SCORE`, `CALIBRATION_SENSITIVITY`, `calibration`, `extracted`, `training`: Kanpig genotype metrics copied to INFO and the XGBoost score and labels, on 50 bp to 2 kb calls.
+  - `CollapseId`, `NumCollapsed`, `NumConsolidated`: Truvari collapse bookkeeping.
+  - Other fields, such as `SUPPORT`, `COVERAGE`, `PHASE`, `QUERY` and `SEQ`, are passed through from the representative caller's record.
 - `SUB_FAMILY`: Sub-family for MEI calls.
 - Tandem Repeats: Tandem repeat-specific annotations for TR calls, including motif composition and structural information.
   - `MOTIFS`: Motifs that the tandem repeat is composed of.
@@ -141,17 +153,19 @@ Some names below depend on the inputs of the released callsets rather than being
 
 ## FORMAT Fields
 Which fields a call carries depends on its `INFO/SOURCE`.
-- `AD`: Allelic depths for the REF and ALT alleles, in the order listed. Set on `DeepVariant` and `HPRC_SV_Integration` calls; for SVs, the depths come from Kanpig regenotyping.
+- `AD`: Allelic depths for the REF and ALT alleles, in the order listed. Set on `DeepVariant` and SV calls; for 50 bp to 2 kb SVs, the depths come from Kanpig regenotyping.
 - `AL`: Allele length. On `HPRC_SV_Integration` calls, the unsigned length of the sample's SV allele; on tandem repeat calls, the length of each allele from TRGT.
-- `DP`: Approximate read depth. Set on `DeepVariant` calls only.
-- `GQ`: Genotype quality. Set on `DeepVariant` and `HPRC_SV_Integration` calls.
+- `DP`: Approximate read depth. Set on `DeepVariant` and SV calls.
+- `GQ`: Genotype quality. Set on `DeepVariant` and SV calls.
 - `GT`: Genotype, written with `|` where phasing placed the call on a haplotype.
-- Phasing: Haplotype phasing from HiPhase and backbone phasing, set on `DeepVariant` and `HPRC_SV_Integration` calls.
+- Phasing: Haplotype phasing from HiPhase and backbone phasing, set on `DeepVariant`, SV and tandem repeat calls. Homopolymer tandem repeat calls (`HOMOPOLYMER_TRV`) are left out of phasing, so their genotypes stay unphased.
   - `PF`: Phasing flag set by HiPhase on a call it deliberately excluded from phasing. The only value is `TR_OVERLAP`, for a call fully contained within a TRGT tandem repeat call.
   - `PS`: Phase set identifier, the `POS` of the first variant in the phase block. Backbone phasing fills it for some `PF = TR_OVERLAP` calls from its run without TRGT calls.
 - `PL`: Phred-scaled genotype likelihoods. Set on `DeepVariant` and `HPRC_SV_Integration` calls.
 - `RNC`: Reason for a no-call in `GT`, as one code per allele from GLnexus - e.g. `M` for missing data, `D` for insufficient depth or `.` when not applicable. The VCF header lists every code. Set on `DeepVariant` calls only.
-- SV Calls: Per-sample allele position and caller evidence for `HPRC_SV_Integration` calls.
+- SV Calls: Per-sample allele position, genotyping and caller evidence for SV calls.
+  - `FTK`, `KS`, `SQ`: Kanpig filter, score and non-reference Phred quality, on 50 bp to 2 kb calls (`SV_Integration` in the template workspace).
+  - `DR`, `DV`, `SAC`, `SUPP`: Reference and variant read counts and per-strand read support from the representative caller, and the Truvari collapse support flag, on long-SV calls (`LongSV_Integration` in the template workspace).
   - `APOS`: Breakpoint position of the sample's SV allele, which can differ from the site `POS`.
   - `BEV`: Representative caller for the sample call - `kanpig` if it appears in `EV`, otherwise the caller in `EV` whose `AD` gives the highest `GQ`. Added by the archived `AnnotateSvCallerSupport`, for HPRC/HGSVC only.
   - `EV`: Callers supporting the sample call, added by the archived `AnnotateSvCallerSupport` for HPRC/HGSVC only, as a comma-separated list of `caller_(refAD_altAD)` - e.g. `pbsv_(18_13)`. The assembly-based callers `dipcall` and `hapdiff` carry no depths.
