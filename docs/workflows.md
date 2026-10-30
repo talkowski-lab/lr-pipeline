@@ -1037,6 +1037,7 @@ Inputs:
 - `Int depth_window`: Window size, in bp, of the depth track. (default `250`)
 - `Array[File] annotation_beds`: BED files drawn as feature tracks under the reads and shaded on the depth tracks, such as segmental duplications. (default `[]`)
 - `Array[String] annotation_names`: Track names for `annotation_beds`, in the same order. (default `[]`)
+- `File? genes_gtf`: Gene annotation GTF drawn as a gene track under the annotation tracks, cut to the plotted regions first.
 - `String prefix`: Prefix for output file names.
 - `String utils_docker`, `String igv_docker`: Container images.
 - `RuntimeAttr? runtime_attr_*`: Optional per-task runtime overrides (3).

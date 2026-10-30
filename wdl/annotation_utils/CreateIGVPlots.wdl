@@ -32,6 +32,7 @@ workflow CreateIGVPlots {
         depth_window: "Window size, in bp, of the depth track."
         annotation_beds: "BED files drawn as feature tracks under the reads and shaded on the depth tracks, such as segmental duplications."
         annotation_names: "Track names for `annotation_beds`, in the same order."
+        genes_gtf: "Gene annotation GTF drawn as a gene track under the annotation tracks, cut to the plotted regions first."
         igv_plots_tar: "Tarball of `igv_plots/<family>/<variant_id>_<family>.png`, one plot per family per variant it carries."
     }
 
@@ -51,6 +52,7 @@ workflow CreateIGVPlots {
         Int depth_window = 250
         Array[File] annotation_beds = []
         Array[String] annotation_names = []
+        File? genes_gtf
 
         String utils_docker
         String igv_docker
@@ -86,6 +88,7 @@ workflow CreateIGVPlots {
                 depth_window = depth_window,
                 annotation_beds = annotation_beds,
                 annotation_names = annotation_names,
+                genes_gtf = genes_gtf,
                 docker = igv_docker,
                 runtime_attr_override = runtime_attr_plot_family_igv
         }
@@ -166,6 +169,7 @@ task PlotFamilyIGV {
         Int depth_window
         Array[File] annotation_beds
         Array[String] annotation_names
+        File? genes_gtf
         String docker
         RuntimeAttr? runtime_attr_override
     }
@@ -199,6 +203,9 @@ task PlotFamilyIGV {
             print $1, (start < 0 ? 0 : start), $3 + pad
         }' family_variants.bed | sort -k1,1 -k2,2n | bedtools merge > regions.bed
         bedtools makewindows -b regions.bed -w ~{depth_window} > windows.bed
+        if [[ -n "~{genes_gtf}" ]]; then
+            bedtools intersect -u -a ~{genes_gtf} -b regions.bed > genes.gtf
+        fi
 
         export GCS_OAUTH_TOKEN=$(gcloud auth application-default print-access-token)
         while read -r SAMPLE BAM BAI; do
@@ -224,7 +231,8 @@ task PlotFamilyIGV {
             --long_read \
             --status_labels \
             --annotation_beds ~{sep=' ' annotation_beds} \
-            --annotation_names ~{sep=' ' annotation_names}
+            --annotation_names ~{sep=' ' annotation_names} \
+            ~{if defined(genes_gtf) then "--genes genes.gtf" else ""}
 
         # Size the IGV heap to the VM, leaving room for the virtual display
         MEM_KB=$(awk '/MemTotal/ { print $2 }' /proc/meminfo)
