@@ -575,6 +575,7 @@ workflows:
     filters:
       branches:
         - main
+        - kj-evaluate-callset-accuracy-contig-set
       tags:
         - /.*/
 

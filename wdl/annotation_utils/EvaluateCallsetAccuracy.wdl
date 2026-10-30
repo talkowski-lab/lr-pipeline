@@ -7,55 +7,75 @@ import "../utils/Structs.wdl"
 workflow EvaluateCallsetAccuracy {
     meta {
         description: [
-            "This utility benchmarks one contig of a cohort VCF against a truth set combined from an SNV & indel truth VCF and an SV truth VCF, reporting precision and recall at the site and call level. Each truth VCF is cut to the callset's samples and contig, split into biallelic records and left-aligned, and the SNV & indel truth is restricted to `truth_snv_indel_bed` when given. SV truth records identical in CHROM, POS, REF and ALT to an SNV & indel truth record are dropped before the two are combined, so each variant is counted once. The BED also restricts callset records shorter than `sv_min_length`, matching the truth records it bounds; longer callset records are kept genome-wide like the SV truth. Only records with at least one non-reference call are kept on either side.",
-            "Matching reuses the first round of `AnnotateCallsetOverlap`, an exact match on CHROM, POS, REF and ALT, followed by a single Truvari pass at 0.5 sequence similarity, size similarity and overlap between the callset records left unmatched, with `abs(INFO/allele_length)` of at least `min_sv_length_truvari_vcf`, and every truth record of at least `min_sv_length_truvari_truth_vcf`. The Truvari pass keeps every pair that passes these thresholds rather than one partner per record, so a record can match several records on the other side, and each record still counts once in its own side's totals. Truvari skips records longer than 50 kb, so those count only through the exact match.",
-            "A site is one record and a call is one sample's non-reference genotype at it, with phasing and zygosity ignored. A callset site is a true positive when it matched any truth record and a callset call when that sample is also non-reference in any matched truth record; a truth site or call is recovered the same way from the other side. Precision counts callset sites and calls, stratified by `INFO/allele_type` and `abs(INFO/allele_length)`, with a duplication written as an insertion (`allele_type=dup` or `SVTYPE=DUP` and an ALT longer than its REF) counted and matched as an insertion, and recall counts truth sites and calls, stratified by the type and length of the truth record - `SVTYPE` and `SVLEN` when present, otherwise REF and ALT. A matched pair can therefore fall in different strata on the two sides. Truth records that are not an SNV, insertion or deletion, such as multi-nucleotide variants and inversions, are left out of recall.",
-            "Each record is also assigned the genomic region of `AnnotateRegion` - simple repeat, segmental duplication, RepeatMasker or unique sequence - and rows are stratified into `US/RM` and `SD/SR`, by the callset record's region for precision and the truth record's for recall.",
-            "Every row is reported at both matching stages, cumulatively, so the `truvari` rows give the totals. All count columns sum across contigs."
+            "This utility benchmarks a callset against a truth VCF, reporting precision and recall at the site and call level across a set of contigs. Each contig's callset VCF is evaluated on its own, in parallel, and the counts are summed across contigs into one table and a set of plots. The truth VCF holds every contig and is read once per contig; it may be paired with a second truth VCF of SVs, whose records identical in CHROM, POS, REF and ALT to a `truth_vcf` record are dropped before the two are combined, so each variant is counted once.",
+            "Both sides are cut to the contig and the callset's samples, split into biallelic records and left-aligned, and filtered by their own `bcftools view` include expressions; only records with at least one non-reference call are kept. Every record is given an allele type and signed length, from `INFO/allele_type` and `INFO/allele_length` when present, then from `SVTYPE` and `SVLEN`, then from REF and ALT, with a duplication written as an insertion (a sequence ALT longer than its REF) counted and matched as an insertion, so any VCF can be benchmarked. `truth_bed` restricts `truth_vcf` to its confident regions and bounds the callset records it covers: every callset record, or only those shorter than `sv_min_length` when `truth_sv_vcf` supplies the longer variants genome-wide.",
+            "Matching reuses the first round of `AnnotateCallsetOverlap`, an exact match on CHROM, POS, REF and ALT, followed by a single Truvari pass between the callset records left unmatched with an absolute length of at least `min_sv_length_truvari_vcf` and every truth record of at least `min_sv_length_truvari_truth_vcf`, up to the `max_sv_length_truvari_*` lengths, at the `truvari_*` thresholds. The Truvari pass keeps every pair that passes these thresholds rather than one partner per record, so a record can match several records on the other side, and each record still counts once in its own side's totals. Callset records above `max_sv_length_truvari_vcf` count only through the exact match.",
+            "A site is one record and a call is one sample's non-reference genotype at it, with phasing and zygosity ignored. A callset site is a true positive when it matched any truth record and a callset call when that sample is also non-reference in any matched truth record; a truth site or call is recovered the same way from the other side. Precision counts callset sites and calls, stratified by allele type and absolute length, and recall counts truth sites and calls, stratified by the type and length of the truth record, so a matched pair can fall in different strata on the two sides. Truth records that are not an SNV, insertion or deletion, such as multi-nucleotide variants, inversions and symbolic duplications, are left out of recall.",
+            "Each record is also assigned the genomic region of `AnnotateRegion` - simple repeat, segmental duplication, RepeatMasker or unique sequence - and rows are stratified into `US/RM` and `SD/SR`, by the callset record's region for precision and the truth record's for recall. Every row is reported at both matching stages, cumulatively, so the `truvari` rows give the totals."
         ]
     }
 
     parameter_meta {
-        vcf: "Callset VCF to benchmark, carrying `INFO/allele_type` and `INFO/allele_length`."
-        vcf_idx: "Index for `vcf`."
-        truth_snv_indel_vcf: "Truth VCF of SNVs and indels, holding every callset sample."
-        truth_snv_indel_vcf_idx: "Index for `truth_snv_indel_vcf`."
-        truth_sv_vcf: "Truth VCF of SVs, holding every callset sample."
+        vcfs: "Callset VCFs to benchmark, one per contig."
+        vcf_idxs: "Indexes for `vcfs`."
+        contigs: "Contig of each of `vcfs`, in the same order."
+        truth_vcf: "Truth VCF covering every contig in `contigs` and holding every callset sample."
+        truth_vcf_idx: "Index for `truth_vcf`."
+        truth_sv_vcf: "Optional second truth VCF of SVs, holding every callset sample and kept genome-wide."
         truth_sv_vcf_idx: "Index for `truth_sv_vcf`."
-        truth_snv_indel_bed: "Confident regions of `truth_snv_indel_vcf`, restricting it and the callset records shorter than `sv_min_length`."
-        contig: "Contig to evaluate."
-        args_string_vcf: "`bcftools view` include expression selecting the callset records to benchmark."
-        sv_min_length: "Callset `abs(INFO/allele_length)` from which records are kept outside `truth_snv_indel_bed`."
-        min_sv_length_truvari_vcf: "Minimum `abs(INFO/allele_length)` for an unmatched callset record to enter the Truvari pass."
-        min_sv_length_truvari_truth_vcf: "Minimum absolute length for an unmatched truth record to enter the Truvari pass."
+        truth_bed: "Confident regions of `truth_vcf`, restricting it and the callset records it covers."
+        args_string_vcf: "`bcftools view` include expression selecting the callset records to benchmark, applied after typing, so it may use `INFO/allele_type` and `INFO/allele_length`."
+        args_string_truth_vcf: "`bcftools view` include expression selecting the `truth_vcf` records, applied to them as read."
+        args_string_truth_sv_vcf: "`bcftools view` include expression selecting the `truth_sv_vcf` records, applied to them as read."
+        sv_min_length: "Absolute length from which callset records are kept outside `truth_bed` when `truth_sv_vcf` is given."
+        min_sv_length_truvari_vcf: "Minimum absolute length for an unmatched callset record to enter the Truvari pass."
+        min_sv_length_truvari_truth_vcf: "Minimum absolute length for a truth record to enter the Truvari pass."
+        max_sv_length_truvari_vcf: "Maximum absolute length for an unmatched callset record to enter the Truvari pass."
+        max_sv_length_truvari_truth_vcf: "Maximum absolute length for a truth record to enter the Truvari pass."
+        truvari_refdist: "Maximum distance in base pairs between a Truvari pair's breakpoints."
+        truvari_pctseq: "Minimum Truvari sequence similarity of a pair; 0 compares by position and size only."
+        truvari_pctsize: "Minimum Truvari size similarity of a pair."
+        truvari_pctovl: "Minimum Truvari reciprocal overlap of a pair."
+        truvari_typeignore: "Let Truvari pair records of different SV types."
         length_bins: "Size-bin edges stratifying records by absolute length."
-        shard_bin_size_exact_match: "Width in base pairs of the regions the exact-match round is sharded into."
+        shard_bin_size_exact_match: "Width in base pairs of the regions each contig's exact-match round is sharded into."
         records_per_shard_region: "Number of records per shard when assigning genomic regions."
         ref_fa: "From references."
         ref_fai: "From references."
         simple_repeats_bed: "From references."
         seg_dup_bed: "From references."
         repeat_masked_bed: "From references."
-        exact_match_tsv: "Exact-match pairs, one row per callset record with the callset record ID in the fifth column and the truth record ID in the seventh."
-        truvari_match_tsv: "Truvari pairs in the same layout, one row per passing callset and truth record pair."
-        accuracy_tsv: "One row per level (`site` or `call`), sample, allele type, length bin, region (`US/RM` or `SD/SR`) and cumulative matching stage (`exact` or `truvari`), with `tp_eval`, `fp`, `tp_truth`, `fn`, precision, recall and F1; strata with no records on either side are left out. Site rows use sample `all`; type, length bin and region each have an `all` marginal."
+        exact_match_tsvs: "Exact-match pairs of each contig, in the order of `contigs`, one row per callset record with the callset record ID in the fifth column and the truth record ID in the seventh."
+        truvari_match_tsvs: "Truvari pairs of each contig in the same layout, one row per passing callset and truth record pair."
+        accuracy_tsv: "Counts summed across contigs, one row per level (`site` or `call`), sample, allele type, length bin, region (`US/RM` or `SD/SR`) and cumulative matching stage (`exact` or `truvari`), with `tp_eval`, `fp`, `tp_truth`, `fn`, precision, recall and F1; strata with no records on either side are left out. Site rows use sample `all`; type, length bin and region each have an `all` marginal."
+        accuracy_per_contig_tsv: "The rows of `accuracy_tsv` for each contig, under a leading `contig` column."
+        accuracy_plots_tar: "Tarball of precision and recall plots by allele type, length bin and region, by sample and by matching stage, with `summary.tsv` holding the site and call metrics side by side."
     }
 
     input {
-        File vcf
-        File vcf_idx
-        File truth_snv_indel_vcf
-        File truth_snv_indel_vcf_idx
-        File truth_sv_vcf
-        File truth_sv_vcf_idx
-        File? truth_snv_indel_bed
-        String contig
+        Array[File] vcfs
+        Array[File] vcf_idxs
+        Array[String] contigs
+        File truth_vcf
+        File truth_vcf_idx
+        File? truth_sv_vcf
+        File? truth_sv_vcf_idx
+        File? truth_bed
         String prefix
 
-        String args_string_vcf = 'INFO/allele_type!="trv"'
+        String? args_string_vcf
+        String? args_string_truth_vcf
+        String? args_string_truth_sv_vcf
         Int sv_min_length = 50
         Int min_sv_length_truvari_vcf = 5
         Int min_sv_length_truvari_truth_vcf = 10
+        Int max_sv_length_truvari_vcf = 50000
+        Int max_sv_length_truvari_truth_vcf = 50000
+        Int truvari_refdist = 500
+        Float truvari_pctseq = 0.5
+        Float truvari_pctsize = 0.5
+        Float truvari_pctovl = 0.5
+        Boolean truvari_typeignore = false
         Array[Int] length_bins = [0, 1, 50, 2000]
 
         Int shard_bin_size_exact_match = 5000000
@@ -73,6 +93,7 @@ workflow EvaluateCallsetAccuracy {
         RuntimeAttr? runtime_attr_prepare_truth
         RuntimeAttr? runtime_attr_truvari_match
         RuntimeAttr? runtime_attr_count_accuracy
+        RuntimeAttr? runtime_attr_summarize_accuracy
         RuntimeAttr? runtime_attr_create_exact_shards
         RuntimeAttr? runtime_attr_subset_exact_vcf
         RuntimeAttr? runtime_attr_subset_exact_truth
@@ -80,140 +101,173 @@ workflow EvaluateCallsetAccuracy {
         RuntimeAttr? runtime_attr_append_exact_annotations
         RuntimeAttr? runtime_attr_truvari_subset_vcf
         RuntimeAttr? runtime_attr_truvari_subset_truth
+        RuntimeAttr? runtime_attr_truvari_subset_oversized
         RuntimeAttr? runtime_attr_concat_exact_annotations
         RuntimeAttr? runtime_attr_concat_exact_unmatched
         RuntimeAttr? runtime_attr_concat_exact_truth
+        RuntimeAttr? runtime_attr_concat_exact_oversized
         RuntimeAttr? runtime_attr_region_shard
         RuntimeAttr? runtime_attr_annotate_region
         RuntimeAttr? runtime_attr_concat_region_shards
     }
 
-    call PrepareAccuracyEvalVcf {
+    # Without a separate SV truth, the BED's truth holds every variant length, so it bounds every callset record
+    Int bounded_below_length = if defined(truth_sv_vcf) then sv_min_length else 2147483647
+
+    scatter (i in range(length(vcfs))) {
+        String contig = contigs[i]
+
+        call PrepareAccuracyEvalVcf {
+            input:
+                vcf = vcfs[i],
+                vcf_idx = vcf_idxs[i],
+                contig = contig,
+                include_args = args_string_vcf,
+                bounded_below_length = bounded_below_length,
+                restrict_bed = truth_bed,
+                ref_fa = ref_fa,
+                ref_fai = ref_fai,
+                prefix = "~{prefix}.~{contig}.eval",
+                docker = utils_docker,
+                runtime_attr_override = runtime_attr_prepare_eval
+        }
+
+        call PrepareAccuracyTruthVcf {
+            input:
+                truth_vcf = truth_vcf,
+                truth_vcf_idx = truth_vcf_idx,
+                sv_vcf = truth_sv_vcf,
+                sv_vcf_idx = truth_sv_vcf_idx,
+                include_args = args_string_truth_vcf,
+                sv_include_args = args_string_truth_sv_vcf,
+                contig = contig,
+                samples = PrepareAccuracyEvalVcf.samples,
+                restrict_bed = truth_bed,
+                ref_fa = ref_fa,
+                ref_fai = ref_fai,
+                prefix = "~{prefix}.~{contig}.truth",
+                docker = utils_docker,
+                runtime_attr_override = runtime_attr_prepare_truth
+        }
+
+        call ExactMatch.ExactMatch {
+            input:
+                vcf = PrepareAccuracyEvalVcf.eval_vcf,
+                vcf_idx = PrepareAccuracyEvalVcf.eval_vcf_idx,
+                truth_snv_indel_vcf = PrepareAccuracyTruthVcf.prepared_vcf,
+                truth_snv_indel_vcf_idx = PrepareAccuracyTruthVcf.prepared_vcf_idx,
+                contig = contig,
+                prefix = "~{prefix}.~{contig}",
+                run_exact_matching = true,
+                run_truvari_matching = true,
+                shard_bin_size_exact_match = shard_bin_size_exact_match,
+                min_sv_length_truvari_vcf = min_sv_length_truvari_vcf,
+                min_sv_length_truvari_truth_snv_indel_vcf = min_sv_length_truvari_truth_vcf,
+                max_sv_length_truvari_vcf = max_sv_length_truvari_vcf,
+                max_sv_length_truvari_truth_snv_indel_vcf = max_sv_length_truvari_truth_vcf,
+                length_field_vcf = "allele_length",
+                length_field_truth_snv_indel_vcf = "allele_length",
+                source_tag_truth_snv_indel_vcf = "truth",
+                utils_docker = utils_docker,
+                runtime_attr_create_exact_shards = runtime_attr_create_exact_shards,
+                runtime_attr_subset_exact_vcf = runtime_attr_subset_exact_vcf,
+                runtime_attr_subset_exact_truth = runtime_attr_subset_exact_truth,
+                runtime_attr_exact_match = runtime_attr_exact_match,
+                runtime_attr_append_exact_annotations = runtime_attr_append_exact_annotations,
+                runtime_attr_truvari_subset_vcf = runtime_attr_truvari_subset_vcf,
+                runtime_attr_truvari_subset_truth = runtime_attr_truvari_subset_truth,
+                runtime_attr_truvari_subset_oversized = runtime_attr_truvari_subset_oversized,
+                runtime_attr_concat_exact_annotations = runtime_attr_concat_exact_annotations,
+                runtime_attr_concat_exact_unmatched = runtime_attr_concat_exact_unmatched,
+                runtime_attr_concat_exact_truth = runtime_attr_concat_exact_truth,
+                runtime_attr_concat_exact_oversized = runtime_attr_concat_exact_oversized
+        }
+
+        # ExactMatch hands Truvari every long enough truth record, so a truth record matched exactly can still pair with other callset records
+        call TruvariMatchAllPairs {
+            input:
+                vcf = ExactMatch.truvari_eval_vcf,
+                vcf_idx = ExactMatch.truvari_eval_vcf_idx,
+                truth_vcf = select_first([ExactMatch.truvari_truth_vcf]),
+                truth_vcf_idx = select_first([ExactMatch.truvari_truth_vcf_idx]),
+                refdist = truvari_refdist,
+                pctseq = truvari_pctseq,
+                pctsize = truvari_pctsize,
+                pctovl = truvari_pctovl,
+                sizemax = if max_sv_length_truvari_vcf > max_sv_length_truvari_truth_vcf then max_sv_length_truvari_vcf else max_sv_length_truvari_truth_vcf,
+                typeignore = truvari_typeignore,
+                ref_fa = ref_fa,
+                ref_fai = ref_fai,
+                prefix = "~{prefix}.~{contig}.truvari",
+                docker = utils_docker,
+                runtime_attr_override = runtime_attr_truvari_match
+        }
+
+        call AnnotateRegion.AnnotateRegion as AnnotateEvalRegion {
+            input:
+                vcf = PrepareAccuracyEvalVcf.eval_vcf,
+                vcf_idx = PrepareAccuracyEvalVcf.eval_vcf_idx,
+                contigs = [contig],
+                prefix = "~{prefix}.~{contig}.eval",
+                records_per_shard = records_per_shard_region,
+                simple_repeats_bed = simple_repeats_bed,
+                seg_dup_bed = seg_dup_bed,
+                repeat_masked_bed = repeat_masked_bed,
+                utils_docker = utils_docker,
+                runtime_attr_shard = runtime_attr_region_shard,
+                runtime_attr_annotate_region = runtime_attr_annotate_region,
+                runtime_attr_concat_shards = runtime_attr_concat_region_shards
+        }
+
+        call AnnotateRegion.AnnotateRegion as AnnotateTruthRegion {
+            input:
+                vcf = PrepareAccuracyTruthVcf.prepared_vcf,
+                vcf_idx = PrepareAccuracyTruthVcf.prepared_vcf_idx,
+                contigs = [contig],
+                prefix = "~{prefix}.~{contig}.truth",
+                records_per_shard = records_per_shard_region,
+                simple_repeats_bed = simple_repeats_bed,
+                seg_dup_bed = seg_dup_bed,
+                repeat_masked_bed = repeat_masked_bed,
+                utils_docker = utils_docker,
+                runtime_attr_shard = runtime_attr_region_shard,
+                runtime_attr_annotate_region = runtime_attr_annotate_region,
+                runtime_attr_concat_shards = runtime_attr_concat_region_shards
+        }
+
+        call CountCallsetAccuracy {
+            input:
+                eval_vcf = PrepareAccuracyEvalVcf.eval_vcf,
+                eval_vcf_idx = PrepareAccuracyEvalVcf.eval_vcf_idx,
+                truth_vcf = PrepareAccuracyTruthVcf.prepared_vcf,
+                truth_vcf_idx = PrepareAccuracyTruthVcf.prepared_vcf_idx,
+                eval_region_tsv = AnnotateEvalRegion.annotations_tsv_region,
+                truth_region_tsv = AnnotateTruthRegion.annotations_tsv_region,
+                match_tsvs = select_all([ExactMatch.annotated_tsv, TruvariMatchAllPairs.annotation_tsv]),
+                length_bins = length_bins,
+                prefix = "~{prefix}.~{contig}.callset_accuracy",
+                docker = utils_docker,
+                runtime_attr_override = runtime_attr_count_accuracy
+        }
+
+        File exact_match_tsv = select_first([ExactMatch.annotated_tsv])
+    }
+
+    call SummarizeCallsetAccuracy {
         input:
-            vcf = vcf,
-            vcf_idx = vcf_idx,
-            contig = contig,
-            include_args = args_string_vcf,
-            sv_min_length = sv_min_length,
-            restrict_bed = truth_snv_indel_bed,
-            prefix = "~{prefix}.~{contig}.eval",
+            accuracy_tsvs = CountCallsetAccuracy.accuracy_tsv,
+            contigs = contigs,
+            prefix = "~{prefix}.callset_accuracy",
             docker = utils_docker,
-            runtime_attr_override = runtime_attr_prepare_eval
-    }
-
-    call PrepareAccuracyTruthVcf {
-        input:
-            snv_indel_vcf = truth_snv_indel_vcf,
-            snv_indel_vcf_idx = truth_snv_indel_vcf_idx,
-            sv_vcf = truth_sv_vcf,
-            sv_vcf_idx = truth_sv_vcf_idx,
-            contig = contig,
-            samples = PrepareAccuracyEvalVcf.samples,
-            restrict_bed = truth_snv_indel_bed,
-            ref_fa = ref_fa,
-            ref_fai = ref_fai,
-            prefix = "~{prefix}.~{contig}.truth",
-            docker = utils_docker,
-            runtime_attr_override = runtime_attr_prepare_truth
-    }
-
-    call ExactMatch.ExactMatch {
-        input:
-            vcf = PrepareAccuracyEvalVcf.eval_vcf,
-            vcf_idx = PrepareAccuracyEvalVcf.eval_vcf_idx,
-            truth_snv_indel_vcf = PrepareAccuracyTruthVcf.truth_vcf,
-            truth_snv_indel_vcf_idx = PrepareAccuracyTruthVcf.truth_vcf_idx,
-            contig = contig,
-            prefix = "~{prefix}.~{contig}",
-            run_exact_matching = true,
-            run_truvari_matching = true,
-            shard_bin_size_exact_match = shard_bin_size_exact_match,
-            min_sv_length_truvari_vcf = min_sv_length_truvari_vcf,
-            min_sv_length_truvari_truth_snv_indel_vcf = min_sv_length_truvari_truth_vcf,
-            length_field_vcf = "allele_length",
-            length_field_truth_snv_indel_vcf = "allele_length",
-            source_tag_truth_snv_indel_vcf = "truth",
-            utils_docker = utils_docker,
-            runtime_attr_create_exact_shards = runtime_attr_create_exact_shards,
-            runtime_attr_subset_exact_vcf = runtime_attr_subset_exact_vcf,
-            runtime_attr_subset_exact_truth = runtime_attr_subset_exact_truth,
-            runtime_attr_exact_match = runtime_attr_exact_match,
-            runtime_attr_append_exact_annotations = runtime_attr_append_exact_annotations,
-            runtime_attr_truvari_subset_vcf = runtime_attr_truvari_subset_vcf,
-            runtime_attr_truvari_subset_truth = runtime_attr_truvari_subset_truth,
-            runtime_attr_concat_exact_annotations = runtime_attr_concat_exact_annotations,
-            runtime_attr_concat_exact_unmatched = runtime_attr_concat_exact_unmatched,
-            runtime_attr_concat_exact_truth = runtime_attr_concat_exact_truth
-    }
-
-    # ExactMatch hands Truvari every long enough truth record, so a truth record matched exactly can still pair with other callset records
-    call TruvariMatchAllPairs {
-        input:
-            vcf = ExactMatch.truvari_eval_vcf,
-            vcf_idx = ExactMatch.truvari_eval_vcf_idx,
-            truth_vcf = select_first([ExactMatch.truvari_truth_vcf]),
-            truth_vcf_idx = select_first([ExactMatch.truvari_truth_vcf_idx]),
-            pctseq = 0.5,
-            pctsize = 0.5,
-            pctovl = 0.5,
-            ref_fa = ref_fa,
-            ref_fai = ref_fai,
-            prefix = "~{prefix}.~{contig}.truvari",
-            docker = utils_docker,
-            runtime_attr_override = runtime_attr_truvari_match
-    }
-
-    call AnnotateRegion.AnnotateRegion as AnnotateEvalRegion {
-        input:
-            vcf = PrepareAccuracyEvalVcf.eval_vcf,
-            vcf_idx = PrepareAccuracyEvalVcf.eval_vcf_idx,
-            contigs = [contig],
-            prefix = "~{prefix}.~{contig}.eval",
-            records_per_shard = records_per_shard_region,
-            simple_repeats_bed = simple_repeats_bed,
-            seg_dup_bed = seg_dup_bed,
-            repeat_masked_bed = repeat_masked_bed,
-            utils_docker = utils_docker,
-            runtime_attr_shard = runtime_attr_region_shard,
-            runtime_attr_annotate_region = runtime_attr_annotate_region,
-            runtime_attr_concat_shards = runtime_attr_concat_region_shards
-    }
-
-    call AnnotateRegion.AnnotateRegion as AnnotateTruthRegion {
-        input:
-            vcf = PrepareAccuracyTruthVcf.truth_vcf,
-            vcf_idx = PrepareAccuracyTruthVcf.truth_vcf_idx,
-            contigs = [contig],
-            prefix = "~{prefix}.~{contig}.truth",
-            records_per_shard = records_per_shard_region,
-            simple_repeats_bed = simple_repeats_bed,
-            seg_dup_bed = seg_dup_bed,
-            repeat_masked_bed = repeat_masked_bed,
-            utils_docker = utils_docker,
-            runtime_attr_shard = runtime_attr_region_shard,
-            runtime_attr_annotate_region = runtime_attr_annotate_region,
-            runtime_attr_concat_shards = runtime_attr_concat_region_shards
-    }
-
-    call CountCallsetAccuracy {
-        input:
-            eval_vcf = PrepareAccuracyEvalVcf.eval_vcf,
-            eval_vcf_idx = PrepareAccuracyEvalVcf.eval_vcf_idx,
-            truth_vcf = PrepareAccuracyTruthVcf.truth_vcf,
-            truth_vcf_idx = PrepareAccuracyTruthVcf.truth_vcf_idx,
-            eval_region_tsv = AnnotateEvalRegion.annotations_tsv_region,
-            truth_region_tsv = AnnotateTruthRegion.annotations_tsv_region,
-            match_tsvs = select_all([ExactMatch.annotated_tsv, TruvariMatchAllPairs.annotation_tsv]),
-            length_bins = length_bins,
-            prefix = "~{prefix}.~{contig}.callset_accuracy",
-            docker = utils_docker,
-            runtime_attr_override = runtime_attr_count_accuracy
+            runtime_attr_override = runtime_attr_summarize_accuracy
     }
 
     output {
-        File exact_match_tsv = select_first([ExactMatch.annotated_tsv])
-        File truvari_match_tsv = TruvariMatchAllPairs.annotation_tsv
-        File accuracy_tsv = CountCallsetAccuracy.accuracy_tsv
+        Array[File] exact_match_tsvs = exact_match_tsv
+        Array[File] truvari_match_tsvs = TruvariMatchAllPairs.annotation_tsv
+        File accuracy_tsv = SummarizeCallsetAccuracy.combined_tsv
+        File accuracy_per_contig_tsv = SummarizeCallsetAccuracy.per_contig_tsv
+        File accuracy_plots_tar = SummarizeCallsetAccuracy.plots_tar
     }
 }
 
@@ -222,9 +276,11 @@ task PrepareAccuracyEvalVcf {
         File vcf
         File vcf_idx
         String contig
-        String include_args
-        Int sv_min_length
+        String? include_args
+        Int bounded_below_length
         File? restrict_bed
+        File ref_fa
+        File ref_fai
         String prefix
         String docker
         RuntimeAttr? runtime_attr_override
@@ -235,33 +291,28 @@ task PrepareAccuracyEvalVcf {
 
         bcftools query -l ~{vcf} > samples.txt
 
-        # Short records are bounded by the BED like the SNV & indel truth, long ones are kept genome-wide like the SV truth
+        # Split and left-align as the truth is, dropping the cohort-wide AC/AN so --min-ac counts the genotypes themselves
+        bcftools view -r ~{contig} -Ou ~{vcf} \
+            | bcftools annotate -x INFO/AC,INFO/AN,INFO/AF -Ou \
+            | bcftools norm -m- -f ~{ref_fa} -c w -Ou \
+            | bcftools sort -T sort_tmp -Oz -o split.vcf.gz
+        python3 /opt/scripts/qc/annotate_accuracy_alleles.py --vcf split.vcf.gz --output typed.vcf.gz --id_prefix "eval_~{contig}"
+
+        # Records the BED's truth covers are bounded by it; longer ones, covered by a separate SV truth, are kept genome-wide
         bcftools view \
-            -r ~{contig} \
             ~{if defined(restrict_bed) then "-T " + restrict_bed else ""} \
-            -i '(~{include_args}) && abs(INFO/allele_length)<~{sv_min_length}' \
+            -i '~{"(" + include_args + ") && "}abs(INFO/allele_length)<~{bounded_below_length}' \
+            --min-ac 1 \
             -Oz -o short.vcf.gz \
-            ~{vcf}
+            typed.vcf.gz
         bcftools view \
-            -r ~{contig} \
-            -i '(~{include_args}) && abs(INFO/allele_length)>=~{sv_min_length}' \
+            -i '~{"(" + include_args + ") && "}abs(INFO/allele_length)>=~{bounded_below_length}' \
+            --min-ac 1 \
             -Oz -o long.vcf.gz \
-            ~{vcf}
+            typed.vcf.gz
         tabix -p vcf short.vcf.gz
         tabix -p vcf long.vcf.gz
-
-        # Drop the cohort-wide AC/AN so --min-ac counts the genotypes themselves, and benchmark a duplication written as an insertion as one
-        bcftools concat -a short.vcf.gz long.vcf.gz -Ou \
-            | bcftools annotate -x INFO/AC,INFO/AN,INFO/AF -Ou \
-            | bcftools view --min-ac 1 \
-            | awk 'BEGIN{FS=OFS="\t"} !/^#/ && length($5) > length($4) {
-                $8 = ";" $8 ";"
-                gsub(/;allele_type=dup;/, ";allele_type=ins;", $8)
-                gsub(/;SVTYPE=DUP;/, ";SVTYPE=INS;", $8)
-                $8 = substr($8, 2, length($8) - 2)
-            } {print}' \
-            | bgzip -c > ~{prefix}.vcf.gz
-
+        bcftools concat -a short.vcf.gz long.vcf.gz -Oz -o ~{prefix}.vcf.gz
         tabix -p vcf -f ~{prefix}.vcf.gz
     >>>
 
@@ -274,7 +325,7 @@ task PrepareAccuracyEvalVcf {
     RuntimeAttr default_attr = object {
         cpu_cores: 1,
         mem_gb: 4,
-        disk_gb: 3 * ceil(size(vcf, "GB")) + 10,
+        disk_gb: ceil(4 * size(vcf, "GB") + size(ref_fa, "GB")) + 10,
         boot_disk_gb: 10,
         preemptible_tries: 1,
         max_retries: 0
@@ -293,10 +344,12 @@ task PrepareAccuracyEvalVcf {
 
 task PrepareAccuracyTruthVcf {
     input {
-        File snv_indel_vcf
-        File snv_indel_vcf_idx
-        File sv_vcf
-        File sv_vcf_idx
+        File truth_vcf
+        File truth_vcf_idx
+        File? sv_vcf
+        File? sv_vcf_idx
+        String? include_args
+        String? sv_include_args
         String contig
         Array[String] samples
         File? restrict_bed
@@ -311,66 +364,42 @@ task PrepareAccuracyTruthVcf {
         set -euo pipefail
 
         # Split and left-align so alleles match the callset exactly, warning on placeholder N REFs; -s puts samples in the callset's order for concat, and sort fixes records left-aligned past their neighbours
-        bcftools view -r ~{contig} -s ~{sep=',' samples} -Ou ~{snv_indel_vcf} \
+        bcftools view -r ~{contig} -s ~{sep=',' samples} ~{"-i '" + include_args + "'"} -Ou ~{truth_vcf} \
             | bcftools annotate -x INFO/AC,INFO/AN,INFO/AF -Ou \
             | bcftools norm -m- -f ~{ref_fa} -c w -Ou \
             | bcftools view --min-ac 1 ~{if defined(restrict_bed) then "-T " + restrict_bed else ""} -Ou \
-            | bcftools sort -T sort_tmp -Oz -o snv_indel.vcf.gz
-        bcftools view -r ~{contig} -s ~{sep=',' samples} -Ou ~{sv_vcf} \
-            | bcftools annotate -x INFO/AC,INFO/AN,INFO/AF -Ou \
-            | bcftools norm -m- -f ~{ref_fa} -c w -Ou \
-            | bcftools view --min-ac 1 -Ou \
-            | bcftools sort -T sort_tmp -Oz -o sv.vcf.gz
-        tabix -p vcf snv_indel.vcf.gz
-        tabix -p vcf sv.vcf.gz
+            | bcftools sort -T sort_tmp -Oz -o truth.vcf.gz
+        tabix -p vcf truth.vcf.gz
 
-        # Keep one copy of a variant present in both truths, dropping the SV truth's
-        bcftools isec -C -c none -w1 sv.vcf.gz snv_indel.vcf.gz -Oz -o sv.unique.vcf.gz
-        tabix -p vcf sv.unique.vcf.gz
-        echo "Dropped $(( $(bcftools index -n sv.vcf.gz) - $(bcftools index -n sv.unique.vcf.gz) )) SV truth records also in the SNV & indel truth"
+        if [[ -n "~{sv_vcf}" ]]; then
+            bcftools view -r ~{contig} -s ~{sep=',' samples} ~{"-i '" + sv_include_args + "'"} -Ou ~{sv_vcf} \
+                | bcftools annotate -x INFO/AC,INFO/AN,INFO/AF -Ou \
+                | bcftools norm -m- -f ~{ref_fa} -c w -Ou \
+                | bcftools view --min-ac 1 -Ou \
+                | bcftools sort -T sort_tmp -Oz -o sv.vcf.gz
+            tabix -p vcf sv.vcf.gz
 
-        bcftools concat -a snv_indel.vcf.gz sv.unique.vcf.gz -Oz -o combined.vcf.gz
+            # Keep one copy of a variant present in both truths, dropping the SV truth's
+            bcftools isec -C -c none -w1 sv.vcf.gz truth.vcf.gz -Oz -o sv.unique.vcf.gz
+            tabix -p vcf sv.unique.vcf.gz
+            echo "Dropped $(( $(bcftools index -n sv.vcf.gz) - $(bcftools index -n sv.unique.vcf.gz) )) SV truth records also in the truth VCF"
+            bcftools concat -a truth.vcf.gz sv.unique.vcf.gz -Oz -o combined.vcf.gz
+        else
+            mv truth.vcf.gz combined.vcf.gz
+        fi
 
-        python3 <<'CODE'
-import pysam
-
-# Give every record a unique ID and the allele type and signed length the callset carries, from SVTYPE and SVLEN when present
-with pysam.VariantFile('combined.vcf.gz') as vcf_in:
-    header = vcf_in.header.copy()
-    header.add_line('##INFO=<ID=allele_type,Number=1,Type=String,Description="Allele type">')
-    header.add_line('##INFO=<ID=allele_length,Number=1,Type=Integer,Description="Allele length">')
-    with pysam.VariantFile("~{prefix}.vcf", 'w', header=header) as vcf_out:
-        for n, record in enumerate(vcf_in, 1):
-            record.translate(header)
-            ref, alt = record.ref, record.alts[0]
-            if 'SVTYPE' in record.info:
-                allele_type = record.info['SVTYPE'].lower()
-                svlen = record.info.get('SVLEN')
-                svlen = svlen[0] if isinstance(svlen, tuple) else svlen
-                length = abs(svlen) if svlen is not None else abs(len(alt) - len(ref))
-                length = -length if allele_type == 'del' else length
-            elif len(alt) == len(ref):
-                allele_type, length = ('snv' if len(ref) == 1 else 'mnv'), 0
-            else:
-                allele_type, length = ('ins' if len(alt) > len(ref) else 'del'), len(alt) - len(ref)
-            record.id = f"truth_~{contig}_{n}"
-            record.info['allele_type'] = allele_type
-            record.info['allele_length'] = length
-            vcf_out.write(record)
-
-pysam.tabix_index("~{prefix}.vcf", preset='vcf', force=True)
-CODE
+        python3 /opt/scripts/qc/annotate_accuracy_alleles.py --vcf combined.vcf.gz --output ~{prefix}.vcf.gz --id_prefix "truth_~{contig}" --replace_ids
     >>>
 
     output {
-        File truth_vcf = "~{prefix}.vcf.gz"
-        File truth_vcf_idx = "~{prefix}.vcf.gz.tbi"
+        File prepared_vcf = "~{prefix}.vcf.gz"
+        File prepared_vcf_idx = "~{prefix}.vcf.gz.tbi"
     }
 
     RuntimeAttr default_attr = object {
         cpu_cores: 1,
         mem_gb: 4,
-        disk_gb: ceil(3 * (size(snv_indel_vcf, "GB") + size(sv_vcf, "GB")) + size(ref_fa, "GB")) + 10,
+        disk_gb: ceil(3 * (size(truth_vcf, "GB") + size(sv_vcf, "GB")) + size(ref_fa, "GB")) + 10,
         boot_disk_gb: 10,
         preemptible_tries: 1,
         max_retries: 0
@@ -393,9 +422,12 @@ task TruvariMatchAllPairs {
         File vcf_idx
         File truth_vcf
         File truth_vcf_idx
+        Int refdist
         Float pctseq
         Float pctsize
         Float pctovl
+        Int sizemax
+        Boolean typeignore
         File ref_fa
         File ref_fai
         String prefix
@@ -420,7 +452,8 @@ from truvari.bench import check_inputs, parse_args
 
 # Build the parameters as `truvari bench` does, so its filters and defaults apply unchanged
 args = parse_args(['-b', "~{truth_vcf}", '-c', "~{vcf}", '-o', 'unused', '--reference', "~{ref_fa}",
-                   '--pctseq', "~{pctseq}", '--pctsize', "~{pctsize}", '--pctovl', "~{pctovl}", '--sizemin', '0', '--sizefilt', '0'])
+                   '--refdist', "~{refdist}", '--pctseq', "~{pctseq}", '--pctsize', "~{pctsize}", '--pctovl', "~{pctovl}",
+                   '--sizemin', '0', '--sizefilt', '0', '--sizemax', "~{sizemax}"~{if typeignore then ", '--typeignore'" else ""}])
 check_inputs(args)
 params = truvari.VariantParams(args, skip_gt=args.bSample is None or args.cSample is None,
                                short_circuit=args.short, decompose=args.no_decompose)
@@ -617,6 +650,54 @@ CODE
         cpu_cores: 1,
         mem_gb: 8,
         disk_gb: ceil(size(eval_vcf, "GB") + size(truth_vcf, "GB") + size([eval_region_tsv, truth_region_tsv], "GB") + size(match_tsvs, "GB")) + 10,
+        boot_disk_gb: 10,
+        preemptible_tries: 1,
+        max_retries: 0
+    }
+    RuntimeAttr runtime_attr = select_first([runtime_attr_override, default_attr])
+    runtime {
+        cpu: select_first([runtime_attr.cpu_cores, default_attr.cpu_cores])
+        memory: select_first([runtime_attr.mem_gb, default_attr.mem_gb]) + " GiB"
+        disks: "local-disk " + select_first([runtime_attr.disk_gb, default_attr.disk_gb]) + " HDD"
+        bootDiskSizeGb: select_first([runtime_attr.boot_disk_gb, default_attr.boot_disk_gb])
+        docker: docker
+        preemptible: select_first([runtime_attr.preemptible_tries, default_attr.preemptible_tries])
+        maxRetries: select_first([runtime_attr.max_retries, default_attr.max_retries])
+    }
+}
+
+task SummarizeCallsetAccuracy {
+    input {
+        Array[File] accuracy_tsvs
+        Array[String] contigs
+        String prefix
+        String docker
+        RuntimeAttr? runtime_attr_override
+    }
+
+    command <<<
+        set -euo pipefail
+
+        python3 /opt/scripts/qc/plot_callset_accuracy.py \
+            --tsvs ~{sep=' ' accuracy_tsvs} \
+            --contigs ~{sep=' ' contigs} \
+            --combined_tsv ~{prefix}.tsv \
+            --per_contig_tsv ~{prefix}.per_contig.tsv \
+            --output_dir ~{prefix}_plots
+
+        tar -czf ~{prefix}_plots.tar.gz ~{prefix}_plots
+    >>>
+
+    output {
+        File combined_tsv = "~{prefix}.tsv"
+        File per_contig_tsv = "~{prefix}.per_contig.tsv"
+        File plots_tar = "~{prefix}_plots.tar.gz"
+    }
+
+    RuntimeAttr default_attr = object {
+        cpu_cores: 1,
+        mem_gb: 4,
+        disk_gb: 2 * ceil(size(accuracy_tsvs, "GB")) + 10,
         boot_disk_gb: 10,
         preemptible_tries: 1,
         max_retries: 0

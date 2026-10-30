@@ -87,11 +87,13 @@ Scripts reach a running task baked into an image, never fetched by URL. The `uti
 | `helper/vep_annotate_hail.py` | AnnotateVEP | Run VEP over a VCF via Hail and emit the annotated result. |
 | `mei/PALMER_to_vcf.py` | Helpers.wdl | Convert raw PALMER mobile-element calls into a VCF. |
 | `mei/PALMER_transfer_annotations.py` | AnnotatePALMER | Transfer PALMER annotations onto matching callset records, using edit distance to resolve near-matches. |
+| `qc/annotate_accuracy_alleles.py` | EvaluateCallsetAccuracy | Give every callset or truth record an allele type, signed length and unique ID, from its own INFO fields, `SVTYPE` and `SVLEN`, or REF and ALT. |
 | `qc/igv/reformat_variants_for_visualization.py` | CreateIGVPlots | Normalize the list of variants to plot into a sorted six-column BED, filling in missing IDs and SV types. |
 | `qc/igv/makeigvpesr.py` | CreateIGVPlots | Write the IGV batch script that loads a family's reads and annotation tracks once and snapshots each variant, labelling reads by carrier and affected status. |
 | `qc/igv/plot_longread_depth.py` | CreateIGVPlots | Plot each family member's flank-normalized mosdepth depth across a DEL or DUP. |
 | `qc/igv/concat_igv_depth.py` | CreateIGVPlots | Stack each variant's IGV snapshot over its depth plot under a header naming the variant. |
 | `qc/plot_annotation_summaries.py` | CreateAnnotationPlots | Plot site, per-genome, inheritance and variant-list summaries from the SummarizeAnnotations parquet tables, one plot group per task. |
+| `qc/plot_callset_accuracy.py` | EvaluateCallsetAccuracy | Sum the per-contig accuracy counts, recompute precision, recall and F1, and plot them by allele type, size bin, region, sample and matching stage. |
 | `qc/plot_ncr_cutoffs.py` | EvaluateNCRCutoffs | Plot precision and recall across NCR cutoffs per allele type, size bin, region and FILTER, suggest a cutoff per stratum, and write the recommended cutoffs `FilterNCRCutoffs` reads. |
 | `qc/vcf_qc/collectQC.vcf_wide.sh` | SummarizeAnnotationsGATKSV | Collect per-site genotype counts and frequencies from a symbolic-allele VCF shard into the site statistics BED, via `vcf2bed.py` and `clean_vcf2bed_output.R`. |
 | `qc/vcf_qc/vcf2bed.py` | SummarizeAnnotationsGATKSV, ConvertVcfToBed, AnnotateCallsetOverlap | Convert a VCF to a BED with its called samples and chosen INFO fields; a pysam-only port of `svtk vcf2bed`. |

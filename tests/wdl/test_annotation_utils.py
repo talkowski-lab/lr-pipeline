@@ -1278,9 +1278,8 @@ def trio_outcome(record, child, parents):
     return "skipped" if any(None in record["gts"][p] for p in parents) else "uninherited"
 
 
-def test_evaluate_callset_accuracy_counts_site_and_call_matches_against_deduplicated_combined_truth_by_region(
-    run_workflow, run_dir, window_vcf, utils_docker
-):
+def accuracy_case(run_dir, window_vcf):
+    """A callset, a truth and an SV truth repeating its long records, region BEDs and the expected exact-match totals."""
     biallelic = write_vcf(window_vcf, run_dir / "biallelic.vcf.gz", lambda r: len(r.alts) == 1 and r.info["allele_type"] != "trv")
 
     # Allele-type normalization writes tandem duplications in insertion form, which must still count and match as insertions
@@ -1305,7 +1304,7 @@ def test_evaluate_callset_accuracy_counts_site_and_call_matches_against_deduplic
 
     dropped = itertools.count()
     kept = write_vcf(callset, run_dir / "kept.vcf.gz", lambda r: next(dropped) % 4 != 0)
-    # The SNV & indel truth holds every truth record and the SV truth repeats the long ones, which must count once
+    # The truth holds every truth record and the SV truth repeats the long ones, which must count once
     truth = rewrite_vcf(kept, run_dir / "truth.vcf.gz", ["SVTYPE", "SVLEN"], swap_carrier)
     sv_truth = write_vcf(truth, run_dir / "sv_truth.vcf.gz", lambda r: abs(r.info["allele_length"]) >= 50)
 
@@ -1313,26 +1312,6 @@ def test_evaluate_callset_accuracy_counts_site_and_call_matches_against_deduplic
     starts = [r["pos"] - 1 for r in load_records(callset)[1]]
     sr, sd, rm = ([(CONTIG, max(x - 5, 0), x + 5) for x in starts[i::step]] for i, step in ((0, 7), (1, 3), (2, 2)))
     beds = {name: write_table(run_dir / f"{name}.bed", sorted(rows)) for name, rows in (("sr", sr), ("sd", sd), ("rm", rm))}
-
-    outputs = run_workflow(
-        f"{UTILS}/EvaluateCallsetAccuracy.wdl",
-        {
-            "vcf": str(callset),
-            "vcf_idx": f"{callset}.tbi",
-            "truth_snv_indel_vcf": str(truth),
-            "truth_snv_indel_vcf_idx": f"{truth}.tbi",
-            "truth_sv_vcf": str(sv_truth),
-            "truth_sv_vcf_idx": f"{sv_truth}.tbi",
-            "contig": CONTIG,
-            "prefix": "accuracy",
-            "ref_fa": str(WINDOW_FASTA),
-            "ref_fai": f"{WINDOW_FASTA}.fai",
-            "simple_repeats_bed": str(beds["sr"]),
-            "seg_dup_bed": str(beds["sd"]),
-            "repeat_masked_bed": str(beds["rm"]),
-            "utils_docker": utils_docker,
-        },
-    )
 
     def carriers(record):
         return {s for s in record["gts"] if is_carrier(record, s)}
@@ -1352,8 +1331,18 @@ def test_evaluate_callset_accuracy_counts_site_and_call_matches_against_deduplic
         ),
     }
     assert expected["site"][0] > 0 and expected["call"][1] > 0
+    reference_inputs = {
+        "ref_fa": str(WINDOW_FASTA),
+        "ref_fai": f"{WINDOW_FASTA}.fai",
+        "simple_repeats_bed": str(beds["sr"]),
+        "seg_dup_bed": str(beds["sd"]),
+        "repeat_masked_bed": str(beds["rm"]),
+    }
+    return callset, truth, sv_truth, reference_inputs, expected
 
-    rows = read_dicts(outputs["EvaluateCallsetAccuracy.accuracy_tsv"])
+
+def check_accuracy_rows(rows, expected):
+    """Exact-match totals equal expected, Truvari keeps each side's totals, and the region groups sum to their marginal."""
     assert "dup" not in {r["allele_type"] for r in rows}
 
     def total_row(level, stage):
@@ -1381,6 +1370,66 @@ def test_evaluate_callset_accuracy_counts_site_and_call_matches_against_deduplic
     for groups in by_region.values():
         for c in ("tp_eval", "fp", "tp_truth", "fn"):
             assert groups[("US/RM", c)] + groups[("SD/SR", c)] == groups[("all", c)]
+
+
+def test_evaluate_callset_accuracy_counts_site_and_call_matches_against_deduplicated_combined_truth_by_region(
+    run_workflow, run_dir, window_vcf, utils_docker
+):
+    callset, truth, sv_truth, reference_inputs, expected = accuracy_case(run_dir, window_vcf)
+    outputs = run_workflow(
+        f"{UTILS}/EvaluateCallsetAccuracy.wdl",
+        {
+            "vcfs": [str(callset)],
+            "vcf_idxs": [f"{callset}.tbi"],
+            "contigs": [CONTIG],
+            "truth_vcf": str(truth),
+            "truth_vcf_idx": f"{truth}.tbi",
+            "truth_sv_vcf": str(sv_truth),
+            "truth_sv_vcf_idx": f"{sv_truth}.tbi",
+            "prefix": "accuracy",
+            **reference_inputs,
+            "utils_docker": utils_docker,
+        },
+    )
+
+    check_accuracy_rows(read_dicts(outputs["EvaluateCallsetAccuracy.accuracy_tsv"]), expected)
+    assert len(outputs["EvaluateCallsetAccuracy.exact_match_tsvs"]) == 1
+    assert {r["contig"] for r in read_dicts(outputs["EvaluateCallsetAccuracy.accuracy_per_contig_tsv"])} == {CONTIG}
+    with tarfile.open(outputs["EvaluateCallsetAccuracy.accuracy_plots_tar"]) as tar:
+        names = {Path(n).name for n in tar.getnames()}
+    assert {"accuracy_sites.png", "accuracy_calls.png", "accuracy_by_sample.png", "accuracy_by_stage.png", "summary.tsv"} <= names
+
+
+def test_evaluate_callset_accuracy_types_an_unannotated_callset_and_sums_contigs(run_workflow, run_dir, window_vcf, utils_docker):
+    callset, truth, _, reference_inputs, expected = accuracy_case(run_dir, window_vcf)
+
+    # A callset from any caller: no allele type or length, no SV fields and no IDs, so every record is typed and named here
+    def drop_id(record):
+        record.id = None
+
+    plain = rewrite_vcf(callset, run_dir / "plain.vcf.gz", ["allele_type", "allele_length", "SVTYPE", "SVLEN"], drop_id)
+    # The same contig twice stands in for two contigs, so every count doubles in the sum
+    outputs = run_workflow(
+        f"{UTILS}/EvaluateCallsetAccuracy.wdl",
+        {
+            "vcfs": [str(plain), str(plain)],
+            "vcf_idxs": [f"{plain}.tbi", f"{plain}.tbi"],
+            "contigs": [CONTIG, CONTIG],
+            "truth_vcf": str(truth),
+            "truth_vcf_idx": f"{truth}.tbi",
+            "prefix": "accuracy",
+            "truvari_pctseq": 0,
+            "truvari_typeignore": True,
+            **reference_inputs,
+            "utils_docker": utils_docker,
+        },
+    )
+
+    doubled = {level: tuple(2 * c for c in counts) for level, counts in expected.items()}
+    check_accuracy_rows(read_dicts(outputs["EvaluateCallsetAccuracy.accuracy_tsv"]), doubled)
+    assert len(read_dicts(outputs["EvaluateCallsetAccuracy.accuracy_per_contig_tsv"])) == 2 * len(
+        read_dicts(outputs["EvaluateCallsetAccuracy.accuracy_tsv"])
+    )
 
 
 def test_evaluate_ncr_cutoffs_tabulates_trio_transmission_cumulatively_by_ncr_cutoff(run_workflow, run_dir, vcf_inputs, source):
