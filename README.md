@@ -30,7 +30,7 @@ The pipeline targets the GRCh38 reference and PacBio HiFi long reads. Cromwell o
 Running the pipeline:
 - [Getting Started](docs/getting-started.md) - what a new cohort needs and how to run it from the template Terra workspace.
 - [Pipeline](docs/pipeline.md) - how to run the pipeline end-to-end on a new cohort, covering callset generation, phasing and annotation.
-- [CNV Pipeline](docs/pipeline_cnvs.md) - how to call depth-based CNVs on a new cohort, from per-sample depth to a genotyped cohort CNV VCF.
+- [CNV Pipeline](docs/pipeline_cnvs.md) - how to call depth-based CNVs on a new cohort, from per-sample depth to CNV VCFs from GATK gCNV, Sawfish and HiFiCNV.
 - [References](docs/references.md) - all reference files, their sources and their GCS locations.
 - [Docker images](docs/dockers.md) - every image the pipeline uses, and how repository images are built, tagged and pushed.
 

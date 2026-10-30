@@ -7,8 +7,8 @@
     "HiFiCNV.ref_fai": "gs://<references-bucket>/hg38.no_alt.fa.fai",
     "HiFiCNV.exclude_bed": "gs://<references-bucket>/exclude.bed",
     "HiFiCNV.exclude_bed_idx": "gs://<references-bucket>/exclude.bed.tbi",
-    "HiFiCNV.expected_cn_male": "gs://<references-bucket>/expected_cn_male",
-    "HiFiCNV.expected_cn_female": "gs://<references-bucket>/expected_cn_female",
+    "HiFiCNV.expected_cn_male": "gs://<references-bucket>/expected_cn.hg38.XY.bed",
+    "HiFiCNV.expected_cn_female": "gs://<references-bucket>/expected_cn.hg38.XX.bed",
     "HiFiCNV.hificnv_docker": "us-central1-docker.pkg.dev/talkowski-sv-gnomad/kj-dockers/hificnv:latest",
     "HiFiCNV.utils_docker": "us-central1-docker.pkg.dev/talkowski-sv-gnomad/kj-dockers/utils:latest"
 }

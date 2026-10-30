@@ -1,3 +1,4 @@
+import pytest
 from conftest import load_script
 
 dag = load_script(".github/scripts/generate_pipeline_dag.py")
@@ -17,9 +18,13 @@ def wiring():
     ]
 
 
-def test_committed_graph_matches_generator():
-    markdown = dag.PIPELINE_MD.read_text()
-    assert dag.render(markdown, dag.run_order_configs()) == markdown, "run python .github/scripts/generate_pipeline_dag.py"
+@pytest.mark.parametrize("name", sorted(dag.PIPELINES))
+def test_committed_graph_matches_generator(name):
+    pipeline = dag.PIPELINES[name]
+    markdown = pipeline.markdown.read_text()
+    assert dag.render(markdown, dag.run_order_configs(pipeline), pipeline) == markdown, (
+        "run python .github/scripts/generate_pipeline_dag.py"
+    )
 
 
 def test_resolve_follows_entity_hops():
@@ -49,6 +54,12 @@ def test_unwritten_read_is_an_error():
     configs = wiring()
     configs[2]["inputs"]["W.bed"] = "this.missing_bed"
     assert "03-Annotate reads contig.missing_bed, which no config writes" in dag.graph(configs)[1]
+
+
+def test_hand_filled_inputs_are_per_pipeline():
+    configs = [config("01-Depth", "sample", {"W.bam": "this.aligned_bam"})]
+    assert dag.graph(configs, dag.PIPELINES["cnvs"])[1] == []
+    assert dag.graph(configs, dag.PIPELINES["main"])[1] == ["01-Depth reads sample.aligned_bam, which no config writes"]
 
 
 def test_table_must_match_snapshot():

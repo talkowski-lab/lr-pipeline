@@ -1,12 +1,14 @@
 #!/usr/bin/env python3
-"""Generate the Run Order graph in docs/pipeline.md from the method config snapshot in docs/method_configs.json.
+"""Generate the Run Order graphs in docs/pipeline.md and docs/pipeline_cnvs.md from their method config snapshots.
 
-One config feeds another when the second reads a data table or workspace attribute the first writes, and each
-config is coloured by the numbered pipeline.md section that links its workflow. The graph is checked before it
-is written: every edge must go to a higher step number, no attribute may have two writers, every attribute read
-must be written by a config or be a cohort input, every workflow must be linked from exactly one section, and
-the configs must match the Run Order table. Run after refreshing the snapshot with export_terra_method_configs.py or editing the
-table; `--check` exits 1 when the committed graph differs from the regenerated one.
+Each pipeline document has its own snapshot of its template workspace's method configs: docs/method_configs.json
+for pipeline.md and docs/method_configs_cnvs.json for pipeline_cnvs.md. One config feeds another when the second
+reads a data table or workspace attribute the first writes, and each config is coloured by the numbered section
+that links its workflow. The graph is checked before it is written: every edge must go to a higher step number,
+no attribute may have two writers, every attribute read must be written by a config or be a cohort input, every
+workflow must be linked from exactly one section, and the configs must match the Run Order table. Run after
+refreshing a snapshot with export_terra_method_configs.py or editing a table; `--check` exits 1 when a committed
+graph differs from the regenerated one.
 """
 
 import argparse
@@ -17,8 +19,6 @@ import sys
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-SNAPSHOT = REPO_ROOT / "docs" / "method_configs.json"
-PIPELINE_MD = REPO_ROOT / "docs" / "pipeline.md"
 START, END = "<!-- pipeline-dag:start -->", "<!-- pipeline-dag:end -->"
 
 ATTRIBUTE_RE = re.compile(r"\b(?:this(?:\.\w+)+|workspace\.\w+)")
@@ -27,7 +27,12 @@ STEP_RE = re.compile(r"^(\d+)-")
 HOPS = {"samples": "sample", "sample_set": "sample_set", "contigs": "contig"}
 SECTION_RE = re.compile(r"^## (\d)\. (.+)$", re.MULTILINE)
 # Fill and border of each numbered section's boxes, in section order; white text is legible on every fill
-SECTION_STYLES = ["fill:#1d4ed8,stroke:#1e3a8a", "fill:#15803d,stroke:#14532d", "fill:#c2410c,stroke:#7c2d12"]
+SECTION_STYLES = [
+    "fill:#1d4ed8,stroke:#1e3a8a",
+    "fill:#15803d,stroke:#14532d",
+    "fill:#c2410c,stroke:#7c2d12",
+    "fill:#7e22ce,stroke:#581c87",
+]
 INIT = '%%{init: {"themeVariables": {"fontSize": "18px"}, "flowchart": {"nodeSpacing": 30, "rankSpacing": 60}}}%%'
 
 # The SV integration workflows hand their VCFs on through bucket directories rather than data table columns
@@ -62,6 +67,26 @@ HAND_FILLED = {
     ("contig", "gnomad_snv_indel_vcf_idx"),
 }
 
+# The CNV pipeline starts from aligned reads, which its optional step 00 configs produce when they are missing
+CNV_HAND_FILLED = {
+    ("sample", "aligned_bam"),
+    ("sample", "aligned_bai"),
+    ("sample", "sex"),
+    ("sample", "sample_id"),
+    ("sample_set", "sample_set_id"),
+    ("sample_set", "cnv_plot_regions_bed"),
+}
+
+Pipeline = collections.namedtuple("Pipeline", ["snapshot", "markdown", "directory_edges", "hand_filled"])
+PIPELINES = {
+    "main": Pipeline(
+        REPO_ROOT / "docs" / "method_configs.json", REPO_ROOT / "docs" / "pipeline.md", DIRECTORY_EDGES, HAND_FILLED
+    ),
+    "cnvs": Pipeline(
+        REPO_ROOT / "docs" / "method_configs_cnvs.json", REPO_ROOT / "docs" / "pipeline_cnvs.md", [], CNV_HAND_FILLED
+    ),
+}
+
 
 def resolve(expression, root):
     """(data table, attribute) an attribute expression refers to, from a config rooted at `root`."""
@@ -74,16 +99,16 @@ def resolve(expression, root):
     return table, parts[-1]
 
 
-def run_order_configs():
-    """Numbered configs of the snapshot; the unnumbered ones run optional analyses outside the Run Order."""
-    return [c for c in json.loads(SNAPSHOT.read_text()) if STEP_RE.match(c["name"])]
+def run_order_configs(pipeline):
+    """Numbered configs of the pipeline's snapshot; the unnumbered ones run optional analyses outside the Run Order."""
+    return [c for c in json.loads(pipeline.snapshot.read_text()) if STEP_RE.match(c["name"])]
 
 
 def step(name):
     return int(STEP_RE.match(name).group(1))
 
 
-def graph(configs):
+def graph(configs, pipeline=PIPELINES["main"]):
     """Edges between config names, and a list of wiring errors."""
     writers = collections.defaultdict(set)
     for config in configs:
@@ -91,14 +116,14 @@ def graph(configs):
             writers[resolve(expression, config["root_entity_type"])].add(config["name"])
 
     errors = [f"{t}.{a} is written by {', '.join(sorted(w))}" for (t, a), w in sorted(writers.items()) if len(w) > 1]
-    edges = set(DIRECTORY_EDGES)
+    edges = set(pipeline.directory_edges)
     for config in configs:
         for expression in config["inputs"].values():
             for reference in ATTRIBUTE_RE.findall(expression):
                 key = resolve(reference, config["root_entity_type"])
                 if key in writers:
                     edges.update((source, config["name"]) for source in writers[key] if source != config["name"])
-                elif key[0] != "workspace" and key not in HAND_FILLED:
+                elif key[0] != "workspace" and key not in pipeline.hand_filled:
                     errors.append(f"{config['name']} reads {key[0]}.{key[1]}, which no config writes")
     errors += [f"{s} feeds {t} but does not have a lower step number" for s, t in sorted(edges) if step(s) >= step(t)]
     return sorted(edges), errors
@@ -161,9 +186,9 @@ def mermaid(configs, edges, section_of):
     return "\n".join(lines + ["```"])
 
 
-def render(markdown, configs):
-    """pipeline.md with the graph between the markers replaced; raises on wiring errors."""
-    edges, errors = graph(configs)
+def render(markdown, configs, pipeline=PIPELINES["main"]):
+    """The pipeline document with the graph between the markers replaced; raises on wiring errors."""
+    edges, errors = graph(configs, pipeline)
     section_of, section_errors = sections(configs, markdown)
     errors += section_errors + table_errors(configs, markdown)
     if errors:
@@ -174,22 +199,29 @@ def render(markdown, configs):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
-    parser.add_argument("--check", action="store_true", help="exit 1 if docs/pipeline.md differs from regenerated output")
+    parser.add_argument("--check", action="store_true", help="exit 1 if a pipeline document differs from regenerated output")
+    parser.add_argument("--pipeline", choices=sorted(PIPELINES), help="regenerate only this pipeline's graph")
     args = parser.parse_args()
 
-    markdown = PIPELINE_MD.read_text()
-    try:
-        expected = render(markdown, run_order_configs())
-    except ValueError as error:
-        print(error)
-        return 1
-    if args.check:
-        if expected != markdown:
-            print("out of date: docs/pipeline.md\nRun: python .github/scripts/generate_pipeline_dag.py")
-        return int(expected != markdown)
-    PIPELINE_MD.write_text(expected)
-    print(f"Wrote the Run Order graph to {PIPELINE_MD.relative_to(REPO_ROOT)}")
-    return 0
+    status = 0
+    for name in [args.pipeline] if args.pipeline else sorted(PIPELINES):
+        pipeline = PIPELINES[name]
+        path = pipeline.markdown.relative_to(REPO_ROOT)
+        markdown = pipeline.markdown.read_text()
+        try:
+            expected = render(markdown, run_order_configs(pipeline), pipeline)
+        except ValueError as error:
+            print(f"{path}:\n{error}")
+            status = 1
+            continue
+        if args.check:
+            if expected != markdown:
+                print(f"out of date: {path}\nRun: python .github/scripts/generate_pipeline_dag.py")
+                status = 1
+            continue
+        pipeline.markdown.write_text(expected)
+        print(f"Wrote the Run Order graph to {path}")
+    return status
 
 
 if __name__ == "__main__":

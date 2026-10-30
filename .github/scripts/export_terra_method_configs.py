@@ -1,11 +1,13 @@
 #!/usr/bin/env python3
-"""Export the template Terra workspace's method configs into docs/method_configs.json.
+"""Export a template Terra workspace's method configs into its method config snapshot.
 
-Keeps each config's name, workflow, root entity type (null for a config run without one), inputs and outputs - the wiring that
-generate_pipeline_dag.py turns into the Run Order graph in docs/pipeline.md. Method versions are left out,
-so repointing a config between a branch and `main` never changes the snapshot. The unnumbered configs, for the
-optional analyses, are kept so a clone can be rebuilt from the snapshot; step 00 is a template-only downsampling step
-and is left out. Needs `gcloud` authenticated with read access to the workspace.
+`--pipeline main` exports the main template workspace into docs/method_configs.json and `--pipeline cnvs` the
+CNV template workspace into docs/method_configs_cnvs.json. Keeps each config's name, workflow, root entity type
+(null for a config run without one), inputs and outputs - the wiring that generate_pipeline_dag.py turns into the
+Run Order graph in docs/pipeline.md or docs/pipeline_cnvs.md. Method versions are left out, so repointing a config
+between a branch and `main` never changes the snapshot. The unnumbered configs, for the optional analyses, are kept
+so a clone can be rebuilt from the snapshot; step 00 holds the template-only downsampling and alignment steps and is
+left out. Needs `gcloud` authenticated with read access to the workspace.
 """
 
 import argparse
@@ -18,7 +20,11 @@ import urllib.request
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-SNAPSHOT = REPO_ROOT / "docs" / "method_configs.json"
+# Template workspace and snapshot of each pipeline
+PIPELINES = {
+    "main": ("LR_GNOMAD-AoU_TALK_Pipeline-Template", REPO_ROOT / "docs" / "method_configs.json"),
+    "cnvs": ("LR_GNOMAD-AoU_TALK_CNV-Pipeline-Template", REPO_ROOT / "docs" / "method_configs_cnvs.json"),
+}
 RAWLS = "https://api.firecloud.org/api/workspaces"
 TEMPLATE_ONLY_RE = re.compile(r"^00-")
 
@@ -53,14 +59,17 @@ def export(namespace, name):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
+    parser.add_argument("--pipeline", choices=sorted(PIPELINES), default="main")
     parser.add_argument("--workspace-namespace", default="LR_GNOMAD_1_CO-AoU_TALK")
-    parser.add_argument("--workspace-name", default="LR_GNOMAD-AoU_TALK_Pipeline-Template")
-    parser.add_argument("--output", type=Path, default=SNAPSHOT)
+    parser.add_argument("--workspace-name", help="overrides the pipeline's template workspace")
+    parser.add_argument("--output", type=Path, help="overrides the pipeline's snapshot")
     args = parser.parse_args()
 
-    configs = export(args.workspace_namespace, args.workspace_name)
-    args.output.write_text(json.dumps(configs, indent=4) + "\n")
-    print(f"Wrote {len(configs)} method configs to {args.output}")
+    workspace, snapshot = PIPELINES[args.pipeline]
+    output = args.output or snapshot
+    configs = export(args.workspace_namespace, args.workspace_name or workspace)
+    output.write_text(json.dumps(configs, indent=4) + "\n")
+    print(f"Wrote {len(configs)} method configs to {output}")
     return 0
 
 

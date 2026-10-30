@@ -1,5 +1,5 @@
 # Pipeline
-This document describes how to run the pipeline end-to-end on a new cohort, starting from raw unaligned lrGS reads and finishing with an annotated cohort VCF. It is organized into three steps: generating the cohort callsets, phasing them, and annotating them. Depth-based CNV calling is a separate path, covered in [CNV Pipeline](pipeline_cnvs.md).
+This document describes how to run the pipeline end-to-end on a new cohort, starting from raw unaligned lrGS reads and finishing with an annotated cohort VCF. It is organized into three steps: generating the cohort callsets, phasing them, and annotating them.
 
 Each workflow below is run on its own and passes its outputs to the next as inputs; on Terra, outputs are written to the data table and the next workflow's inputs point at those columns. Numbered lists are sequential; bulleted lists run in parallel. [Run Order](#run-order) flattens the whole pipeline into numbered steps, where every workflow sharing a number can run at the same time. For the specific sequence of steps used to build the existing HPRC/HGSVC and All of Us callsets, including the ad-hoc reruns and one-off fixes those callsets required, see [Trace](trace.md).
 
@@ -12,6 +12,7 @@ flowchart TB
     classDef section1 fill:#1d4ed8,stroke:#1e3a8a,color:#ffffff,stroke-width:2px
     classDef section2 fill:#15803d,stroke:#14532d,color:#ffffff,stroke-width:2px
     classDef section3 fill:#c2410c,stroke:#7c2d12,color:#ffffff,stroke-width:2px
+    classDef section4 fill:#7e22ce,stroke:#581c87,color:#ffffff,stroke-width:2px
     s01_CreateCohortMetadata["01-CreateCohortMetadata"]:::section2
     s01_Hifiasm["01-Hifiasm"]:::section1
     s01_MinimapReadAlignment["01-MinimapReadAlignment"]:::section1
@@ -333,8 +334,6 @@ The SV callset is the regenotyped cohort SV VCF from step 5 together with the lo
    - **[CreateCohortCoverageSummary](../wdl/annotation_utils/CreateCohortCoverageSummary.wdl)** - binned coverage across all samples, for the browser and QC.
    - **[IdentifyLowCoverageRegions](../wdl/annotation_utils/IdentifyLowCoverageRegions.wdl)** - derive per-sample coverage cutoffs, which `FilterLowCoverageGenotypes` uses in step 3, and flag the bins that are low-coverage across the cohort as `failed_bins_bed`. The template workspace filters regions with the `low_coverage_regions` reference instead; `failed_bins_bed` can replace it or be merged with it.
 
-The cohort binned-coverage matrix and ploidy estimates from `CreateCohortDepthFiles` are only needed for depth-based CNV calling, which the [CNV pipeline](pipeline_cnvs.md) covers.
-
 ### Mobile Element Calls
 1. **[PALMERAssembly](../wdl/tools/PALMERAssembly.wdl)** - call mobile element insertions per sample from the assembly BAMs. A cohort without assemblies uses **[PALMERDiploid](../wdl/tools/PALMERDiploid.wdl)** instead, which calls them from the aligned reads; only one of the two feeds the cohort PALMER VCF.
 2. **[MergePALMERCallsets](../wdl/tools/MergePALMERCallsets.wdl)** - merge the per-sample calls into the cohort PALMER VCF, which step 2 splits per contig for `AnnotatePALMER` in step 3.
@@ -436,8 +435,8 @@ These workflows are not needed to produce the release VCF. They run on it, or on
 - Callset summaries: [SummarizeAnnotations](../wdl/annotation_utils/SummarizeAnnotations.wdl), which also draws the summary plots when `create_plotting = true`, [SummarizeAnnotationsGATKSV](../wdl/annotation_utils/SummarizeAnnotationsGATKSV.wdl) for the GATK-SV VCF QC plots, [SummarizeSingletonCalls](../wdl/annotation_utils/SummarizeSingletonCalls.wdl), [SummarizeVariantBases](../wdl/annotation_utils/SummarizeVariantBases.wdl) with [MergeVariantBaseTables](../wdl/annotation_utils/MergeVariantBaseTables.wdl), and [SummarizeTRVAllelesPerGenome](../wdl/annotation_utils/SummarizeTRVAllelesPerGenome.wdl).
 - Tandem repeat analysis: [ExtractTRVLengthDeltas](../wdl/annotation_utils/ExtractTRVLengthDeltas.wdl) with [MergeTRVLengthDeltas](../wdl/annotation_utils/MergeTRVLengthDeltas.wdl), [EvaluateOverlappingTRLoci](../wdl/annotation_utils/EvaluateOverlappingTRLoci.wdl) and [ExtractDisparateTRLoci](../wdl/annotation_utils/ExtractDisparateTRLoci.wdl).
 - Release variants: [StripGenotypes](../wdl/annotation_utils/StripGenotypes.wdl), for a sites-only VCF where only site-level data may be released.
-- Variant review: [CreateIGVPlots](../wdl/annotation_utils/CreateIGVPlots.wdl), IGV snapshots of each family's long reads at a curated list of variants, with a read-depth track under each DEL and DUP. Depth plots of CNV calls are drawn by `CreateCNVDepthPlots` in the [CNV pipeline](pipeline_cnvs.md).
+- Variant review: [CreateIGVPlots](../wdl/annotation_utils/CreateIGVPlots.wdl), IGV snapshots of each family's long reads at a curated list of variants, with a read-depth track under each DEL and DUP.
 - Callset benchmarking: [EvaluateCallsetAccuracy](../wdl/annotation_utils/EvaluateCallsetAccuracy.wdl), site and call precision and recall of per-contig callset VCFs against any truth VCF, optionally with a second SV truth VCF and a confident-regions BED. It runs every contig in parallel, matches exactly and then with Truvari at configurable thresholds and per-side size limits, and sums the counts across contigs into one table and plots stratified by allele type, size bin, region and sample. On Terra it runs on a `contig_set`; the template workspace benchmarks the release VCFs against the Platinum Pedigree truth on its `truth_contigs` set, which leaves out chrY, as the truth has none.
 - Callset comparison and export: [MergeVcfs](../wdl/annotation_utils/MergeVcfs.wdl), [ExtractRandomCalls](../wdl/annotation_utils/ExtractRandomCalls.wdl) and [ConvertVcfToBed](../wdl/annotation_utils/ConvertVcfToBed.wdl).
-- Alternative callers, for benchmarking: [HiFiCNV](../wdl/tools/HiFiCNV.wdl), [Sawfish](../wdl/tools/Sawfish.wdl) and [Vamos](../wdl/tools/Vamos.wdl).
+- Alternative TR caller, for benchmarking: [Vamos](../wdl/tools/Vamos.wdl).
 - Terra workspace cleanup: [Automop](../wdl/tools/Automop.wdl) deletes intermediate files no data table references, or with `dry_run = true` only lists them.

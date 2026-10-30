@@ -1,0 +1,329 @@
+[
+    {
+        "name": "01-CreateDepthIntervals",
+        "workflow": "CreateDepthIntervals",
+        "root_entity_type": "sample_set",
+        "inputs": {
+            "CreateDepthIntervals.bin_size": "2000",
+            "CreateDepthIntervals.contigs": "[\"chr2\",\"chr6\",\"chr22\"]",
+            "CreateDepthIntervals.prefix": "this.sample_set_id",
+            "CreateDepthIntervals.ref_fai": "workspace.ref_fai",
+            "CreateDepthIntervals.utils_docker": "workspace.utils_docker"
+        },
+        "outputs": {
+            "CreateDepthIntervals.intervals": "this.intervals"
+        }
+    },
+    {
+        "name": "01-MosDepth",
+        "workflow": "MosDepth",
+        "root_entity_type": "sample",
+        "inputs": {
+            "MosDepth.bai": "this.aligned_bai",
+            "MosDepth.bam": "this.aligned_bam",
+            "MosDepth.contigs": "workspace.contigs",
+            "MosDepth.fast_mode": "false",
+            "MosDepth.mosdepth_docker": "workspace.mosdepth_docker",
+            "MosDepth.mosdepthstream_docker": "workspace.mosdepthstream_docker",
+            "MosDepth.prefix": "this.sample_id",
+            "MosDepth.ref_fa": "workspace.ref_fa",
+            "MosDepth.ref_fai": "workspace.ref_fai",
+            "MosDepth.single_contig": "false",
+            "MosDepth.stream_mode": "true",
+            "MosDepth.utils_docker": "workspace.utils_docker"
+        },
+        "outputs": {
+            "MosDepth.mosdepth_dist": "this.mosdepth_dist",
+            "MosDepth.mosdepth_per_base": "this.mosdepth_per_base",
+            "MosDepth.mosdepth_per_base_csi": "this.mosdepth_per_base_csi",
+            "MosDepth.mosdepth_regions_bed": "this.mosdepth_regions_bed",
+            "MosDepth.mosdepth_regions_bed_csi": "this.mosdepth_regions_bed_csi",
+            "MosDepth.mosdepth_summary": "this.mosdepth_summary"
+        }
+    },
+    {
+        "name": "02-ConcatenateMosDepth",
+        "workflow": "ConcatenateMosDepth",
+        "root_entity_type": "sample",
+        "inputs": {
+            "ConcatenateMosDepth.mosdepth_bed_files": "this.mosdepth_per_base",
+            "ConcatenateMosDepth.prefix": "this.sample_id",
+            "ConcatenateMosDepth.utils_docker": "workspace.utils_docker"
+        },
+        "outputs": {
+            "ConcatenateMosDepth.mosdepth_per_base_combined": "this.mosdepth_per_base_combined",
+            "ConcatenateMosDepth.mosdepth_per_base_combined_idx": "this.mosdepth_per_base_combined_idx"
+        }
+    },
+    {
+        "name": "02-CreateSampleReadCounts",
+        "workflow": "CreateSampleReadCounts",
+        "root_entity_type": "sample",
+        "inputs": {
+            "CreateSampleReadCounts.bin_size": "2000",
+            "CreateSampleReadCounts.contigs": "workspace.contigs",
+            "CreateSampleReadCounts.mosdepth_bed_files": "this.mosdepth_per_base",
+            "CreateSampleReadCounts.mosdepth_bed_idx": "this.mosdepth_per_base_csi",
+            "CreateSampleReadCounts.prefix": "this.sample_id",
+            "CreateSampleReadCounts.ref_dict": "workspace.ref_dict",
+            "CreateSampleReadCounts.sample_id": "this.sample_id",
+            "CreateSampleReadCounts.utils_docker": "workspace.utils_docker"
+        },
+        "outputs": {
+            "CreateSampleReadCounts.binned_read_counts": "this.binned_read_counts"
+        }
+    },
+    {
+        "name": "03-CreateCohortDepthFiles",
+        "workflow": "CreateCohortDepthFiles",
+        "root_entity_type": "sample_set",
+        "inputs": {
+            "CreateCohortDepthFiles.mosdepth_bed_files": "this.samples.mosdepth_per_base_combined",
+            "CreateCohortDepthFiles.prefix": "this.sample_set_id",
+            "CreateCohortDepthFiles.runtime_attr_median_cov": "{\"disk_gb\": 100}",
+            "CreateCohortDepthFiles.sample_ids": "this.samples.sample_id",
+            "CreateCohortDepthFiles.utils_docker": "workspace.utils_docker"
+        },
+        "outputs": {
+            "CreateCohortDepthFiles.binned_coverage": "this.binned_coverage",
+            "CreateCohortDepthFiles.binned_coverage_idx": "this.binned_coverage_idx",
+            "CreateCohortDepthFiles.binned_estimated_ecn": "this.binned_estimated_ecn",
+            "CreateCohortDepthFiles.estimated_cn": "this.estimated_cn",
+            "CreateCohortDepthFiles.median_coverage": "this.median_coverage",
+            "CreateCohortDepthFiles.ploidy_plots": "this.ploidy_plots"
+        }
+    },
+    {
+        "name": "04-HiFiCNV",
+        "workflow": "HiFiCNV",
+        "root_entity_type": "sample",
+        "inputs": {
+            "HiFiCNV.bai": "this.aligned_bai",
+            "HiFiCNV.bam": "this.aligned_bam",
+            "HiFiCNV.exclude_bed": "workspace.exclude_intervals_for_gcnv_filter_intervals_bgz",
+            "HiFiCNV.exclude_bed_idx": "workspace.exclude_intervals_for_gcnv_filter_intervals_bgz_idx",
+            "HiFiCNV.exclude_intervals": "workspace.depth_exclude_list",
+            "HiFiCNV.expected_cn_female": "workspace.expected_cn_female",
+            "HiFiCNV.expected_cn_male": "workspace.expected_cn_male",
+            "HiFiCNV.hificnv_docker": "workspace.hificnv_docker",
+            "HiFiCNV.prefix": "this.sample_id",
+            "HiFiCNV.ref_fa": "workspace.ref_fa",
+            "HiFiCNV.ref_fai": "workspace.ref_fai",
+            "HiFiCNV.sex": "this.sex",
+            "HiFiCNV.utils_docker": "workspace.utils_docker"
+        },
+        "outputs": {
+            "HiFiCNV.hificnv_bedgraph": "this.hificnv_bedgraph",
+            "HiFiCNV.hificnv_depth_bw": "this.hificnv_depth_bw",
+            "HiFiCNV.hificnv_log": "this.hificnv_log",
+            "HiFiCNV.hificnv_vcf": "this.hificnv_vcf",
+            "HiFiCNV.hificnv_vcf_idx": "this.hificnv_vcf_idx"
+        }
+    },
+    {
+        "name": "04-Sawfish",
+        "workflow": "Sawfish",
+        "root_entity_type": "sample_set",
+        "inputs": {
+            "Sawfish.bais": "this.samples.aligned_bai",
+            "Sawfish.bams": "this.samples.aligned_bam",
+            "Sawfish.exclude_bed": "workspace.exclude_intervals_for_gcnv_filter_intervals_bgz",
+            "Sawfish.exclude_bed_idx": "workspace.exclude_intervals_for_gcnv_filter_intervals_bgz_idx",
+            "Sawfish.exclude_intervals": "workspace.depth_exclude_list",
+            "Sawfish.expected_cn_female": "workspace.expected_cn_female",
+            "Sawfish.expected_cn_male": "workspace.expected_cn_male",
+            "Sawfish.prefix": "this.sample_set_id",
+            "Sawfish.ref_fa": "workspace.ref_fa",
+            "Sawfish.ref_fai": "workspace.ref_fai",
+            "Sawfish.runtime_attr_discover": "{\"mem_gb\": 40}",
+            "Sawfish.runtime_attr_joint_call": "{\"mem_gb\": 25}",
+            "Sawfish.sample_ids": "this.samples.sample_id",
+            "Sawfish.sawfish_docker": "workspace.sawfish_docker",
+            "Sawfish.sexes": "this.samples.sex",
+            "Sawfish.utils_docker": "workspace.utils_docker"
+        },
+        "outputs": {
+            "Sawfish.sawfish_bedgraphs": "this.sawfish_bedgraphs",
+            "Sawfish.sawfish_depth_bws": "this.sawfish_depth_bws",
+            "Sawfish.sawfish_log": "this.sawfish_log",
+            "Sawfish.sawfish_supporting_reads": "this.sawfish_supporting_reads",
+            "Sawfish.sawfish_vcf": "this.sawfish_vcf",
+            "Sawfish.sawfish_vcf_idx": "this.sawfish_vcf_idx"
+        }
+    },
+    {
+        "name": "04-gCNV-Case-Cohort",
+        "workflow": "LongReadCNVs",
+        "root_entity_type": "sample_set",
+        "inputs": {
+            "LongReadCNVs.batch_id": "this.sample_set_id",
+            "LongReadCNVs.blacklist_intervals": "workspace.exclude_intervals_for_gcnv_filter_intervals_modified",
+            "LongReadCNVs.contig_ploidy_priors": "workspace.contig_ploidy_priors",
+            "LongReadCNVs.contigs": "workspace.contigs",
+            "LongReadCNVs.depth_profiles": "this.samples.binned_read_counts",
+            "LongReadCNVs.exclude_intervals": "workspace.depth_exclude_list",
+            "LongReadCNVs.exclude_overlap_fraction": "0.5",
+            "LongReadCNVs.gatk_docker": "workspace.gatk_docker",
+            "LongReadCNVs.gcnv_caller_update_convergence_threshold": "\"0.000001\"",
+            "LongReadCNVs.gcnv_case_caller_internal_admixing_rate": "0.5",
+            "LongReadCNVs.gcnv_case_caller_update_convergence_threshold": "\"0.000001\"",
+            "LongReadCNVs.gcnv_case_cnv_coherence_length": "1000",
+            "LongReadCNVs.gcnv_case_convergence_snr_averaging_window": "100",
+            "LongReadCNVs.gcnv_case_convergence_snr_trigger_threshold": "0.2",
+            "LongReadCNVs.gcnv_case_copy_number_posterior_expectation_mode": "\"EXACT\"",
+            "LongReadCNVs.gcnv_case_learning_rate": "0.03",
+            "LongReadCNVs.gcnv_case_log_emission_sampling_median_rel_error": "0.001",
+            "LongReadCNVs.gcnv_case_log_emission_sampling_rounds": "20",
+            "LongReadCNVs.gcnv_case_max_advi_iter_first_epoch": "1000",
+            "LongReadCNVs.gcnv_case_max_advi_iter_subsequent_epochs": "200",
+            "LongReadCNVs.gcnv_case_max_training_epochs": "5",
+            "LongReadCNVs.gcnv_case_min_training_epochs": "1",
+            "LongReadCNVs.gcnv_case_num_thermal_advi_iters": "250",
+            "LongReadCNVs.gcnv_case_p_alt": "\"0.000001\"",
+            "LongReadCNVs.gcnv_case_sample_psi_scale": "\"0.000001\"",
+            "LongReadCNVs.gcnv_class_coherence_length": "1000",
+            "LongReadCNVs.gcnv_cnv_coherence_length": "1000",
+            "LongReadCNVs.gcnv_convergence_snr_trigger_threshold": "0.2",
+            "LongReadCNVs.gcnv_copy_number_posterior_expectation_mode": "\"EXACT\"",
+            "LongReadCNVs.gcnv_enable_bias_factors": "false",
+            "LongReadCNVs.gcnv_interval_psi_scale": "\"0.000001\"",
+            "LongReadCNVs.gcnv_learning_rate": "0.03",
+            "LongReadCNVs.gcnv_log_emission_sampling_median_rel_error": "0.001",
+            "LongReadCNVs.gcnv_log_emission_sampling_rounds": "10",
+            "LongReadCNVs.gcnv_log_mean_bias_standard_deviation": "0.01",
+            "LongReadCNVs.gcnv_max_advi_iter_subsequent_epochs": "200",
+            "LongReadCNVs.gcnv_max_bias_factors": "1",
+            "LongReadCNVs.gcnv_max_calling_iters": "20",
+            "LongReadCNVs.gcnv_max_training_epochs": "50",
+            "LongReadCNVs.gcnv_min_training_epochs": "5",
+            "LongReadCNVs.gcnv_p_alt": "\"0.000001\"",
+            "LongReadCNVs.gcnv_sample_psi_scale": "\"0.000001\"",
+            "LongReadCNVs.intervals": "this.intervals",
+            "LongReadCNVs.median_coverage": "this.median_coverage",
+            "LongReadCNVs.merged_bincov": "this.binned_coverage",
+            "LongReadCNVs.merged_bincov_idx": "this.binned_coverage_idx",
+            "LongReadCNVs.num_intervals_per_scatter": "5000",
+            "LongReadCNVs.num_training_samples": "2",
+            "LongReadCNVs.pedigree": "workspace.ped",
+            "LongReadCNVs.ploidy_case_sample_psi_scale": "0.001",
+            "LongReadCNVs.ploidy_global_psi_scale": "0.05",
+            "LongReadCNVs.ploidy_mean_bias_standard_deviation": "1.0",
+            "LongReadCNVs.ploidy_sample_psi_scale": "0.001",
+            "LongReadCNVs.prefix": "this.sample_set_id",
+            "LongReadCNVs.ref_dict": "workspace.ref_dict",
+            "LongReadCNVs.ref_fa": "workspace.ref_fa",
+            "LongReadCNVs.ref_fai": "workspace.ref_fai",
+            "LongReadCNVs.sample_ids": "this.samples.sample_id",
+            "LongReadCNVs.sort_depth_profiles": "true",
+            "LongReadCNVs.sv_pipeline_docker": "workspace.sv_pipeline_docker",
+            "LongReadCNVs.training_intervals": "workspace.training_intervals",
+            "LongReadCNVs.utils_docker": "workspace.utils_docker",
+            "LongReadCNVs.variant_prefix": "\"lr_cnv\""
+        },
+        "outputs": {
+            "LongReadCNVs.genotyped_depth_vcf": "this.gcnv_case_cohort_genotyped_depth_vcf",
+            "LongReadCNVs.genotyped_depth_vcf_idx": "this.gcnv_case_cohort_genotyped_depth_vcf_idx",
+            "LongReadCNVs.genotyping_rd_table": "this.gcnv_case_cohort_genotyping_rd_table",
+            "LongReadCNVs.merged_cnvs_vcf": "this.gcnv_case_cohort_merged_cnvs_vcf",
+            "LongReadCNVs.merged_cnvs_vcf_idx": "this.gcnv_case_cohort_merged_cnvs_vcf_idx",
+            "LongReadCNVs.ploidy_table": "this.gcnv_case_cohort_ploidy_table"
+        }
+    },
+    {
+        "name": "04-gCNV-Cohort",
+        "workflow": "LongReadCNVs",
+        "root_entity_type": "sample_set",
+        "inputs": {
+            "LongReadCNVs.batch_id": "this.sample_set_id",
+            "LongReadCNVs.blacklist_intervals": "workspace.exclude_intervals_for_gcnv_filter_intervals_modified",
+            "LongReadCNVs.contig_ploidy_priors": "workspace.contig_ploidy_priors",
+            "LongReadCNVs.contigs": "workspace.contigs",
+            "LongReadCNVs.depth_profiles": "this.samples.binned_read_counts",
+            "LongReadCNVs.exclude_intervals": "workspace.depth_exclude_list",
+            "LongReadCNVs.exclude_overlap_fraction": "0.5",
+            "LongReadCNVs.gatk_docker": "workspace.gatk_docker",
+            "LongReadCNVs.gcnv_caller_update_convergence_threshold": "\"0.000001\"",
+            "LongReadCNVs.gcnv_class_coherence_length": "1000",
+            "LongReadCNVs.gcnv_cnv_coherence_length": "1000",
+            "LongReadCNVs.gcnv_convergence_snr_trigger_threshold": "0.2",
+            "LongReadCNVs.gcnv_copy_number_posterior_expectation_mode": "\"EXACT\"",
+            "LongReadCNVs.gcnv_enable_bias_factors": "false",
+            "LongReadCNVs.gcnv_interval_psi_scale": "\"0.000001\"",
+            "LongReadCNVs.gcnv_learning_rate": "0.03",
+            "LongReadCNVs.gcnv_log_emission_sampling_median_rel_error": "0.001",
+            "LongReadCNVs.gcnv_log_emission_sampling_rounds": "10",
+            "LongReadCNVs.gcnv_log_mean_bias_standard_deviation": "0.01",
+            "LongReadCNVs.gcnv_max_advi_iter_subsequent_epochs": "200",
+            "LongReadCNVs.gcnv_max_bias_factors": "1",
+            "LongReadCNVs.gcnv_max_calling_iters": "20",
+            "LongReadCNVs.gcnv_max_training_epochs": "50",
+            "LongReadCNVs.gcnv_min_training_epochs": "5",
+            "LongReadCNVs.gcnv_p_alt": "\"0.000001\"",
+            "LongReadCNVs.gcnv_sample_psi_scale": "\"0.000001\"",
+            "LongReadCNVs.intervals": "this.intervals",
+            "LongReadCNVs.median_coverage": "this.median_coverage",
+            "LongReadCNVs.merged_bincov": "this.binned_coverage",
+            "LongReadCNVs.merged_bincov_idx": "this.binned_coverage_idx",
+            "LongReadCNVs.num_intervals_per_scatter": "5000",
+            "LongReadCNVs.num_training_samples": "-1",
+            "LongReadCNVs.pedigree": "workspace.ped",
+            "LongReadCNVs.ploidy_global_psi_scale": "0.05",
+            "LongReadCNVs.ploidy_mean_bias_standard_deviation": "1.0",
+            "LongReadCNVs.ploidy_sample_psi_scale": "0.001",
+            "LongReadCNVs.prefix": "this.sample_set_id",
+            "LongReadCNVs.ref_dict": "workspace.ref_dict",
+            "LongReadCNVs.ref_fa": "workspace.ref_fa",
+            "LongReadCNVs.ref_fai": "workspace.ref_fai",
+            "LongReadCNVs.sample_ids": "this.samples.sample_id",
+            "LongReadCNVs.sort_depth_profiles": "true",
+            "LongReadCNVs.sv_pipeline_docker": "workspace.sv_pipeline_docker",
+            "LongReadCNVs.training_intervals": "workspace.training_intervals",
+            "LongReadCNVs.utils_docker": "workspace.utils_docker",
+            "LongReadCNVs.variant_prefix": "\"lr_cnv\""
+        },
+        "outputs": {
+            "LongReadCNVs.genotyped_depth_vcf": "this.gcnv_cohort_genotyped_depth_vcf",
+            "LongReadCNVs.genotyped_depth_vcf_idx": "this.gcnv_cohort_genotyped_depth_vcf_idx",
+            "LongReadCNVs.genotyping_rd_table": "this.gcnv_cohort_genotyping_rd_table",
+            "LongReadCNVs.merged_cnvs_vcf": "this.gcnv_cohort_merged_cnvs_vcf",
+            "LongReadCNVs.merged_cnvs_vcf_idx": "this.gcnv_cohort_merged_cnvs_vcf_idx",
+            "LongReadCNVs.ploidy_table": "this.gcnv_cohort_ploidy_table"
+        }
+    },
+    {
+        "name": "05-CreateCNVDepthPlots",
+        "workflow": "CreateCNVDepthPlots",
+        "root_entity_type": "sample_set",
+        "inputs": {
+            "CreateCNVDepthPlots.genotyped_depth_vcf": "this.gcnv_cohort_genotyped_depth_vcf",
+            "CreateCNVDepthPlots.genotyped_depth_vcf_idx": "this.gcnv_cohort_genotyped_depth_vcf_idx",
+            "CreateCNVDepthPlots.median_coverage": "this.median_coverage",
+            "CreateCNVDepthPlots.merged_bincov": "this.binned_coverage",
+            "CreateCNVDepthPlots.merged_bincov_idx": "this.binned_coverage_idx",
+            "CreateCNVDepthPlots.prefix": "this.sample_set_id",
+            "CreateCNVDepthPlots.records_per_shard": "100",
+            "CreateCNVDepthPlots.regions_bed": "this.cnv_plot_regions_bed",
+            "CreateCNVDepthPlots.repeat_masked_bed": "workspace.repeat_masked_bed",
+            "CreateCNVDepthPlots.seg_dup_bed": "workspace.seg_dup_bed",
+            "CreateCNVDepthPlots.simple_repeats_bed": "workspace.simple_repeats_bed",
+            "CreateCNVDepthPlots.utils_docker": "workspace.utils_docker"
+        },
+        "outputs": {
+            "CreateCNVDepthPlots.cnv_depth_plots_tar": "this.cnv_depth_plots_tar",
+            "CreateCNVDepthPlots.cnv_variants_tsv": "this.cnv_variants_tsv"
+        }
+    },
+    {
+        "name": "Automop",
+        "workflow": "Automop",
+        "root_entity_type": null,
+        "inputs": {
+            "Automop.automop_docker": "workspace.automop_docker",
+            "Automop.dry_run": "true",
+            "Automop.prefix": "\"cohort\"",
+            "Automop.workspace_name": "\"LR_GNOMAD-AoU_TALK_CNV-Pipeline-Template\"",
+            "Automop.workspace_namespace": "\"LR_GNOMAD_1_CO-AoU_TALK\""
+        },
+        "outputs": {}
+    }
+]
