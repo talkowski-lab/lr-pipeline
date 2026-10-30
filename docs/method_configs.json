@@ -1184,7 +1184,7 @@
             "PostprocessCallset.par_bed": "workspace.par_bed",
             "PostprocessCallset.ped": "workspace.ped",
             "PostprocessCallset.prefix": "this.contig_id",
-            "PostprocessCallset.run_clean_vcf_header": "false",
+            "PostprocessCallset.run_clean_vcf_header": "true",
             "PostprocessCallset.run_compute_allele_counts": "true",
             "PostprocessCallset.run_decrement_trv_ids": "false",
             "PostprocessCallset.run_drop_filters": "false",
@@ -1362,6 +1362,7 @@
         "workflow": "FilterNCRCutoffs",
         "root_entity_type": "contig",
         "inputs": {
+            "FilterNCRCutoffs.clean_vcf_header": "true",
             "FilterNCRCutoffs.ncr_cutoffs_tsv": "workspace.recommended_ncr_cutoffs_tsv",
             "FilterNCRCutoffs.ncr_filter_pass_only": "true",
             "FilterNCRCutoffs.prefix": "this.contig_id",
@@ -1390,56 +1391,15 @@
         "outputs": {}
     },
     {
-        "name": "CreateCNVDepthPlots",
-        "workflow": "CreateCNVDepthPlots",
-        "root_entity_type": "sample_set",
-        "inputs": {
-            "CreateCNVDepthPlots.genotyped_depth_vcf": "this.genotyped_depth_vcf",
-            "CreateCNVDepthPlots.genotyped_depth_vcf_idx": "this.genotyped_depth_vcf_idx",
-            "CreateCNVDepthPlots.median_coverage": "this.median_coverage",
-            "CreateCNVDepthPlots.merged_bincov": "this.binned_coverage",
-            "CreateCNVDepthPlots.merged_bincov_idx": "this.binned_coverage_idx",
-            "CreateCNVDepthPlots.prefix": "this.sample_set_id",
-            "CreateCNVDepthPlots.records_per_shard": "100",
-            "CreateCNVDepthPlots.regions_bed": "this.cnv_plot_regions_bed",
-            "CreateCNVDepthPlots.repeat_masked_bed": "workspace.repeat_masked_bed",
-            "CreateCNVDepthPlots.seg_dup_bed": "workspace.seg_dup_bed",
-            "CreateCNVDepthPlots.simple_repeats_bed": "workspace.simple_repeats_bed",
-            "CreateCNVDepthPlots.utils_docker": "workspace.utils_docker"
-        },
-        "outputs": {
-            "CreateCNVDepthPlots.cnv_depth_plots_tar": "this.cnv_depth_plots_tar",
-            "CreateCNVDepthPlots.cnv_variants_tsv": "this.cnv_variants_tsv"
-        }
-    },
-    {
-        "name": "CreateCohortDepthFiles",
-        "workflow": "CreateCohortDepthFiles",
-        "root_entity_type": "sample_set",
-        "inputs": {
-            "CreateCohortDepthFiles.mosdepth_bed_files": "this.samples.mosdepth_per_base_combined",
-            "CreateCohortDepthFiles.prefix": "this.sample_set_id",
-            "CreateCohortDepthFiles.sample_ids": "this.samples.sample_id",
-            "CreateCohortDepthFiles.utils_docker": "workspace.utils_docker"
-        },
-        "outputs": {
-            "CreateCohortDepthFiles.binned_coverage": "this.binned_coverage",
-            "CreateCohortDepthFiles.binned_coverage_idx": "this.binned_coverage_idx",
-            "CreateCohortDepthFiles.binned_estimated_ecn": "this.binned_estimated_ecn",
-            "CreateCohortDepthFiles.estimated_cn": "this.estimated_cn",
-            "CreateCohortDepthFiles.median_coverage": "this.median_coverage",
-            "CreateCohortDepthFiles.ploidy_plots": "this.ploidy_plots"
-        }
-    },
-    {
         "name": "CreateIGVPlots",
         "workflow": "CreateIGVPlots",
         "root_entity_type": "sample_set",
         "inputs": {
-            "CreateIGVPlots.annotation_beds": "[workspace.seg_dup_bed, workspace.simple_repeats_bed]",
-            "CreateIGVPlots.annotation_names": "[\"SegDup\", \"SimpleRepeats\"]",
+            "CreateIGVPlots.annotation_beds": "[workspace.seg_dup_bed, workspace.simple_repeats_bed, workspace.gaps_bed]",
+            "CreateIGVPlots.annotation_names": "[\"SegDup\", \"SimpleRepeats\", \"Gaps\"]",
             "CreateIGVPlots.bais": "this.samples.aligned_bai",
             "CreateIGVPlots.bams": "this.samples.aligned_bam",
+            "CreateIGVPlots.genes_gtf": "workspace.mane_gtf",
             "CreateIGVPlots.igv_docker": "workspace.igv_docker",
             "CreateIGVPlots.ped": "workspace.ped",
             "CreateIGVPlots.prefix": "this.sample_set_id",
@@ -1449,6 +1409,39 @@
         },
         "outputs": {
             "CreateIGVPlots.igv_plots_tar": "this.igv_plots_tar"
+        }
+    },
+    {
+        "name": "EvaluateCallsetAccuracy",
+        "workflow": "EvaluateCallsetAccuracy",
+        "root_entity_type": "contig_set",
+        "inputs": {
+            "EvaluateCallsetAccuracy.args_string_vcf": "\"INFO/allele_type!=\\\"trv\\\" && FILTER=\\\"PASS\\\"\"",
+            "EvaluateCallsetAccuracy.contigs": "this.contigs.contig_id",
+            "EvaluateCallsetAccuracy.length_bins": "[0, 1, 50, 2000]",
+            "EvaluateCallsetAccuracy.prefix": "\"cohort\"",
+            "EvaluateCallsetAccuracy.records_per_shard_region": "10000",
+            "EvaluateCallsetAccuracy.ref_fa": "workspace.ref_fa",
+            "EvaluateCallsetAccuracy.ref_fai": "workspace.ref_fai",
+            "EvaluateCallsetAccuracy.repeat_masked_bed": "workspace.repeat_masked_bed",
+            "EvaluateCallsetAccuracy.seg_dup_bed": "workspace.seg_dup_bed",
+            "EvaluateCallsetAccuracy.shard_bin_size_exact_match": "5000000",
+            "EvaluateCallsetAccuracy.simple_repeats_bed": "workspace.simple_repeats_bed",
+            "EvaluateCallsetAccuracy.truth_bed": "workspace.truth_platinum_pedigree_bed",
+            "EvaluateCallsetAccuracy.truth_sv_vcf": "workspace.truth_platinum_pedigree_sv_vcf",
+            "EvaluateCallsetAccuracy.truth_sv_vcf_idx": "workspace.truth_platinum_pedigree_sv_vcf_idx",
+            "EvaluateCallsetAccuracy.truth_vcf": "workspace.truth_platinum_pedigree_vcf",
+            "EvaluateCallsetAccuracy.truth_vcf_idx": "workspace.truth_platinum_pedigree_vcf_idx",
+            "EvaluateCallsetAccuracy.utils_docker": "workspace.utils_docker",
+            "EvaluateCallsetAccuracy.vcf_idxs": "this.contigs.ncr_filtered_vcf_idx",
+            "EvaluateCallsetAccuracy.vcfs": "this.contigs.ncr_filtered_vcf"
+        },
+        "outputs": {
+            "EvaluateCallsetAccuracy.accuracy_per_contig_tsv": "this.accuracy_per_contig_tsv",
+            "EvaluateCallsetAccuracy.accuracy_plots_tar": "this.accuracy_plots_tar",
+            "EvaluateCallsetAccuracy.accuracy_tsv": "this.accuracy_tsv",
+            "EvaluateCallsetAccuracy.exact_match_tsvs": "this.exact_match_tsvs",
+            "EvaluateCallsetAccuracy.truvari_match_tsvs": "this.truvari_match_tsvs"
         }
     },
     {
