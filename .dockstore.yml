@@ -728,3 +728,14 @@ workflows:
         - main
       tags:
         - /.*/
+
+  # Analysis Workflows
+  - subclass: WDL
+    name: LocalAssemblyHifiasm
+    primaryDescriptorPath: /wdl_analyses/LocalAssemblyHifiasm.wdl
+    filters:
+      branches:
+        - main
+        - xz_analyses
+      tags:
+        - /.*/
