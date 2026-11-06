@@ -63,9 +63,9 @@ SUBWORKFLOWS_INTRO = (
 SUBWORKFLOW_GROUPS = [
     (
         "Depth-based CNV pipeline",
-        "`LRCNVs`, `DepthPreprocessing`, `DepthClustering` and `GenotypeDepth` are called in that order by "
-        "`LongReadCNVs`, which supplies their shared inputs.",
-        ["LRCNVs", "DepthPreprocessing", "DepthClustering", "GenotypeDepth"],
+        "`LRCNVs`, `DepthPreprocessing`, `FilterDepthCalls`, `DepthClustering` and `GenotypeDepth` are called in that "
+        "order by `LongReadCNVs`, which supplies their shared inputs.",
+        ["LRCNVs", "DepthPreprocessing", "FilterDepthCalls", "DepthClustering", "GenotypeDepth"],
     ),
     (
         "Callset matching and sharding",

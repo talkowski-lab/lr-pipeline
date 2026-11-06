@@ -49,6 +49,7 @@ Built from [dockerfiles/](../dockerfiles/) in this repository and pushed to the 
 | Argument Name | Image | Dockerfile |
 |---|---|---|
 | `cpg_docker` | `cpgtools` | [`Dockerfile.cpgtools`](../dockerfiles/Dockerfile.cpgtools) |
+| `depth_filter_docker` | `depthfilter` | [`Dockerfile.depthfilter`](../dockerfiles/Dockerfile.depthfilter) |
 | `hail_docker` | `hail` | [`Dockerfile.hail`](../dockerfiles/Dockerfile.hail) |
 | `hifiasm_docker` | `hifiasm` | [`Dockerfile.hifiasm`](../dockerfiles/Dockerfile.hifiasm) |
 | `hificnv_docker` | `hificnv` | [`Dockerfile.hificnv`](../dockerfiles/Dockerfile.hificnv) |
@@ -75,6 +76,8 @@ Built from [dockerfiles/](../dockerfiles/) in this repository and pushed to the 
 | `whatshap_docker` | `whatshap` | [`Dockerfile.whatshap`](../dockerfiles/Dockerfile.whatshap) |
 
 The `igv` image ports the `lr-visualize` image of [variant-interpretation](https://github.com/yuliamostovoy/variant-interpretation/tree/main/dockerfiles/long_read_visualize) (`quay.io/ymostovoy/lr-visualize`) by Yulia Mostovoy onto `utils`, which already carries samtools, bedtools and the plotting libraries, adding mosdepth and IGV with its bundled Java runtime; its scripts are baked in from `scripts/qc/igv/` rather than cloned.
+
+The `depthfilter` image is `utils` with `scripts/cnv/` baked in, so `LongReadCNVs` can run its `FilterDepthCalls` step from its own image and leave every task that uses `utils_docker` unchanged, keeping their call-cache hits; `depth_filter_docker` defaults to `utils_docker`.
 
 Every Dockerfile in `dockerfiles/` maps to exactly one argument above; retired ones live in [`archive/dockerfiles/`](../archive/dockerfiles/) and are not built.
 

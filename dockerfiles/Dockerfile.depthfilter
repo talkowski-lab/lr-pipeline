@@ -1,0 +1,7 @@
+ARG BASE_IMAGE=us-central1-docker.pkg.dev/talkowski-sv-gnomad/kj-dockers/utils:latest
+FROM ${BASE_IMAGE}
+
+MAINTAINER Xuefang Zhao
+
+# Bake in the depth-based CNV breakpoint refinement and filtering scripts and the breakpoint-sharpness model
+COPY ./scripts/cnv /opt/scripts/cnv

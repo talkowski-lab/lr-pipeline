@@ -2,6 +2,7 @@ version 1.0
 
 import "../utils/LRCNVs.wdl"
 import "../utils/DepthPreprocessing.wdl"
+import "../utils/FilterDepthCalls.wdl"
 import "../utils/DepthClustering.wdl"
 import "../utils/GenotypeDepth.wdl"
 import "../utils/Helpers.wdl"
@@ -11,7 +12,8 @@ workflow LongReadCNVs {
     meta {
         description: [
             "This workflow calls cohort CNVs from long-read depth profiles with GATK gCNV, then converts, clusters and genotypes the depth calls. It outputs merged CNV calls, ploidy, and genotyped depth VCFs.",
-            "With `num_training_samples` left at -1 every sample is called in gCNV cohort mode. Setting it below the cohort size instead runs a hybrid case-cohort mode, fitting the contig-ploidy and gCNV models on that many randomly drawn samples and then calling every sample, the training samples included, against those models in case mode, as GATK-SV does. The case-mode steps take their own `ploidy_case_*` and `gcnv_case_*` settings, each falling back to the matching cohort-mode input when unset. All downstream steps and outputs still cover the whole cohort either way."
+            "With `num_training_samples` left at -1 every sample is called in gCNV cohort mode. Setting it below the cohort size instead runs a hybrid case-cohort mode, fitting the contig-ploidy and gCNV models on that many randomly drawn samples and then calling every sample, the training samples included, against those models in case mode, as GATK-SV does. The case-mode steps take their own `ploidy_case_*` and `gcnv_case_*` settings, each falling back to the matching cohort-mode input when unset. All downstream steps and outputs still cover the whole cohort either way.",
+            "With `filter_depth_calls` on, the merged per-sample calls pass through `FilterDepthCalls`, run in the image given by `depth_filter_docker` (default `utils_docker`), before clustering: calls shorter than `depth_filter_min_size` or overlapping `blacklist_intervals` are dropped, each sample's call is refined and judged on that sample's read depth alone, and only calls whose breakpoints the depth supports are clustered and genotyped, at their refined breakpoints."
         ]
     }
 
@@ -141,12 +143,21 @@ workflow LongReadCNVs {
         exclude_overlap_fraction: "Overlap fraction at which a call is excluded."
         gatk_to_svtk_script: "Override for the GATK-to-svtk conversion script."
         svtk_set_pass: "Set FILTER to PASS during conversion."
+        filter_depth_calls: "Refine and filter the merged per-sample calls from read depth with `FilterDepthCalls` before clustering; needs `blacklist_intervals` and `seg_dup_bed`."
+        depth_filter_min_size: "Minimum call length kept by `FilterDepthCalls`; shorter calls are dropped."
+        depth_filter_gbm_cutoff: "Minimum breakpoint-sharpness model probability for a call without segmental duplication involvement to pass `FilterDepthCalls`."
+        depth_filter_sd_sharp_rule: "How `FilterDepthCalls` combines the sharp-transition checks of the two ends of a call involving a segmental duplication: 'all', 'majority' or 'score'."
+        seg_dup_bed: "From references."
+        depth_filter_sharpness_model: "Breakpoint-sharpness model JSON for `FilterDepthCalls`; defaults to the copy shipped in the utils image."
         merged_cnvs_vcf: "Cohort CNV VCF after depth preprocessing."
         merged_cnvs_vcf_idx: "Index for `merged_cnvs_vcf`."
         ploidy_table: "Per-sample ploidy table."
         genotyped_depth_vcf: "Clustered CNV VCF genotyped from read depth."
         genotyped_depth_vcf_idx: "Index for `genotyped_depth_vcf`."
         genotyping_rd_table: "Read-depth evidence used for genotyping."
+        filtered_cnvs_vcf: "Per-sample calls that passed `FilterDepthCalls`, at their refined breakpoints, as clustered."
+        filtered_cnvs_vcf_idx: "Index for `filtered_cnvs_vcf`."
+        depth_filter_decisions: "Decision of `FilterDepthCalls` for every sample-call of at least `depth_filter_min_size`."
     }
 
     input {
@@ -180,6 +191,7 @@ workflow LongReadCNVs {
         String gatk_docker
         String utils_docker
         String sv_pipeline_docker
+        String depth_filter_docker = utils_docker
 
         File? gatk4_jar_override
         File? mappability_track_bed
@@ -284,6 +296,12 @@ workflow LongReadCNVs {
         Float exclude_overlap_fraction = 0.5
         File? gatk_to_svtk_script
         Boolean svtk_set_pass = false
+        Boolean filter_depth_calls = true
+        Int depth_filter_min_size = 10000
+        Float depth_filter_gbm_cutoff = 0.5
+        String depth_filter_sd_sharp_rule = "majority"
+        File? seg_dup_bed
+        File? depth_filter_sharpness_model
 
         RuntimeAttr? runtime_attr_sort_depth_profiles
         RuntimeAttr? runtime_attr_subsample_indices
@@ -303,6 +321,10 @@ workflow LongReadCNVs {
         RuntimeAttr? runtime_attr_make_ploidy_table
         RuntimeAttr? runtime_attr_cnv_bed_to_vcf
         RuntimeAttr? runtime_attr_concat_preprocessed_vcfs
+        RuntimeAttr? runtime_attr_subset_depth_vcf
+        RuntimeAttr? runtime_attr_refine_filter_depth_calls
+        RuntimeAttr? runtime_attr_concat_filtered_depth_vcfs
+        RuntimeAttr? runtime_attr_concat_depth_filter_decisions
         RuntimeAttr? runtime_attr_sv_cluster
         RuntimeAttr? runtime_attr_exclude_intervals
         RuntimeAttr? runtime_attr_gatk_to_svtk_vcf
@@ -473,10 +495,35 @@ workflow LongReadCNVs {
             runtime_attr_concat_vcfs = runtime_attr_concat_preprocessed_vcfs
     }
 
+    if (filter_depth_calls) {
+        call FilterDepthCalls.FilterDepthCalls {
+            input:
+                depth_vcf = DepthPreprocessing.merged_vcf,
+                depth_vcf_idx = DepthPreprocessing.merged_vcf_idx,
+                contigs = GetContigsFromIntervalList.contigs,
+                prefix = prefix,
+                min_size = depth_filter_min_size,
+                gbm_cutoff = depth_filter_gbm_cutoff,
+                sd_sharp_rule = depth_filter_sd_sharp_rule,
+                rd_file = merged_bincov,
+                rd_file_idx = merged_bincov_idx,
+                median_coverage = median_coverage,
+                seg_dup_bed = select_first([seg_dup_bed]),
+                gaps_bed = select_first([blacklist_intervals]),
+                ref_fai = ref_fai,
+                sharpness_model = depth_filter_sharpness_model,
+                utils_docker = depth_filter_docker,
+                runtime_attr_subset_vcf = runtime_attr_subset_depth_vcf,
+                runtime_attr_refine_filter = runtime_attr_refine_filter_depth_calls,
+                runtime_attr_concat_vcfs = runtime_attr_concat_filtered_depth_vcfs,
+                runtime_attr_concat_tsvs = runtime_attr_concat_depth_filter_decisions
+        }
+    }
+
     call DepthClustering.DepthClustering {
         input:
-            depth_vcf = DepthPreprocessing.merged_vcf,
-            depth_vcf_idx = DepthPreprocessing.merged_vcf_idx,
+            depth_vcf = select_first([FilterDepthCalls.filtered_vcf, DepthPreprocessing.merged_vcf]),
+            depth_vcf_idx = select_first([FilterDepthCalls.filtered_vcf_idx, DepthPreprocessing.merged_vcf_idx]),
             ploidy_table = DepthPreprocessing.ploidy_table,
             prefix = prefix,
             variant_prefix = variant_prefix,
@@ -538,5 +585,8 @@ workflow LongReadCNVs {
         File genotyped_depth_vcf = GenotypeDepth.genotyped_depth_vcf
         File genotyped_depth_vcf_idx = GenotypeDepth.genotyped_depth_vcf_idx
         File genotyping_rd_table = GenotypeDepth.genotyping_rd_table
+        File? filtered_cnvs_vcf = FilterDepthCalls.filtered_vcf
+        File? filtered_cnvs_vcf_idx = FilterDepthCalls.filtered_vcf_idx
+        File? depth_filter_decisions = FilterDepthCalls.decisions_tsv
     }
 }
