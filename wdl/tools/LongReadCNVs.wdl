@@ -2,7 +2,7 @@ version 1.0
 
 import "../utils/LRCNVs.wdl"
 import "../utils/DepthPreprocessing.wdl"
-import "../utils/FilterDepthCalls.wdl"
+import "../annotation_utils/FilterDepthCalls.wdl"
 import "../utils/DepthClustering.wdl"
 import "../utils/GenotypeDepth.wdl"
 import "../utils/Helpers.wdl"

@@ -1,13 +1,13 @@
 version 1.0
 
-import "Structs.wdl"
-import "Helpers.wdl"
+import "../utils/Structs.wdl"
+import "../utils/Helpers.wdl"
 
 # Refine and filter per-sample gCNV depth calls from read depth before clustering
 workflow FilterDepthCalls {
     meta {
         description: [
-            "This sub-workflow refines the breakpoints of per-sample gCNV depth calls from the binned read depth and removes calls whose depth profile does not support them, before the calls are clustered and genotyped. Each sample's call is refined and judged on that sample's depth alone; calls of other samples are never pooled or merged. Only DEL and DUP calls of at least `min_size` are kept, and calls overlapping `gaps_bed` are dropped.",
+            "This workflow refines the breakpoints of per-sample gCNV depth calls from the binned read depth and removes calls whose depth profile does not support them, before the calls are clustered and genotyped. Each sample's call is refined and judged on that sample's depth alone; calls of other samples are never pooled or merged. Only DEL and DUP calls of at least `min_size` are kept, and calls overlapping `gaps_bed` are dropped.",
             "Calls without segmental duplication (SD) involvement are refined by locating the depth transition within 2 kb of each called breakpoint; when one breakpoint is sharp and the other is not, the other is searched for out to twice the call length. The sharpness of the two breakpoints (edge z-score, copy-number step and edge jump) is scored with a gradient-boosted tree model trained on chr6 of HPRC and HGSVC, with short-read GATK-SV calls as labels, and calls with a probability of at least `gbm_cutoff` are kept. Calls with a breakpoint in, or lying within, an SD are scored separately: each end must show the expected copy-number change against its flank and a sharp transition, the two ends evaluated together under `sd_sharp_rule`.",
             "The passing calls are written as a VCF with one record per call and carrier at the refined breakpoints, together with a table of the decision for every sample-call."
         ]

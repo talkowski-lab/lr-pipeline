@@ -20,6 +20,7 @@ EXEMPT = {
     "CreateCohortDepthFiles": "needs mosdepth-sized inputs for all 24 contigs",
     "CreateIGVPlots": "needs IGV image, aligned BAMs and an IGV-hosted genome",
     "CreateCNVDepthPlots": "needs depth matrices for all 24 contigs and the plotting image",
+    "FilterDepthCalls": "needs a cohort read-depth matrix and gCNV calls, and streams the matrix from GCS",
     "CreateTRGTHistograms": "needs the stranalysis image",
     "Automop": "cleans up a Terra workspace through FISS (automop image)",
     "DeepVariant": "needs the DeepVariant image and an aligned BAM",

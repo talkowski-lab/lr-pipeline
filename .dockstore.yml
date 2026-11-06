@@ -388,6 +388,17 @@ workflows:
         - /.*/
 
   - subclass: WDL
+    name: FilterDepthCalls
+    primaryDescriptorPath: /wdl/annotation_utils/FilterDepthCalls.wdl
+    publish: true
+    filters:
+      branches:
+        - main
+        - gcnv-depth-refinement
+      tags:
+        - /.*/
+
+  - subclass: WDL
     name: CreateIGVPlots
     primaryDescriptorPath: /wdl/annotation_utils/CreateIGVPlots.wdl
     publish: true
