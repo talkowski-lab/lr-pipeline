@@ -168,7 +168,18 @@ task SelectLoci {
 
         # Keep only loci whose chromosome has a VCF in gvcfs (a path containing "/<chrom>." or "/<chrom>_");
         # the header line is dropped and skipped loci are listed in <prefix>.loci.skipped.tsv
-        tail -n +2 ~{default="/opt/gd_scripts/references/gd_loci.windows.tsv" tsv} > loci.tsv
+        loci=~{default="/opt/gd_scripts/references/gd_loci.windows.tsv" tsv}
+        # The loci table must be gd_sd_windows.py output: header starting with "locus", 19 tab-separated columns
+        if ! head -n 1 "${loci}" | grep -q "^locus"$'\t'"chrom"; then
+            echo "loci_tsv must be the gd_sd_windows.py table (header 'locus chrom gd_start ...'); got: $(head -n 1 "${loci}")" >&2
+            exit 1
+        fi
+        bad=$(awk -F'\t' 'NR > 1 && NF != 19' "${loci}" | wc -l)
+        if [[ ${bad} -gt 0 ]]; then
+            echo "loci_tsv: ${bad} rows do not have 19 tab-separated columns" >&2
+            exit 1
+        fi
+        tail -n +2 "${loci}" | tr -d '\r' > loci.tsv
         : > ~{prefix}.loci.rows.tsv
         : > ~{prefix}.loci.skipped.tsv
         while IFS=$'\t' read -r locus chrom rest; do
