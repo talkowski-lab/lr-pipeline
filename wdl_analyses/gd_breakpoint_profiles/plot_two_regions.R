@@ -25,6 +25,10 @@
 #   both breakpoint SDs and the GD interval; needs --medians), with the SD and SD breakpoint tracks above it, the two
 #   zoomed windows shaded and dashed lines at --mark1/--mark2. --overview-window "start,end" (bp) fixes its range,
 #   --overview-bin its bin size (0 = automatic, window / 300).
+# --page-size N: one page per N DEL + N DUP carriers (other carriers grey on that page); 0 = all on one page.
+# --order-by-edges: carriers are ordered (and so grouped into pages) by their copy-number edges: per carrier, the overview
+#   copy number is smoothed with a running median over ~25 kb, and the longest run below 1.5 (DEL) or above 2.5 (DUP)
+#   gives its left and right edge; carriers are sorted by left edge, then right edge. --edges-out writes the edges.
 # Breakpoint arrows: --bp1/--bp2 = ranked.tsv of find_baf_terminal_loh.py (columns sample and --bp-col, default bp_est,
 #   in bp); an arrow in the sample's colour marks it in the depth and BAF panels, for highlighted samples matching
 #   --bp-pattern (default: the --del-pattern; BAF loss only places deletion breakpoints).
@@ -55,6 +59,11 @@ opt <- parse_args(OptionParser(option_list = list(
   make_option("--het-lo", type = "double", default = 0.1), make_option("--het-hi", type = "double", default = 0.9),
   make_option("--overview-rd"), make_option("--overview-window"),
   make_option("--overview-bin", type = "integer", default = 0),
+  make_option("--order-by-edges", action = "store_true", default = FALSE,
+              help = "order carriers by their copy-number edges from the overview depth (needs --overview-rd)"),
+  make_option("--edges-out", help = "TSV of the per-carrier copy-number edges (with --order-by-edges)"),
+  make_option("--page-size", type = "integer", default = 0,
+              help = "with > 0: one page per group of this many DEL plus this many DUP carriers (multi-page PDF)"),
   make_option("--max-legend", type = "integer", default = 16,
               help = "list coloured samples in the legend only up to this many (title gives the DEL/DUP counts)"))))
 for (x in c("baf1", "baf2", "out")) if (is.null(opt[[x]])) stop("need --baf1, --baf2 and --out (see -h)")
@@ -251,44 +260,111 @@ column <- function(reg, mk, first, bp) {
   }
   Filter(Negate(is.null), list(sd, p_cn, p_b, p_h, p_ld))
 }
-c1 <- column(R[[1]], marks[[1]], TRUE, bps[[1]])
-c2 <- column(R[[2]], marks[[2]], FALSE, bps[[2]])
-grid_hts <- c(0.18, 1.2, 1, if (opt$`het-baf`) 1, 1.4)
-fig <- wrap_plots(c(rbind(c1, c2)), ncol = 2, byrow = TRUE) + plot_layout(heights = grid_hts, guides = "collect")
-if (!is.null(ov)) {
-  mk <- c(marks[[1]], marks[[2]])
-  zoom <- data.table(xmin = c(R[[1]]$xr[1], R[[2]]$xr[1]), xmax = c(R[[1]]$xr[2], R[[2]]$xr[2]))
-  osd <- read_sd(opt$segdup, ov$chrom, ov$xr)
-  p_osd <- if (!is.null(osd) && nrow(osd)) {
-    osd[, track := factor(track, levels = rev(unique(track)))]; osd[label %in% c("NA", NA), label := ""]
-    ggplot(osd) + geom_rect(aes(xmin = start, xmax = end, ymin = as.numeric(track) - 0.4, ymax = as.numeric(track) + 0.4),
-                            fill = "#E8A33D", colour = "grey30", linewidth = 0.2) +
-      geom_text(aes(x = (start + end) / 2, y = as.numeric(track), label = label), size = 7.76 * 0.7,
-                family = font_family, fontface = "bold") +
-      { if (length(mk)) geom_vline(xintercept = mk, linetype = "dashed", colour = "#1F5FA8") } +
-      scale_y_continuous(breaks = seq_along(levels(osd$track)), labels = levels(osd$track), expand = c(0, 0.3)) +
-      coord_cartesian(xlim = ov$xr) +
-      labs(x = NULL, y = NULL, title = sprintf("whole locus (CN %g kb bins; shaded = zoomed SD windows below)", ov$bin / 1000)) +
-      theme(panel.grid = element_blank(), axis.text.x = element_blank(), axis.ticks = element_blank(),
-            plot.title = element_text(hjust = 0.5, face = "bold"))
-  } else ggplot() + theme_void()
-  ocn_max <- max(4, quantile(ov$cn$CN, 0.999, na.rm = TRUE))
-  p_ocn <- lines_panel(ov$cn, "CN", c(0, ocn_max), ov$xr, "copy number", mk,
-                       list(geom_rect(data = zoom, aes(xmin = xmin, xmax = xmax, ymin = -Inf, ymax = Inf),
-                                      fill = "#9ECAE1", alpha = 0.25, inherit.aes = FALSE),
-                            geom_hline(yintercept = c(1, 2, 3), linetype = "dotted", colour = "grey40"))) +
-    labs(x = paste(ov$chrom, "position (Mb)")) + guides(colour = "none")
-  fig <- wrap_plots(p_osd, p_ocn, fig, ncol = 1, heights = c(0.18, 1.3, sum(grid_hts))) +
-    plot_layout(guides = "collect")
+make_fig <- function(page_label) {
+  c1 <- column(R[[1]], marks[[1]], TRUE, bps[[1]])
+  c2 <- column(R[[2]], marks[[2]], FALSE, bps[[2]])
+  grid_hts <- c(0.18, 1.2, 1, if (opt$`het-baf`) 1, 1.4)
+  fig <- wrap_plots(c(rbind(c1, c2)), ncol = 2, byrow = TRUE) + plot_layout(heights = grid_hts, guides = "collect")
+  if (!is.null(ov)) {
+    mk <- c(marks[[1]], marks[[2]])
+    zoom <- data.table(xmin = c(R[[1]]$xr[1], R[[2]]$xr[1]), xmax = c(R[[1]]$xr[2], R[[2]]$xr[2]))
+    osd <- read_sd(opt$segdup, ov$chrom, ov$xr)
+    p_osd <- if (!is.null(osd) && nrow(osd)) {
+      osd[, track := factor(track, levels = rev(unique(track)))]; osd[label %in% c("NA", NA), label := ""]
+      ggplot(osd) + geom_rect(aes(xmin = start, xmax = end, ymin = as.numeric(track) - 0.4, ymax = as.numeric(track) + 0.4),
+                              fill = "#E8A33D", colour = "grey30", linewidth = 0.2) +
+        geom_text(aes(x = (start + end) / 2, y = as.numeric(track), label = label), size = 7.76 * 0.7,
+                  family = font_family, fontface = "bold") +
+        { if (length(mk)) geom_vline(xintercept = mk, linetype = "dashed", colour = "#1F5FA8") } +
+        scale_y_continuous(breaks = seq_along(levels(osd$track)), labels = levels(osd$track), expand = c(0, 0.3)) +
+        coord_cartesian(xlim = ov$xr) +
+        labs(x = NULL, y = NULL, title = sprintf("whole locus (CN %g kb bins; shaded = zoomed SD windows below)", ov$bin / 1000)) +
+        theme(panel.grid = element_blank(), axis.text.x = element_blank(), axis.ticks = element_blank(),
+              plot.title = element_text(hjust = 0.5, face = "bold"))
+    } else ggplot() + theme_void()
+    ocn_max <- max(4, quantile(ov$cn$CN, 0.999, na.rm = TRUE))
+    p_ocn <- lines_panel(ov$cn, "CN", c(0, ocn_max), ov$xr, "copy number", mk,
+                         list(geom_rect(data = zoom, aes(xmin = xmin, xmax = xmax, ymin = -Inf, ymax = Inf),
+                                        fill = "#9ECAE1", alpha = 0.25, inherit.aes = FALSE),
+                              geom_hline(yintercept = c(1, 2, 3), linetype = "dotted", colour = "grey40"))) +
+      labs(x = paste(ov$chrom, "position (Mb)")) + guides(colour = "none")
+    fig <- wrap_plots(p_osd, p_ocn, fig, ncol = 1, heights = c(0.18, 1.3, sum(grid_hts))) +
+      plot_layout(guides = "collect")
+  }
+  fig <- fig +
+    plot_annotation(title = sprintf("%s%s\ncoloured: %d DEL in red to orange, %d DUP in blue to green; arrows = BAF breakpoint estimates of DEL",
+                                    opt$title, page_label, sum(is_del), sum(is_dup)),
+                    theme = theme(plot.title = element_text(size = 22, family = font_family)))
+  fig
 }
-fig <- fig +
-  plot_annotation(title = sprintf("%s  (coloured: %d DEL in red to orange, %d DUP in blue to green; arrows = BAF breakpoint estimates of DEL)",
-                                  opt$title, sum(is_del), sum(is_dup)),
-                  theme = theme(plot.title = element_text(size = 22, family = font_family)))
+
+# Pages: all carriers on one page, or --page-size DEL + --page-size DUP carriers per page (colours re-spread per page)
+nat <- function(x) x[order(sub("_[0-9]+$", "", x), suppressWarnings(as.numeric(sub(".*_", "", x))))]
+hl_all <- hl; bps_all <- bps
+dels <- nat(hl_all[grepl(opt$`del-pattern`, hl_all)]); dups <- nat(hl_all[grepl(opt$`dup-pattern`, hl_all) & !hl_all %in% dels])
+edges <- NULL
+if (opt$`order-by-edges` && !is.null(ov)) {
+  # Depth edges: smoothed copy number (running median over ~25 kb); bins beyond the threshold (< 1.5 DEL, > 2.5 DUP)
+  # form runs, gaps shorter than ~20 kb between runs are closed, and the run covering the GD midpoint (mean of
+  # --mark1/--mark2; else the longest run) gives the carrier's left and right edge
+  k_bins <- max(3, round(25000 / ov$bin)) %/% 2 * 2 + 1
+  gap_bins <- max(1, round(20000 / ov$bin))
+  gd_mid <- if (length(marks[[1]]) && length(marks[[2]])) mean(c(marks[[1]][1], marks[[2]][1])) * 1e6 else NA
+  e <- ov$cn[sample %in% c(dels, dups) & !is.na(CN)][order(sample, bin)]
+  edges <- e[, {
+    sm <- if (.N >= k_bins) stats::runmed(CN, k_bins, endrule = "median") else CN
+    flag <- if (sample[1] %in% dels) sm < 1.5 else sm > 2.5
+    r <- rle(flag)
+    short_gap <- !r$values & r$lengths <= gap_bins & seq_along(r$values) > 1 & seq_along(r$values) < length(r$values)
+    r$values[short_gap] <- TRUE
+    flag <- inverse.rle(r); r <- rle(flag); ends <- cumsum(r$lengths); starts <- ends - r$lengths + 1
+    runs <- which(r$values)
+    hit <- if (!is.na(gd_mid)) runs[bin[starts[runs]] <= gd_mid & bin[ends[runs]] >= gd_mid] else integer(0)
+    best <- if (length(hit)) hit[1] else if (length(runs)) runs[which.max(r$lengths[runs])] else integer(0)
+    if (length(best)) .(depth_left = bin[starts[best]], depth_right = bin[ends[best]]) else
+      .(depth_left = NA_real_, depth_right = NA_real_)
+  }, by = sample]
+  edges[, type := ifelse(sample %in% dels, "DEL", "DUP")]
+  # BAF breakpoint estimates (DEL carriers): left SD and right SD
+  bl <- if (!is.null(bps_all[[1]])) bps_all[[1]][, .(sample, baf_left = x * 1e6)] else data.table(sample = character(0), baf_left = numeric(0))
+  br <- if (!is.null(bps_all[[2]])) bps_all[[2]][, .(sample, baf_right = x * 1e6)] else data.table(sample = character(0), baf_right = numeric(0))
+  edges <- merge(merge(edges, bl, by = "sample", all.x = TRUE), br, by = "sample", all.x = TRUE)
+  edges[, `:=`(left_edge = fifelse(type == "DEL" & !is.na(baf_left), baf_left, depth_left),
+               right_edge = fifelse(type == "DEL" & !is.na(baf_right), baf_right, depth_right),
+               edge_source = fifelse(type == "DEL" & !is.na(baf_left), "BAF", "depth"))]
+  setorder(edges, type, left_edge, right_edge, na.last = TRUE)
+  dels <- edges[type == "DEL", sample]; dups <- edges[type == "DUP", sample]
+  if (!is.null(opt$`edges-out`)) fwrite(edges, opt$`edges-out`, sep = "\t")
+  print(edges[, .(type, sample = sub(".*_", "#", sample), left_Mb = round(left_edge / 1e6, 3), right_Mb = round(right_edge / 1e6, 3),
+                  edge_source)], nrows = 200)
+}
+page_note <- function(sel) {
+  if (is.null(edges)) return("")
+  f <- function(t) {
+    x <- edges[sample %in% sel & type == t & !is.na(left_edge)]
+    if (!nrow(x)) return(NULL)
+    sprintf("%s edges %.2f-%.2f / %.2f-%.2f Mb", t, min(x$left_edge) / 1e6, max(x$left_edge) / 1e6,
+            min(x$right_edge) / 1e6, max(x$right_edge) / 1e6)
+  }
+  paste0("; ", paste(c(f("DEL"), f("DUP")), collapse = "; "))
+}
+ps <- opt$`page-size`
+np <- if (ps > 0) max(1, ceiling(max(length(dels), length(dups)) / ps)) else 1
+chunk <- function(x, k) if (ps > 0) x[intersect(seq_along(x), (k - 1) * ps + seq_len(ps))] else x
 ht <- opt$height + if (!is.null(ov)) 6 else 0
 if (capabilities("aqua")) quartz(type = "pdf", file = opt$out, width = opt$width, height = ht) else
-  if (capabilities("cairo")) cairo_pdf(opt$out, width = opt$width, height = ht) else
+  if (capabilities("cairo")) cairo_pdf(opt$out, width = opt$width, height = ht, onefile = TRUE) else
     pdf(opt$out, width = opt$width, height = ht)
-print(fig)
+for (k in seq_len(np)) {
+  hl <- c(chunk(dels, k), chunk(dups, k), if (ps == 0) setdiff(hl_all, c(dels, dups)))
+  is_del <- hl %in% dels; is_dup <- hl %in% dups
+  pal <- setNames(rep(c("#1B5E20", "#FF8C00", "#6A3D9A", "#00897B", "#8D6E63", "#C0CA33"), length.out = length(hl)), hl)
+  if (any(is_del)) pal[is_del] <- tones("#7F0000", "#FF8C00", sum(is_del))   # dark red -> orange
+  if (any(is_dup)) pal[is_dup] <- tones("#08306B", "#2E9E44", sum(is_dup))   # dark blue -> green
+  show_leg <- length(hl) <= max(opt$`max-legend`, 2 * ps)
+  bps <- lapply(bps_all, function(b) if (is.null(b)) NULL else b[sample %in% hl])
+  lab <- sub("^; ", "", paste0(if (np > 1) sprintf("page %d of %d", k, np) else "", page_note(hl)))
+  print(make_fig(if (nzchar(lab)) paste0(" (", lab, ")") else ""))
+}
 invisible(dev.off())
 cat("wrote", opt$out, "\n")

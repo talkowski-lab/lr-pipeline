@@ -18,6 +18,9 @@
 #   --overview-rd: optional depth matrix across the whole locus (left window start to right window end), drawn as a
 #   full-width copy-number panel with SD tracks on top of the figure
 #   --cn-bin: copy-number bin size (bp) for all depth panels (default: automatic per window)
+#   --page-size N: one page per N DEL + N DUP carriers (default 0 = all carriers on one page)
+#   --order-by-edges: order carriers by their copy-number edges in the overview depth (needs --overview-rd);
+#   the edges go to <name>.cn_edges.tsv
 # Outputs (in --outdir, prefix <name>): .breakpoint_profile.pdf, .left_loh.ranked.tsv, .right_loh.ranked.tsv,
 #   .left.ld.{sites,binned}.tsv, .right.ld.{sites,binned}.tsv, .{left,right}_loh.clean_sites.baf.tsv.gz
 # Needs python3 (numpy, pandas), R (ggplot2, data.table, optparse, patchwork) and the helper scripts
@@ -26,14 +29,14 @@ set -euo pipefail
 
 usage() { sed -n '2,24p' "$0" | sed 's/^# \{0,1\}//'; exit 1; }
 name=""; pat=""; lp=""; lt="left SD"; lw=""; rp=""; rt="right SD"; rw=""; med=""; sd=""; bpsd=""; gs=""; ge=""
-ovrd=""; cnbin=0; outdir="."; sdir="$(cd "$(dirname "$0")" && pwd)"
+ovrd=""; cnbin=0; pagesize=0; byedges=(); outdir="."; sdir="$(cd "$(dirname "$0")" && pwd)"
 while [[ $# -gt 0 ]]; do
   case $1 in
     --name) name=$2; shift 2 ;; --highlight-pattern) pat=$2; shift 2 ;;
     --left-prefix) lp=$2; shift 2 ;; --left-title) lt=$2; shift 2 ;; --left-window) lw=$2; shift 2 ;;
     --right-prefix) rp=$2; shift 2 ;; --right-title) rt=$2; shift 2 ;; --right-window) rw=$2; shift 2 ;;
     --medians) med=$2; shift 2 ;; --segdup) sd=$2; shift 2 ;; --bp-sd) bpsd=$2; shift 2 ;;
-    --gd-start) gs=$2; shift 2 ;; --gd-end) ge=$2; shift 2 ;; --overview-rd) ovrd=$2; shift 2 ;; --cn-bin) cnbin=$2; shift 2 ;;
+    --gd-start) gs=$2; shift 2 ;; --gd-end) ge=$2; shift 2 ;; --overview-rd) ovrd=$2; shift 2 ;; --cn-bin) cnbin=$2; shift 2 ;; --page-size) pagesize=$2; shift 2 ;; --order-by-edges) byedges=(--order-by-edges --edges-out "EDGES"); shift ;;
     --outdir) outdir=$2; shift 2 ;; --scripts-dir) sdir=$2; shift 2 ;; -h|--help) usage ;;
     *) echo "unknown option $1" >&2; usage ;;
   esac
@@ -65,7 +68,7 @@ Rscript "$sdir/plot_two_regions.R" \
   --title1 "left: $lt" --win1 "$lw" ${mark1[@]+"${mark1[@]}"} \
   --baf2 "$o.right_loh.clean_sites.baf.tsv.gz" --rd2 "$rp.renamed.RD.txt.gz" --ld2 "$o.right.ld" --bp2 "$o.right_loh.ranked.tsv" \
   --title2 "right: $rt" --win2 "$rw" ${mark2[@]+"${mark2[@]}"} ${overview[@]+"${overview[@]}"} \
-  --bin-size "$cnbin" --overview-bin "$cnbin" \
+  --bin-size "$cnbin" --overview-bin "$cnbin" --page-size "$pagesize" ${byedges[@]+"${byedges[@]/EDGES/$o.cn_edges.tsv}"} \
   --medians "$med" --highlight-pattern "$pat" --del-pattern "_DEL_" --dup-pattern "_DUP_" --height 22 \
   --segdup "SD=$sd,SD breakpoint=$bpsd" --out "$o.breakpoint_profile.pdf" --title "$name"
 echo "done: $o.breakpoint_profile.pdf" >&2

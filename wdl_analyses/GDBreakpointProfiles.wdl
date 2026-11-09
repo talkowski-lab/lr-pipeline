@@ -6,7 +6,8 @@ version 1.0
 # breakpoint estimates of DEL carriers), under a full-width copy-number overview of the whole locus (left window start to
 # right window end) with the SD tracks.
 #
-# loci_tsv: output of gd_sd_windows.py (header + one row per locus; windows 0-based half-open). Columns used:
+# loci_tsv: output of gd_sd_windows.py (header + one row per locus; windows 0-based half-open; default: the 39-locus
+#   table built in the image from references/gd_calls.txt). Columns used:
 #   1 locus, 2 chrom, 3 gd_start, 4 gd_end, 7 highlight_pattern, 8 left_sd_name, 12-13 left window,
 #   14 right_sd_name, 18-19 right window.
 # gvcfs: one VCF per contig (local or gs://, bgzipped + tabix index next to it); the VCF of a contig is the path
@@ -18,19 +19,21 @@ import "Structs.wdl"
 
 workflow GDBreakpointProfiles {
     input {
-        File loci_tsv
+        File? loci_tsv
         Array[String] gvcfs
         String rd_matrix
         String prefix
 
         Int cn_bin = 1000
+        Int page_size = 6
+        Boolean order_by_edges = true
         File rd_medians
         File samples
         File id_map
         String? requester_pays_project
 
-        File segdup_bed
-        File bp_sd_bed
+        File? segdup_bed
+        File? bp_sd_bed
 
         String gd_docker
 
@@ -41,17 +44,19 @@ workflow GDBreakpointProfiles {
     }
 
     parameter_meta {
-        loci_tsv: "GD loci with left/right breakpoint-SD windows (gd_sd_windows.py output, with header)"
+        loci_tsv: "GD loci with left/right breakpoint-SD windows (gd_sd_windows.py output, with header; default: the 39-locus table in the image)"
         gvcfs: "One small-variant VCF per contig (gs:// allowed), each with a tabix index next to it"
         rd_matrix: "Cohort read-depth matrix ('#Chr Start End <samples>', bgzipped + tabix-indexed; gs:// allowed)"
         prefix: "Prefix for output files"
         cn_bin: "Copy-number bin size (bp) of all depth panels; 0 = automatic per window"
+        page_size: "Carriers per page and type (N DEL + N DUP per page); 0 = all carriers on one page"
+        order_by_edges: "Order carriers by breakpoint (DEL: BAF breakpoint estimates; DUP: copy-number edges) before paging"
         rd_medians: "2 rows: sample IDs / genome-wide median depth per sample (same scale as rd_matrix)"
         samples: "Real sample IDs (one per line) whose BAF and genotypes are extracted"
         id_map: "2 columns: real sample ID, new sample ID; output samples are renamed and unmapped ones dropped"
         requester_pays_project: "Google project billed for requester-pays buckets (gvcfs, rd_matrix)"
-        segdup_bed: "Merged segmental-duplication BED for the SD track"
-        bp_sd_bed: "GD NAHR breakpoint-SD table for the SD breakpoint track"
+        segdup_bed: "Merged segmental-duplication BED for the SD track (default: hg38 copy in the image)"
+        bp_sd_bed: "GD NAHR breakpoint-SD table for the SD breakpoint track (default: copy in the image)"
     }
 
     call DropHeader {
@@ -125,6 +130,8 @@ workflow GDBreakpointProfiles {
                 right_window = "~{row[17]},~{row[18]}",
                 prefix = "~{prefix}.~{row[0]}",
                 cn_bin = cn_bin,
+                page_size = page_size,
+                order_by_edges = order_by_edges,
                 rd_medians = rd_medians,
                 segdup_bed = segdup_bed,
                 bp_sd_bed = bp_sd_bed,
@@ -146,7 +153,7 @@ workflow GDBreakpointProfiles {
 
 task DropHeader {
     input {
-        File tsv
+        File? tsv
         String prefix
         String docker
         RuntimeAttr? runtime_attr_override
@@ -155,7 +162,7 @@ task DropHeader {
     command <<<
         set -euo pipefail
 
-        tail -n +2 ~{tsv} > ~{prefix}.loci.rows.tsv
+        tail -n +2 ~{default="/opt/gd_scripts/references/gd_loci.windows.tsv" tsv} > ~{prefix}.loci.rows.tsv
     >>>
 
     output {
@@ -322,9 +329,11 @@ task PlotLocus {
         String right_window
         String prefix
         Int cn_bin
+        Int page_size
+        Boolean order_by_edges
         File rd_medians
-        File segdup_bed
-        File bp_sd_bed
+        File? segdup_bed
+        File? bp_sd_bed
         String docker
         RuntimeAttr? runtime_attr_override
     }
@@ -354,9 +363,11 @@ task PlotLocus {
             --gd-end ~{gd_end} \
             --overview-rd ~{locus_rd} \
             --cn-bin ~{cn_bin} \
+            --page-size ~{page_size} \
+            ~{if order_by_edges then "--order-by-edges" else ""} \
             --medians ~{rd_medians} \
-            --segdup ~{segdup_bed} \
-            --bp-sd ~{bp_sd_bed} \
+            --segdup ~{default="/opt/gd_scripts/references/hg38.SegDup.sorted.merged.bed.gz" segdup_bed} \
+            --bp-sd ~{default="/opt/gd_scripts/references/GD_NAHR.breakpoint_SDs.bed.gz" bp_sd_bed} \
             --outdir out
 
         tar -czf ~{prefix}.tables.tar.gz -C out --exclude='*.pdf' .

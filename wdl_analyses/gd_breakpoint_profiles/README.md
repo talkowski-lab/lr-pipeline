@@ -7,7 +7,7 @@ left, right SD on the right; DEL carriers red to orange, DUP carriers blue to gr
 estimate of each DEL carrier.
 
 Docker: `dockerfiles/Dockerfile.GDBreakpointProfiles` (scripts in this folder are copied to `/opt/gd_scripts`), image
-`us-central1-docker.pkg.dev/talkowski-sv-gnomad/kj-dockers/gd-breakpoint-profiles:<tag>` (current: 2026-11-09.2).
+`us-central1-docker.pkg.dev/talkowski-sv-gnomad/kj-dockers/gd-breakpoint-profiles:<tag>` (current: 2026-11-09.3). The image also holds the two SD references in `/opt/gd_scripts/references/` (from `references/` here), used when `segdup_bed` / `bp_sd_bed` are not given.
 
 ## Steps
 1. `gd_sd_windows.py` (run once, locally): GD call IDs -> one row per locus with the left/right breakpoint SDs and
@@ -52,6 +52,14 @@ estimate), clean-site BAF tables and LD tables.
 samples), `find_baf_terminal_loh.py` (BAF loss at one end of a window, breakpoint estimate), `compute_ld.py` (r^2 of
 dosages, binned), `plot_two_regions.R` (two-column figure; `--bin-size`/`--baf-bin` 0 = automatic per window).
 Each prints its usage with `-h`.
+
+## Built-in references (`references/`, baked into the image at /opt/gd_scripts/references)
+- `gd_loci.windows.tsv`: the default `loci_tsv` (39 loci from `gd_calls.txt`, built by gd_sd_windows.py).
+- `gd_calls.txt`: the 59 GD call IDs with carriers it was built from.
+- `hg38.SegDup.sorted.merged.bed.gz`: merged hg38 segmental duplications (gatk-sv GenomicContext resource), SD track.
+- `GD_NAHR.breakpoint_SDs.bed.gz`: the NAHR breakpoint SD blocks of each GD cluster (e.g. 16p11 BP4, BP5), with the GD
+  coordinates that end or start at each block (left/right_GD_candidates); labels the SD breakpoint track and pairs each
+  GD with its left and right SD in gd_sd_windows.py.
 
 ## Inputs
 Data files are not tracked (repository .gitignore). Local copies: `inputs/` next to this README (`gd_calls.txt`, the 59
