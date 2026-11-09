@@ -54,7 +54,9 @@ opt <- parse_args(OptionParser(option_list = list(
   make_option("--het-baf", action = "store_true", default = FALSE, help = "add a het-only BAF panel"),
   make_option("--het-lo", type = "double", default = 0.1), make_option("--het-hi", type = "double", default = 0.9),
   make_option("--overview-rd"), make_option("--overview-window"),
-  make_option("--overview-bin", type = "integer", default = 0))))
+  make_option("--overview-bin", type = "integer", default = 0),
+  make_option("--max-legend", type = "integer", default = 16,
+              help = "list coloured samples in the legend only up to this many (title gives the DEL/DUP counts)"))))
 for (x in c("baf1", "baf2", "out")) if (is.null(opt[[x]])) stop("need --baf1, --baf2 and --out (see -h)")
 if ((!is.null(opt$rd1) || !is.null(opt$rd2)) && is.null(opt$medians)) stop("--rd1/--rd2 need --medians")
 font_family <- if (capabilities("aqua") || capabilities("cairo")) "Arial" else "sans"
@@ -79,6 +81,12 @@ med <- if (!is.null(opt$medians)) {
 } else NULL
 
 auto_bin <- function(span, div, lo) max(lo, round(span / div / 1000) * 1000)
+# Add NA rows for empty bins between the first and last bin, so lines break across gaps instead of bridging them
+fill_bins <- function(d, b, v) {
+  if (!nrow(d)) return(d)
+  grid <- CJ(sample = unique(d$sample), bin = seq(min(d$bin), max(d$bin), by = b))
+  merge(grid, d[, c("sample", "bin", v), with = FALSE], by = c("sample", "bin"), all.x = TRUE)
+}
 load_region <- function(baf, rd, ld, title, win) {
   b <- fread(baf, na.strings = c("NA", "."))
   if (!"CHROM" %in% names(b)) stop(baf, ": no CHROM column")
@@ -112,6 +120,7 @@ load_region <- function(baf, rd, ld, title, win) {
     cn <- rl[, .(RD = sum(RD), n = .N), by = .(sample, bin)]
     cn[, CN := RD / (med[sample] * n) * 2]
     cn[, CN := CN / median(CN) * 2, by = bin]
+    cn <- fill_bins(cn[is.finite(CN)], cnb, "CN")   # bins with zero cohort depth (gaps) become breaks
   }
   poly <- NULL; w <- NA
   if (!is.null(ld) && file.exists(paste0(ld, ".binned.tsv")) && nrow(bn <- fread(paste0(ld, ".binned.tsv")))) {
@@ -148,6 +157,7 @@ if (!is.null(opt$`overview-rd`)) {
   ocn <- rl[, .(RD = sum(RD), n = .N), by = .(sample, bin)]
   ocn[, CN := RD / (med[sample] * n) * 2]
   ocn[, CN := CN / median(CN) * 2, by = bin]
+  ocn <- fill_bins(ocn[is.finite(CN)], ob, "CN")
   ov <- list(cn = ocn, xr = ow / 1e6, chrom = r$chrom[1], bin = ob, samples = rs)
 }
 
@@ -158,6 +168,7 @@ is_del <- grepl(opt$`del-pattern`, hl); is_dup <- grepl(opt$`dup-pattern`, hl) &
 pal <- setNames(rep(c("#1B5E20", "#FF8C00", "#6A3D9A", "#00897B", "#8D6E63", "#C0CA33"), length.out = length(hl)), hl)
 if (any(is_del)) pal[is_del] <- tones("#7F0000", "#FF8C00", sum(is_del))   # dark red -> orange
 if (any(is_dup)) pal[is_dup] <- tones("#08306B", "#2E9E44", sum(is_dup))   # dark blue -> green
+show_leg <- length(hl) <= opt$`max-legend`
 bp_pat <- if (is.null(opt$`bp-pattern`)) opt$`del-pattern` else opt$`bp-pattern`
 read_bp <- function(f) {
   if (is.null(f)) return(NULL)
@@ -169,11 +180,11 @@ read_bp <- function(f) {
 }
 bps <- list(read_bp(opt$bp1), read_bp(opt$bp2))
 cn_all <- rbindlist(lapply(R, `[[`, "cn"))
-cn_max <- if (nrow(cn_all)) max(4, quantile(cn_all$CN, 0.999)) else 4
+cn_max <- if (nrow(cn_all)) max(4, quantile(cn_all$CN, 0.999, na.rm = TRUE)) else 4
 theme_set(theme_bw(base_size = 22, base_family = font_family) +
           theme(panel.grid.minor = element_blank(), strip.background = element_blank()))
 
-band <- function(d, v) d[, .(med = median(get(v))), by = bin]
+band <- function(d, v) d[, .(med = median(get(v), na.rm = TRUE)), by = bin]
 lines_panel <- function(d, v, ylim, xr, ylab, mk, extra = NULL) {
   coh <- band(d, v)
   ggplot() + extra +
@@ -182,7 +193,7 @@ lines_panel <- function(d, v, ylim, xr, ylab, mk, extra = NULL) {
     geom_line(data = coh, aes(bin / 1e6, med), colour = "black", linewidth = 1.4) +
     geom_line(data = d[sample %in% hl], aes(bin / 1e6, .data[[v]], colour = sample), linewidth = 0.9) +
     { if (length(mk)) geom_vline(xintercept = mk, linetype = "dashed", colour = "#1F5FA8") } +
-    scale_colour_manual(values = pal, name = NULL, drop = FALSE) +
+    scale_colour_manual(values = pal, name = NULL, drop = FALSE, guide = if (show_leg) "legend" else "none") +
     coord_cartesian(xlim = xr, ylim = ylim) + labs(x = NULL, y = ylab)
 }
 arrows_layer <- function(bp, ylim) {
@@ -235,7 +246,7 @@ column <- function(reg, mk, first, bp) {
       geom_point(data = reg$hs[sample %in% hl], aes(POS / 1e6, hBAF, colour = sample), size = 1.8, alpha = 0.8,
                  show.legend = FALSE) +
       { if (length(mk)) geom_vline(xintercept = mk, linetype = "dashed", colour = "#1F5FA8") } +
-      scale_colour_manual(values = pal, name = NULL, drop = FALSE) +
+      scale_colour_manual(values = pal, name = NULL, drop = FALSE, guide = if (show_leg) "legend" else "none") +
       coord_cartesian(xlim = reg$xr, ylim = c(0, 0.5)) + labs(x = NULL, y = ylab("het-only folded BAF"))
   }
   Filter(Negate(is.null), list(sd, p_cn, p_b, p_h, p_ld))
@@ -261,7 +272,7 @@ if (!is.null(ov)) {
       theme(panel.grid = element_blank(), axis.text.x = element_blank(), axis.ticks = element_blank(),
             plot.title = element_text(hjust = 0.5, face = "bold"))
   } else ggplot() + theme_void()
-  ocn_max <- max(4, quantile(ov$cn$CN, 0.999))
+  ocn_max <- max(4, quantile(ov$cn$CN, 0.999, na.rm = TRUE))
   p_ocn <- lines_panel(ov$cn, "CN", c(0, ocn_max), ov$xr, "copy number", mk,
                        list(geom_rect(data = zoom, aes(xmin = xmin, xmax = xmax, ymin = -Inf, ymax = Inf),
                                       fill = "#9ECAE1", alpha = 0.25, inherit.aes = FALSE),
@@ -271,8 +282,8 @@ if (!is.null(ov)) {
     plot_layout(guides = "collect")
 }
 fig <- fig +
-  plot_annotation(title = sprintf("%s  (coloured: %d DEL, %d DUP; arrows = BAF breakpoint estimates of DEL)", opt$title,
-                                  sum(is_del), sum(is_dup)),
+  plot_annotation(title = sprintf("%s  (coloured: %d DEL in red to orange, %d DUP in blue to green; arrows = BAF breakpoint estimates of DEL)",
+                                  opt$title, sum(is_del), sum(is_dup)),
                   theme = theme(plot.title = element_text(size = 22, family = font_family)))
 ht <- opt$height + if (!is.null(ov)) 6 else 0
 if (capabilities("aqua")) quartz(type = "pdf", file = opt$out, width = opt$width, height = ht) else

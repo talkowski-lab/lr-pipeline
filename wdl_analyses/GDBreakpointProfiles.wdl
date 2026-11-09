@@ -1,7 +1,7 @@
 version 1.0
 
 # Breakpoint profiles of genomic-disorder (GD) loci: for each locus, the segmental duplication (SD) at its left and right
-# breakpoints (+/- half the SD length) is profiled with read depth, BAF, het-only BAF and LD, and plotted as one figure
+# breakpoints (+/- half the SD length) is profiled with read depth, BAF and LD, and plotted as one figure
 # (left SD on the left, right SD on the right; DEL carriers red to orange, DUP carriers blue to green, arrows at the BAF
 # breakpoint estimates of DEL carriers), under a full-width copy-number overview of the whole locus (left window start to
 # right window end) with the SD tracks.
@@ -23,6 +23,7 @@ workflow GDBreakpointProfiles {
         String rd_matrix
         String prefix
 
+        Int cn_bin = 1000
         File rd_medians
         File samples
         File id_map
@@ -43,6 +44,7 @@ workflow GDBreakpointProfiles {
         gvcfs: "One small-variant VCF per contig (gs:// allowed), each with a tabix index next to it"
         rd_matrix: "Cohort read-depth matrix ('#Chr Start End <samples>', bgzipped + tabix-indexed; gs:// allowed)"
         prefix: "Prefix for output files"
+        cn_bin: "Copy-number bin size (bp) of all depth panels; 0 = automatic per window"
         rd_medians: "2 rows: sample IDs / genome-wide median depth per sample (same scale as rd_matrix)"
         samples: "Real sample IDs (one per line) whose BAF and genotypes are extracted"
         id_map: "2 columns: real sample ID, new sample ID; output samples are renamed and unmapped ones dropped"
@@ -116,6 +118,7 @@ workflow GDBreakpointProfiles {
                 right_sd_name = row[13],
                 right_window = "~{row[17]},~{row[18]}",
                 prefix = "~{prefix}.~{row[0]}",
+                cn_bin = cn_bin,
                 rd_medians = rd_medians,
                 segdup_bed = segdup_bed,
                 bp_sd_bed = bp_sd_bed,
@@ -274,6 +277,7 @@ task PlotLocus {
         String right_sd_name
         String right_window
         String prefix
+        Int cn_bin
         File rd_medians
         File segdup_bed
         File bp_sd_bed
@@ -305,6 +309,7 @@ task PlotLocus {
             --gd-start ~{gd_start} \
             --gd-end ~{gd_end} \
             --overview-rd ~{locus_rd} \
+            --cn-bin ~{cn_bin} \
             --medians ~{rd_medians} \
             --segdup ~{segdup_bed} \
             --bp-sd ~{bp_sd_bed} \

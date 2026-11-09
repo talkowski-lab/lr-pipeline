@@ -733,6 +733,7 @@ workflows:
   - subclass: WDL
     name: GDBreakpointProfiles
     primaryDescriptorPath: /wdl_analyses/GDBreakpointProfiles.wdl
+    publish: true
     filters:
       branches:
         - main

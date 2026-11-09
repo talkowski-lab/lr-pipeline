@@ -2,12 +2,12 @@
 
 Workflow `wdl_analyses/GDBreakpointProfiles.wdl` (Dockstore entry `GDBreakpointProfiles`, branches main and xz_analyses).
 For each genomic-disorder (GD) locus, the segmental duplication (SD) at the left and right breakpoint, widened by half
-its length on each side, is profiled with read depth, BAF, het-only BAF and LD. One figure per locus: left SD on the
+its length on each side, is profiled with read depth, BAF and LD (1 kb copy-number bins by default, `cn_bin`). One figure per locus: left SD on the
 left, right SD on the right; DEL carriers red to orange, DUP carriers blue to green; arrows at the BAF breakpoint
 estimate of each DEL carrier.
 
 Docker: `dockerfiles/Dockerfile.GDBreakpointProfiles` (scripts in this folder are copied to `/opt/gd_scripts`), image
-`us-central1-docker.pkg.dev/talkowski-sv-gnomad/kj-dockers/gd-breakpoint-profiles:<tag>`.
+`us-central1-docker.pkg.dev/talkowski-sv-gnomad/kj-dockers/gd-breakpoint-profiles:<tag>` (current: 2026-11-09.2).
 
 ## Steps
 1. `gd_sd_windows.py` (run once, locally): GD call IDs -> one row per locus with the left/right breakpoint SDs and
