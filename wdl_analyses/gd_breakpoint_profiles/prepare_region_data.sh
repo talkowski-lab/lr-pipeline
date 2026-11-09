@@ -21,7 +21,8 @@
 #              read with pysam/htslib: the OAuth token comes from $GCS_OAUTH_TOKEN if set, else `gcloud auth
 #              print-access-token`, else the VM metadata server; the requester-pays project from
 #              --requester-pays-project, else $GCS_REQUESTER_PAYS_PROJECT, else $GOOGLE_PROJECT
-#   --samples  one real sample ID per line (samples for the BAF and GT tables)
+#   --samples  optional: real sample IDs, one per line, for the BAF and GT tables; default: column 1 of --id-map without
+#              its header line (--id-map-no-header if it has none); either way limited to samples present in the VCF
 #   --id-map   2 columns: real sample ID, new sample ID (samples missing from a table are skipped)
 #   --keep-intermediate  keep the non-renamed tables and the region VCF (removed by default)
 # Needs: tabix, bgzip, bcftools, python3 with pysam and pandas; helper scripts vcf_to_baf_table.py (or --baf-script),
@@ -29,7 +30,7 @@
 set -euo pipefail
 
 usage() { sed -n '2,29p' "$0" | sed 's/^# \{0,1\}//'; exit 1; }
-chr=""; start=""; end=""; name=""; rd=""; vcf=""; samples=""; idmap=""; outdir="."; keep=0; rd_only=0
+chr=""; start=""; end=""; name=""; rd=""; vcf=""; samples=""; idmap=""; outdir="."; keep=0; rd_only=0; map_header=1
 sdir="$(cd "$(dirname "$0")" && pwd)"; baf_script="vcf_to_baf_table.py"; rp_project=""
 while [[ $# -gt 0 ]]; do
   case $1 in
@@ -37,10 +38,10 @@ while [[ $# -gt 0 ]]; do
     --rd) rd=$2; shift 2 ;; --vcf) vcf=$2; shift 2 ;; --samples) samples=$2; shift 2 ;; --id-map) idmap=$2; shift 2 ;;
     --outdir) outdir=$2; shift 2 ;; --scripts-dir) sdir=$2; shift 2 ;; --baf-script) baf_script=$2; shift 2 ;;
     --requester-pays-project) rp_project=$2; shift 2 ;; --keep-intermediate) keep=1; shift ;;
-    --rd-only) rd_only=1; shift ;; -h|--help) usage ;; *) echo "unknown option $1" >&2; usage ;;
+    --rd-only) rd_only=1; shift ;; --id-map-no-header) map_header=0; shift ;; -h|--help) usage ;; *) echo "unknown option $1" >&2; usage ;;
   esac
 done
-required=(chr start end name rd idmap); [[ $rd_only -eq 0 ]] && required+=(vcf samples)
+required=(chr start end name rd idmap); [[ $rd_only -eq 0 ]] && required+=(vcf)
 for v in "${required[@]}"; do [[ -z "${!v}" ]] && { echo "missing --${v/idmap/id-map}" >&2; usage; }; done
 helpers=(subset_rename_samples.py); [[ $rd_only -eq 0 ]] && helpers+=("$baf_script" extract_gt.sh)
 for s in "${helpers[@]}"; do
@@ -103,6 +104,17 @@ print(f"VCF: {n} records, {len(vcf.header.samples)} samples", file=sys.stderr)
 PY
   tabix -f -p vcf "$p.vcf.gz"
 
+  # Samples for BAF/GT: --samples or column 1 of the ID map, limited to samples in the VCF
+  src="$samples"
+  if [[ -z "$src" ]]; then
+    src="$p.idmap_samples.txt"
+    tail -n +$((map_header + 1)) "$idmap" | awk 'NF{print $1}' > "$src"
+  fi
+  bcftools query -l "$p.vcf.gz" | grep -xFf - "$src" > "$p.samples.txt" || true
+  echo "samples: $(wc -l < "$p.samples.txt" | tr -d ' ') of $(awk 'NF' "$src" | wc -l | tr -d ' ') requested are in the VCF" >&2
+  [[ -s "$p.samples.txt" ]] || { echo "none of the requested samples is in the VCF" >&2; exit 1; }
+  samples="$p.samples.txt"
+
   # 3-4. BAF and GT tables for the selected samples
   python3 "$sdir/$baf_script" "$p.vcf.gz" "$samples" "$p.baf.tsv.gz" --region "$region"
   bash "$sdir/extract_gt.sh" -v "$p.vcf.gz" -s "$samples" -o "$p.GT.tsv.gz" -r "$region"
@@ -124,5 +136,7 @@ for f in "${outs[@]}"; do
   bad=$(gzip -cd "$f" | awk -F'\t' -v c="$chr" 'NR > 1 && $1 != c' | wc -l | tr -d ' ')
   if [[ "$bad" -gt 0 ]]; then echo "WARNING: $f has $bad rows not on $chr" >&2; fi
 done
-if [[ $keep -eq 0 ]]; then rm -f "$p.RD.txt.gz" "$p.baf.tsv.gz" "$p.GT.tsv.gz" "$p.vcf.gz" "$p.vcf.gz.tbi"; fi
+if [[ $keep -eq 0 ]]; then
+  rm -f "$p.RD.txt.gz" "$p.baf.tsv.gz" "$p.GT.tsv.gz" "$p.vcf.gz" "$p.vcf.gz.tbi" "$p.samples.txt" "$p.idmap_samples.txt"
+fi
 echo "done: ${outs[*]}" >&2

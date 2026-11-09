@@ -28,7 +28,7 @@ workflow GDBreakpointProfiles {
         Int page_size = 6
         Boolean order_by_edges = true
         File rd_medians
-        File samples
+        File? samples
         File id_map
         String? requester_pays_project
 
@@ -52,8 +52,8 @@ workflow GDBreakpointProfiles {
         page_size: "Carriers per page and type (N DEL + N DUP per page); 0 = all carriers on one page"
         order_by_edges: "Order carriers by breakpoint (DEL: BAF breakpoint estimates; DUP: copy-number edges) before paging"
         rd_medians: "2 rows: sample IDs / genome-wide median depth per sample (same scale as rd_matrix)"
-        samples: "Real sample IDs (one per line) whose BAF and genotypes are extracted"
-        id_map: "2 columns: real sample ID, new sample ID; output samples are renamed and unmapped ones dropped"
+        samples: "Optional real sample IDs (one per line) for BAF and genotypes; default: column 1 of id_map"
+        id_map: "2 columns with a header line: real sample ID, new sample ID; output samples are renamed, unmapped ones dropped"
         requester_pays_project: "Google project billed for requester-pays buckets (gvcfs, rd_matrix)"
         segdup_bed: "Merged segmental-duplication BED for the SD track (default: hg38 copy in the image)"
         bp_sd_bed: "GD NAHR breakpoint-SD table for the SD breakpoint track (default: copy in the image)"
@@ -197,7 +197,7 @@ task PrepareWindow {
         String win_start
         String win_end
         String prefix
-        File samples
+        File? samples
         File id_map
         String? requester_pays_project
         String docker
@@ -225,7 +225,7 @@ task PrepareWindow {
             --name ~{prefix} \
             --rd ~{rd_matrix} \
             --vcf "${gvcf}" \
-            --samples ~{samples} \
+            ~{"--samples " + samples} \
             --id-map ~{id_map} \
             ~{"--requester-pays-project " + requester_pays_project}
     >>>
