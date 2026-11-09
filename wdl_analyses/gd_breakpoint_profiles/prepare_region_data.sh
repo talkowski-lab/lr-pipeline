@@ -110,8 +110,9 @@ PY
     src="$p.idmap_samples.txt"
     tail -n +$((map_header + 1)) "$idmap" | awk 'NF{print $1}' > "$src"
   fi
-  bcftools query -l "$p.vcf.gz" | grep -xFf - "$src" > "$p.samples.txt" || true
-  echo "samples: $(wc -l < "$p.samples.txt" | tr -d ' ') of $(awk 'NF' "$src" | wc -l | tr -d ' ') requested are in the VCF" >&2
+  # unique IDs only: a sample with several GD calls has several rows in the ID map (bcftools rejects repeated samples)
+  bcftools query -l "$p.vcf.gz" | grep -xFf - "$src" | awk '!seen[$0]++' > "$p.samples.txt" || true
+  echo "samples: $(wc -l < "$p.samples.txt" | tr -d ' ') of $(awk 'NF && !seen[$1]++' "$src" | wc -l | tr -d ' ') unique requested are in the VCF" >&2
   [[ -s "$p.samples.txt" ]] || { echo "none of the requested samples is in the VCF" >&2; exit 1; }
   samples="$p.samples.txt"
 

@@ -21,7 +21,8 @@ done
 command -v bcftools >/dev/null || { echo "bcftools not found on PATH" >&2; exit 1; }
 
 tmp=$(mktemp -d); trap 'rm -rf "$tmp"' EXIT
-if [[ -f "$samples" ]]; then awk 'NF{print $1}' "$samples" > "$tmp/s.txt"; else tr ',' '\n' <<< "$samples" | awk 'NF' > "$tmp/s.txt"; fi
+# unique IDs, first occurrence order (bcftools rejects a sample listed twice)
+if [[ -f "$samples" ]]; then awk 'NF && !seen[$1]++ {print $1}' "$samples" > "$tmp/s.txt"; else tr ',' '\n' <<< "$samples" | awk 'NF && !seen[$0]++' > "$tmp/s.txt"; fi
 missing=$(grep -vxFf <(bcftools query -l "$vcf") "$tmp/s.txt" || true)
 [[ -n "$missing" ]] && { echo "not in the VCF: $(paste -sd, - <<< "$missing")" >&2; exit 1; }
 
