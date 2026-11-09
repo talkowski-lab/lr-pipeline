@@ -11,7 +11,8 @@ version 1.0
 #   1 locus, 2 chrom, 3 gd_start, 4 gd_end, 7 highlight_pattern, 8 left_sd_name, 12-13 left window,
 #   14 right_sd_name, 18-19 right window.
 # gvcfs: one VCF per contig (local or gs://, bgzipped + tabix index next to it); the VCF of a contig is the path
-#   containing "<contig>." or "<contig>_" after a "/" (e.g. .../chr16.g.vcf.bgz). Only the window is streamed.
+#   containing "<contig>." or "<contig>_" after a "/" (e.g. .../chr16.g.vcf.bgz). Only loci on a contig with a VCF are
+#   run (the others are listed in skipped_loci), and only the windows are streamed.
 # rd_matrix: cohort read-depth matrix ('#Chr Start End <samples>', bgzipped + .tbi); only the windows are streamed.
 # Samples in the output tables and figures are renamed with id_map (real ID -> new ID; unmapped samples are dropped).
 
@@ -37,7 +38,7 @@ workflow GDBreakpointProfiles {
 
         String gd_docker
 
-        RuntimeAttr? runtime_attr_drop_header
+        RuntimeAttr? runtime_attr_select_loci
         RuntimeAttr? runtime_attr_prepare_window
         RuntimeAttr? runtime_attr_prepare_locus_depth
         RuntimeAttr? runtime_attr_plot_locus
@@ -59,15 +60,16 @@ workflow GDBreakpointProfiles {
         bp_sd_bed: "GD NAHR breakpoint-SD table for the SD breakpoint track (default: copy in the image)"
     }
 
-    call DropHeader {
+    call SelectLoci {
         input:
             tsv = loci_tsv,
+            gvcfs = gvcfs,
             prefix = prefix,
             docker = gd_docker,
-            runtime_attr_override = runtime_attr_drop_header
+            runtime_attr_override = runtime_attr_select_loci
     }
 
-    scatter (row in read_tsv(DropHeader.rows)) {
+    scatter (row in read_tsv(SelectLoci.rows)) {
 
         call PrepareWindow as PrepareLeft {
             input:
@@ -148,12 +150,14 @@ workflow GDBreakpointProfiles {
         Array[File] left_window_tables = flatten([PrepareLeft.rd, PrepareLeft.baf, PrepareLeft.gt])
         Array[File] right_window_tables = flatten([PrepareRight.rd, PrepareRight.baf, PrepareRight.gt])
         Array[File] locus_depth_tables = PrepareLocusDepth.rd
+        File skipped_loci = SelectLoci.skipped
     }
 }
 
-task DropHeader {
+task SelectLoci {
     input {
         File? tsv
+        Array[String] gvcfs
         String prefix
         String docker
         RuntimeAttr? runtime_attr_override
@@ -162,11 +166,24 @@ task DropHeader {
     command <<<
         set -euo pipefail
 
-        tail -n +2 ~{default="/opt/gd_scripts/references/gd_loci.windows.tsv" tsv} > ~{prefix}.loci.rows.tsv
+        # Keep only loci whose chromosome has a VCF in gvcfs (a path containing "/<chrom>." or "/<chrom>_");
+        # the header line is dropped and skipped loci are listed in <prefix>.loci.skipped.tsv
+        tail -n +2 ~{default="/opt/gd_scripts/references/gd_loci.windows.tsv" tsv} > loci.tsv
+        : > ~{prefix}.loci.rows.tsv
+        : > ~{prefix}.loci.skipped.tsv
+        while IFS=$'\t' read -r locus chrom rest; do
+            if grep -qE "(^|/)${chrom}[._]" ~{write_lines(gvcfs)}; then
+                printf '%s\t%s\t%s\n' "${locus}" "${chrom}" "${rest}" >> ~{prefix}.loci.rows.tsv
+            else
+                printf '%s\t%s\tno VCF for %s in gvcfs\n' "${locus}" "${chrom}" "${chrom}" >> ~{prefix}.loci.skipped.tsv
+            fi
+        done < loci.tsv
+        echo "loci kept: $(wc -l < ~{prefix}.loci.rows.tsv); skipped (no VCF for the chromosome): $(wc -l < ~{prefix}.loci.skipped.tsv)" >&2
     >>>
 
     output {
         File rows = "~{prefix}.loci.rows.tsv"
+        File skipped = "~{prefix}.loci.skipped.tsv"
     }
 
     RuntimeAttr default_attr = object {
