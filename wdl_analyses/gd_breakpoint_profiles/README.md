@@ -67,3 +67,13 @@ GD call IDs with carriers; `gd_loci.windows.tsv`, 39 loci; the two SD references
 `wdl_analyses/GDBreakpointProfiles.inputs.json` (fill in the workspace paths of loci_tsv, rd_matrix, rd_medians,
 samples, id_map and the SD BEDs, and the requester-pays project). gvcfs: one VCF per contig, e.g.
 `gs://prod-drc-broad/longreads/demo_group/work_in_progress/pacbio_unfiltered_small_variants_per_chromosome/chr16.g.vcf.bgz`.
+
+### extract_gd_cluster_data.sh
+Depth, BAF and GT for every breakpoint SD of one GD cluster (SD +/- half its length) and depth across the whole span
+(first SD start minus its flank to last SD end plus its flank), samples renamed; e.g. 22q11.21 A-D:
+```bash
+bash extract_gd_cluster_data.sh --cluster 22q11 --breakpoints A,B,C,D --bp-sd references/GD_NAHR.breakpoint_SDs.bed.gz \
+  --rd aou_lrGS_GD_carriers.RD.txt.gz --vcf "gs://.../{chr}.g.vcf.bgz" --id-map id_map.tsv --prefix aou_lrGS --outdir 22q11
+```
+Outputs `<prefix>.<cluster>_<BP>.renamed.{RD.txt,baf.tsv,GT.tsv}.gz`, `<prefix>.<cluster>_<first>-<last>.region.renamed.RD.txt.gz`
+and `<prefix>.<cluster>.windows.bed`.

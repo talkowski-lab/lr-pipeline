@@ -28,7 +28,9 @@
 # --page-size N: one page per N DEL + N DUP carriers (other carriers grey on that page); 0 = all on one page.
 # --order-by-edges: carriers are ordered (and so grouped into pages) by their copy-number edges: per carrier, the overview
 #   copy number is smoothed with a running median over ~25 kb, and the longest run below 1.5 (DEL) or above 2.5 (DUP)
-#   gives its left and right edge; carriers are sorted by left edge, then right edge. --edges-out writes the edges.
+#   gives its left and right edge (DEL carriers: BAF breakpoint estimates when available). Carriers of each type are then
+#   clustered (single linkage, both edges within --cluster-tol bp) and whole clusters are packed onto pages (a cluster is
+#   only split when it is larger than --page-size). --edges-out writes the edges and cluster IDs.
 # Breakpoint arrows: --bp1/--bp2 = ranked.tsv of find_baf_terminal_loh.py (columns sample and --bp-col, default bp_est,
 #   in bp); an arrow in the sample's colour marks it in the depth and BAF panels, for highlighted samples matching
 #   --bp-pattern (default: the --del-pattern; BAF loss only places deletion breakpoints).
@@ -62,6 +64,8 @@ opt <- parse_args(OptionParser(option_list = list(
   make_option("--order-by-edges", action = "store_true", default = FALSE,
               help = "order carriers by their copy-number edges from the overview depth (needs --overview-rd)"),
   make_option("--edges-out", help = "TSV of the per-carrier copy-number edges (with --order-by-edges)"),
+  make_option("--cluster-tol", type = "double", default = 30000,
+              help = "with --order-by-edges: carriers whose left and right edges are both within this (bp) are clustered"),
   make_option("--page-size", type = "integer", default = 0,
               help = "with > 0: one page per group of this many DEL plus this many DUP carriers (multi-page PDF)"),
   make_option("--max-legend", type = "integer", default = 16,
@@ -332,25 +336,61 @@ if (opt$`order-by-edges` && !is.null(ov)) {
   edges[, `:=`(left_edge = fifelse(type == "DEL" & !is.na(baf_left), baf_left, depth_left),
                right_edge = fifelse(type == "DEL" & !is.na(baf_right), baf_right, depth_right),
                edge_source = fifelse(type == "DEL" & !is.na(baf_left), "BAF", "depth"))]
-  setorder(edges, type, left_edge, right_edge, na.last = TRUE)
+  # Breakpoint clusters per type: single linkage on (left, right) with the Chebyshev distance, cut at --cluster-tol
+  edges[, cluster := {
+    ok <- !is.na(left_edge) & !is.na(right_edge)
+    cl <- rep(NA_integer_, .N)
+    if (sum(ok) > 1) {
+      m <- cbind(left_edge[ok], right_edge[ok])
+      cl[ok] <- cutree(hclust(dist(m, method = "maximum"), method = "single"), h = opt$`cluster-tol`)
+    } else if (sum(ok) == 1) cl[ok] <- 1L
+    cl
+  }, by = type]
+  edges[, cl_left := median(left_edge, na.rm = TRUE), by = .(type, cluster)]
+  edges[, cl_right := median(right_edge, na.rm = TRUE), by = .(type, cluster)]
+  setorder(edges, type, cl_left, cl_right, left_edge, right_edge, na.last = TRUE)
+  edges[, cluster := match(paste(cl_left, cl_right), unique(paste(cl_left, cl_right))), by = type]
   dels <- edges[type == "DEL", sample]; dups <- edges[type == "DUP", sample]
   if (!is.null(opt$`edges-out`)) fwrite(edges, opt$`edges-out`, sep = "\t")
-  print(edges[, .(type, sample = sub(".*_", "#", sample), left_Mb = round(left_edge / 1e6, 3), right_Mb = round(right_edge / 1e6, 3),
-                  edge_source)], nrows = 200)
+  print(edges[, .(type, cluster, sample = sub(".*_", "#", sample), left_Mb = round(left_edge / 1e6, 3),
+                  right_Mb = round(right_edge / 1e6, 3), edge_source)], nrows = 200)
 }
 page_note <- function(sel) {
   if (is.null(edges)) return("")
   f <- function(t) {
     x <- edges[sample %in% sel & type == t & !is.na(left_edge)]
     if (!nrow(x)) return(NULL)
-    sprintf("%s edges %.2f-%.2f / %.2f-%.2f Mb", t, min(x$left_edge) / 1e6, max(x$left_edge) / 1e6,
+    sprintf("%s cluster%s %s: edges %.2f-%.2f / %.2f-%.2f Mb", t, if (uniqueN(x$cluster) > 1) "s" else "",
+            paste(unique(x$cluster), collapse = ","), min(x$left_edge) / 1e6, max(x$left_edge) / 1e6,
             min(x$right_edge) / 1e6, max(x$right_edge) / 1e6)
   }
   paste0("; ", paste(c(f("DEL"), f("DUP")), collapse = "; "))
 }
 ps <- opt$`page-size`
-np <- if (ps > 0) max(1, ceiling(max(length(dels), length(dups)) / ps)) else 1
-chunk <- function(x, k) if (ps > 0) x[intersect(seq_along(x), (k - 1) * ps + seq_len(ps))] else x
+# Pages: consecutive chunks of --page-size, or (with breakpoint clusters) whole clusters packed up to --page-size
+pack <- function(x, t) {
+  if (ps <= 0) return(list(x))
+  if (is.null(edges) || !length(x)) return(split(x, ceiling(seq_along(x) / ps)))
+  cl <- edges[type == t][match(x, sample), cluster]
+  pages <- list(); cur <- character(0)
+  for (g in unique(cl)) {
+    m <- x[cl == g]
+    if (length(m) > ps) {  # a cluster larger than a page gets pages of its own
+      if (length(cur)) { pages[[length(pages) + 1]] <- cur; cur <- character(0) }
+      pages <- c(pages, split(m, ceiling(seq_along(m) / ps)))
+    } else if (length(cur) + length(m) > ps) {
+      pages[[length(pages) + 1]] <- cur; cur <- m
+    } else cur <- c(cur, m)
+  }
+  if (length(cur)) pages[[length(pages) + 1]] <- cur
+  pages
+}
+del_pages <- pack(dels, "DEL"); dup_pages <- pack(dups, "DUP")
+np <- max(1, length(del_pages), length(dup_pages))
+chunk <- function(x, k) {
+  pg <- if (identical(x, dels)) del_pages else dup_pages
+  if (k <= length(pg)) pg[[k]] else character(0)
+}
 ht <- opt$height + if (!is.null(ov)) 6 else 0
 if (capabilities("aqua")) quartz(type = "pdf", file = opt$out, width = opt$width, height = ht) else
   if (capabilities("cairo")) cairo_pdf(opt$out, width = opt$width, height = ht, onefile = TRUE) else
