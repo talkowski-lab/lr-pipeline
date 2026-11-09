@@ -52,7 +52,7 @@ workflow GDBreakpointProfiles {
         cn_bin: "Copy-number bin size (bp) of all depth panels; 0 = automatic per window"
         page_size: "Carriers per page and type (N DEL + N DUP per page); 0 = all carriers on one page"
         order_by_edges: "Order carriers by breakpoint (DEL: BAF breakpoint estimates; DUP: copy-number edges) before paging"
-        rd_medians: "2 rows: sample IDs / genome-wide median depth per sample (same scale as rd_matrix)"
+        rd_medians: "2 rows: sample IDs / genome-wide median depth per sample (same scale as rd_matrix); real or new IDs"
         samples: "Optional real sample IDs (one per line) for BAF and genotypes; default: column 1 of id_map"
         id_map: "2 columns with a header line: real sample ID, new sample ID; output samples are renamed, unmapped ones dropped"
         requester_pays_project: "Google project billed for requester-pays buckets (gvcfs, rd_matrix)"
@@ -108,6 +108,7 @@ workflow GDBreakpointProfiles {
                 win_start = row[11],
                 win_end = row[18],
                 prefix = "~{prefix}.~{row[0]}.locus",
+                rd_medians = rd_medians,
                 id_map = id_map,
                 requester_pays_project = requester_pays_project,
                 docker = gd_docker,
@@ -134,7 +135,7 @@ workflow GDBreakpointProfiles {
                 cn_bin = cn_bin,
                 page_size = page_size,
                 order_by_edges = order_by_edges,
-                rd_medians = rd_medians,
+                rd_medians = PrepareLocusDepth.medians,
                 segdup_bed = segdup_bed,
                 bp_sd_bed = bp_sd_bed,
                 docker = gd_docker,
@@ -291,6 +292,7 @@ task PrepareLocusDepth {
         String win_start
         String win_end
         String prefix
+        File rd_medians
         File id_map
         String? requester_pays_project
         String docker
@@ -313,10 +315,29 @@ task PrepareLocusDepth {
             --id-map ~{id_map} \
             --rd-only \
             ~{"--requester-pays-project " + requester_pays_project}
+
+        # Per-sample medians under the new IDs (2 rows: IDs / medians); a sample with several new IDs gets each of them.
+        # Medians already keyed by the new IDs are kept as they are.
+        python3 - ~{rd_medians} ~{id_map} ~{prefix}.renamed.RD_median <<'PY'
+import sys
+med_path, map_path, out_path = sys.argv[1:4]
+rows = [ln.rstrip("\n").split("\t") for ln in open(med_path) if ln.strip()]
+med = dict(zip(rows[0], rows[1]))
+pairs = [ln.split()[:2] for ln in open(map_path) if len(ln.split()) >= 2][1:]
+new_ids = {n for _, n in pairs}
+if sum(i in new_ids for i in med) >= sum(r in med for r, _ in pairs):
+    out = med
+else:
+    out = {n: med[r] for r, n in pairs if r in med}
+with open(out_path, "w") as fh:
+    fh.write("\t".join(out) + "\n" + "\t".join(out.values()) + "\n")
+print(f"medians: {len(out)} samples under the new IDs", file=sys.stderr)
+PY
     >>>
 
     output {
         File rd = "~{prefix}.renamed.RD.txt.gz"
+        File medians = "~{prefix}.renamed.RD_median"
     }
 
     RuntimeAttr default_attr = object {

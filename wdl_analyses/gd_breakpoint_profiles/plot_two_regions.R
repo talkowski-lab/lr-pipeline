@@ -127,6 +127,7 @@ load_region <- function(baf, rd, ld, title, win) {
   if (!is.null(r) && nrow(r)) {
     if (nrow(b) && r$chrom[1] != chrom) warning(title, ": depth chromosome ", r$chrom[1], " differs from BAF ", chrom)
     rs <- intersect(names(r)[-(1:3)], names(med))
+    if (!length(rs)) stop("no sample of the depth matrix has a median in --medians (check that both use the same, renamed, sample IDs)")
     r[, bin := floor(start / cnb) * cnb + cnb / 2]
     rl <- melt(r[, c("bin", rs), with = FALSE], id.vars = "bin", variable.name = "sample", value.name = "RD",
                variable.factor = FALSE)
@@ -164,6 +165,7 @@ if (!is.null(opt$`overview-rd`)) {
     range(c(r$start, r$end))
   ob <- if (opt$`overview-bin` > 0) opt$`overview-bin` else auto_bin(diff(ow), 300, 1000)
   rs <- intersect(names(r)[-(1:3)], names(med))
+  if (!length(rs)) stop("no sample of the depth matrix has a median in --medians (check that both use the same, renamed, sample IDs)")
   r[, bin := floor(start / ob) * ob + ob / 2]
   rl <- melt(r[, c("bin", rs), with = FALSE], id.vars = "bin", variable.name = "sample", value.name = "RD",
              variable.factor = FALSE)
