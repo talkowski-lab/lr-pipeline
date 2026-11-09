@@ -731,6 +731,16 @@ workflows:
 
   # Analysis Workflows
   - subclass: WDL
+    name: GDBreakpointProfiles
+    primaryDescriptorPath: /wdl_analyses/GDBreakpointProfiles.wdl
+    filters:
+      branches:
+        - main
+        - xz_analyses
+      tags:
+        - /.*/
+
+  - subclass: WDL
     name: LocalAssemblyHifiasm
     primaryDescriptorPath: /wdl_analyses/LocalAssemblyHifiasm.wdl
     filters:
