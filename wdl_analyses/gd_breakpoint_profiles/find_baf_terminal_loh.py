@@ -12,17 +12,14 @@ sum of the cohort het frequency of its sites, scaled by the sample's own het rat
 (observed / expected), giving lambda; P(no het in the segment) is about exp(-lambda), so high lambda = strong LOH.
 
 Outputs:
-  <out-prefix>.ranked.tsv     one row per sample, sorted by lambda (sample, obs_outside, rate, loh_start/loh_end,
-                              clean_sites_in_loh, exp_in_loh, lambda, homalt_in_loh, bp_het_bound, bp_est, bp_ci95_bound)
-Breakpoint estimate (the inner edge of the LOH segment, i.e. where the deletion would begin):
-  bp_het_bound   position of the sample's last (right side) / first (left side) clean het; the breakpoint cannot be on the
-                 far side of it
-  bp_est         moving from bp_het_bound into the LOH segment, the clean site where the expected het count
-                 (sample rate x cohort het frequency, summed) reaches ln 2: the median breakpoint if any position
-                 between het-bearing sites is equally likely a priori
-  bp_ci95_bound  where that expected count reaches ln 20 (about 3): with 95% probability the breakpoint lies between
-                 bp_het_bound and this site (it would otherwise have left at least one het visible)
-  <out-prefix>.clean_sites.baf.tsv.gz  the input table restricted to clean sites (for plotting)
+  <out-prefix>.ranked.tsv     one row per sample, sorted by llr then lambda (sample, obs_outside, rate, loh_start/loh_end,
+                              clean_sites_in_loh, exp_in_loh, lambda, homalt_in_loh, last_het_bp, last_het_bp_est, bp_est,
+                              bp_ci_lo, bp_ci_hi, llr, hets_after_bp)
+Breakpoint estimate (the inner edge of the LOH segment, i.e. where the deletion would begin): a two-segment fit in which a
+site is het with probability rate x cohort het frequency before the breakpoint and only with probability --het-error
+(stray hets, paralog artifacts) after it; bp_est maximises the log-likelihood ratio (llr) of that fit against no LOH,
+and bp_ci_lo/bp_ci_hi bound the breakpoints within 3 log-units of the best. A few stray hets inside the deletion therefore
+no longer pull the breakpoint (last_het_bp, the last het before the het-free end, is kept for reference).
 
 Usage:
   find_baf_terminal_loh.py --baf aou_II/chr16_bp4.GD_carriers.baf.tsv.gz --out-prefix aou_II/chr16_bp4.right_loh \\
@@ -39,6 +36,32 @@ import numpy as np
 import pandas as pd
 
 
+def change_point(h, f, pos, eps, drop=3.0):
+    """Two-segment fit along sites ordered so the LOH segment is at the end: before the breakpoint a site is het with
+    probability rate x f (f = cohort het frequency, rate = the sample's het rate before the breakpoint), from the
+    breakpoint on only by error (eps). Returns the breakpoint (midpoint between the sites around it), the interval of
+    breakpoints whose log-likelihood ratio is within `drop` of the best, and the best LLR (0 = no LOH segment)."""
+    h = h.astype(float)
+    n = len(h)
+    k = n
+    for _ in range(3):  # estimate the sample's het rate on the non-LOH part, then refit
+        rate = h[:k].sum() / f[:k].sum() if k > 0 and f[:k].sum() > 0 else 1.0
+        q = np.clip(np.clip(rate, 0.3, 3.0) * f, 0.01, 0.95)
+        contrib = h * np.log(eps / q) + (1 - h) * np.log((1 - eps) / (1 - q))
+        llr = np.r_[np.cumsum(contrib[::-1])[::-1], 0.0]  # llr[k]: LOH from site k to the end; llr[n] = no LOH
+        k = int(np.argmax(llr))
+
+    def edge(i):
+        if n == 0 or i >= n:
+            return np.nan
+        return int(pos[i]) if i == 0 else int((pos[i - 1] + pos[i]) / 2)
+    ok = np.where(llr >= llr[k] - drop)[0]
+    ok = ok[ok < n]
+    lo_hi = sorted([edge(ok.min()), edge(ok.max())]) if len(ok) and k < n else [np.nan, np.nan]
+    return dict(bp_est=edge(k), bp_ci_lo=lo_hi[0], bp_ci_hi=lo_hi[1], llr=round(float(llr[k]), 1),
+                hets_after_bp=int(h[k:].sum()) if k < n else 0)
+
+
 def main():
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("--baf", required=True)
@@ -50,6 +73,7 @@ def main():
     p.add_argument("--min-homalt", type=int, default=3)
     p.add_argument("--max-het-dev", type=float, default=0.1)
     p.add_argument("--min-clean-frac", type=float, default=0.8)
+    p.add_argument("--het-error", type=float, default=0.02, help="het probability inside an LOH segment (artifacts, errors)")
     p.add_argument("--top", type=int, default=20, help="rows printed to stdout")
     p.add_argument("--format", choices=["markdown", "tsv"], default="markdown", help="printed table format")
     if len(sys.argv) == 1:
@@ -94,30 +118,32 @@ def main():
         def reach(level):
             i = np.where(cum >= level)[0]
             return int(seg[i[0]]) if len(i) else (int(seg[-1]) if len(seg) else np.nan)
-        bp = dict(bp_het_bound=int(pos[k - 1]) if k > 0 else np.nan, bp_est=reach(np.log(2)), bp_ci95_bound=reach(np.log(20)))
+        bp = dict(last_het_bp=int(pos[k - 1]) if k > 0 else np.nan, last_het_bp_est=reach(np.log(2)))
+        bp.update(change_point(hc[:, j], f, pos, a.het_error))
         rows.append(dict(sample=s, obs_outside=int(obs_out), rate=round(rate, 2),
                          loh_start=int(seg.min()) if len(seg) else np.nan, loh_end=int(seg.max()) if len(seg) else np.nan,
                          clean_sites_in_loh=len(seg), exp_in_loh=round(exp_in, 1),
                          **{"lambda": round(rate * exp_in, 1)}, homalt_in_loh=int(ac[k:, j].sum()), **bp))
-    r = pd.DataFrame(rows).sort_values("lambda", ascending=False)
+    r = pd.DataFrame(rows).sort_values(["llr", "lambda"], ascending=False)
     r.to_csv(a.out_prefix + ".ranked.tsv", sep="\t", index=False)
 
     # Printed table: rank, sample, start of the het-free end segment, expected hets missing there, score, hom-alt sites
     t = r.head(a.top).reset_index(drop=True)
     side = "from" if a.side == "right" else "up to"
-    header = ["Rank", "Sample", f"Het-free {side} (Mb)", "Expected hets missing", "Score (lambda)", "Hom-alt in het-free stretch",
-              "Last het (Mb)" if a.side == "right" else "First het (Mb)", "Breakpoint est. (Mb)", "95% interval (Mb)"]
+    header = ["Rank", "Sample", f"Het-free {side} (Mb)", "Expected hets missing", "Score (lambda)",
+              "LLR",
+              "Last het (Mb)" if a.side == "right" else "First het (Mb)", "Breakpoint est. (Mb)", "Interval (Mb)",
+              "Hets after bp"]
     loh_edge = t["loh_start"] if a.side == "right" else t["loh_end"]
 
     def mb(v):
         return "NA" if pd.isna(v) else f"{v / 1e6:.3f}"
 
     def ci(i):
-        lo, hi = sorted([t.at[i, "bp_het_bound"], t.at[i, "bp_ci95_bound"]])
-        return f"{mb(lo)}-{mb(hi)}"
+        return f"{mb(t.at[i, 'bp_ci_lo'])}-{mb(t.at[i, 'bp_ci_hi'])}"
     body = [[str(i + 1), t.at[i, "sample"], mb(loh_edge[i]), f"{t.at[i, 'exp_in_loh']:.1f}",
-             f"{t.at[i, 'lambda']:.1f}", str(t.at[i, "homalt_in_loh"]), mb(t.at[i, "bp_het_bound"]), mb(t.at[i, "bp_est"]),
-             ci(i)]
+             f"{t.at[i, 'lambda']:.1f}", f"{t.at[i, 'llr']:.1f}", mb(t.at[i, "last_het_bp"]), mb(t.at[i, "bp_est"]),
+             ci(i), str(t.at[i, "hets_after_bp"])]
             for i in range(len(t))]
     if a.format == "markdown":
         print("| " + " | ".join(header) + " |")
