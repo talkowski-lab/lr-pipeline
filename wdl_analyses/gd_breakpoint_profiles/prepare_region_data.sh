@@ -4,7 +4,7 @@
 #   2. VCF: fetch the region from the per-chromosome small-variant VCF (local or gs://, requester pays via pysam)
 #                                                                                     -> <name>.vcf.gz (+ .tbi)
 #   3. BAF: per-sample BAF from FORMAT/AD (vcf_to_baf_table.py)                        -> <name>.baf.tsv.gz
-#   4. GT:  per-sample genotypes (extract_gt.py, pysam)                                       -> <name>.GT.tsv.gz
+#   4. GT:  per-sample genotypes (extract_gt.py, pysam)                               -> <name>.GT.tsv.gz
 #   5. rename: keep and rename the samples of --id-map (subset_rename_samples.py)     -> <name>.renamed.{RD.txt,baf.tsv,GT.tsv}.gz
 #
 # Usage:
@@ -25,7 +25,7 @@
 #              its header line (--id-map-no-header if it has none); either way limited to samples present in the VCF
 #   --id-map   2 columns: real sample ID, new sample ID (samples missing from a table are skipped)
 #   --keep-intermediate  keep the non-renamed tables and the region VCF (removed by default)
-# Needs: tabix, bgzip, bcftools, python3 with pysam and pandas; helper scripts vcf_to_baf_table.py (or --baf-script),
+# Needs: tabix, bgzip, python3 with pysam and pandas; helper scripts vcf_to_baf_table.py (or --baf-script),
 # extract_gt.py, subset_rename_samples.py.
 set -euo pipefail
 
@@ -110,8 +110,9 @@ PY
     src="$p.idmap_samples.txt"
     tail -n +$((map_header + 1)) "$idmap" | awk 'NF{print $1}' > "$src"
   fi
-  # unique IDs only: a sample with several GD calls has several rows in the ID map (bcftools rejects repeated samples)
-  bcftools query -l "$p.vcf.gz" | grep -xFf - "$src" | awk '!seen[$0]++' > "$p.samples.txt" || true
+  # unique IDs only: a sample with several GD calls has several rows in the ID map
+  python3 -c 'import sys, pysam; print("\n".join(pysam.VariantFile(sys.argv[1]).header.samples))' "$p.vcf.gz" \
+    | grep -xFf - "$src" | awk '!seen[$0]++' > "$p.samples.txt" || true
   echo "samples: $(wc -l < "$p.samples.txt" | tr -d ' ') of $(awk 'NF && !seen[$1]++' "$src" | wc -l | tr -d ' ') unique requested are in the VCF" >&2
   [[ -s "$p.samples.txt" ]] || { echo "none of the requested samples is in the VCF" >&2; exit 1; }
   samples="$p.samples.txt"

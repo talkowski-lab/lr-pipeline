@@ -7,7 +7,7 @@ left, right SD on the right; DEL carriers red to orange, DUP carriers blue to gr
 estimate of each DEL carrier.
 
 Docker: `dockerfiles/Dockerfile.GDBreakpointProfiles` (scripts in this folder are copied to `/opt/gd_scripts`), image
-`us-central1-docker.pkg.dev/talkowski-sv-gnomad/kj-dockers/gd-breakpoint-profiles:<tag>` (current: 2026-11-09.7). The image also holds the two SD references in `/opt/gd_scripts/references/` (from `references/` here), used when `segdup_bed` / `bp_sd_bed` are not given.
+`us-central1-docker.pkg.dev/talkowski-sv-gnomad/kj-dockers/gd-breakpoint-profiles:<tag>` (current: 2026-11-09.8). The image also holds the two SD references in `/opt/gd_scripts/references/` (from `references/` here), used when `segdup_bed` / `bp_sd_bed` are not given.
 
 ## Steps
 1. `gd_sd_windows.py` (run once, locally): GD call IDs -> one row per locus with the left/right breakpoint SDs and
