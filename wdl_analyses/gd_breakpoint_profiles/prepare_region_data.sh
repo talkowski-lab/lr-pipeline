@@ -4,7 +4,7 @@
 #   2. VCF: fetch the region from the per-chromosome small-variant VCF (local or gs://, requester pays via pysam)
 #                                                                                     -> <name>.vcf.gz (+ .tbi)
 #   3. BAF: per-sample BAF from FORMAT/AD (vcf_to_baf_table.py)                        -> <name>.baf.tsv.gz
-#   4. GT:  per-sample genotypes (extract_gt.sh)                                       -> <name>.GT.tsv.gz
+#   4. GT:  per-sample genotypes (extract_gt.py, pysam)                                       -> <name>.GT.tsv.gz
 #   5. rename: keep and rename the samples of --id-map (subset_rename_samples.py)     -> <name>.renamed.{RD.txt,baf.tsv,GT.tsv}.gz
 #
 # Usage:
@@ -26,7 +26,7 @@
 #   --id-map   2 columns: real sample ID, new sample ID (samples missing from a table are skipped)
 #   --keep-intermediate  keep the non-renamed tables and the region VCF (removed by default)
 # Needs: tabix, bgzip, bcftools, python3 with pysam and pandas; helper scripts vcf_to_baf_table.py (or --baf-script),
-# extract_gt.sh, subset_rename_samples.py.
+# extract_gt.py, subset_rename_samples.py.
 set -euo pipefail
 
 usage() { sed -n '2,29p' "$0" | sed 's/^# \{0,1\}//'; exit 1; }
@@ -43,7 +43,7 @@ while [[ $# -gt 0 ]]; do
 done
 required=(chr start end name rd idmap); [[ $rd_only -eq 0 ]] && required+=(vcf)
 for v in "${required[@]}"; do [[ -z "${!v}" ]] && { echo "missing --${v/idmap/id-map}" >&2; usage; }; done
-helpers=(subset_rename_samples.py); [[ $rd_only -eq 0 ]] && helpers+=("$baf_script" extract_gt.sh)
+helpers=(subset_rename_samples.py); [[ $rd_only -eq 0 ]] && helpers+=("$baf_script" extract_gt.py)
 for s in "${helpers[@]}"; do
   [[ -f "$sdir/$s" ]] || { echo "helper script not found: $sdir/$s (set --scripts-dir)" >&2; exit 1; }
 done
@@ -118,7 +118,7 @@ PY
 
   # 3-4. BAF and GT tables for the selected samples
   python3 "$sdir/$baf_script" "$p.vcf.gz" "$samples" "$p.baf.tsv.gz" --region "$region"
-  bash "$sdir/extract_gt.sh" -v "$p.vcf.gz" -s "$samples" -o "$p.GT.tsv.gz" -r "$region"
+  python3 "$sdir/extract_gt.py" --vcf "$p.vcf.gz" --samples "$samples" --out "$p.GT.tsv.gz" --region "$region"
   outs+=("$p.renamed.baf.tsv.gz" "$p.renamed.GT.tsv.gz")
 fi
 

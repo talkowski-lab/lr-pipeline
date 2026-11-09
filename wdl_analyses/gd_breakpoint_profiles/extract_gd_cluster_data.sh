@@ -14,7 +14,7 @@
 #     [--prefix aou_lrGS] [--outdir .] [--flank-frac 0.5] [--samples samples.txt] [--scripts-dir <helpers>]
 #   --rd / --vcf / --id-map / --samples: as in prepare_region_data.sh (samples default to column 1 of the ID map)
 # Needs the helper scripts next to this one (or --scripts-dir): breakpoint_sd_windows.py, prepare_region_data.sh,
-# vcf_to_baf_table.py, extract_gt.sh, subset_rename_samples.py.
+# vcf_to_baf_table.py, extract_gt.py, subset_rename_samples.py.
 set -euo pipefail
 
 usage() { sed -n '2,20p' "$0" | sed 's/^# \{0,1\}//'; exit 1; }
