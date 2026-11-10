@@ -116,51 +116,56 @@ workflow ReadRecurrence {
                 runtime_attr_override = runtime_attr_list_region_reads
         }
 
-        scatter (read_bam in ListRegionReads.read_bams) {
-            call Recurrence as RecurrenceHg38 {
-                input:
-                    read_bam = read_bam,
-                    region = region,
-                    flank = flank,
-                    window = window,
-                    step = step,
-                    max_ed_frac = max_ed_frac,
-                    reference_name = "hg38",
-                    ref_fa = PrepareRegion.hg38_segment_fa,
-                    segdup_bed = PrepareRegion.hg38_segdup_region,
-                    genes_gtf = PrepareRegion.hg38_genes_region,
-                    threads = recurrence_threads,
-                    prefix = hap.left,
-                    docker = recurrence_docker,
-                    runtime_attr_override = runtime_attr_recurrence
-            }
+        Array[Pair[String, File]] hap_reads = cross([hap.left], ListRegionReads.read_bams)
+    }
 
-            call Recurrence as RecurrenceT2T {
-                input:
-                    read_bam = read_bam,
-                    region = region,
-                    flank = flank,
-                    window = window,
-                    step = step,
-                    max_ed_frac = max_ed_frac,
-                    reference_name = "T2T",
-                    ref_fa = PrepareRegion.t2t_segment_fa,
-                    chain = chain,
-                    t2t_segment = PrepareRegion.t2t_segment,
-                    segdup_bed = PrepareRegion.t2t_segdup_region,
-                    genes_gtf = PrepareRegion.t2t_genes_region,
-                    threads = recurrence_threads,
-                    prefix = hap.left,
-                    docker = recurrence_docker,
-                    runtime_attr_override = runtime_attr_recurrence
-            }
+    # One flat list of (haplotype, read BAM) jobs, so that the per-read calls sit in a single (not nested) scatter
+    Array[Pair[String, File]] read_jobs = flatten(hap_reads)
+
+    scatter (job in read_jobs) {
+        call Recurrence as RecurrenceHg38 {
+            input:
+                read_bam = job.right,
+                region = region,
+                flank = flank,
+                window = window,
+                step = step,
+                max_ed_frac = max_ed_frac,
+                reference_name = "hg38",
+                ref_fa = PrepareRegion.hg38_segment_fa,
+                segdup_bed = PrepareRegion.hg38_segdup_region,
+                genes_gtf = PrepareRegion.hg38_genes_region,
+                threads = recurrence_threads,
+                prefix = job.left,
+                docker = recurrence_docker,
+                runtime_attr_override = runtime_attr_recurrence
+        }
+
+        call Recurrence as RecurrenceT2T {
+            input:
+                read_bam = job.right,
+                region = region,
+                flank = flank,
+                window = window,
+                step = step,
+                max_ed_frac = max_ed_frac,
+                reference_name = "T2T",
+                ref_fa = PrepareRegion.t2t_segment_fa,
+                chain = chain,
+                t2t_segment = PrepareRegion.t2t_segment,
+                segdup_bed = PrepareRegion.t2t_segdup_region,
+                genes_gtf = PrepareRegion.t2t_genes_region,
+                threads = recurrence_threads,
+                prefix = job.left,
+                docker = recurrence_docker,
+                runtime_attr_override = runtime_attr_recurrence
         }
     }
 
     call BundleOutputs {
         input:
-            pdfs = flatten([flatten(RecurrenceHg38.pdf), flatten(RecurrenceT2T.pdf)]),
-            tables = flatten([flatten(flatten(RecurrenceHg38.tables)), flatten(flatten(RecurrenceT2T.tables))]),
+            pdfs = flatten([RecurrenceHg38.pdf, RecurrenceT2T.pdf]),
+            tables = flatten([flatten(RecurrenceHg38.tables), flatten(RecurrenceT2T.tables)]),
             read_lists = ListRegionReads.reads_tsv,
             lift_tsv = PrepareRegion.lift_tsv,
             prefix = prefix,
