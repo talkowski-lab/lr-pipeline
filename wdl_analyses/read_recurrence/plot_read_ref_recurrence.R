@@ -55,6 +55,9 @@ segs <- if ("segments" %in% names(I)) {
   r <- strsplit(I[["segments"]], ";")[[1]]
   data.table(chrom = sub(":.*", "", r), start = as.numeric(sub(".*:([0-9]+)-.*", "\\1", r)),
              end = as.numeric(sub(".*-", "", r)))
+} else if ("segment" %in% names(h)) {
+  # no info file: each segment spans its hits
+  h[, .(chrom = region_chrom, start = min(ref_start), end = max(ref_end)), keyby = segment][, segment := NULL][]
 } else if ("ref_start" %in% names(I)) {
   data.table(chrom = region_chrom, start = as.numeric(I[["ref_start"]]), end = as.numeric(I[["ref_end"]]))
 } else data.table(chrom = region_chrom, start = min(h$ref_start), end = max(h$ref_end))
