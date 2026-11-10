@@ -45,9 +45,25 @@ python3 read_t2t_recurrence.py --bam hap1.ctg.bam --read-name h1tg003138l --regi
   --out hap1__T2T__h1tg003138l --pad 5000 --orient-to-ref
 ```
 
+## read_split_recurrence.py
+A read/contig with a split alignment (primary + supplementary, e.g. the two sides of a large deletion) against all its
+aligned reference segments together: each alignment's reference span +/- `--pad` is a segment (overlaps merged, or
+`--segments`), the read is windowed over the span of those alignments +/- `--pad`, and every window is matched against
+every segment. The plot puts the segments side by side, so a deletion shows as one diagonal that jumps between panels.
+```
+python3 read_split_recurrence.py --bam asm_h1.minimap2.bam --read-name h1tg003138l --region chr16:29268226-29300000 \
+  --ref hg38.fa --out 16p_BP4-5.h1tg003138l --pad 20000 --threads 8 --orient-to-ref
+Rscript plot_read_ref_recurrence.R --prefix 16p_BP4-5.h1tg003138l --ref-label hg38 --out 16p_BP4-5.h1tg003138l.pdf \
+  [--segdup segdups.bed.gz] [--genes genes.gtf.gz]
+```
+Outputs: as read_ref_recurrence.py, with a `segment` column in `<out>.hits.tsv`, `segments` in `<out>.info.tsv`, and
+`<out>.alignments.tsv` (the alignments used, in reference and read coordinates). `--all-chroms` also uses alignments on
+other chromosomes.
+
 ## plot_read_ref_recurrence.R
-Plot from either script's outputs: reference on x (SD and gene tracks underneath), read on y; blue forward, red reverse
-complement, windows with > `--max-copies` hits faint grey, the read's alignment blocks as grey lines.
+Plot from any of the scripts' outputs: reference on x (SD and gene tracks underneath), read on y; blue forward, red
+reverse complement, windows with > `--max-copies` hits faint grey, the read's alignment blocks as grey lines; several
+reference segments are drawn side by side, each panel as wide as its segment.
 ```
 Rscript plot_read_ref_recurrence.R --prefix hap1__hg38__h1tg003138l --out hap1__hg38__h1tg003138l.pdf \
   [--segdup segdups.bed.gz] [--genes genes.gtf.gz] [--ref-label hg38] [--title ...] [--max-copies 5]
