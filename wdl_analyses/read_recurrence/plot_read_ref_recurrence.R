@@ -13,7 +13,10 @@
 #   Rscript plot_read_ref_recurrence.R --hits read1.hits.tsv.gz --chrom chr16 --ref-label hg38 --out ...
 #   With --prefix, <prefix>.hits.tsv[.gz] is read and .info.tsv / .aln.tsv[.gz] are used when present; without them
 #   the axes span the hits and no alignment blocks are drawn.
-#   --segdup / --genes add an SD track and a gene track under the reference (x) axis.
+#   --segdup / --genes add an SD track and a gene track under the reference (x) axis; --regions marks named regions
+#   (e.g. "BP4 SD=chr16:29324176-29638676;BP5 SD=chr16:30188532-30343458") with dashed lines and a labelled track;
+#   --sections adds the reference block layout (segment_structure.py sections) as a block track; --segment-names names
+#   the panels.
 suppressPackageStartupMessages({library(ggplot2); library(data.table); library(optparse); library(patchwork)})
 opt <- parse_args(OptionParser(option_list = list(
   make_option("--prefix", help = "output prefix of read_ref_recurrence.py / read_t2t_recurrence.py"),
@@ -21,6 +24,9 @@ opt <- parse_args(OptionParser(option_list = list(
   make_option("--chrom", help = "reference chromosome for the y axis (needed without an info file)"),
   make_option("--ref-label", dest = "ref_label", help = "reference name for the y axis, e.g. hg38"),
   make_option("--out"), make_option("--title"), make_option("--segdup"),
+  make_option("--segment-names", dest = "segment_names", help = "comma-separated names of the reference segments (panel titles)"),
+  make_option("--regions", help = "named regions to mark, 'NAME=chrom:start-end;...' (e.g. the SDs inside flanked segments): dashed lines and a labelled track"),
+  make_option("--sections", help = "reference block layout (segment_structure.py <prefix>.sections.tsv) drawn as a block track"),
   make_option("--genes"), make_option("--size", type = "double", default = 12),
   make_option("--max-copies", dest = "max_copies", type = "integer", default = 5,
               help = "windows with more hits than this (interspersed repeats) are drawn as a faint grey background [%default]"))))
@@ -62,6 +68,10 @@ segs <- if ("segments" %in% names(I)) {
   data.table(chrom = region_chrom, start = as.numeric(I[["ref_start"]]), end = as.numeric(I[["ref_end"]]))
 } else data.table(chrom = region_chrom, start = min(h$ref_start), end = max(h$ref_end))
 segs[, label := sprintf("%s:%.3f-%.3f Mb", chrom, start / 1e6, end / 1e6)]
+if (!is.null(opt$segment_names)) {
+  nm <- strsplit(opt$segment_names, ",")[[1]]
+  if (length(nm) == nrow(segs)) segs[, label := paste0(nm, "  ", label)]
+}
 segs[, seg := factor(label, levels = label)]
 multi <- nrow(segs) > 1
 h[, seg := segs$seg[if ("segment" %in% names(h)) segment else 1L]]
@@ -75,13 +85,37 @@ in_seg <- function(d, chrom_col, s_col, e_col) {
   }), fill = TRUE)
   out
 }
+clip_to_seg <- function(d, s_col = "start", e_col = "end") {
+  # clip features to their segment so that every row of the figure has the same panel ranges
+  if (!nrow(d)) return(d)
+  d <- merge(d, segs[, .(seg, s0 = start, s1 = end)], by = "seg")
+  d[, (s_col) := pmax(get(s_col), s0)][, (e_col) := pmin(get(e_col), s1)]
+  d[get(e_col) > get(s_col)][, c("s0", "s1") := NULL][]
+}
 if (nrow(aln) && "chrom" %in% names(aln)) aln <- in_seg(aln, "chrom", "ref_start", "ref_end") else
   if (nrow(aln)) aln[, seg := segs$seg[1]]
+if (nrow(aln)) {
+  aln <- merge(aln, segs[, .(seg, s0 = start, s1 = end)], by = "seg")
+  aln[, `:=`(cut_l = pmax(0, s0 - ref_start), cut_r = pmax(0, ref_end - s1))]
+  aln[strand == "+", `:=`(read_start = read_start + cut_l, read_end = read_end - cut_r)]
+  aln[strand == "-", `:=`(read_start = read_start + cut_r, read_end = read_end - cut_l)]
+  aln[, `:=`(ref_start = ref_start + cut_l, ref_end = ref_end - cut_r)]
+  aln <- aln[ref_end > ref_start & read_end > read_start][, c("s0", "s1", "cut_l", "cut_r") := NULL]
+}
 h[, n_hits := .N, by = read_start]
 h[, rmid := (ref_start + ref_end) / 2e6][, qmid := (read_start + read_end) / 2e3]
 bounds <- segs[, .(x = c(start, end) / 1e6), by = seg]
 facet <- facet_grid(cols = vars(seg), scales = "free_x", space = "free_x")
 xscale <- scale_x_continuous(expand = c(0, 0))
+reg <- data.table()
+if (!is.null(opt$regions)) {
+  r <- strsplit(strsplit(opt$regions, ";")[[1]], "=")
+  reg <- data.table(name = trimws(sapply(r, `[`, 1)), loc = sapply(r, `[`, 2))
+  reg[, `:=`(chrom = sub(":.*", "", loc), start = as.numeric(sub(".*:([0-9]+)-.*", "\\1", loc)), end = as.numeric(sub(".*-", "", loc)))]
+  reg[, full_kb := round((end - start + 1) / 1e3)]  # label with the full length even when clipped to a panel
+  reg <- clip_to_seg(in_seg(reg, "chrom", "start", "end"))
+}
+vl <- if (nrow(reg)) reg[, .(x = c(start, end) / 1e6), by = .(name, seg)] else data.table()
 theme_set(theme_bw(base_size = 22, base_family = font_family) +
             theme(panel.grid.minor = element_blank(), panel.spacing.x = unit(1.2, "lines")))
 
@@ -92,6 +126,7 @@ p <- ggplot() +
                                                 xend = ifelse(strand == "+", ref_end, ref_start) / 1e6,
                                                 y = read_start / 1e3, yend = read_end / 1e3),
                                 colour = "grey75", linewidth = 3, lineend = "round") } +
+  { if (nrow(vl)) geom_vline(data = vl, aes(xintercept = x), linetype = "22", colour = "grey40", linewidth = 0.4) } +
   geom_point(data = h[n_hits > opt$max_copies], aes(rmid, qmid), colour = "grey70", alpha = 0.15, size = 0.5) +
   geom_point(data = h[n_hits <= opt$max_copies], aes(rmid, qmid, colour = strand, alpha = identity), size = 0.9) +
   scale_colour_manual(values = c("+" = "#1F5FA8", "-" = "#B2182B"), name = "strand",
@@ -115,6 +150,34 @@ track_theme <- theme(panel.grid = element_blank(), plot.caption = element_text(s
                      axis.title.y = element_text(angle = 0, vjust = 0.5, size = 18),
                      strip.text = element_blank(), strip.background = element_blank())
 tracks <- list()
+if (nrow(reg)) {
+  tracks$regions <- ggplot(reg) + geom_blank(data = bounds, aes(x = x, y = 0)) +
+    geom_segment(aes(x = start / 1e6, xend = end / 1e6, y = 0.35, yend = 0.35), linewidth = 1.4) +
+    geom_segment(aes(x = start / 1e6, xend = start / 1e6, y = 0.15, yend = 0.55)) +
+    geom_segment(aes(x = end / 1e6, xend = end / 1e6, y = 0.15, yend = 0.55)) +
+    geom_text(aes(x = (start + end) / 2e6, y = 0.85, label = sprintf("%s (%s kb)", name, prettyNum(full_kb, big.mark = ","))),
+              size = 7.76 * 0.6, family = font_family, fontface = "bold") +
+    facet + xscale + coord_cartesian(ylim = c(0, 1.15), clip = "off") + labs(x = NULL, y = "region") + track_theme +
+    theme(panel.border = element_blank())
+}
+if (!is.null(opt$sections)) {
+  bl_all <- fread(opt$sections)
+  bl <- in_seg(bl_all, "chrom", "start", "end")
+  if (nrow(bl)) {
+    bl <- merge(bl, segs[, .(seg, s0 = start, s1 = end)], by = "seg")[, `:=`(start = pmax(start, s0), end = pmin(end, s1))]
+    pal <- c("#4477AA", "#EE6677", "#228833", "#CCBB44", "#66CCEE", "#AA3377", "#BBBBBB", "#EE8866", "#44BB99",
+             "#99DDFF", "#FFAABB", "#AAAA00", "#77AADD", "#994455", "#DDCC77", "#117733")
+    cl <- unique(bl_all$class)
+    bcols <- setNames(pal[(seq_along(cl) - 1) %% length(pal) + 1], cl)
+    tot <- sum(segs$end - segs$start)
+    tracks$blocks <- ggplot(bl) + geom_blank(data = bounds, aes(x = x, y = 0)) +
+      geom_rect(aes(xmin = start / 1e6, xmax = end / 1e6, ymin = 0, ymax = 1, fill = class), colour = "white", linewidth = 0.3) +
+      geom_text(data = bl[end - start > tot * 0.02], aes(x = (start + end) / 2e6, y = 0.5, label = label), colour = "white",
+                fontface = "bold", size = 7.76 * 0.55, family = font_family) +
+      scale_fill_manual(values = bcols, guide = "none") +
+      facet + xscale + coord_cartesian(ylim = c(0, 1), expand = FALSE) + labs(x = NULL, y = "blocks") + track_theme
+  }
+}
 if (!is.null(opt$segdup)) {
   s <- fread(opt$segdup, header = FALSE)[, 1:3]; setnames(s, c("chrom", "start", "end"))
   s <- in_seg(s, "chrom", "start", "end")
@@ -131,7 +194,7 @@ if (!is.null(opt$genes)) {
   if (nrow(g)) {
     g <- g[grepl('(gene_type|gene_biotype)[ =]"?protein_coding', V9),
            .(chrom = V1, start = V4, end = V5, name = sub('.*gene_name[ =]"?([^";]+).*', "\\1", V9))]
-    g <- in_seg(g, "chrom", "start", "end")
+    g <- clip_to_seg(in_seg(g, "chrom", "start", "end"))
   }
   if (nrow(g)) {
     # per segment, stack genes into lanes so that neither boxes nor labels overlap (label width from its length)
@@ -157,7 +220,8 @@ if (!is.null(opt$genes)) {
   }
 }
 panels <- c(list(p), tracks)
-heights <- c(1, if (!is.null(tracks$SD)) 0.03, if (!is.null(tracks$genes)) 0.06 * (max(tracks$genes$data$lane) + 1))
+heights <- c(1, if (!is.null(tracks$regions)) 0.05, if (!is.null(tracks$blocks)) 0.045, if (!is.null(tracks$SD)) 0.03,
+             if (!is.null(tracks$genes)) 0.06 * (max(tracks$genes$data$lane) + 1))
 for (i in seq_along(panels)) {
   last <- i == length(panels)
   panels[[i]] <- panels[[i]] + labs(x = if (last) xlab else NULL, caption = if (last) cap else NULL) +

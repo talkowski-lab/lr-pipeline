@@ -7,10 +7,13 @@ version 1.0
 # side by side, so a deletion shows as one diagonal that jumps between panels.
 # 1. ListSplitReads (per haplotype): the split reads, one bundle each (the read's alignments, its reference segments as a
 #    small FASTA, SD and gene tracks cut to the segments) and a summary table. A haplotype without split reads gives no
-#    bundle and no plot.
+#    bundle and no plot. With ref_segments, every read is compared against the same fixed reference segments (e.g. the
+#    two SDs of a GD +/- 50 kb) instead of its own alignment spans; min_alignments = 1 plots every read in the region.
 # 2. SplitRecurrence (one job per split read): read_split_recurrence.py (every window x bp of the read's aligned span
 #    +/- pad matched against every segment, edit distance <= max_ed_frac x window, both strands; reads matching mostly on
-#    the reverse strand reverse-complemented) and the plot.
+#    the reverse strand reverse-complemented) and the plot: reference segments side by side on x (named by
+#    segment_names), the read on y; under them the labelled regions (region_labels, e.g. the SDs), the reference block
+#    layout (blocks_tsv, segment_structure.py sections), SDs and genes.
 # 3. BundleOutputs: all figures in one tar.gz (<prefix>_split_recurrence_figures/<haplotype>/<read>.pdf, with the split
 #    read summary), all tables in another.
 
@@ -33,12 +36,16 @@ workflow SplitReadRecurrence {
         Int min_alignments = 2
         Boolean all_chroms = false
         Int max_reads = 50
+        String? ref_segments
+        String? segment_names
+        String? region_labels
 
         File hg38_fa
         File hg38_fai
         File? hg38_gzi
         File? segdup_bed
         File? genes_gtf
+        File? blocks_tsv
 
         String recurrence_docker
         Int recurrence_threads = 4
@@ -61,6 +68,10 @@ workflow SplitReadRecurrence {
         min_alignments: "Minimum primary/supplementary alignments for a read to count as split"
         all_chroms: "Count and plot alignments on any chromosome (default: only the region's chromosome)"
         max_reads: "Maximum split reads plotted per haplotype (most alignments first)"
+        ref_segments: "Fixed reference segments for every read, comma-separated chrom:start-end (e.g. chr16:29274176-29688676,chr16:30138532-30393458 for the 16p11.2 BP4 and BP5 SDs +/- 50 kb); default: each read's alignment spans +/- pad"
+        segment_names: "Names of the reference segments for the panel titles, comma-separated in the same order (e.g. BP4,BP5)"
+        region_labels: "Named regions marked on the plots, NAME=chrom:start-end separated by ';' (e.g. BP4 SD=chr16:29324176-29638676;BP5 SD=chr16:30188532-30343458)"
+        blocks_tsv: "Reference block layout drawn under the plots (segment_structure.py <prefix>.sections.tsv)"
         hg38_gzi: "Needed when hg38_fa is bgzipped"
         segdup_bed: "Optional SD BED for the SD track"
         genes_gtf: "Optional gene GTF/GFF3 for the gene track (protein-coding genes are drawn)"
@@ -79,6 +90,7 @@ workflow SplitReadRecurrence {
                 min_alignments = min_alignments,
                 all_chroms = all_chroms,
                 max_reads = max_reads,
+                ref_segments = ref_segments,
                 prefix = hap.left,
                 hg38_fa = hg38_fa,
                 hg38_fai = hg38_fai,
@@ -105,6 +117,9 @@ workflow SplitReadRecurrence {
                 step = step,
                 max_ed_frac = max_ed_frac,
                 all_chroms = all_chroms,
+                segment_names = segment_names,
+                region_labels = region_labels,
+                blocks_tsv = blocks_tsv,
                 threads = recurrence_threads,
                 prefix = job.left,
                 docker = recurrence_docker,
@@ -139,6 +154,7 @@ task ListSplitReads {
         Int min_alignments
         Boolean all_chroms
         Int max_reads
+        String? ref_segments
         String prefix
         File hg38_fa
         File hg38_fai
@@ -172,6 +188,7 @@ task ListSplitReads {
             --min-alignments ~{min_alignments} \
             ~{if all_chroms then "--all-chroms" else ""} \
             --max-reads ~{max_reads} \
+            ~{"--segments " + ref_segments} \
             ~{"--segdup " + segdup_bed} \
             ~{"--genes " + genes_gtf}
     >>>
@@ -210,6 +227,9 @@ task SplitRecurrence {
         Int step
         Float max_ed_frac
         Boolean all_chroms
+        String? segment_names
+        String? region_labels
+        File? blocks_tsv
         Int threads
         String prefix
         String docker
@@ -251,7 +271,10 @@ task SplitRecurrence {
         Rscript /opt/read_recurrence/plot_read_ref_recurrence.R \
             --prefix tables/~{out} \
             --ref-label hg38 \
-            --title "~{prefix} ${read_name}: split alignment; ~{window} bp windows, step ~{step}" \
+            --title "~{prefix} ${read_name}; ~{window} bp windows, step ~{step}" \
+            ~{"--segment-names " + segment_names} \
+            ~{if defined(region_labels) then "--regions '" + select_first([region_labels]) + "'" else ""} \
+            ~{"--sections " + blocks_tsv} \
             ${tracks[@]+"${tracks[@]}"} \
             --out ~{out}.pdf
     >>>

@@ -7,8 +7,8 @@ alignments ignored) on the region's chromosome (--all-chroms: on any chromosome)
 region by >= --min-overlap bp. For each split read (at most --max-reads, most alignments first), <outdir>/<out>.<file_id>.tar.gz
 holds:
   read.bam (+ .bai)    the read's primary and supplementary alignments
-  segments.fa (+ .fai) the reference segments: each alignment's span +/- --pad, overlapping ones merged; one sequence per
-                       segment, named chrom:start-end
+  segments.fa (+ .fai) the reference segments (--segments, or each alignment's span +/- --pad, overlapping ones
+                       merged); one sequence per segment, named chrom:start-end
   segments.txt         the segments, comma-separated (for read_split_recurrence.py --segments)
   read_name.txt        the read name
   segdup.bed, genes.gtf  --segdup / --genes features overlapping the segments (empty files when not given)
@@ -20,6 +20,7 @@ chrom:start-end(strand,primary|supplementary), 1-based).
 Usage:
   list_split_reads.py --bam asm_h1.bam --region chr16:28000000-30500000 --ref hg38.fa --out hap1 --outdir bundles \\
       [--pad 20000] [--min-overlap 1000] [--min-alignments 2] [--all-chroms] [--max-reads 50] \\
+      [--segments chr16:29274176-29688676,chr16:30138532-30393458] \\
       [--segdup segdups.bed.gz] [--genes genes.gtf.gz]
 Needs read_ref_recurrence.py and read_split_recurrence.py in the same directory.
 """
@@ -68,6 +69,8 @@ def main():
     p.add_argument("--all-chroms", action="store_true")
     p.add_argument("--max-reads", type=int, default=50)
     p.add_argument("--max-ref", type=int, default=5000000, help="skip reads whose segments total more than this (bp)")
+    p.add_argument("--segments", help="comma-separated chrom:start-end: fixed reference segments for every read (e.g. the "
+                   "two SDs of a GD +/- flank) instead of each read's alignment spans +/- --pad")
     p.add_argument("--segdup")
     p.add_argument("--genes")
     p.add_argument("--requester-pays-project")
@@ -79,6 +82,7 @@ def main():
     os.makedirs(a.outdir, exist_ok=True)
 
     chrom, rs_, re_ = rr.parse_region(a.region)
+    fixed = [rr.parse_region(x) for x in a.segments.split(",")] if a.segments else None
     chroms = None if a.all_chroms else {chrom}
     bam = pysam.AlignmentFile(a.bam)
     # candidates: reads overlapping the region by >= min_overlap with a supplementary alignment somewhere (SA tag)
@@ -106,7 +110,7 @@ def main():
         summary.write("read_name\tfile_id\tn_alignments\talignments\tsegments\tbundled\n")
         for k, (name, use) in enumerate(split):
             fid = re.sub(r"[^A-Za-z0-9._-]", "_", name)
-            segs = rs.segments_from(use, a.pad)
+            segs = fixed if fixed else rs.segments_from(use, a.pad)
             total = sum(e - s + 1 for _, s, e in segs)
             desc = ",".join(f"{r.reference_name}:{r.reference_start + 1}-{r.reference_end}"
                             f"({'-' if r.is_reverse else '+'},{'supplementary' if r.is_supplementary else 'primary'})"

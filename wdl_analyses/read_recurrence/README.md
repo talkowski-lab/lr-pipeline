@@ -53,8 +53,9 @@ read_split_recurrence.py: the read's alignments (BAM), its reference segments (e
 small FASTA, and the SD and gene tracks cut to them.
 ```
 python3 list_split_reads.py --bam asm_h1.bam --region chr16:28000000-30500000 --ref hg38.fa --out hap1 --outdir bundles \
-  [--pad 20000] [--segdup segdups.bed.gz] [--genes genes.gtf.gz]
+  [--pad 20000] [--segdup segdups.bed.gz] [--genes genes.gtf.gz] [--segments chr16:S1-E1,chr16:S2-E2]
 ```
+`--segments` gives every read the same fixed reference segments (e.g. BP4 and BP5 SDs +/- 50 kb).
 Outputs: `<out>.split_reads.tsv` (read_name file_id n_alignments alignments segments bundled) and
 `<outdir>/<out>.<file_id>.tar.gz` (read.bam, segments.fa, segments.txt, read_name.txt, segdup.bed, genes.gtf).
 
@@ -80,4 +81,12 @@ reference segments are drawn side by side, each panel as wide as its segment.
 ```
 Rscript plot_read_ref_recurrence.R --prefix hap1__hg38__h1tg003138l --out hap1__hg38__h1tg003138l.pdf \
   [--segdup segdups.bed.gz] [--genes genes.gtf.gz] [--ref-label hg38] [--title ...] [--max-copies 5]
+  [--segment-names BP4,BP5] [--regions "BP4 SD=chr16:S-E;BP5 SD=chr16:S-E"] [--sections blocks.tsv]
 ```
+
+## references/16p11_BP4_BP5_SDs.flank50kb.hg38_blocks.tsv
+hg38 block layout of the 16p11.2 BP4 and BP5 SDs +/- 50 kb (segment_structure.py on the SD-vs-SD recurrence): A B1 C1
+B2 D1 E | C2 B3 D2 F; copies of one block share the letter (B = the NPIPB unit, C and D = the near-identical BP4/BP5
+copies). Use as SplitReadRecurrence `blocks_tsv` with
+`ref_segments = chr16:29274176-29688676,chr16:30138532-30393458`, `segment_names = BP4,BP5`,
+`region_labels = BP4 SD=chr16:29324176-29638676;BP5 SD=chr16:30188532-30343458`.
