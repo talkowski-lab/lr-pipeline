@@ -7,7 +7,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         python3 python3-pip fontconfig fonts-liberation \
     && rm -rf /var/lib/apt/lists/*
 RUN pip3 install --no-cache-dir pysam==0.23.0 numpy==1.26.4
-RUN install2.r --error --skipinstalled ggplot2 data.table optparse patchwork
+RUN install2.r --error --skipinstalled ggplot2 data.table R.utils optparse patchwork
 
 COPY wdl_analyses/read_recurrence /opt/read_recurrence
 RUN chmod +x /opt/read_recurrence/*.py /opt/read_recurrence/*.R

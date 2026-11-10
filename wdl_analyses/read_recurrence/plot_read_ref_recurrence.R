@@ -104,12 +104,12 @@ if (!is.null(opt$genes)) {
       geom_rect(aes(xmin = start / 1e6, xmax = end / 1e6, ymin = -lane + 0.55, ymax = -lane + 0.85), fill = "#3C3C3C") +
       geom_text(aes(x = (start + end) / 2e6, y = -lane + 0.3, label = name), size = 7.76 * 0.6,
                 family = font_family, fontface = "italic") +
-      coord_cartesian(xlim = yr, ylim = c(-max(g$lane), 1), expand = FALSE, clip = "off") +
+      coord_cartesian(xlim = yr, ylim = c(-max(g$lane) - 0.1, 1), expand = FALSE, clip = "off") +
       labs(x = NULL, y = "genes") + track_theme
   }
 }
 panels <- c(list(p), tracks)
-heights <- c(1, if (!is.null(tracks$SD)) 0.03, if (!is.null(tracks$genes)) 0.06 * max(tracks$genes$data$lane))
+heights <- c(1, if (!is.null(tracks$SD)) 0.03, if (!is.null(tracks$genes)) 0.06 * (max(tracks$genes$data$lane) + 1))
 for (i in seq_along(panels)) {
   last <- i == length(panels)
   panels[[i]] <- panels[[i]] + labs(x = if (last) xlab else NULL, caption = if (last) cap else NULL) +
