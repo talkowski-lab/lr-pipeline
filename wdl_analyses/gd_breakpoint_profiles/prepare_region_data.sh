@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Prepare depth (RD), BAF and genotype (GT) tables for one region, with samples subset and renamed, in one run:
 #   1. RD:  tabix the region out of the cohort RD matrix (header kept)               -> <name>.RD.txt.gz
-#   2. VCF: fetch the region from the per-chromosome small-variant VCF (local or gs://, requester pays via pysam)
+#   2. VCF: fetch the region from the per-chromosome small-variant VCF (local or gs://, requester pays via pysam;
+#           fetch_vcf_window.py refreshes the token during long reads and resumes after read errors)
 #                                                                                     -> <name>.vcf.gz (+ .tbi)
 #   3. BAF: per-sample BAF from FORMAT/AD (vcf_to_baf_table.py)                        -> <name>.baf.tsv.gz
 #   4. GT:  per-sample genotypes (extract_gt.py, pysam)                               -> <name>.GT.tsv.gz
@@ -26,7 +27,7 @@
 #   --id-map   2 columns: real sample ID, new sample ID (samples missing from a table are skipped)
 #   --keep-intermediate  keep the non-renamed tables and the region VCF (removed by default)
 # Needs: tabix, bgzip, python3 with pysam and pandas; helper scripts vcf_to_baf_table.py (or --baf-script),
-# extract_gt.py, subset_rename_samples.py.
+# extract_gt.py, subset_rename_samples.py, fetch_vcf_window.py.
 set -euo pipefail
 
 usage() { sed -n '2,29p' "$0" | sed 's/^# \{0,1\}//'; exit 1; }
@@ -43,7 +44,7 @@ while [[ $# -gt 0 ]]; do
 done
 required=(chr start end name rd idmap); [[ $rd_only -eq 0 ]] && required+=(vcf)
 for v in "${required[@]}"; do [[ -z "${!v}" ]] && { echo "missing --${v/idmap/id-map}" >&2; usage; }; done
-helpers=(subset_rename_samples.py); [[ $rd_only -eq 0 ]] && helpers+=("$baf_script" extract_gt.py)
+helpers=(subset_rename_samples.py); [[ $rd_only -eq 0 ]] && helpers+=("$baf_script" extract_gt.py fetch_vcf_window.py)
 for s in "${helpers[@]}"; do
   [[ -f "$sdir/$s" ]] || { echo "helper script not found: $sdir/$s (set --scripts-dir)" >&2; exit 1; }
 done
@@ -86,23 +87,8 @@ PY
 
 outs=("$p.renamed.RD.txt.gz")
 if [[ $rd_only -eq 0 ]]; then
-  # 2. Region VCF (pysam handles gs:// with an OAuth token and requester pays)
-  python3 - "$vcf" "$chr" "$start" "$end" "$p.vcf.gz" <<'PY'
-import sys
-import pysam
-path, chrom, start, end, out_path = sys.argv[1], sys.argv[2], int(sys.argv[3]), int(sys.argv[4]), sys.argv[5]
-vcf = pysam.VariantFile(path)
-if chrom not in vcf.header.contigs:
-    sys.exit(f"{chrom} is not a contig of {path}")
-out = pysam.VariantFile(out_path, "wz", header=vcf.header)
-n = 0
-for rec in vcf.fetch(chrom, start - 1, end):
-    out.write(rec)
-    n += 1
-out.close()
-print(f"VCF: {n} records, {len(vcf.header.samples)} samples", file=sys.stderr)
-PY
-  tabix -f -p vcf "$p.vcf.gz"
+  # 2. Region VCF (pysam; gs:// with an OAuth token refreshed during long reads, resuming after read errors)
+  python3 "$sdir/fetch_vcf_window.py" --vcf "$vcf" --region "$region" --out "$p.vcf.gz"
 
   # Samples for BAF/GT: --samples or column 1 of the ID map, limited to samples in the VCF
   src="$samples"

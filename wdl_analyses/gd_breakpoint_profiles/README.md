@@ -77,6 +77,14 @@ VCF are listed in `skipped_loci`.
   and locus RD tables, `<prefix>_GD_breakpoint_tables/<chrom>/<locus>/`.
 - `gd_contigs`, `skipped_loci`.
 
+### fetch_vcf_window.py
+One region of a VCF (local or gs://) into an indexed VCF, robust to long remote reads: for gs:// the file is reopened
+with a fresh OAuth token every 40 min (tokens last about an hour) and, after a read error ("truncated file"), reopened
+and resumed right after the last record written (at most 6 errors). Used by prepare_region_data.sh (step 2).
+```
+python3 fetch_vcf_window.py --vcf gs://.../chr1.g.vcf.bgz --region chr1:145541830-147568500 --out window.vcf.gz
+```
+
 ### extract_gd_cluster_data.sh
 Depth, BAF and GT for every breakpoint SD of one GD cluster (SD +/- half its length) and depth across the whole span
 (first SD start minus its flank to last SD end plus its flank), samples renamed; e.g. 22q11.21 A-D:
