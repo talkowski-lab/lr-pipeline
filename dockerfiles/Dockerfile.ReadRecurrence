@@ -1,0 +1,13 @@
+# Read/contig recurrence (dot) plots against hg38 and T2T-CHM13 (ReadRecurrence.wdl): pysam + numpy matching, R plots.
+# Build from the repository root:
+#   podman build --platform linux/amd64 -f dockerfiles/Dockerfile.ReadRecurrence -t <registry>/read-recurrence:<tag> .
+FROM rocker/r-ver:4.4.1
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        python3 python3-pip fontconfig fonts-liberation \
+    && rm -rf /var/lib/apt/lists/*
+RUN pip3 install --no-cache-dir pysam==0.23.0 numpy==1.26.4
+RUN install2.r --error --skipinstalled ggplot2 data.table optparse patchwork
+
+COPY wdl_analyses/read_recurrence /opt/read_recurrence
+RUN chmod +x /opt/read_recurrence/*.py /opt/read_recurrence/*.R

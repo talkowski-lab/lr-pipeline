@@ -1,0 +1,54 @@
+# read_recurrence
+
+Recurrence (dot) plots of reads or assembly contigs aligned to hg38 across one region, against hg38 and T2T-CHM13.
+Run by `wdl_analyses/ReadRecurrence.wdl` (image built from `dockerfiles/Dockerfile.ReadRecurrence`, scripts in
+`/opt/read_recurrence`); every script also runs on its own (`-h` prints usage).
+
+## prepare_region.py
+hg38 region +/- flank and the region lifted to T2T (UCSC chain hg38 -> CHM13) +/- flank, each as a small FASTA with one
+sequence named `chrom:start-end`.
+```
+python3 prepare_region.py --region chr16:29324175-29638676 --flank 5000 --hg38-ref hg38.fa --t2t-ref chm13v2.0.fa.bgz \
+  --chain grch38-chm13v2.chain --out 16p_bp4 [--t2t-region chr16:...] [--lift-step 1000]
+```
+Outputs: `<out>.hg38.fa`, `<out>.t2t.fa` (+ .fai), `<out>.t2t_region.txt`, `<out>.lift.tsv` (each lifted point).
+
+## list_region_reads.py
+Reads/contigs whose non-secondary alignments overlap the region (>= `--min-overlap` bp; `--spanning-only`: covering the
+whole region; at most `--max-reads`, largest overlap first), and one small BAM per read with all its primary and
+supplementary alignments (SA tag followed).
+```
+python3 list_region_reads.py --bam asm_h1.bam --region chr16:29324175-29638676 --out hap1 --outdir reads
+```
+Outputs: `<out>.reads.tsv` (read_name file_id n_alignments strands overlap_bp aligned_start aligned_end spans_region kept),
+`<outdir>/<out>.<file_id>.bam` (+ .bai).
+
+## read_ref_recurrence.py
+One read against a reference: the read is cut by its CIGAR to the part aligned to `--region` (+/- `--pad`), split into
+`--window` bp windows (`--step` apart; default = window), and every window is matched against `--region` +/- `--pad` with
+edit distance <= `--max-ed-frac` x window on both strands (exact seed-and-verify). `--orient-to-ref` reverse-complements
+reads that match mostly on the reverse strand so that their diagonal runs forward. `--ref` may be a whole genome or a
+`chrom:start-end` segment FASTA.
+```
+python3 read_ref_recurrence.py --bam hap1.ctg.bam --read-name h1tg003138l --region chr16:29324175-29638676 \
+  --ref 16p_bp4.hg38.fa --out hap1__hg38__h1tg003138l --pad 5000 --threads 4 --orient-to-ref
+```
+Outputs: `<out>.hits.tsv` (read_start read_end strand ref_start ref_end edit_distance identity), `<out>.aln.tsv` (the
+read's alignment blocks), `<out>.info.tsv` (read, segments, orientation, settings).
+
+## read_t2t_recurrence.py
+As read_ref_recurrence.py, against T2T-CHM13: `--region` is lifted through `--chain` (or `--t2t-region` is used) and the
+hg38 alignment blocks are lifted for the guide lines. Extra outputs: `<out>.lift.tsv`.
+```
+python3 read_t2t_recurrence.py --bam hap1.ctg.bam --read-name h1tg003138l --region chr16:29324175-29638676 \
+  --chain grch38-chm13v2.chain --t2t-ref 16p_bp4.t2t.fa --t2t-region $(cat 16p_bp4.t2t_region.txt) \
+  --out hap1__T2T__h1tg003138l --pad 5000 --orient-to-ref
+```
+
+## plot_read_ref_recurrence.R
+Plot from either script's outputs: reference on x (SD and gene tracks underneath), read on y; blue forward, red reverse
+complement, windows with > `--max-copies` hits faint grey, the read's alignment blocks as grey lines.
+```
+Rscript plot_read_ref_recurrence.R --prefix hap1__hg38__h1tg003138l --out hap1__hg38__h1tg003138l.pdf \
+  [--segdup segdups.bed.gz] [--genes genes.gtf.gz] [--ref-label hg38] [--title ...] [--max-copies 5]
+```
