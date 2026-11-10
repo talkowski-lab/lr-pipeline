@@ -3,7 +3,8 @@ version 1.0
 # Recurrence (dot) plots of the reads or assembly contigs of two haplotype BAMs (aligned to hg38) across one region,
 # against hg38 and against T2T-CHM13.
 # 1. PrepareRegion (once): hg38 region +/- flank, and the region lifted to T2T through an hg38 -> CHM13 chain file
-#    +/- flank, as two small FASTAs (one sequence named chrom:start-end each).
+#    +/- flank, as two small FASTAs (one sequence named chrom:start-end each); the optional SD and gene tracks are cut
+#    to the two segments (empty files when not given).
 # 2. ListRegionReads (per haplotype): reads whose non-secondary alignments overlap the region by >= min_overlap bp
 #    (spanning_only: also covering the whole region), at most max_reads per haplotype; one small BAM per read with all its
 #    primary and supplementary alignments (SA tag followed).
@@ -93,6 +94,10 @@ workflow ReadRecurrence {
             t2t_fai = t2t_fai,
             t2t_gzi = t2t_gzi,
             chain = chain,
+            hg38_segdup_bed = hg38_segdup_bed,
+            hg38_genes_gtf = hg38_genes_gtf,
+            t2t_segdup_bed = t2t_segdup_bed,
+            t2t_genes_gtf = t2t_genes_gtf,
             docker = recurrence_docker,
             runtime_attr_override = runtime_attr_prepare_region
     }
@@ -122,8 +127,8 @@ workflow ReadRecurrence {
                     max_ed_frac = max_ed_frac,
                     reference_name = "hg38",
                     ref_fa = PrepareRegion.hg38_segment_fa,
-                    segdup_bed = hg38_segdup_bed,
-                    genes_gtf = hg38_genes_gtf,
+                    segdup_bed = PrepareRegion.hg38_segdup_region,
+                    genes_gtf = PrepareRegion.hg38_genes_region,
                     threads = recurrence_threads,
                     prefix = hap.left,
                     docker = recurrence_docker,
@@ -142,8 +147,8 @@ workflow ReadRecurrence {
                     ref_fa = PrepareRegion.t2t_segment_fa,
                     chain = chain,
                     t2t_segment = PrepareRegion.t2t_segment,
-                    segdup_bed = t2t_segdup_bed,
-                    genes_gtf = t2t_genes_gtf,
+                    segdup_bed = PrepareRegion.t2t_segdup_region,
+                    genes_gtf = PrepareRegion.t2t_genes_region,
                     threads = recurrence_threads,
                     prefix = hap.left,
                     docker = recurrence_docker,
@@ -185,6 +190,10 @@ task PrepareRegion {
         File t2t_fai
         File? t2t_gzi
         File chain
+        File? hg38_segdup_bed
+        File? hg38_genes_gtf
+        File? t2t_segdup_bed
+        File? t2t_genes_gtf
         String docker
         RuntimeAttr? runtime_attr_override
     }
@@ -212,6 +221,27 @@ task PrepareRegion {
             --chain ~{chain} \
             ~{"--t2t-region " + t2t_region} \
             --out ~{prefix}
+
+        # SD and gene tracks cut to the two segments (empty files when a track is not given), so that the per-read jobs
+        # get small, always-defined track files
+        subset() {
+            local in=$1 region=$2 kind=$3 out=$4
+            : > "${out}"
+            [[ -z "${in}" ]] && return 0
+            local chrom=${region%%:*} rng=${region#*:}
+            local s=${rng%-*} e=${rng#*-}
+            if [[ "${in}" == *.gz ]]; then gzip -cd "${in}"; else cat "${in}"; fi \
+                | awk -F'\t' -v c="${chrom}" -v s="${s}" -v e="${e}" -v k="${kind}" \
+                    'k == "bed" && $1 == c && $3 >= s && $2 <= e; k == "gtf" && $1 == c && $3 == "gene" && $5 >= s && $4 <= e' \
+                > "${out}"
+            echo "${in}: $(wc -l < "${out}") features in ${region}" >&2
+        }
+        hg38_seg=$(head -n 1 ~{prefix}.hg38.fa | tr -d '>')
+        t2t_seg=$(cat ~{prefix}.t2t_region.txt)
+        subset "~{hg38_segdup_bed}" "${hg38_seg}" bed ~{prefix}.hg38.segdup.bed
+        subset "~{hg38_genes_gtf}" "${hg38_seg}" gtf ~{prefix}.hg38.genes.gtf
+        subset "~{t2t_segdup_bed}" "${t2t_seg}" bed ~{prefix}.t2t.segdup.bed
+        subset "~{t2t_genes_gtf}" "${t2t_seg}" gtf ~{prefix}.t2t.genes.gtf
     >>>
 
     output {
@@ -219,12 +249,16 @@ task PrepareRegion {
         File t2t_segment_fa = "~{prefix}.t2t.fa"
         String t2t_segment = read_string("~{prefix}.t2t_region.txt")
         File lift_tsv = "~{prefix}.lift.tsv"
+        File hg38_segdup_region = "~{prefix}.hg38.segdup.bed"
+        File hg38_genes_region = "~{prefix}.hg38.genes.gtf"
+        File t2t_segdup_region = "~{prefix}.t2t.segdup.bed"
+        File t2t_genes_region = "~{prefix}.t2t.genes.gtf"
     }
 
     RuntimeAttr default_attr = object {
         cpu_cores: 1,
         mem_gb: 4,
-        disk_gb: ceil(size([hg38_fa, t2t_fa, chain], "GB")) + 10,
+        disk_gb: ceil(size([hg38_fa, t2t_fa, chain], "GB") + size([hg38_segdup_bed, hg38_genes_gtf, t2t_segdup_bed, t2t_genes_gtf], "GB")) + 10,
         boot_disk_gb: 10,
         preemptible_tries: 2,
         max_retries: 0
@@ -309,8 +343,8 @@ task Recurrence {
         File ref_fa
         File? chain
         String? t2t_segment
-        File? segdup_bed
-        File? genes_gtf
+        File segdup_bed
+        File genes_gtf
         Int threads
         String prefix
         String docker
@@ -362,12 +396,15 @@ task Recurrence {
         fi
         gzip tables/~{out}.hits.tsv
 
+        # tracks are empty files when not given
+        tracks=()
+        if [[ -s ~{segdup_bed} ]]; then tracks+=(--segdup ~{segdup_bed}); fi
+        if [[ -s ~{genes_gtf} ]]; then tracks+=(--genes ~{genes_gtf}); fi
         Rscript /opt/read_recurrence/plot_read_ref_recurrence.R \
             --prefix tables/~{out} \
             --ref-label "$label" \
             --title "~{prefix} $read_name vs $label; ~{window} bp windows, step ~{step}" \
-            ~{"--segdup " + segdup_bed} \
-            ~{"--genes " + genes_gtf} \
+            ${tracks[@]+"${tracks[@]}"} \
             --out ~{out}.pdf
     >>>
 
@@ -379,7 +416,7 @@ task Recurrence {
     RuntimeAttr default_attr = object {
         cpu_cores: threads,
         mem_gb: 8,
-        disk_gb: 2 * ceil(size([read_bam, ref_fa], "GB")) + ceil(size([segdup_bed, genes_gtf, chain], "GB")) + 10,
+        disk_gb: 2 * ceil(size([read_bam, ref_fa, segdup_bed, genes_gtf], "GB")) + ceil(size(chain, "GB")) + 10,
         boot_disk_gb: 10,
         preemptible_tries: 2,
         max_retries: 0
