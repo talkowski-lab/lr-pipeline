@@ -5,10 +5,10 @@ version 1.0
 #   sv_summary          over the whole interval
 #   breakpoint_summary  over +/- breakpoint_flank bp windows at the two breakpoints (first base start+1 and last base
 #                       end; the union when they overlap); insertions (svtype INS / INS:*) use their interval as is
-# Columns of both: chrom start end name svtype n_bases n_snv mean_phred max_phred n_ge10 n_ge15 n_ge20 n_ge30 n_indel
-#   max_indel_phred (breakpoint_summary adds left_max_phred right_max_phred). n_bases = positions summarized; n_snv =
-#   scored SNVs (all 3 alternative alleles per base); indels = CADD-scored gnomAD v4 indels starting in the interval;
-#   NA when there is nothing to summarize.
+# Columns of both: chrom start end name svtype n_bases n_snv mean_phred max_phred n_ge10 n_ge15 n_ge20 n_ge30 n_ge40
+#   n_ge50 n_ge60 n_ge70 n_indel max_indel_phred (breakpoint_summary adds left_max_phred right_max_phred). n_bases =
+#   positions summarized; n_snv = scored SNVs (all 3 alternative alleles per base); n_geX = scored SNVs with PHRED >= X;
+#   indels = CADD-scored gnomAD v4 indels starting in the interval; NA when there is nothing to summarize.
 # 1. SplitByChrom: one BED per chromosome (input order kept within a chromosome).
 # 2. ScoreChrom (one job per chromosome): the chromosome's CADD SNV and indel scores are streamed once (pysam; https or
 #    gs://, resuming after read errors) into per-base arrays, from which every SV of the chromosome is summarized.
@@ -223,7 +223,7 @@ print(f"{chrom}: SNV scores read in {time.time() - t0:.0f} s", file=sys.stderr)
 cnt = np.zeros(L, dtype=np.uint8)
 psum = np.zeros(L, dtype=np.float32)
 pmax = np.zeros(L, dtype=np.uint16)
-thr = [10, 15, 20, 30]
+thr = [10, 15, 20, 30, 40, 50, 60, 70]
 ge = np.zeros((len(thr), L), dtype=np.uint8)
 for a in range(0, L, 10_000_000):
     b = min(L, a + 10_000_000)
@@ -328,7 +328,7 @@ task MergeSummaries {
     command <<<
         set -euo pipefail
 
-        cols="chrom\tstart\tend\tname\tsvtype\tn_bases\tn_snv\tmean_phred\tmax_phred\tn_ge10\tn_ge15\tn_ge20\tn_ge30\tn_indel\tmax_indel_phred"
+        cols="chrom\tstart\tend\tname\tsvtype\tn_bases\tn_snv\tmean_phred\tmax_phred\tn_ge10\tn_ge15\tn_ge20\tn_ge30\tn_ge40\tn_ge50\tn_ge60\tn_ge70\tn_indel\tmax_indel_phred"
         merge() {
             local list=$1 out=$2 header=$3
             { printf "#%b\n" "${header}"; while read -r f; do cat "${f}"; done < "${list}" \
