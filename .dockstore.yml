@@ -753,6 +753,17 @@ workflows:
         - /.*/
 
   - subclass: WDL
+    name: SplitReadRecurrence
+    primaryDescriptorPath: /wdl_analyses/SplitReadRecurrence.wdl
+    publish: true
+    filters:
+      branches:
+        - main
+        - xz_analyses
+      tags:
+        - /.*/
+
+  - subclass: WDL
     name: LocalAssemblyHifiasm
     primaryDescriptorPath: /wdl_analyses/LocalAssemblyHifiasm.wdl
     filters:

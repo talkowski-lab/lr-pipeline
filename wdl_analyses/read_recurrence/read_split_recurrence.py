@@ -34,6 +34,23 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import read_ref_recurrence as rr  # noqa: E402
 
 
+def used_alignments(alns, chroms):
+    """Primary/supplementary alignments on the given chromosomes (all when chroms is None), sorted by position."""
+    return sorted((r for r in alns if chroms is None or r.reference_name in chroms),
+                  key=lambda r: (r.reference_name, r.reference_start))
+
+
+def segments_from(use, pad):
+    """Reference segments: each alignment's span +/- pad (1-based, inclusive), overlapping segments merged."""
+    segs = []
+    for c, s, e in sorted((r.reference_name, max(1, r.reference_start + 1 - pad), r.reference_end + pad) for r in use):
+        if segs and segs[-1][0] == c and s <= segs[-1][2]:
+            segs[-1] = (c, segs[-1][1], max(segs[-1][2], e))
+        else:
+            segs.append((c, s, e))
+    return segs
+
+
 def main():
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     rr.common_args(p)
@@ -51,8 +68,7 @@ def main():
     alns, prim, seq = rr.fetch_read(bam, a.read_name, a.region)
     qlen = len(seq)
     chroms = None if a.all_chroms or not a.region else {rr.parse_region(a.region)[0]}
-    use = sorted((r for r in alns if chroms is None or r.reference_name in chroms),
-                 key=lambda r: (r.reference_name, r.reference_start))
+    use = used_alignments(alns, chroms)
     if not use:
         sys.exit("no alignment of the read on the chromosome of --region")
     spans = []
@@ -72,13 +88,7 @@ def main():
     if a.segments:
         segs = [rr.parse_region(x) for x in a.segments.split(",")]
     else:
-        raw = sorted((r.reference_name, max(1, r.reference_start + 1 - a.pad), r.reference_end + a.pad) for r in use)
-        segs = []
-        for c, s, e in raw:
-            if segs and segs[-1][0] == c and s <= segs[-1][2]:
-                segs[-1] = (c, segs[-1][1], max(segs[-1][2], e))
-            else:
-                segs.append((c, s, e))
+        segs = segments_from(use, a.pad)
     total = sum(e - s + 1 for _, s, e in segs)
     if total > a.max_ref:
         sys.exit(f"reference segments total {total:,} bp, more than --max-ref {a.max_ref:,}; use --segments")

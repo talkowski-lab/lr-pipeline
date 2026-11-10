@@ -1,7 +1,8 @@
 # read_recurrence
 
 Recurrence (dot) plots of reads or assembly contigs aligned to hg38 across one region, against hg38 and T2T-CHM13.
-Run by `wdl_analyses/ReadRecurrence.wdl` (image built from `dockerfiles/Dockerfile.ReadRecurrence`, scripts in
+Run by `wdl_analyses/ReadRecurrence.wdl` (every read in the region) and `wdl_analyses/SplitReadRecurrence.wdl` (only the
+split-aligned reads, each against all its aligned segments side by side) (image built from `dockerfiles/Dockerfile.ReadRecurrence`, scripts in
 `/opt/read_recurrence`); every script also runs on its own (`-h` prints usage).
 
 ## prepare_region.py
@@ -44,6 +45,18 @@ python3 read_t2t_recurrence.py --bam hap1.ctg.bam --read-name h1tg003138l --regi
   --chain grch38-chm13v2.chain --t2t-ref 16p_bp4.t2t.fa --t2t-region $(cat 16p_bp4.t2t_region.txt) \
   --out hap1__T2T__h1tg003138l --pad 5000 --orient-to-ref
 ```
+
+## list_split_reads.py
+Split-aligned reads of a region (>= `--min-alignments` primary/supplementary alignments on the region's chromosome, one
+overlapping the region by >= `--min-overlap` bp; secondary alignments ignored) and one bundle per read for
+read_split_recurrence.py: the read's alignments (BAM), its reference segments (each alignment +/- `--pad`, merged) as a
+small FASTA, and the SD and gene tracks cut to them.
+```
+python3 list_split_reads.py --bam asm_h1.bam --region chr16:28000000-30500000 --ref hg38.fa --out hap1 --outdir bundles \
+  [--pad 20000] [--segdup segdups.bed.gz] [--genes genes.gtf.gz]
+```
+Outputs: `<out>.split_reads.tsv` (read_name file_id n_alignments alignments segments bundled) and
+`<outdir>/<out>.<file_id>.tar.gz` (read.bam, segments.fa, segments.txt, read_name.txt, segdup.bed, genes.gtf).
 
 ## read_split_recurrence.py
 A read/contig with a split alignment (primary + supplementary, e.g. the two sides of a large deletion) against all its
