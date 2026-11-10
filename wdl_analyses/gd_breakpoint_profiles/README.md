@@ -67,6 +67,15 @@ GD call IDs with carriers; `gd_loci.windows.tsv`, 39 loci; the two SD references
 `wdl_analyses/GDBreakpointProfiles.inputs.json` (fill in the workspace paths of loci_tsv, rd_matrix, rd_medians,
 samples, id_map and the SD BEDs, and the requester-pays project). gvcfs: one VCF per contig, e.g.
 `gs://prod-drc-broad/longreads/demo_group/work_in_progress/pacbio_unfiltered_small_variants_per_chromosome/chr16.g.vcf.bgz`.
+Give all contig VCFs in one run (not one run per contig): SelectLoci reads the loci table, keeps only the contigs that
+carry GD loci (`gd_contigs` output: contig, number of loci, matched VCF) and runs their loci; loci on a contig without a
+VCF are listed in `skipped_loci`.
+
+## Workflow outputs
+- `breakpoint_profiles_tar`: all profile PDFs, `<prefix>_GD_breakpoint_profiles/<chrom>/<prefix>.<locus>.breakpoint_profile.pdf`.
+- `breakpoint_tables_tar`: per locus, the ranked BAF-loss tables, the PlotLocus tables tar and the renamed window RD/BAF/GT
+  and locus RD tables, `<prefix>_GD_breakpoint_tables/<chrom>/<locus>/`.
+- `gd_contigs`, `skipped_loci`.
 
 ### extract_gd_cluster_data.sh
 Depth, BAF and GT for every breakpoint SD of one GD cluster (SD +/- half its length) and depth across the whole span

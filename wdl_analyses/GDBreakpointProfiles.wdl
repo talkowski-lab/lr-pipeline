@@ -11,8 +11,12 @@ version 1.0
 #   1 locus, 2 chrom, 3 gd_start, 4 gd_end, 7 highlight_pattern, 8 left_sd_name, 12-13 left window,
 #   14 right_sd_name, 18-19 right window.
 # gvcfs: one VCF per contig (local or gs://, bgzipped + tabix index next to it); the VCF of a contig is the path
-#   containing "<contig>." or "<contig>_" after a "/" (e.g. .../chr16.g.vcf.bgz). Only loci on a contig with a VCF are
-#   run (the others are listed in skipped_loci), and only the windows are streamed.
+#   whose file name starts with "<contig>." or "<contig>_" (e.g. .../chr16.g.vcf.bgz). SelectLoci reads the loci table first,
+#   lists the contigs that carry GD loci (gd_contigs) and matches each to its VCF; only those contigs' loci are run (loci
+#   whose contig has no VCF are listed in skipped_loci), and only the windows are streamed. Run the workflow once with all
+#   contig VCFs (e.g. on the contig set), not once per contig.
+# Outputs: all profile PDFs in one tar.gz (<prefix>_GD_breakpoint_profiles/<chrom>/<locus>.breakpoint_profile.pdf) and
+#   all tables in another (<prefix>_GD_breakpoint_tables/<chrom>/<locus>/...).
 # rd_matrix: cohort read-depth matrix ('#Chr Start End <samples>', bgzipped + .tbi); only the windows are streamed.
 # Samples in the output tables and figures are renamed with id_map (real ID -> new ID; unmapped samples are dropped).
 
@@ -42,6 +46,7 @@ workflow GDBreakpointProfiles {
         RuntimeAttr? runtime_attr_prepare_window
         RuntimeAttr? runtime_attr_prepare_locus_depth
         RuntimeAttr? runtime_attr_plot_locus
+        RuntimeAttr? runtime_attr_bundle_outputs
     }
 
     parameter_meta {
@@ -73,7 +78,7 @@ workflow GDBreakpointProfiles {
 
         call PrepareWindow as PrepareLeft {
             input:
-                gvcfs = gvcfs,
+                gvcf = row[19],
                 rd_matrix = rd_matrix,
                 chrom = row[1],
                 win_start = row[11],
@@ -88,7 +93,7 @@ workflow GDBreakpointProfiles {
 
         call PrepareWindow as PrepareRight {
             input:
-                gvcfs = gvcfs,
+                gvcf = row[19],
                 rd_matrix = rd_matrix,
                 chrom = row[1],
                 win_start = row[17],
@@ -143,14 +148,30 @@ workflow GDBreakpointProfiles {
         }
     }
 
+    call BundleOutputs {
+        input:
+            chroms = SelectLoci.chroms,
+            loci = SelectLoci.loci,
+            profile_pdfs = PlotLocus.profile_pdf,
+            left_ranked = PlotLocus.left_ranked,
+            right_ranked = PlotLocus.right_ranked,
+            locus_tables = PlotLocus.tables_tar,
+            left_window_rd = PrepareLeft.rd,
+            left_window_baf = PrepareLeft.baf,
+            left_window_gt = PrepareLeft.gt,
+            right_window_rd = PrepareRight.rd,
+            right_window_baf = PrepareRight.baf,
+            right_window_gt = PrepareRight.gt,
+            locus_rd = PrepareLocusDepth.rd,
+            prefix = prefix,
+            docker = gd_docker,
+            runtime_attr_override = runtime_attr_bundle_outputs
+    }
+
     output {
-        Array[File] breakpoint_profiles = PlotLocus.profile_pdf
-        Array[File] left_breakpoint_tables = PlotLocus.left_ranked
-        Array[File] right_breakpoint_tables = PlotLocus.right_ranked
-        Array[File] locus_tables = PlotLocus.tables_tar
-        Array[File] left_window_tables = flatten([PrepareLeft.rd, PrepareLeft.baf, PrepareLeft.gt])
-        Array[File] right_window_tables = flatten([PrepareRight.rd, PrepareRight.baf, PrepareRight.gt])
-        Array[File] locus_depth_tables = PrepareLocusDepth.rd
+        File breakpoint_profiles_tar = BundleOutputs.profiles_tar
+        File breakpoint_tables_tar = BundleOutputs.tables_tar
+        File gd_contigs = SelectLoci.contigs
         File skipped_loci = SelectLoci.skipped
     }
 }
@@ -167,8 +188,8 @@ task SelectLoci {
     command <<<
         set -euo pipefail
 
-        # Keep only loci whose chromosome has a VCF in gvcfs (a path containing "/<chrom>." or "/<chrom>_");
-        # the header line is dropped and skipped loci are listed in <prefix>.loci.skipped.tsv
+        # Rows (header dropped) of the loci on contigs that have a VCF in gvcfs, with that VCF appended as column 20;
+        # loci on other contigs are listed in <prefix>.loci.skipped.tsv
         loci=~{default="/opt/gd_scripts/references/gd_loci.windows.tsv" tsv}
         # The loci table must be gd_sd_windows.py output: header starting with "locus", 19 tab-separated columns
         if ! head -n 1 "${loci}" | grep -q "^locus"$'\t'"chrom"; then
@@ -181,21 +202,34 @@ task SelectLoci {
             exit 1
         fi
         tail -n +2 "${loci}" | tr -d '\r' > loci.tsv
+
+        # Contigs that carry GD loci, each matched to its VCF (file name starting with "<chrom>." or "<chrom>_")
+        printf 'contig\tn_loci\tvcf\n' > ~{prefix}.gd_contigs.tsv
         : > ~{prefix}.loci.rows.tsv
         : > ~{prefix}.loci.skipped.tsv
-        while IFS=$'\t' read -r locus chrom rest; do
-            if grep -qE "(^|/)${chrom}[._]" ~{write_lines(gvcfs)}; then
-                printf '%s\t%s\t%s\n' "${locus}" "${chrom}" "${rest}" >> ~{prefix}.loci.rows.tsv
+        cut -f2 loci.tsv | awk '!seen[$0]++' > contigs.txt
+        while read -r chrom; do
+            n=$(awk -F'\t' -v c="${chrom}" '$2 == c' loci.tsv | wc -l | tr -d ' ')
+            vcf=$(grep -E "(^|/)${chrom}[._][^/]*$" ~{write_lines(gvcfs)} | head -n 1 || true)
+            if [[ -n "${vcf}" ]]; then
+                printf '%s\t%s\t%s\n' "${chrom}" "${n}" "${vcf}" >> ~{prefix}.gd_contigs.tsv
+                awk -F'\t' -v OFS='\t' -v c="${chrom}" -v v="${vcf}" '$2 == c {print $0, v}' loci.tsv >> ~{prefix}.loci.rows.tsv
             else
-                printf '%s\t%s\tno VCF for %s in gvcfs\n' "${locus}" "${chrom}" "${chrom}" >> ~{prefix}.loci.skipped.tsv
+                printf '%s\t%s\tno VCF\n' "${chrom}" "${n}" >> ~{prefix}.gd_contigs.tsv
+                awk -F'\t' -v OFS='\t' -v c="${chrom}" '$2 == c {print $1, $2, "no VCF for " c " in gvcfs"}' loci.tsv >> ~{prefix}.loci.skipped.tsv
             fi
-        done < loci.tsv
-        echo "loci kept: $(wc -l < ~{prefix}.loci.rows.tsv); skipped (no VCF for the chromosome): $(wc -l < ~{prefix}.loci.skipped.tsv)" >&2
+        done < contigs.txt
+        cut -f1 ~{prefix}.loci.rows.tsv > ~{prefix}.loci.names.txt
+        cut -f2 ~{prefix}.loci.rows.tsv > ~{prefix}.loci.chroms.txt
+        echo "contigs with GD loci: $(wc -l < contigs.txt) ($(paste -sd, contigs.txt)); loci kept: $(wc -l < ~{prefix}.loci.rows.tsv); skipped (no VCF for the contig): $(wc -l < ~{prefix}.loci.skipped.tsv)" >&2
     >>>
 
     output {
         File rows = "~{prefix}.loci.rows.tsv"
+        File contigs = "~{prefix}.gd_contigs.tsv"
         File skipped = "~{prefix}.loci.skipped.tsv"
+        Array[String] loci = read_lines("~{prefix}.loci.names.txt")
+        Array[String] chroms = read_lines("~{prefix}.loci.chroms.txt")
     }
 
     RuntimeAttr default_attr = object {
@@ -220,7 +254,7 @@ task SelectLoci {
 
 task PrepareWindow {
     input {
-        Array[String] gvcfs
+        String gvcf
         String rd_matrix
         String chrom
         String win_start
@@ -241,19 +275,13 @@ task PrepareWindow {
             http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token \
             | python3 -c 'import json,sys; print(json.load(sys.stdin)["access_token"])')
 
-        gvcf=$(grep -E "(^|/)~{chrom}[._]" ~{write_lines(gvcfs)} | head -n 1 || true)
-        if [[ -z "${gvcf}" ]]; then
-            echo "no VCF for ~{chrom} in gvcfs" >&2
-            exit 1
-        fi
-
         bash /opt/gd_scripts/prepare_region_data.sh \
             --chr ~{chrom} \
             --start $(( ~{win_start} + 1 )) \
             --end ~{win_end} \
             --name ~{prefix} \
             --rd ~{rd_matrix} \
-            --vcf "${gvcf}" \
+            --vcf ~{gvcf} \
             ~{"--samples " + samples} \
             --id-map ~{id_map} \
             ~{"--requester-pays-project " + requester_pays_project}
@@ -435,6 +463,79 @@ task PlotLocus {
         cpu_cores: 2,
         mem_gb: 16,
         disk_gb: 4 * ceil(size([left_rd, left_baf, left_gt, right_rd, right_baf, right_gt, locus_rd], "GB")) + 10,
+        boot_disk_gb: 10,
+        preemptible_tries: 2,
+        max_retries: 0
+    }
+    RuntimeAttr runtime_attr = select_first([runtime_attr_override, default_attr])
+    runtime {
+        cpu: select_first([runtime_attr.cpu_cores, default_attr.cpu_cores])
+        memory: select_first([runtime_attr.mem_gb, default_attr.mem_gb]) + " GiB"
+        disks: "local-disk " + select_first([runtime_attr.disk_gb, default_attr.disk_gb]) + " HDD"
+        bootDiskSizeGb: select_first([runtime_attr.boot_disk_gb, default_attr.boot_disk_gb])
+        docker: docker
+        preemptible: select_first([runtime_attr.preemptible_tries, default_attr.preemptible_tries])
+        maxRetries: select_first([runtime_attr.max_retries, default_attr.max_retries])
+    }
+}
+
+task BundleOutputs {
+    input {
+        Array[String] chroms
+        Array[String] loci
+        Array[File] profile_pdfs
+        Array[File] left_ranked
+        Array[File] right_ranked
+        Array[File] locus_tables
+        Array[File] left_window_rd
+        Array[File] left_window_baf
+        Array[File] left_window_gt
+        Array[File] right_window_rd
+        Array[File] right_window_baf
+        Array[File] right_window_gt
+        Array[File] locus_rd
+        String prefix
+        String docker
+        RuntimeAttr? runtime_attr_override
+    }
+
+    command <<<
+        set -euo pipefail
+
+        # One line per locus (same order as the scatter): chrom, locus, then its files
+        fig=~{prefix}_GD_breakpoint_profiles
+        tab=~{prefix}_GD_breakpoint_tables
+        mkdir -p "${fig}" "${tab}"
+        paste ~{write_lines(chroms)} ~{write_lines(loci)} ~{write_lines(profile_pdfs)} > profiles.tsv
+        while IFS=$'\t' read -r chrom locus pdf; do
+            mkdir -p "${fig}/${chrom}"
+            cp "${pdf}" "${fig}/${chrom}/"
+        done < profiles.tsv
+        paste ~{write_lines(chroms)} ~{write_lines(loci)} ~{write_lines(left_ranked)} ~{write_lines(right_ranked)} \
+            ~{write_lines(locus_tables)} ~{write_lines(left_window_rd)} ~{write_lines(left_window_baf)} \
+            ~{write_lines(left_window_gt)} ~{write_lines(right_window_rd)} ~{write_lines(right_window_baf)} \
+            ~{write_lines(right_window_gt)} ~{write_lines(locus_rd)} > tables.tsv
+        while IFS=$'\t' read -r chrom locus files; do
+            mkdir -p "${tab}/${chrom}/${locus}"
+            for f in ${files}; do
+                cp "${f}" "${tab}/${chrom}/${locus}/"
+            done
+        done < <(awk -F'\t' -v OFS='\t' '{f = $3; for (i = 4; i <= NF; i++) f = f " " $i; print $1, $2, f}' tables.tsv)
+
+        tar -czf ~{prefix}.GD_breakpoint_profiles.tar.gz "${fig}"
+        tar -czf ~{prefix}.GD_breakpoint_tables.tar.gz "${tab}"
+        echo "profiles: $(find "${fig}" -name '*.pdf' | wc -l) PDFs in $(ls "${fig}" | wc -l) chromosome folders" >&2
+    >>>
+
+    output {
+        File profiles_tar = "~{prefix}.GD_breakpoint_profiles.tar.gz"
+        File tables_tar = "~{prefix}.GD_breakpoint_tables.tar.gz"
+    }
+
+    RuntimeAttr default_attr = object {
+        cpu_cores: 1,
+        mem_gb: 2,
+        disk_gb: 3 * ceil(size(profile_pdfs, "GB") + size(locus_tables, "GB") + size(left_window_baf, "GB") + size(right_window_baf, "GB") + size(left_window_rd, "GB") + size(right_window_rd, "GB") + size(left_window_gt, "GB") + size(right_window_gt, "GB") + size(locus_rd, "GB")) + 10,
         boot_disk_gb: 10,
         preemptible_tries: 2,
         max_retries: 0
