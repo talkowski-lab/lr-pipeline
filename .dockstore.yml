@@ -764,6 +764,17 @@ workflows:
         - /.*/
 
   - subclass: WDL
+    name: FetchCaddScores
+    primaryDescriptorPath: /wdl_analyses/FetchCaddScores.wdl
+    publish: true
+    filters:
+      branches:
+        - main
+        - xz_analyses
+      tags:
+        - /.*/
+
+  - subclass: WDL
     name: LocalAssemblyHifiasm
     primaryDescriptorPath: /wdl_analyses/LocalAssemblyHifiasm.wdl
     filters:
