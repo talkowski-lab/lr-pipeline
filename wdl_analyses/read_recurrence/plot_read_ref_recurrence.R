@@ -15,7 +15,8 @@
 #   the axes span the hits and no alignment blocks are drawn.
 #   --segdup / --genes add an SD track and a gene track under the reference (x) axis; --regions marks named regions
 #   (e.g. "BP4 SD=chr16:29324176-29638676;BP5 SD=chr16:30188532-30343458") with dashed lines and a labelled track;
-#   --sections adds the reference block layout (segment_structure.py sections) as a block track; --segment-names names
+#   --sections adds the reference block layout (segment_structure.py sections) as a block track, with dashed lines at the
+#   block boundaries through the dot plot; --segment-names names
 #   the panels.
 suppressPackageStartupMessages({library(ggplot2); library(data.table); library(optparse); library(patchwork)})
 opt <- parse_args(OptionParser(option_list = list(
@@ -170,6 +171,12 @@ if (!is.null(opt$sections)) {
     cl <- unique(bl_all$class)
     bcols <- setNames(pal[(seq_along(cl) - 1) %% length(pal) + 1], cl)
     tot <- sum(segs$end - segs$start)
+    # block boundaries (inside the panels) as dashed lines through the dot plot and the tracks above the blocks
+    bvl <- bl[, .(x = sort(unique(c(start, end + 1)))), by = seg][, .SD[x > min(x) & x < max(x)], by = seg]
+    bvl <- merge(bvl, segs[, .(seg, s0 = start, s1 = end)], by = "seg")[x > s0 & x <= s1][, x := x / 1e6]
+    blk_line <- geom_vline(data = bvl, aes(xintercept = x), linetype = "42", colour = "grey55", linewidth = 0.35)
+    p <- p + blk_line
+    if (!is.null(tracks$regions)) tracks$regions <- tracks$regions + blk_line
     tracks$blocks <- ggplot(bl) + geom_blank(data = bounds, aes(x = x, y = 0)) +
       geom_rect(aes(xmin = start / 1e6, xmax = end / 1e6, ymin = 0, ymax = 1, fill = class), colour = "white", linewidth = 0.3) +
       geom_text(data = bl[end - start > tot * 0.02], aes(x = (start + end) / 2e6, y = 0.5, label = label), colour = "white",
@@ -185,6 +192,7 @@ if (!is.null(opt$segdup)) {
   tracks$SD <- ggplot() + geom_blank(data = bounds, aes(x = x, y = 0)) +
     { if (nrow(s)) geom_rect(data = s, aes(xmin = start / 1e6, xmax = end / 1e6, ymin = 0, ymax = 1), fill = "#E8A33D") } +
     facet + xscale + coord_cartesian(ylim = c(0, 1), expand = FALSE) + labs(x = NULL, y = "SD") + track_theme
+  if (exists("blk_line")) tracks$SD <- tracks$SD + blk_line
 }
 if (!is.null(opt$genes)) {
   awk_cond <- paste(sprintf('($1 == "%s" && $5 > %d && $4 < %d)', segs$chrom, round(segs$start), round(segs$end)), collapse = " || ")
