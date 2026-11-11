@@ -786,6 +786,17 @@ workflows:
         - /.*/
 
   - subclass: WDL
+    name: PerSampleSvCountInSizeRange
+    primaryDescriptorPath: /wdl_analyses/PerSampleSvCountInSizeRange.wdl
+    publish: true
+    filters:
+      branches:
+        - main
+        - xz_analyses
+      tags:
+        - /.*/
+
+  - subclass: WDL
     name: LocalAssemblyHifiasm
     primaryDescriptorPath: /wdl_analyses/LocalAssemblyHifiasm.wdl
     filters:
