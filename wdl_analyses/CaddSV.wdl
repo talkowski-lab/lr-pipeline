@@ -228,7 +228,10 @@ score, header = {}, None
 with gzip.open("~{prefix}.caddsv_features.tsv.gz", "wt") as feat:
     for fn in files:
         with gzip.open(fn, "rt") as f:
-            h = f.readline().rstrip("\n").split("\t")
+            line = f.readline()
+            while line.startswith("##"):
+                line = f.readline()
+            h = line.rstrip("\n").split("\t")
             if header is None:
                 header = h
                 feat.write("\t".join(h) + "\n")
