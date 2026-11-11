@@ -784,6 +784,16 @@ workflows:
         - xz_analyses
       tags:
         - /.*/
+  - subclass: WDL
+    name: CaddSV
+    primaryDescriptorPath: /wdl_analyses/CaddSV.wdl
+    publish: true
+    filters:
+      branches:
+        - main
+        - xz_analyses
+      tags:
+        - /.*/
 
   - subclass: WDL
     name: PerSampleSvCountInSizeRange

@@ -1,0 +1,14 @@
+FROM condaforge/miniforge3:24.11.3-0
+
+ARG CADD_SV_VERSION=2.0.4
+
+RUN conda install -y -n base -c conda-forge pigz && \
+    conda clean --all --yes
+
+RUN pip install --no-cache-dir "caddsv==${CADD_SV_VERSION}"
+
+# Build the per-rule Conda environments of the coordinate-based workflow once, so runs need no network access.
+RUN caddsv get envs --use-conda --conda-prefix /opt/caddsv-conda --coordinate-based-only && \
+    conda clean --all --yes
+
+ENV CADD_SV_CONDA_PREFIX=/opt/caddsv-conda
