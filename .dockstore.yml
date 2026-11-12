@@ -167,6 +167,16 @@ workflows:
       tags:
         - /.*/
 
+  - subclass: WDL
+    name: DownsampledMethylationQC
+    primaryDescriptorPath: /wdl/qc/DownsampledMethylationQC.wdl
+    filters:
+      branches:
+        - main
+        - aou_scaling
+      tags:
+        - /.*/
+
   # --------------------
   # Annotation Utilities
   # --------------------
