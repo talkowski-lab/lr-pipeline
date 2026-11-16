@@ -18,6 +18,7 @@ workflow PlotCnvDepthProfiles {
         Int min_flank = 20000
         Int min_bin = 100
         String svtypes = "DEL,DUP"
+        String extra_args = ""
 
         File median_coverage
         File segdup_bed
@@ -37,6 +38,7 @@ workflow PlotCnvDepthProfiles {
         sr_bed: "Short-read SV intervals (#chrom start end ID SVTYPE FILTER) for the srGS track"
         plot_script: "plot_cnv_calls_depth.R"
         font: "Arial TTF installed for cairo_pdf"
+        extra_args: "Extra arguments appended to the plot_script call, e.g. '--mode fn'"
     }
 
     scatter (bed in site_beds) {
@@ -49,6 +51,7 @@ workflow PlotCnvDepthProfiles {
                 min_flank = min_flank,
                 min_bin = min_bin,
                 svtypes = svtypes,
+                extra_args = extra_args,
                 median_coverage = median_coverage,
                 segdup_bed = segdup_bed,
                 sr_bed = sr_bed,
@@ -74,6 +77,7 @@ task PlotDepth {
         Int min_flank
         Int min_bin
         String svtypes
+        String extra_args
         File median_coverage
         File segdup_bed
         File sr_bed
@@ -148,6 +152,7 @@ PY
             --bin-size 0 \
             --min-bin ~{min_bin} \
             --sr-bed ~{sr_bed} \
+            ~{extra_args} \
             --out ~{prefix}.depth_profiles.pdf 2>&1 | tee -a ~{prefix}.log
     >>>
 
