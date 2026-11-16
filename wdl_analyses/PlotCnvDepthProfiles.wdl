@@ -23,6 +23,7 @@ workflow PlotCnvDepthProfiles {
         File median_coverage
         File segdup_bed
         File sr_bed
+        File? genes
         File plot_script
         File font
 
@@ -35,6 +36,7 @@ workflow PlotCnvDepthProfiles {
         site_beds: "Site BEDs, one PDF each (#chrom start end SVID carriers SVLEN SVTYPE [sr_match_ids sr_match_detail ...])"
         rd_matrix: "Cohort RD matrix ('#Chr Start End <samples>', bgzipped + tabix-indexed), gs:// path, read in place"
         median_coverage: "Sample median coverage, 2 rows (sample IDs / medians)"
+        genes: "Optional gene track (#chrom start end gene strand feature), passed to the plot script as --genes"
         sr_bed: "Short-read SV intervals (#chrom start end ID SVTYPE FILTER) for the srGS track"
         plot_script: "plot_cnv_calls_depth.R"
         font: "Arial TTF installed for cairo_pdf"
@@ -55,6 +57,7 @@ workflow PlotCnvDepthProfiles {
                 median_coverage = median_coverage,
                 segdup_bed = segdup_bed,
                 sr_bed = sr_bed,
+                genes = genes,
                 plot_script = plot_script,
                 font = font,
                 docker = docker,
@@ -81,6 +84,7 @@ task PlotDepth {
         File median_coverage
         File segdup_bed
         File sr_bed
+        File? genes
         File plot_script
         File font
         String docker
@@ -152,6 +156,7 @@ PY
             --bin-size 0 \
             --min-bin ~{min_bin} \
             --sr-bed ~{sr_bed} \
+            ~{"--genes " + genes} \
             ~{extra_args} \
             --out ~{prefix}.depth_profiles.pdf 2>&1 | tee -a ~{prefix}.log
     >>>
