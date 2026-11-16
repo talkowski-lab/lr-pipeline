@@ -731,6 +731,17 @@ workflows:
 
   # Analysis Workflows
   - subclass: WDL
+    name: PlotCnvDepthProfiles
+    primaryDescriptorPath: /wdl_analyses/PlotCnvDepthProfiles.wdl
+    publish: true
+    filters:
+      branches:
+        - main
+        - xz_analyses
+      tags:
+        - /.*/
+
+  - subclass: WDL
     name: GDBreakpointProfiles
     primaryDescriptorPath: /wdl_analyses/GDBreakpointProfiles.wdl
     publish: true
