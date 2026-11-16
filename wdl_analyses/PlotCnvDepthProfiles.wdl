@@ -3,7 +3,7 @@ version 1.0
 # Read-depth profiles of CNV sites, one PDF per input site BED, scattered so the groups run in parallel.
 # Each site BED (plot_cnv_calls_depth.R format: #chrom start end SVID carriers SVLEN SVTYPE ...; carriers = comma-separated
 # samples, all coloured) is plotted with plot_cnv_calls_depth.R on depth read on the VM: the windows (site +/- max(flank_mult x
-# size, min_flank)) are sliced from the cohort RD matrix with tabix over gs:// (OAuth token from the VM metadata server), so the
+# size, min_flank)) are sliced from the cohort RD matrix with pysam over gs:// (OAuth token from the VM metadata server), so the
 # matrix is never localized. Normalised depth = RD / sample median coverage x 2 (median_coverage: 2-row sample / median file).
 
 import "Structs.wdl"
@@ -102,28 +102,39 @@ task PlotDepth {
                 END {if (NR) print c, s, e}' > windows.bed
         echo "sites: $(zcat ~{sites} | grep -vc '^#'); windows: $(wc -l < windows.bed)" | tee ~{prefix}.log
 
-        # RD slice, one tabix query per window, retried
-        tabix -H ~{rd_matrix} > rd.tsv
-        while read -r c s e; do
-            ok=0
-            for t in 1 2 3 4 5; do
-                if tabix ~{rd_matrix} "${c}:$((s + 1))-${e}" > win.tsv; then
-                    cat win.tsv >> body.tsv
-                    ok=1
-                    break
-                fi
-                sleep $((t * 5))
-            done
-            if [[ ${ok} -eq 0 ]]; then
-                echo "failed to read ${c}:${s}-${e}" | tee -a ~{prefix}.log
-                exit 1
-            fi
-        done < windows.bed
-        sort -k1,1 -k2,2n -u body.tsv >> rd.tsv
-        bgzip -c rd.tsv > rd.txt.gz
+        # RD slice, one query per window through pysam (the image's tabix binary has no gs:// support), retried
+        python3 - ~{rd_matrix} windows.bed rd.tsv <<'PY'
+import sys
+import time
+import pysam
+path, windows, out = sys.argv[1:4]
+tbx = pysam.TabixFile(path)
+rows = set()
+with open(out, "w") as fo:
+    fo.write("\n".join(tbx.header) + "\n")
+    for line in open(windows):
+        c, s, e = line.split()[:3]
+        for attempt in range(5):
+            try:
+                got = list(tbx.fetch(c, int(s), int(e)))
+                break
+            except (OSError, ValueError):
+                time.sleep(5 * (attempt + 1))
+                tbx = pysam.TabixFile(path)
+        else:
+            sys.exit("failed to read %s:%s-%s" % (c, s, e))
+        for r in got:
+            f = r.split("\t", 2)
+            k = (f[0], int(f[1]))
+            if k not in rows:
+                rows.add(k)
+                fo.write(r + "\n")
+print("RD bins:", len(rows))
+PY
+        (head -n 1 rd.tsv; tail -n +2 rd.tsv | sort -k1,1 -k2,2n) | bgzip -c > rd.txt.gz
         tabix -f -s1 -b2 -e3 rd.txt.gz
         echo "RD bins: $(($(wc -l < rd.tsv) - 1))" | tee -a ~{prefix}.log
-        rm -f body.tsv win.tsv rd.tsv
+        rm -f rd.tsv
 
         Rscript ~{plot_script} \
             --bed ~{sites} \
