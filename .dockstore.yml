@@ -742,6 +742,17 @@ workflows:
         - /.*/
 
   - subclass: WDL
+    name: ScoreCnvBreakpoints
+    primaryDescriptorPath: /wdl_analyses/ScoreCnvBreakpoints.wdl
+    publish: true
+    filters:
+      branches:
+        - main
+        - xz_analyses
+      tags:
+        - /.*/
+
+  - subclass: WDL
     name: PlotCnvDepthProfiles
     primaryDescriptorPath: /wdl_analyses/PlotCnvDepthProfiles.wdl
     publish: true
