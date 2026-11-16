@@ -731,6 +731,17 @@ workflows:
 
   # Analysis Workflows
   - subclass: WDL
+    name: ClusterDepthCnvs
+    primaryDescriptorPath: /wdl_analyses/ClusterDepthCnvs.wdl
+    publish: true
+    filters:
+      branches:
+        - main
+        - xz_analyses
+      tags:
+        - /.*/
+
+  - subclass: WDL
     name: PlotCnvDepthProfiles
     primaryDescriptorPath: /wdl_analyses/PlotCnvDepthProfiles.wdl
     publish: true
