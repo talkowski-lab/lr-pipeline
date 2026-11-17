@@ -13,7 +13,9 @@ import "Structs.wdl"
 # and never localized: the BED is split into batches of regions_per_batch regions (a batch never spans contigs), each
 # batch is fetched with a remote tabix query and trimmed (SNV, PASS, biallelic, AF) on the fly, n_parallel batches at a
 # time, each with a fresh OAuth token from the VM metadata server, then the batches are concatenated in BED order. Set
-# requester_pays_project for requester-pays buckets (e.g. All of Us).
+# requester_pays_project for requester-pays buckets (e.g. All of Us). Set gvcf = true for gVCF input (*.g.vcf.bgz): every
+# record carries a <NON_REF> (or <*>) allele, so alleles not seen in any genotype are trimmed first (bcftools view -a);
+# reference blocks and RefCall sites then have no ALT and drop out, and A -> G,<NON_REF> becomes a biallelic A -> G SNV.
 
 workflow SelectSnvsInBed {
     input {
@@ -24,6 +26,7 @@ workflow SelectSnvsInBed {
 
         Boolean pass_only = true
         Boolean biallelic_only = true
+        Boolean gvcf = false
         Float? min_af
         String? requester_pays_project
         Int regions_per_batch = 500
@@ -43,6 +46,7 @@ workflow SelectSnvsInBed {
                 regions_bed = regions_bed,
                 pass_only = pass_only,
                 biallelic_only = biallelic_only,
+                gvcf = gvcf,
                 min_af = min_af,
                 requester_pays_project = requester_pays_project,
                 regions_per_batch = regions_per_batch,
@@ -76,6 +80,7 @@ task SelectSnvs {
         File regions_bed
         Boolean pass_only
         Boolean biallelic_only
+        Boolean gvcf
         Float? min_af
         String? requester_pays_project
         Int regions_per_batch
@@ -87,6 +92,7 @@ task SelectSnvs {
 
     String pass_arg = if pass_only then "-f PASS" else ""
     String biallelic_arg = if biallelic_only then "-m2 -M2" else ""
+    String gvcf_cmd = if gvcf then "bcftools view -a -Ou | " else ""
     String trim_cmd = if defined(min_af) then "bcftools +fill-tags - -Ou -- -t AF | bcftools view -i 'INFO/AF>" + select_first([min_af, 0.0]) + "' -Ob" else "bcftools view -Ob"
 
     command <<<
@@ -117,7 +123,7 @@ task SelectSnvs {
         out="${bed%.bed}.bcf"
         for attempt in 1 2 3; do
             export GCS_OAUTH_TOKEN=$(bash get_token.sh)
-            if bcftools view -R "$bed" -v snps ~{pass_arg} ~{biallelic_arg} -Ou "$INPUT" | ~{trim_cmd} -o "$out"; then
+            if bcftools view -R "$bed" ~{pass_arg} -Ou "$INPUT" | ~{gvcf_cmd}bcftools view -v snps ~{biallelic_arg} -Ou | ~{trim_cmd} -o "$out"; then
                 exit 0
             fi
             echo "retrying $bed (attempt $attempt failed)" >&2
