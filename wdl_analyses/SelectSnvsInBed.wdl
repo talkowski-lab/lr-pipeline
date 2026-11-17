@@ -7,7 +7,9 @@ import "Structs.wdl"
 # into one VCF. All input files must share the same samples in the same order. Records are kept when they overlap a BED
 # interval and are SNVs. With biallelic_only, multiallelic sites are dropped (including those with spanning-deletion
 # alleles); with pass_only, only FILTER=PASS records are kept (set false for pre-filtered files whose FILTER is ".").
-# Genotypes are kept unchanged. Run the same workflow on case and control VCFs so both sides share the same site set.
+# With min_af, only SNVs with AF > min_af are kept, where AF is recomputed from the genotypes in the file
+# (bcftools +fill-tags, overwriting any INFO/AF). Genotypes are kept unchanged. Run the same workflow on case and
+# control VCFs so both sides share the same site set.
 
 workflow SelectSnvsInBed {
     input {
@@ -18,6 +20,7 @@ workflow SelectSnvsInBed {
 
         Boolean pass_only = true
         Boolean biallelic_only = true
+        Float? min_af
 
         String bcftools_docker = "quay.io/biocontainers/bcftools:1.19--h8b25389_1"
 
@@ -33,6 +36,7 @@ workflow SelectSnvsInBed {
                 regions_bed = regions_bed,
                 pass_only = pass_only,
                 biallelic_only = biallelic_only,
+                min_af = min_af,
                 prefix = "~{prefix}.shard_~{i}",
                 docker = bcftools_docker,
                 runtime_attr_override = runtime_attr_select_snvs_in_bed
@@ -62,6 +66,7 @@ task SelectSnvs {
         File regions_bed
         Boolean pass_only
         Boolean biallelic_only
+        Float? min_af
         String prefix
         String docker
         RuntimeAttr? runtime_attr_override
@@ -73,14 +78,26 @@ task SelectSnvs {
     command <<<
         set -euo pipefail
 
-        bcftools view \
-            -R ~{regions_bed} \
-            -v snps \
-            ~{pass_arg} \
-            ~{biallelic_arg} \
-            --threads 2 \
-            -Oz -o ~{prefix}.snvs_in_bed.vcf.gz \
-            ~{vcf}
+        if [ -n "~{min_af}" ]; then
+            bcftools view \
+                -R ~{regions_bed} \
+                -v snps \
+                ~{pass_arg} \
+                ~{biallelic_arg} \
+                -Ou \
+                ~{vcf} \
+                | bcftools +fill-tags -Ou -- -t AF \
+                | bcftools view -i 'INFO/AF>~{min_af}' --threads 2 -Oz -o ~{prefix}.snvs_in_bed.vcf.gz
+        else
+            bcftools view \
+                -R ~{regions_bed} \
+                -v snps \
+                ~{pass_arg} \
+                ~{biallelic_arg} \
+                --threads 2 \
+                -Oz -o ~{prefix}.snvs_in_bed.vcf.gz \
+                ~{vcf}
+        fi
         bcftools index -t ~{prefix}.snvs_in_bed.vcf.gz
     >>>
 
