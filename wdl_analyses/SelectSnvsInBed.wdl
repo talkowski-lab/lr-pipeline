@@ -16,6 +16,9 @@ import "Structs.wdl"
 # requester_pays_project for requester-pays buckets (e.g. All of Us). Set gvcf = true for gVCF input (*.g.vcf.bgz): every
 # record carries a <NON_REF> (or <*>) allele, so alleles not seen in any genotype are trimmed first (bcftools view -a);
 # reference blocks and RefCall sites then have no ALT and drop out, and A -> G,<NON_REF> becomes a biallelic A -> G SNV.
+# With sites_tsv (tab-separated chr, pos, end, ref, alt, optionally gzipped, header skipped; pos is the 1-based VCF
+# position, contig names as in the VCF), the output is further restricted to SNVs whose CHROM:POS:REF:ALT is in the
+# list (e.g. SNVs common in other cohorts); kept records get ID = CHROM:POS:REF:ALT.
 
 workflow SelectSnvsInBed {
     input {
@@ -28,6 +31,7 @@ workflow SelectSnvsInBed {
         Boolean biallelic_only = true
         Boolean gvcf = false
         Float? min_af
+        File? sites_tsv
         String? requester_pays_project
         Int regions_per_batch = 500
         Int n_parallel = 16
@@ -48,6 +52,7 @@ workflow SelectSnvsInBed {
                 biallelic_only = biallelic_only,
                 gvcf = gvcf,
                 min_af = min_af,
+                sites_tsv = sites_tsv,
                 requester_pays_project = requester_pays_project,
                 regions_per_batch = regions_per_batch,
                 n_parallel = n_parallel,
@@ -82,6 +87,7 @@ task SelectSnvs {
         Boolean biallelic_only
         Boolean gvcf
         Float? min_af
+        File? sites_tsv
         String? requester_pays_project
         Int regions_per_batch
         Int n_parallel
@@ -93,6 +99,8 @@ task SelectSnvs {
     String pass_arg = if pass_only then "-f PASS" else ""
     String biallelic_arg = if biallelic_only then "-m2 -M2" else ""
     String gvcf_cmd = if gvcf then "bcftools view -a -Ou | " else ""
+    String sites_targets_arg = if defined(sites_tsv) then "-T sites.pos" else ""
+    String sites_cmd = if defined(sites_tsv) then "bcftools annotate --set-id '%CHROM:%POS:%REF:%FIRST_ALT' -Ou | bcftools view -i 'ID=@sites.ids' -Ou | " else ""
     String trim_cmd = if defined(min_af) then "bcftools +fill-tags - -Ou -- -t AF | bcftools view -i 'INFO/AF>" + select_first([min_af, 0.0]) + "' -Ob" else "bcftools view -Ob"
 
     command <<<
@@ -111,6 +119,10 @@ task SelectSnvs {
         export GCS_OAUTH_TOKEN=$(bash get_token.sh)
         bcftools index -s "$INPUT" | cut -f1 > file_contigs.txt
         awk 'FNR == NR {keep[$1] = 1; next} ($1 in keep)' file_contigs.txt ~{regions_bed} > regions.bed
+        if [ -n "~{sites_tsv}" ]; then
+            gzip -cdf ~{sites_tsv} | awk -F'\t' '$2 ~ /^[0-9]+$/ {print $1 "\t" $2 > "sites.pos"; print $1 ":" $2 ":" $4 ":" $5 > "sites.ids"}'
+            echo "$(wc -l < sites.ids) sites in sites_tsv"
+        fi
         mkdir batches
         awk -v n=~{regions_per_batch} '
             $1 != prev || c == n {if (f) close(f); b++; c = 0; prev = $1; f = sprintf("batches/batch.%06d.bed", b)}
@@ -123,7 +135,7 @@ task SelectSnvs {
         out="${bed%.bed}.bcf"
         for attempt in 1 2 3; do
             export GCS_OAUTH_TOKEN=$(bash get_token.sh)
-            if bcftools view -R "$bed" ~{pass_arg} -Ou "$INPUT" | ~{gvcf_cmd}bcftools view -v snps ~{biallelic_arg} -Ou | ~{trim_cmd} -o "$out"; then
+            if bcftools view -R "$bed" ~{sites_targets_arg} ~{pass_arg} -Ou "$INPUT" | ~{gvcf_cmd}bcftools view -v snps ~{biallelic_arg} -Ou | ~{sites_cmd}~{trim_cmd} -o "$out"; then
                 exit 0
             fi
             echo "retrying $bed (attempt $attempt failed)" >&2
