@@ -1,7 +1,8 @@
 version 1.0
 
 # Depth edge scan for CNV discovery (edge_scan_cnv.py): sharp drops / rises of cohort-relative depth found with a step
-# scan, paired into DEL / DUP candidates, breakpoints refined by shrinking each edge's window. One task per contig; the
+# scan, paired into DEL / DUP candidates, breakpoints refined by shrinking each edge's window. One task per contig and
+# sample group; the
 # RD matrix is read on the VM over gs:// with pysam (OAuth token from the metadata server), never localized.
 
 import "Structs.wdl"
@@ -10,7 +11,7 @@ workflow EdgeScanCnv {
     input {
         String rd_matrix
         Array[String] contigs
-        String samples
+        Array[String] sample_groups
         String prefix
 
         String extra_args = ""
@@ -26,20 +27,20 @@ workflow EdgeScanCnv {
 
     parameter_meta {
         rd_matrix: "Cohort RD matrix ('#Chr Start End <samples>', bgzipped + tabix-indexed), gs:// path, read in place"
-        samples: "Comma-separated samples to scan"
+        sample_groups: "Groups of samples to scan, each a comma-separated string; one task per contig and group"
         median_coverage: "Sample median coverage, 2 rows (sample IDs / medians)"
         ref_fai: "Reference FASTA index, for contig lengths"
         scan_script: "edge_scan_cnv.py"
         extra_args: "Extra arguments for scan_script, e.g. '--scale 5000 --min-z 4'"
     }
 
-    scatter (contig in contigs) {
+    scatter (pair in cross(contigs, range(length(sample_groups)))) {
         call EdgeScan {
             input:
                 rd_matrix = rd_matrix,
-                contig = contig,
-                samples = samples,
-                prefix = prefix + "." + contig,
+                contig = pair.left,
+                samples = sample_groups[pair.right],
+                prefix = "~{prefix}.~{pair.left}.group~{pair.right}",
                 extra_args = extra_args,
                 median_coverage = median_coverage,
                 ref_fai = ref_fai,
