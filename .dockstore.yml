@@ -742,6 +742,17 @@ workflows:
         - /.*/
 
   - subclass: WDL
+    name: BinDepthWindows
+    primaryDescriptorPath: /wdl_analyses/BinDepthWindows.wdl
+    publish: true
+    filters:
+      branches:
+        - main
+        - xz_analyses
+      tags:
+        - /.*/
+
+  - subclass: WDL
     name: ScoreCnvBreakpoints
     primaryDescriptorPath: /wdl_analyses/ScoreCnvBreakpoints.wdl
     publish: true
