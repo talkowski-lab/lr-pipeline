@@ -742,6 +742,17 @@ workflows:
         - /.*/
 
   - subclass: WDL
+    name: EdgeScanCnv
+    primaryDescriptorPath: /wdl_analyses/EdgeScanCnv.wdl
+    publish: true
+    filters:
+      branches:
+        - main
+        - xz_analyses
+      tags:
+        - /.*/
+
+  - subclass: WDL
     name: BinDepthWindows
     primaryDescriptorPath: /wdl_analyses/BinDepthWindows.wdl
     publish: true
