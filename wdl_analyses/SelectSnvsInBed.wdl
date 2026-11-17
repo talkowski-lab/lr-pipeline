@@ -9,18 +9,25 @@ import "Structs.wdl"
 # alleles); with pass_only, only FILTER=PASS records are kept (set false for pre-filtered files whose FILTER is ".").
 # With min_af, only SNVs with AF > min_af are kept, where AF is recomputed from the genotypes in the file
 # (bcftools +fill-tags, overwriting any INFO/AF). Genotypes are kept unchanged. Run the same workflow on case and
-# control VCFs so both sides share the same site set.
+# control VCFs so both sides share the same site set. vcfs and vcf_idxs are gs:// paths read in place over the network
+# and never localized: the BED is split into batches of regions_per_batch regions (a batch never spans contigs), each
+# batch is fetched with a remote tabix query and trimmed (SNV, PASS, biallelic, AF) on the fly, n_parallel batches at a
+# time, each with a fresh OAuth token from the VM metadata server, then the batches are concatenated in BED order. Set
+# requester_pays_project for requester-pays buckets (e.g. All of Us).
 
 workflow SelectSnvsInBed {
     input {
-        Array[File] vcfs
-        Array[File] vcf_idxs
+        Array[String] vcfs
+        Array[String] vcf_idxs
         File regions_bed
         String prefix
 
         Boolean pass_only = true
         Boolean biallelic_only = true
         Float? min_af
+        String? requester_pays_project
+        Int regions_per_batch = 500
+        Int n_parallel = 16
 
         String bcftools_docker = "quay.io/biocontainers/bcftools:1.19--h8b25389_1"
 
@@ -37,6 +44,9 @@ workflow SelectSnvsInBed {
                 pass_only = pass_only,
                 biallelic_only = biallelic_only,
                 min_af = min_af,
+                requester_pays_project = requester_pays_project,
+                regions_per_batch = regions_per_batch,
+                n_parallel = n_parallel,
                 prefix = "~{prefix}.shard_~{i}",
                 docker = bcftools_docker,
                 runtime_attr_override = runtime_attr_select_snvs_in_bed
@@ -61,12 +71,15 @@ workflow SelectSnvsInBed {
 
 task SelectSnvs {
     input {
-        File vcf
-        File vcf_idx
+        String vcf
+        String vcf_idx
         File regions_bed
         Boolean pass_only
         Boolean biallelic_only
         Float? min_af
+        String? requester_pays_project
+        Int regions_per_batch
+        Int n_parallel
         String prefix
         String docker
         RuntimeAttr? runtime_attr_override
@@ -74,31 +87,50 @@ task SelectSnvs {
 
     String pass_arg = if pass_only then "-f PASS" else ""
     String biallelic_arg = if biallelic_only then "-m2 -M2" else ""
+    String trim_cmd = if defined(min_af) then "bcftools +fill-tags - -Ou -- -t AF | bcftools view -i 'INFO/AF>" + select_first([min_af, 0.0]) + "' -Ob" else "bcftools view -Ob"
 
     command <<<
         set -euo pipefail
 
-        if [ -n "~{min_af}" ]; then
-            bcftools view \
-                -R ~{regions_bed} \
-                -v snps \
-                ~{pass_arg} \
-                ~{biallelic_arg} \
-                -Ou \
-                ~{vcf} \
-                | bcftools +fill-tags -Ou -- -t AF \
-                | bcftools view -i 'INFO/AF>~{min_af}' --threads 2 -Oz -o ~{prefix}.snvs_in_bed.vcf.gz
-        else
-            bcftools view \
-                -R ~{regions_bed} \
-                -v snps \
-                ~{pass_arg} \
-                ~{biallelic_arg} \
-                --threads 2 \
-                -Oz -o ~{prefix}.snvs_in_bed.vcf.gz \
-                ~{vcf}
+        cat > get_token.sh <<'EOF'
+        wget -q -O - --header "Metadata-Flavor: Google" \
+            "http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token" \
+            | sed -E 's/.*"access_token" *: *"([^"]*)".*/\1/'
+        EOF
+        if [ -n "~{requester_pays_project}" ]; then
+            export GCS_REQUESTER_PAYS_PROJECT="~{requester_pays_project}"
         fi
+        export INPUT="~{vcf}##idx##~{vcf_idx}"
+
+        export GCS_OAUTH_TOKEN=$(bash get_token.sh)
+        bcftools index -s "$INPUT" | cut -f1 > file_contigs.txt
+        awk 'FNR == NR {keep[$1] = 1; next} ($1 in keep)' file_contigs.txt ~{regions_bed} > regions.bed
+        mkdir batches
+        awk -v n=~{regions_per_batch} '
+            $1 != prev || c == n {if (f) close(f); b++; c = 0; prev = $1; f = sprintf("batches/batch.%06d.bed", b)}
+            {c++; print > f}' regions.bed
+        echo "$(wc -l < regions.bed) regions on $(wc -l < file_contigs.txt) contigs in $(ls batches | wc -l) batches"
+
+        cat > select_batch.sh <<'EOF'
+        set -euo pipefail
+        bed="$1"
+        out="${bed%.bed}.bcf"
+        for attempt in 1 2 3; do
+            export GCS_OAUTH_TOKEN=$(bash get_token.sh)
+            if bcftools view -R "$bed" -v snps ~{pass_arg} ~{biallelic_arg} -Ou "$INPUT" | ~{trim_cmd} -o "$out"; then
+                exit 0
+            fi
+            echo "retrying $bed (attempt $attempt failed)" >&2
+            sleep $((attempt * 30))
+        done
+        exit 1
+        EOF
+        ls batches/*.bed | xargs -P ~{n_parallel} -n 1 bash select_batch.sh
+
+        ls batches/*.bcf > parts.txt
+        bcftools concat --file-list parts.txt --threads 2 -Oz -o ~{prefix}.snvs_in_bed.vcf.gz
         bcftools index -t ~{prefix}.snvs_in_bed.vcf.gz
+        echo "$(bcftools index -n ~{prefix}.snvs_in_bed.vcf.gz) SNVs selected"
     >>>
 
     output {
@@ -107,9 +139,9 @@ task SelectSnvs {
     }
 
     RuntimeAttr default_attr = object {
-        cpu_cores: 2,
-        mem_gb: 4,
-        disk_gb: 2 * ceil(size(vcf, "GB")) + 10,
+        cpu_cores: 4,
+        mem_gb: 8,
+        disk_gb: 50,
         boot_disk_gb: 10,
         preemptible_tries: 2,
         max_retries: 0
