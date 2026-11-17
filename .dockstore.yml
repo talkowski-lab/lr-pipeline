@@ -753,6 +753,17 @@ workflows:
         - /.*/
 
   - subclass: WDL
+    name: SelectSnvsInBed
+    primaryDescriptorPath: /wdl_analyses/SelectSnvsInBed.wdl
+    publish: true
+    filters:
+      branches:
+        - main
+        - xz_analyses
+      tags:
+        - /.*/
+
+  - subclass: WDL
     name: BinDepthWindows
     primaryDescriptorPath: /wdl_analyses/BinDepthWindows.wdl
     publish: true
