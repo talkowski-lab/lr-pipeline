@@ -18,7 +18,9 @@ import "Structs.wdl"
 # reference blocks and RefCall sites then have no ALT and drop out, and A -> G,<NON_REF> becomes a biallelic A -> G SNV.
 # With sites_tsv (tab-separated chr, pos, end, ref, alt, optionally gzipped, header skipped; pos is the 1-based VCF
 # position, contig names as in the VCF), the output is further restricted to SNVs whose CHROM:POS:REF:ALT is in the
-# list (e.g. SNVs common in other cohorts); kept records get ID = CHROM:POS:REF:ALT.
+# list (e.g. SNVs common in other cohorts); kept records get ID = CHROM:POS:REF:ALT. Listed sites with no matching
+# record in the VCF are not added. Outputs: the filtered VCF, its SNV count, and snv_sites_tsv (chr, pos, end, ref, alt,
+# AF; AF recomputed from the output genotypes) in the sites_tsv format, to restrict other cohorts to the same sites.
 
 workflow SelectSnvsInBed {
     input {
@@ -75,6 +77,7 @@ workflow SelectSnvsInBed {
         File snv_vcf = ConcatSnvs.snv_vcf
         File snv_vcf_idx = ConcatSnvs.snv_vcf_idx
         File snv_count = ConcatSnvs.snv_count
+        File snv_sites_tsv = ConcatSnvs.snv_sites_tsv
     }
 }
 
@@ -195,12 +198,18 @@ task ConcatSnvs {
             -Oz -o ~{prefix}.snvs_in_bed.vcf.gz
         bcftools index -t ~{prefix}.snvs_in_bed.vcf.gz
         bcftools index -n ~{prefix}.snvs_in_bed.vcf.gz > ~{prefix}.snvs_in_bed.count.txt
+        (
+            printf 'chr\tpos\tend\tref\talt\tAF\n'
+            bcftools +fill-tags ~{prefix}.snvs_in_bed.vcf.gz -Ou -- -t AF \
+                | bcftools query -f '%CHROM\t%POS\t%POS\t%REF\t%ALT\t%INFO/AF\n'
+        ) | gzip -c > ~{prefix}.snvs_in_bed.sites.tsv.gz
     >>>
 
     output {
         File snv_vcf = "~{prefix}.snvs_in_bed.vcf.gz"
         File snv_vcf_idx = "~{prefix}.snvs_in_bed.vcf.gz.tbi"
         File snv_count = "~{prefix}.snvs_in_bed.count.txt"
+        File snv_sites_tsv = "~{prefix}.snvs_in_bed.sites.tsv.gz"
     }
 
     RuntimeAttr default_attr = object {
