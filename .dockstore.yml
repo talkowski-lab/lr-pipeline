@@ -764,6 +764,17 @@ workflows:
         - /.*/
 
   - subclass: WDL
+    name: PcaAncestryProjection
+    primaryDescriptorPath: /wdl_analyses/PcaAncestryProjection.wdl
+    publish: true
+    filters:
+      branches:
+        - main
+        - xz_analyses
+      tags:
+        - /.*/
+
+  - subclass: WDL
     name: BinDepthWindows
     primaryDescriptorPath: /wdl_analyses/BinDepthWindows.wdl
     publish: true
