@@ -804,6 +804,16 @@ workflows:
         - xz_analyses
       tags:
         - /.*/
+  - subclass: WDL
+    name: AnnotateCaseWithControlCounts
+    primaryDescriptorPath: /wdl_analyses/AnnotateCaseWithControlCounts.wdl
+    publish: true
+    filters:
+      branches:
+        - main
+        - xz_analyses
+      tags:
+        - /.*/
 
   - subclass: WDL
     name: BinDepthWindows
