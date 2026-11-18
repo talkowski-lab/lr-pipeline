@@ -775,6 +775,17 @@ workflows:
         - /.*/
 
   - subclass: WDL
+    name: PcaAncestryTwoStudies
+    primaryDescriptorPath: /wdl_analyses/PcaAncestryTwoStudies.wdl
+    publish: true
+    filters:
+      branches:
+        - main
+        - xz_analyses
+      tags:
+        - /.*/
+
+  - subclass: WDL
     name: BinDepthWindows
     primaryDescriptorPath: /wdl_analyses/BinDepthWindows.wdl
     publish: true

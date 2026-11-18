@@ -7,12 +7,13 @@ import "Structs.wdl"
 # 1. PrepPlink (case and reference): VCF -> PLINK, autosomal biallelic SNVs only, variant IDs set to CHROM:POS:REF:ALT
 #    (CHROM without "chr"), genotype missingness <= max_missing and MAF >= min_maf. Reference samples can be restricted
 #    with ref_samples (one sample ID per line, e.g. unrelated samples). With variants_tsv (columns chr, pos, end, ref, alt;
-#    pos is the 1-based VCF position; a header line is skipped), only the listed SNVs are used in both datasets.
+#    pos is the 1-based VCF position; optionally gzipped; a header line is skipped), only the listed SNVs are used in both
+#    datasets.
 # 2. MergeForPca: SNVs passing QC in both datasets, LD pruned on the reference (plink --indep-pairwise) when ld_prune is
 #    true, then the two datasets are merged.
 # 3. SmartPca: convertf to EIGENSTRAT, reference samples labelled from ref_ancestry_tsv (column ref_label_column, sample IDs
 #    in the first column), study samples labelled STUDY. PCs are fit on the reference populations (poplistname) and
-#    study samples are projected (lsqproject).
+#    study samples are projected (lsqproject), with nsnpldregress neighbouring SNVs regressed out for LD (0 disables).
 # 4. AssignAncestry: each study sample gets the majority label of its knn_k nearest reference samples in PC space; the
 #    label is kept when that fraction is >= min_prob, otherwise "unassigned".
 
@@ -36,6 +37,7 @@ workflow PcaAncestryProjection {
         Int ld_step = 50
         Float ld_r2 = 0.2
         Int n_pcs = 10
+        Int nsnpldregress = 2
         Int knn_k = 10
         Float min_prob = 0.75
 
@@ -101,6 +103,7 @@ workflow PcaAncestryProjection {
             ref_ancestry_tsv = ref_ancestry_tsv,
             ref_label_column = ref_label_column,
             n_pcs = n_pcs,
+            nsnpldregress = nsnpldregress,
             prefix = prefix,
             docker = eigensoft_docker,
             runtime_attr_override = runtime_attr_smartpca
@@ -146,7 +149,7 @@ task PrepPlink {
         set -euo pipefail
 
         if [ -n "~{variants_tsv}" ]; then
-            awk '$2 ~ /^[0-9]+$/ {sub(/^chr/, "", $1); print $1":"$2":"$4":"$5}' ~{variants_tsv} > variant_ids.txt
+            gzip -cdf ~{variants_tsv} | awk '$2 ~ /^[0-9]+$/ {sub(/^chr/, "", $1); print $1":"$2":"$4":"$5}' > variant_ids.txt
             echo "variant list: $(wc -l < variant_ids.txt) SNVs"
         fi
 
@@ -281,6 +284,7 @@ task SmartPca {
         File ref_ancestry_tsv
         String ref_label_column
         Int n_pcs
+        Int nsnpldregress
         String prefix
         String docker
         RuntimeAttr? runtime_attr_override
@@ -321,6 +325,7 @@ task SmartPca {
         poplistname: poplist.txt
         lsqproject: YES
         numoutevec: ~{n_pcs}
+        nsnpldregress: ~{nsnpldregress}
         numoutlieriter: 0
         altnormstyle: NO
         numthreads: 4
