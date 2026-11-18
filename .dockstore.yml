@@ -794,6 +794,16 @@ workflows:
         - xz_analyses
       tags:
         - /.*/
+  - subclass: WDL
+    name: MatchControlsFromPca
+    primaryDescriptorPath: /wdl_analyses/MatchControlsFromPca.wdl
+    publish: true
+    filters:
+      branches:
+        - main
+        - xz_analyses
+      tags:
+        - /.*/
 
   - subclass: WDL
     name: BinDepthWindows

@@ -329,7 +329,7 @@ task IntersectSites {
 task MatchControls {
     input {
         File study_ancestry
-        File eigenvalues
+        File? eigenvalues
         String case_name
         String control_name
         Int n_controls
@@ -349,8 +349,10 @@ task MatchControls {
         import math
 
         rows = list(csv.DictReader(open("~{study_ancestry}"), delimiter="\t"))
-        evals = [float(x) for x in open("~{eigenvalues}").read().split()]
         pcs = [c for c in rows[0] if c.startswith("PC")][:~{match_n_pcs}]
+        # each PC weighted by sqrt(eigenvalue) when the smartpca eigenvalues are given, otherwise all PCs weigh the same
+        eval_path = "~{eigenvalues}"
+        evals = [float(x) for x in open(eval_path).read().split()] if eval_path else [1.0] * len(pcs)
         w = [math.sqrt(max(evals[i], 0.0)) for i in range(len(pcs))]
 
         def coords(r):
