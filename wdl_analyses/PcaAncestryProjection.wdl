@@ -15,7 +15,8 @@ import "Structs.wdl"
 #    in the first column), study samples labelled STUDY. PCs are fit on the reference populations (poplistname) and
 #    study samples are projected (lsqproject), with nsnpldregress neighbouring SNVs regressed out for LD (0 disables).
 # 4. AssignAncestry: each study sample gets the majority label of its knn_k nearest reference samples in PC space; the
-#    label is kept when that fraction is >= min_prob, otherwise "unassigned".
+#    label is kept when that fraction is >= min_prob, otherwise "unassigned". frac_<label> columns give the fraction of
+#    the knn_k neighbours carrying each reference label (the weight on each ancestry).
 
 workflow PcaAncestryProjection {
     input {
@@ -387,15 +388,19 @@ task AssignAncestry {
         ref = [(r["label"], [float(r[c]) for c in pc_cols]) for r in rows if r["label"] not in ("STUDY", "Ignore")]
         study = [r for r in rows if r["label"] == "STUDY"]
 
+        labels = sorted({p[0] for p in ref})
         with open("~{prefix}.case_ancestry.tsv", "w") as o:
-            o.write("sample_id\tassigned_ancestry\tknn_label\tknn_fraction\t" + "\t".join(pc_cols) + "\n")
+            o.write("sample_id\tassigned_ancestry\tknn_label\tknn_fraction\t" + "\t".join("frac_" + lab for lab in labels)
+                    + "\t" + "\t".join(pc_cols) + "\n")
             for r in study:
                 x = [float(r[c]) for c in pc_cols]
                 nearest = sorted(ref, key=lambda p: sum((a - b) ** 2 for a, b in zip(p[1], x)))[:~{knn_k}]
-                label, n = collections.Counter(p[0] for p in nearest).most_common(1)[0]
+                votes = collections.Counter(p[0] for p in nearest)
+                label, n = votes.most_common(1)[0]
                 frac = n / len(nearest)
                 assigned = label if frac >= ~{min_prob} else "unassigned"
-                o.write(f"{r['sample_id']}\t{assigned}\t{label}\t{frac:.2f}\t" + "\t".join(r[c] for c in pc_cols) + "\n")
+                fracs = "\t".join(f"{votes[lab] / len(nearest):.2f}" for lab in labels)
+                o.write(f"{r['sample_id']}\t{assigned}\t{label}\t{frac:.2f}\t{fracs}\t" + "\t".join(r[c] for c in pc_cols) + "\n")
 
         counts = collections.Counter(line.split("\t")[1] for line in open("~{prefix}.case_ancestry.tsv").readlines()[1:])
         print(f"{len(ref)} reference and {len(study)} study samples; assigned: {dict(counts)}")
