@@ -838,6 +838,17 @@ workflows:
         - /.*/
 
   - subclass: WDL
+    name: DepthCnvMergeGenotype
+    primaryDescriptorPath: /wdl_analyses/DepthCnvMergeGenotype.wdl
+    publish: true
+    filters:
+      branches:
+        - main
+        - xz_analyses
+      tags:
+        - /.*/
+
+  - subclass: WDL
     name: PlotCnvDepthProfiles
     primaryDescriptorPath: /wdl_analyses/PlotCnvDepthProfiles.wdl
     publish: true
