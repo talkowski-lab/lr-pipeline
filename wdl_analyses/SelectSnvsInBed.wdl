@@ -21,6 +21,8 @@ import "Structs.wdl"
 # list (e.g. SNVs common in other cohorts); kept records get ID = CHROM:POS:REF:ALT. Listed sites with no matching
 # record in the VCF are not added. Outputs: the filtered VCF, its SNV count, and snv_sites_tsv (chr, pos, end, ref, alt,
 # AF; AF recomputed from the output genotypes) in the sites_tsv format, to restrict other cohorts to the same sites.
+# Sex chromosomes and chrM (chrX, chrY, chrM, X, Y, M, MT) are skipped; a file with no BED regions left (e.g. a chrX or
+# chrY shard) gives a header-only VCF, so per-chromosome inputs that include the sex chromosomes run through.
 
 workflow SelectSnvsInBed {
     input {
@@ -120,7 +122,8 @@ task SelectSnvs {
         export INPUT="~{vcf}##idx##~{vcf_idx}"
 
         export GCS_OAUTH_TOKEN=$(bash get_token.sh)
-        bcftools index -s "$INPUT" | cut -f1 > file_contigs.txt
+        bcftools index -s "$INPUT" | cut -f1 > all_contigs.txt
+        grep -vE '^(chr)?(X|Y|M|MT)$' all_contigs.txt > file_contigs.txt || true
         awk 'FNR == NR {keep[$1] = 1; next} ($1 in keep)' file_contigs.txt ~{regions_bed} > regions.bed
         if [ -n "~{sites_tsv}" ]; then
             gzip -cdf ~{sites_tsv} | awk -F'\t' '$2 ~ /^[0-9]+$/ {print $1 "\t" $2 > "sites.pos"; print $1 ":" $2 ":" $4 ":" $5 > "sites.ids"}'
@@ -146,7 +149,11 @@ task SelectSnvs {
         done
         exit 1
         EOF
-        ls batches/*.bed | xargs -P ~{n_parallel} -n 1 bash select_batch.sh
+        if [ -s regions.bed ]; then
+            ls batches/*.bed | xargs -P ~{n_parallel} -n 1 bash select_batch.sh
+        else
+            bcftools view -h "$INPUT" | ~{gvcf_cmd}bcftools view -v snps -Ou | ~{sites_cmd}~{trim_cmd} -o batches/empty.bcf
+        fi
 
         ls batches/*.bcf > parts.txt
         bcftools concat --file-list parts.txt --threads 2 -Oz -o ~{prefix}.snvs_in_bed.vcf.gz
