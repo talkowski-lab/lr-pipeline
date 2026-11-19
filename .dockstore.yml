@@ -484,6 +484,17 @@ workflows:
         - /.*/
 
   - subclass: WDL
+    name: SubsetReferenceFasta
+    primaryDescriptorPath: /wdl/annotation_utils/SubsetReferenceFasta.wdl
+    publish: true
+    filters:
+      branches:
+        - main
+        - xz_analyses
+      tags:
+        - /.*/
+
+  - subclass: WDL
     name: SubsetTsvToColumns
     primaryDescriptorPath: /wdl/annotation_utils/SubsetTsvToColumns.wdl
     filters:
