@@ -559,6 +559,17 @@ workflows:
         - /.*/
 
   - subclass: WDL
+    name: BLAT
+    primaryDescriptorPath: /wdl/tools/BLAT.wdl
+    publish: true
+    filters:
+      branches:
+        - main
+        - xz_analyses
+      tags:
+        - /.*/
+
+  - subclass: WDL
     name: HiPhase
     primaryDescriptorPath: /wdl/tools/HiPhase.wdl
     filters:

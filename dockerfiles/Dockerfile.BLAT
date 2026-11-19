@@ -1,0 +1,14 @@
+FROM ubuntu:22.04
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates \
+    curl \
+    python3 \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN for tool in blat/blat faToTwoBit pslSort; do \
+        curl -fsSL -o /usr/local/bin/$(basename ${tool}) https://hgdownload.soe.ucsc.edu/admin/exe/linux.x86_64/${tool}; \
+        chmod +x /usr/local/bin/$(basename ${tool}); \
+    done
