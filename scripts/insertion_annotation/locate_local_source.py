@@ -81,28 +81,31 @@ def main():
             w = max(a.min_window, int(a.window_x * n))
             ws = max(0, pos - w)
             win = ref.fetch(ch, ws, pos + w).upper()
-            idx = collections.defaultdict(list)
-            for i in range(len(win) - k + 1):
-                idx[win[i:i + k]].append(i)
             best = (0.0, None)
             for strand, q in (("+", seq), ("-", rc(seq))):
-                hits = sorted((rp, qi) for qi in range(len(q) - k + 1) for rp in idx.get(q[qi:qi + k], []))
-                clusters, cur = [], []
-                for rp, qi in hits:
-                    if cur and rp - cur[-1][0] > a.gap:
-                        clusters.append(cur)
-                        cur = []
-                    cur.append((rp, qi))
-                if cur:
-                    clusters.append(cur)
-                for cl in clusters:
-                    cov = bytearray(len(q))
-                    for _, qi in cl:
-                        for j in range(qi, qi + k):
-                            cov[j] = 1
+                qidx = collections.defaultdict(list)
+                for qi in range(len(q) - k + 1):
+                    qidx[q[qi:qi + k]].append(qi)
+                # stream k-mer hits in reference order (no hit list kept); one coverage array per cluster
+                cov, c0, last = None, None, None
+                for rp in range(len(win) - k + 1):
+                    qis = qidx.get(win[rp:rp + k])
+                    if not qis:
+                        continue
+                    if cov is not None and rp - last > a.gap:
+                        frac = sum(cov) / n
+                        if frac > best[0]:
+                            best = (frac, (strand, c0 + ws, last + ws + k))
+                        cov = None
+                    if cov is None:
+                        cov, c0 = bytearray(len(q)), rp
+                    last = rp
+                    for qi in qis:
+                        cov[qi:qi + k] = b"\x01" * k
+                if cov is not None:
                     frac = sum(cov) / n
                     if frac > best[0]:
-                        best = (frac, (strand, min(r for r, _ in cl) + ws, max(r for r, _ in cl) + ws + k))
+                        best = (frac, (strand, c0 + ws, last + ws + k))
             frac, info = best
             r = ann.get(iid, {})
             row = dict(ID=iid, len=n, remap_class=r.get("remap_class", ""), remap_coords=r.get("remap_coords", ""),
