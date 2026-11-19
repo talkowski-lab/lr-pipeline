@@ -1,0 +1,17 @@
+# Insertion annotation pipeline (wdl/annotation/AnnotateInsertionOrigins.wdl): R + Python scripts in
+# scripts/insertion_annotation, with minimap2, bwa, samtools, bcftools and bedtools. Build from the repository root:
+#   docker build --platform linux/amd64 -f dockerfiles/Dockerfile.InsertionAnnotation -t <registry>/insertion-annotation:<tag> .
+FROM rocker/r-ver:4.4.1
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        python3 python3-pip samtools bcftools tabix minimap2 bwa gzip curl ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+RUN pip3 install --no-cache-dir pysam==0.23.0
+RUN install2.r --error --skipinstalled data.table optparse R.utils ggplot2 patchwork
+RUN apt-get update && apt-get install -y --no-install-recommends bedtools && rm -rf /var/lib/apt/lists/*
+
+COPY scripts/insertion_annotation /opt/insertion_annotation
+RUN chmod +x /opt/insertion_annotation/*.sh /opt/insertion_annotation/*.py /opt/insertion_annotation/*.R
+ENV PATH="/opt/insertion_annotation:${PATH}"
