@@ -541,6 +541,17 @@ workflows:
   # Tools
   # -----
   - subclass: WDL
+    name: AlignQueriesBWA
+    primaryDescriptorPath: /wdl/tools/AlignQueriesBWA.wdl
+    publish: true
+    filters:
+      branches:
+        - main
+        - xz_analyses
+      tags:
+        - /.*/
+
+  - subclass: WDL
     name: Automop
     primaryDescriptorPath: /wdl/tools/Automop.wdl
     filters:
