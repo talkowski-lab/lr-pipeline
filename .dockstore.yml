@@ -270,6 +270,17 @@ workflows:
         - /.*/
 
   - subclass: WDL
+    name: CountVariantClasses
+    primaryDescriptorPath: /wdl/annotation_utils/CountVariantClasses.wdl
+    publish: true
+    filters:
+      branches:
+        - main
+        - xz_analyses
+      tags:
+        - /.*/
+
+  - subclass: WDL
     name: CreateBiallelicVcf
     primaryDescriptorPath: /wdl/annotation_utils/CreateBiallelicVcf.wdl
     filters:

@@ -557,6 +557,20 @@ Outputs:
 - `annotation_counts_alleles_tsv`: Per-allele counts (when `create_per_allele`).
 
 
+### [CountVariantClasses](../wdl/annotation_utils/CountVariantClasses.wdl)
+This utility counts SNVs, indels (1-49 bp) and SVs (>= 50 bp) in each contig of a list of VCFs, then sums them over all contigs, using `scripts/miscellaneous/count_variant_classes.py` (one shard per VCF, then a sum). Each ALT allele is classified: SNV when REF and ALT are both 1 bp; indel when the REF / ALT length difference is 1 to `max_indel`; SV when it is larger or the ALT is symbolic / a breakend; other for same-length REF / ALT longer than 1 bp (MNPs). `*` and `.` ALTs are skipped and multi-allelic records count once per ALT allele.
+
+Inputs:
+- `Array[File] vcfs`: VCFs to count (e.g. one per contig).
+- `Array[File] vcf_idxs`: Indexes for `vcfs`.
+- `Int max_indel`: Largest indel length in bp; longer alleles are SVs (default `49`).
+- `File count_script`: `scripts/miscellaneous/count_variant_classes.py`.
+
+Outputs:
+- `per_contig_counts`: TSV with contig, records, snv, indel, sv, other and alleles per contig.
+- `total_counts`: The same columns summed over all contigs.
+
+
 ### [CreateBiallelicVcf](../wdl/annotation_utils/CreateBiallelicVcf.wdl)
 This utility normalizes a VCF into a streamlined biallelic callset. It splits multiallelic records and left-aligns variants against the reference, sorts the result, adds the `allele_length` and `allele_type` INFO fields, and rewrites each variant ID to `CHROM-POS-REF-ALT` for SNVs or `CHROM-POS-TYPE-LENGTH` otherwise, suffixing any colliding IDs to keep them unique. It outputs the biallelic VCF.
 
