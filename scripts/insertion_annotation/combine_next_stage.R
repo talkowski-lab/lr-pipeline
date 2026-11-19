@@ -27,6 +27,7 @@ m <- fread(opt$mcnv, na.strings = c("", "NA"))[, .(ID, mcnv_locus = locus, mcnv_
                                                   mcnv_segment = aligned_region, mcnv_segment_len = region_len, mcnv_copies_added = copies_by_len)]
 im <- fread(opt$immune, na.strings = c("", "NA"))[, .(ID, immune_call)]
 x <- Reduce(function(a, b) merge(a, b, by = "ID", all.x = TRUE), list(x, s, m, im))
+for (k in c("structure", "mcnv_locus", "mcnv_copy_range", "mcnv_segment", "immune_call")) set(x, j = k, value = as.character(x[[k]]))
 x[, mcnv := !is.na(mcnv_segment)]
 x[, next_call := fcase(mcnv & !is.na(immune_call), paste0("mCNV; ", immune_call),
                        mcnv, "mCNV",
