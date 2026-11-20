@@ -760,6 +760,24 @@ Outputs:
 - `subset_untrimmed_vcf_idx`: Index for the subset VCF.
 
 
+### [GDCallsToVcf](../wdl/annotation_utils/GDCallsToVcf.wdl)
+This utility writes the genomic disorder (GD) CNV calls of gatk-sv `CallGenomicDisorderCNVs` as their own VCF, one per contig, without integrating them into a callset. Each batch tarball is read for `call/gd_cnv_calls.tsv.gz` only (the per-bin posteriors, BAF tables and plots are not unpacked), the batch tables and ploidy tables are concatenated and split by contig, and `gatk-sv-gd integrate` is run per contig on a header-only VCF that carries the cohort samples. Every GD entry with at least one carrier becomes a record (`<GD_ID>_<svtype>_novel`, `EV=RD`, `ALGORITHMS=depth`, GD cluster and breakpoints in INFO) with each sample's genotype and copy number from the GD model; non-carriers are hom-ref.
+
+Inputs:
+- `Array[File] gd_output_tarballs`: One `CallGenomicDisorderCNVs` output tarball per batch.
+- `Array[File] ploidy_tables`: Wide ploidy tables (sample + one column per contig), all with the same header.
+- `File header_vcf`: Header-only VCF (no records) whose samples are the cohort samples.
+- `File header_vcf_idx`: Index for `header_vcf`.
+- `Array[String] contigs`: Contigs to write (those in `gd_table`).
+- `File gd_table`: GD regions table used for calling.
+- `File par_bed`: Pseudoautosomal regions BED.
+
+Outputs:
+- `gd_vcfs`: One bgzipped GD-call VCF per contig.
+- `gd_vcf_idxs`: Indexes for `gd_vcfs`.
+- `gd_calls`: Concatenated `gd_cnv_calls.tsv.gz` across all batches.
+
+
 ### [GenerateTRGTJson](../wdl/annotation_utils/GenerateTRGTJson.wdl)
 This utility converts a TRGT longest-polymer-sequence (LPS) table into per-locus allele-frequency histograms, using a metadata file for sample context, and concatenates them into a single TSV. It outputs the histogram TSV.
 
