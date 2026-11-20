@@ -17,6 +17,7 @@ wdl/
   05_CNV_depth_calling/           # Depth CNV calling, genomic-disorder breakpoints, read recurrence, local assembly
   06_compound_het/                # Compound-het / double-hit analyses (placeholder)
   07_ancestry_matching/           # PCA ancestry projection and ancestry-matched control selection
+                                  # each NN_ folder: workflows at its top, their Python / bash / R scripts in scripts/
   annotation_utils/  # VCF manipulation and utility workflows
   tools/             # Individual bioinformatics tool wrappers
   utils/             # Shared structs (Structs.wdl) and helper tasks (Helpers.wdl)

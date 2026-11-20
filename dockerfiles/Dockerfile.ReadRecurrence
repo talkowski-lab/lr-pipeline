@@ -9,5 +9,5 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 RUN pip3 install --no-cache-dir pysam==0.23.0 numpy==1.26.4
 RUN install2.r --error --skipinstalled ggplot2 data.table R.utils optparse patchwork
 
-COPY wdl/05_CNV_depth_calling/read_recurrence /opt/read_recurrence
+COPY wdl/05_CNV_depth_calling/scripts/read_recurrence /opt/read_recurrence
 RUN chmod +x /opt/read_recurrence/*.py /opt/read_recurrence/*.R
