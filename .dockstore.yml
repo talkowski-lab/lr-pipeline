@@ -1032,3 +1032,25 @@ workflows:
         - xz_analyses
       tags:
         - /.*/
+
+  - subclass: WDL
+    name: LrgsVariantConstraint
+    primaryDescriptorPath: /wdl_analyses/LrgsVariantConstraint.wdl
+    publish: true
+    filters:
+      branches:
+        - main
+        - xz_analyses
+      tags:
+        - /.*/
+
+  - subclass: WDL
+    name: PhasedHetPerGene
+    primaryDescriptorPath: /wdl_analyses/PhasedHetPerGene.wdl
+    publish: true
+    filters:
+      branches:
+        - main
+        - xz_analyses
+      tags:
+        - /.*/
