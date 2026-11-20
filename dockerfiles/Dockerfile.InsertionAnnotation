@@ -1,4 +1,4 @@
-# Insertion annotation pipeline (wdl/annotation/AnnotateInsertionOrigins.wdl): R + Python scripts in
+# Insertion annotation pipeline (wdl/01_insertion_source_analyses/AnnotateInsertionOrigins.wdl): R + Python scripts in
 # scripts/insertion_annotation, with minimap2, bwa, samtools, bcftools and bedtools. Build from the repository root:
 #   docker build --platform linux/amd64 -f dockerfiles/Dockerfile.InsertionAnnotation -t <registry>/insertion-annotation:<tag> .
 FROM rocker/r-ver:4.4.1

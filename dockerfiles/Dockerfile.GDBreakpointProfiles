@@ -9,5 +9,5 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 RUN pip3 install --no-cache-dir pysam==0.23.0 pandas==2.2.3 numpy==1.26.4
 RUN install2.r --error --skipinstalled ggplot2 data.table R.utils optparse patchwork
 
-COPY wdl_analyses/gd_breakpoint_profiles /opt/gd_scripts
+COPY wdl/05_CNV_depth_calling/gd_breakpoint_profiles /opt/gd_scripts
 RUN chmod +x /opt/gd_scripts/*.sh /opt/gd_scripts/*.py /opt/gd_scripts/*.R

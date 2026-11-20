@@ -12,7 +12,14 @@ The pipeline covers three broad stages.
 ## Repository Layout
 ```
 wdl/
-  annotation/        # Main annotation workflows (prefix: Annotate*)
+  00_annotate_SV/                 # Annotations added to long-read variants for the gnomAD-LR resource (prefix: Annotate*)
+  01_insertion_source_analyses/   # Origin of inserted sequences (AnnotateInsertionOrigins, AnnotateSmallInsertionOrigins)
+  02_variant_TR_constraint/       # Per-sample burden, per-gene variant / TR constraint, CADD scores
+  03_expression_alterations/      # Expression alterations (PhasedHetPerGene: phased hets per gene for Iso-Seq phasing)
+  04_methylation_analyses/        # Methylation analyses (placeholder)
+  05_CNV_depth_calling/           # Depth CNV calling, genomic-disorder breakpoints, read recurrence, local assembly
+  06_compound_het/                # Compound-het / double-hit analyses (placeholder)
+  07_ancestry_matching/           # PCA ancestry projection and ancestry-matched control selection
   annotation_utils/  # VCF manipulation and utility workflows
   tools/             # Individual bioinformatics tool wrappers
   utils/             # Shared structs (Structs.wdl) and helper tasks (Helpers.wdl)

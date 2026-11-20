@@ -66,34 +66,34 @@ The phased cohort VCF was annotated in two broad stages: a set of parallel varia
 ### Variant Characterization (parallel)
 The following workflows were run concurrently on the phased cohort VCF:
 - **[RepeatMasker](../wdl/tools/RepeatMasker.wdl)** ([docs](workflows.md#repeatmasker)) - annotated mobile-element content in insertions; used as input to AnnotatePALMER.
-- **[AnnotateL1MEAID](../wdl/annotation/AnnotateL1MEAID.wdl)** ([docs](workflows.md#annotatel1meaid)) - identified MEI calls using L1ME-AID and INTACT_MEI.
-- **[AnnotateSVAN](../wdl/annotation/AnnotateSVAN.wdl)** ([docs](workflows.md#annotatesvan)) - annotated MEIs, MEDs, tandem duplications, dispersed duplications and NUMTs using SVAN.
-- **[AnnotateMEDs](../wdl/annotation/AnnotateMEDs.wdl)** ([docs](workflows.md#annotatemeds)) - identified mobile element deletions by intersecting deletions against the MEI catalog.
-- **[AnnotateIndelTRs](../wdl/annotation/AnnotateIndelTRs.wdl)** ([docs](workflows.md#annotatetrs)) - flagged short indels that represent tandem repeats.
-- **[AnnotateSQMetrics](../wdl/annotation/AnnotateSQMetrics.wdl)** ([docs](workflows.md#annotatesqmetrics)) - recomputed site-level quality metrics (HWE, inbreeding coefficient, AS fields).
-- **[AnnotateGQMetrics](../wdl/annotation/AnnotateGQMetrics.wdl)** ([docs](workflows.md#annotategqmetrics)) - computed binned distributions of genotype quality and allele balance.
-- **[AnnotateAgeMetrics](../wdl/annotation/AnnotateAgeMetrics.wdl)** ([docs](workflows.md#annotateagemetrics)) _(All of Us only)_ - computed age-bin carrier distributions per variant.
-- **[AnnotateRegion](../wdl/annotation/AnnotateRegion.wdl)** ([docs](workflows.md#annotateregion)) - assigned each variant a genomic region class (SR, SD, RM or US).
-- **[AnnotateInSilicoPredictors](../wdl/annotation/AnnotateInSilicoPredictors.wdl)** ([docs](workflows.md#annotateinsilicopredictors)) - looked up CADD, Pangolin, PhyloP, REVEL and SpliceAI scores for SNVs and indels.
-- **[AnnotateGnomADSTR](../wdl/annotation/AnnotateGnomADSTR.wdl)** ([docs](workflows.md#annotategnomadstr)) - matched tandem repeat calls against the gnomAD V4 TR catalog.
-- **[AnnotateDbSNP](../wdl/annotation/AnnotateDbSNP.wdl)** ([docs](workflows.md#annotatedbsnp)) - assigned dbSNP rsIDs to matched variants.
-- **[AnnotateVRS](../wdl/annotation/AnnotateVRS.wdl)** ([docs](workflows.md#annotatevrs)) - annotated each variant with GA4GH VRS identifiers.
+- **[AnnotateL1MEAID](../wdl/00_annotate_SV/AnnotateL1MEAID.wdl)** ([docs](workflows.md#annotatel1meaid)) - identified MEI calls using L1ME-AID and INTACT_MEI.
+- **[AnnotateSVAN](../wdl/00_annotate_SV/AnnotateSVAN.wdl)** ([docs](workflows.md#annotatesvan)) - annotated MEIs, MEDs, tandem duplications, dispersed duplications and NUMTs using SVAN.
+- **[AnnotateMEDs](../wdl/00_annotate_SV/AnnotateMEDs.wdl)** ([docs](workflows.md#annotatemeds)) - identified mobile element deletions by intersecting deletions against the MEI catalog.
+- **[AnnotateIndelTRs](../wdl/00_annotate_SV/AnnotateIndelTRs.wdl)** ([docs](workflows.md#annotatetrs)) - flagged short indels that represent tandem repeats.
+- **[AnnotateSQMetrics](../wdl/00_annotate_SV/AnnotateSQMetrics.wdl)** ([docs](workflows.md#annotatesqmetrics)) - recomputed site-level quality metrics (HWE, inbreeding coefficient, AS fields).
+- **[AnnotateGQMetrics](../wdl/00_annotate_SV/AnnotateGQMetrics.wdl)** ([docs](workflows.md#annotategqmetrics)) - computed binned distributions of genotype quality and allele balance.
+- **[AnnotateAgeMetrics](../wdl/00_annotate_SV/AnnotateAgeMetrics.wdl)** ([docs](workflows.md#annotateagemetrics)) _(All of Us only)_ - computed age-bin carrier distributions per variant.
+- **[AnnotateRegion](../wdl/00_annotate_SV/AnnotateRegion.wdl)** ([docs](workflows.md#annotateregion)) - assigned each variant a genomic region class (SR, SD, RM or US).
+- **[AnnotateInSilicoPredictors](../wdl/00_annotate_SV/AnnotateInSilicoPredictors.wdl)** ([docs](workflows.md#annotateinsilicopredictors)) - looked up CADD, Pangolin, PhyloP, REVEL and SpliceAI scores for SNVs and indels.
+- **[AnnotateGnomADSTR](../wdl/00_annotate_SV/AnnotateGnomADSTR.wdl)** ([docs](workflows.md#annotategnomadstr)) - matched tandem repeat calls against the gnomAD V4 TR catalog.
+- **[AnnotateDbSNP](../wdl/00_annotate_SV/AnnotateDbSNP.wdl)** ([docs](workflows.md#annotatedbsnp)) - assigned dbSNP rsIDs to matched variants.
+- **[AnnotateVRS](../wdl/00_annotate_SV/AnnotateVRS.wdl)** ([docs](workflows.md#annotatevrs)) - annotated each variant with GA4GH VRS identifiers.
 
 Additionally, the Cohort PALMER VCF was processed in parallel:
 
-- **[AnnotatePALMER](../wdl/annotation/AnnotatePALMER.wdl)** ([docs](workflows.md#annotatepalmer)) - matched MEI calls from PALMER against the cohort VCF insertions using the RepeatMasker output.
+- **[AnnotatePALMER](../wdl/00_annotate_SV/AnnotatePALMER.wdl)** ([docs](workflows.md#annotatepalmer)) - matched MEI calls from PALMER against the cohort VCF insertions using the RepeatMasker output.
 
 ### MEI Consolidation and Allele Typing
-1. **[AnnotateMEIs](../wdl/annotation/AnnotateMEIs.wdl)** ([docs](workflows.md#annotatemeis)) - consolidated the L1MEAID, PALMER and SVAN MEI annotations into a single harmonized MEI TSV.
+1. **[AnnotateMEIs](../wdl/00_annotate_SV/AnnotateMEIs.wdl)** ([docs](workflows.md#annotatemeis)) - consolidated the L1MEAID, PALMER and SVAN MEI annotations into a single harmonized MEI TSV.
 2. **[SubsetTsvToColumns](../wdl/annotation_utils/SubsetTsvToColumns.wdl)** ([docs](workflows.md#subsettsvtocolumns)) - extracted the duplication-specific columns from the SVAN output.
 3. **[AnnotateAlleleType](../wdl/annotation_utils/AnnotateAlleleType.wdl)** ([docs](workflows.md#annotateallleletype)) - updated the `allele_type` INFO field using the MED, MEI and duplication annotation TSVs.
 
 ### Functional and Overlap Annotation (parallel)
 The following workflows were run concurrently on the allele-type-annotated VCF:
-- **[AnnotateVEPHail](../wdl/annotation/AnnotateVEPHail.wdl)** ([docs](workflows.md#annotatevephail)) - predicted functional effects using VEP via Hail.
-- **[AnnotateSVAnnotate](../wdl/annotation/AnnotateSVAnnotate.wdl)** ([docs](workflows.md#annotatesvannotate)) - predicted functional effects for SVs using GATK SVAnnotate.
-- **[AnnotateCallsetOverlap](../wdl/annotation/AnnotateCallsetOverlap.wdl)** ([docs](workflows.md#annotatecallsetoverlap)) - identified variants overlapping gnomAD V4 using exact, Truvari and bedtools closest matching.
-- **[AnnotateDbVaR](../wdl/annotation/AnnotateDbVaR.wdl)** ([docs](workflows.md#annotatedbvar)) - matched SVs against dbVar records.
+- **[AnnotateVEPHail](../wdl/00_annotate_SV/AnnotateVEPHail.wdl)** ([docs](workflows.md#annotatevephail)) - predicted functional effects using VEP via Hail.
+- **[AnnotateSVAnnotate](../wdl/00_annotate_SV/AnnotateSVAnnotate.wdl)** ([docs](workflows.md#annotatesvannotate)) - predicted functional effects for SVs using GATK SVAnnotate.
+- **[AnnotateCallsetOverlap](../wdl/00_annotate_SV/AnnotateCallsetOverlap.wdl)** ([docs](workflows.md#annotatecallsetoverlap)) - identified variants overlapping gnomAD V4 using exact, Truvari and bedtools closest matching.
+- **[AnnotateDbVaR](../wdl/00_annotate_SV/AnnotateDbVaR.wdl)** ([docs](workflows.md#annotatedbvar)) - matched SVs against dbVar records.
 
 ### Downstream Integration and Post-Processing
 1. **[AnnotateVcf](../wdl/annotation_utils/AnnotateVcf.wdl)** ([docs](workflows.md#annotatevcf)) _(AnnotateVcf_Downstream)_ - integrated all annotation TSVs into the VCF as INFO fields.

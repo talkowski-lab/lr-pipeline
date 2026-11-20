@@ -5,7 +5,7 @@ workflows:
   # --------------------
   - subclass: WDL
     name: AnnotateAgeMetrics
-    primaryDescriptorPath: /wdl/annotation/AnnotateAgeMetrics.wdl
+    primaryDescriptorPath: /wdl/00_annotate_SV/AnnotateAgeMetrics.wdl
     filters:
       branches:
         - main
@@ -14,7 +14,7 @@ workflows:
 
   - subclass: WDL
     name: AnnotateCallsetOverlap
-    primaryDescriptorPath: /wdl/annotation/AnnotateCallsetOverlap.wdl
+    primaryDescriptorPath: /wdl/00_annotate_SV/AnnotateCallsetOverlap.wdl
     filters:
       branches:
         - main
@@ -23,7 +23,7 @@ workflows:
 
   - subclass: WDL
     name: AnnotateCallsetOverlap_AF
-    primaryDescriptorPath: /wdl/annotation/AnnotateCallsetOverlap_AF.wdl
+    primaryDescriptorPath: /wdl/00_annotate_SV/AnnotateCallsetOverlap_AF.wdl
     filters:
       branches:
         - main
@@ -32,7 +32,7 @@ workflows:
 
   - subclass: WDL
     name: AnnotateDbSNP
-    primaryDescriptorPath: /wdl/annotation/AnnotateDbSNP.wdl
+    primaryDescriptorPath: /wdl/00_annotate_SV/AnnotateDbSNP.wdl
     filters:
       branches:
         - main
@@ -41,7 +41,7 @@ workflows:
 
   - subclass: WDL
     name: AnnotateDbVaR
-    primaryDescriptorPath: /wdl/annotation/AnnotateDbVaR.wdl
+    primaryDescriptorPath: /wdl/00_annotate_SV/AnnotateDbVaR.wdl
     filters:
       branches:
         - main
@@ -50,7 +50,7 @@ workflows:
 
   - subclass: WDL
     name: AnnotateIndelTRs
-    primaryDescriptorPath: /wdl/annotation/AnnotateIndelTRs.wdl
+    primaryDescriptorPath: /wdl/00_annotate_SV/AnnotateIndelTRs.wdl
     filters:
       branches:
         - main
@@ -59,7 +59,7 @@ workflows:
 
   - subclass: WDL
     name: AnnotateInSilicoPredictors
-    primaryDescriptorPath: /wdl/annotation/AnnotateInSilicoPredictors.wdl
+    primaryDescriptorPath: /wdl/00_annotate_SV/AnnotateInSilicoPredictors.wdl
     filters:
       branches:
         - main
@@ -68,7 +68,7 @@ workflows:
 
   - subclass: WDL
     name: AnnotateGnomADSTR
-    primaryDescriptorPath: /wdl/annotation/AnnotateGnomADSTR.wdl
+    primaryDescriptorPath: /wdl/00_annotate_SV/AnnotateGnomADSTR.wdl
     filters:
       branches:
         - main
@@ -77,7 +77,7 @@ workflows:
 
   - subclass: WDL
     name: AnnotateGQMetrics
-    primaryDescriptorPath: /wdl/annotation/AnnotateGQMetrics.wdl
+    primaryDescriptorPath: /wdl/00_annotate_SV/AnnotateGQMetrics.wdl
     filters:
       branches:
         - main
@@ -86,7 +86,7 @@ workflows:
 
   - subclass: WDL
     name: AnnotateInsertionOrigins
-    primaryDescriptorPath: /wdl/annotation/AnnotateInsertionOrigins.wdl
+    primaryDescriptorPath: /wdl/01_insertion_source_analyses/AnnotateInsertionOrigins.wdl
     publish: true
     filters:
       branches:
@@ -97,7 +97,7 @@ workflows:
 
   - subclass: WDL
     name: AnnotateSmallInsertionOrigins
-    primaryDescriptorPath: /wdl/annotation/AnnotateSmallInsertionOrigins.wdl
+    primaryDescriptorPath: /wdl/01_insertion_source_analyses/AnnotateSmallInsertionOrigins.wdl
     publish: true
     filters:
       branches:
@@ -108,7 +108,7 @@ workflows:
 
   - subclass: WDL
     name: AnnotateL1MEAID
-    primaryDescriptorPath: /wdl/annotation/AnnotateL1MEAID.wdl
+    primaryDescriptorPath: /wdl/00_annotate_SV/AnnotateL1MEAID.wdl
     filters:
       branches:
         - main
@@ -117,7 +117,7 @@ workflows:
 
   - subclass: WDL
     name: AnnotateMEDs
-    primaryDescriptorPath: /wdl/annotation/AnnotateMEDs.wdl
+    primaryDescriptorPath: /wdl/00_annotate_SV/AnnotateMEDs.wdl
     filters:
       branches:
         - main
@@ -126,7 +126,7 @@ workflows:
 
   - subclass: WDL
     name: AnnotateMEIs
-    primaryDescriptorPath: /wdl/annotation/AnnotateMEIs.wdl
+    primaryDescriptorPath: /wdl/00_annotate_SV/AnnotateMEIs.wdl
     filters:
       branches:
         - main
@@ -135,7 +135,7 @@ workflows:
 
   - subclass: WDL
     name: AnnotatePALMER
-    primaryDescriptorPath: /wdl/annotation/AnnotatePALMER.wdl
+    primaryDescriptorPath: /wdl/00_annotate_SV/AnnotatePALMER.wdl
     filters:
       branches:
         - main
@@ -144,7 +144,7 @@ workflows:
 
   - subclass: WDL
     name: AnnotateRegion
-    primaryDescriptorPath: /wdl/annotation/AnnotateRegion.wdl
+    primaryDescriptorPath: /wdl/00_annotate_SV/AnnotateRegion.wdl
     filters:
       branches:
         - main
@@ -153,7 +153,7 @@ workflows:
 
   - subclass: WDL
     name: AnnotateSQMetrics
-    primaryDescriptorPath: /wdl/annotation/AnnotateSQMetrics.wdl
+    primaryDescriptorPath: /wdl/00_annotate_SV/AnnotateSQMetrics.wdl
     filters:
       branches:
         - main
@@ -162,7 +162,7 @@ workflows:
 
   - subclass: WDL
     name: AnnotateSVAN
-    primaryDescriptorPath: /wdl/annotation/AnnotateSVAN.wdl
+    primaryDescriptorPath: /wdl/00_annotate_SV/AnnotateSVAN.wdl
     filters:
       branches:
         - main
@@ -171,7 +171,7 @@ workflows:
 
   - subclass: WDL
     name: AnnotateSVAnnotate
-    primaryDescriptorPath: /wdl/annotation/AnnotateSVAnnotate.wdl
+    primaryDescriptorPath: /wdl/00_annotate_SV/AnnotateSVAnnotate.wdl
     filters:
       branches:
         - main
@@ -180,7 +180,7 @@ workflows:
 
   - subclass: WDL
     name: AnnotateVEPHail
-    primaryDescriptorPath: /wdl/annotation/AnnotateVEPHail.wdl
+    primaryDescriptorPath: /wdl/00_annotate_SV/AnnotateVEPHail.wdl
     filters:
       branches:
         - main
@@ -189,7 +189,7 @@ workflows:
 
   - subclass: WDL
     name: AnnotateVRS
-    primaryDescriptorPath: /wdl/annotation/AnnotateVRS.wdl
+    primaryDescriptorPath: /wdl/00_annotate_SV/AnnotateVRS.wdl
     filters:
       branches:
         - main
@@ -820,7 +820,7 @@ workflows:
   # Analysis Workflows
   - subclass: WDL
     name: ClusterDepthCnvs
-    primaryDescriptorPath: /wdl_analyses/ClusterDepthCnvs.wdl
+    primaryDescriptorPath: /wdl/05_CNV_depth_calling/ClusterDepthCnvs.wdl
     publish: true
     filters:
       branches:
@@ -831,7 +831,7 @@ workflows:
 
   - subclass: WDL
     name: EdgeScanCnv
-    primaryDescriptorPath: /wdl_analyses/EdgeScanCnv.wdl
+    primaryDescriptorPath: /wdl/05_CNV_depth_calling/EdgeScanCnv.wdl
     publish: true
     filters:
       branches:
@@ -842,7 +842,7 @@ workflows:
 
   - subclass: WDL
     name: SelectSnvsInBed
-    primaryDescriptorPath: /wdl_analyses/SelectSnvsInBed.wdl
+    primaryDescriptorPath: /wdl/07_ancestry_matching/SelectSnvsInBed.wdl
     publish: true
     filters:
       branches:
@@ -853,7 +853,7 @@ workflows:
 
   - subclass: WDL
     name: PcaAncestryProjection
-    primaryDescriptorPath: /wdl_analyses/PcaAncestryProjection.wdl
+    primaryDescriptorPath: /wdl/07_ancestry_matching/PcaAncestryProjection.wdl
     publish: true
     filters:
       branches:
@@ -864,7 +864,7 @@ workflows:
 
   - subclass: WDL
     name: PcaAncestryTwoStudies
-    primaryDescriptorPath: /wdl_analyses/PcaAncestryTwoStudies.wdl
+    primaryDescriptorPath: /wdl/07_ancestry_matching/PcaAncestryTwoStudies.wdl
     publish: true
     filters:
       branches:
@@ -874,7 +874,7 @@ workflows:
         - /.*/
   - subclass: WDL
     name: MatchControlsByAncestry
-    primaryDescriptorPath: /wdl_analyses/MatchControlsByAncestry.wdl
+    primaryDescriptorPath: /wdl/07_ancestry_matching/MatchControlsByAncestry.wdl
     publish: true
     filters:
       branches:
@@ -884,7 +884,7 @@ workflows:
         - /.*/
   - subclass: WDL
     name: MatchControlsFromPca
-    primaryDescriptorPath: /wdl_analyses/MatchControlsFromPca.wdl
+    primaryDescriptorPath: /wdl/07_ancestry_matching/MatchControlsFromPca.wdl
     publish: true
     filters:
       branches:
@@ -894,7 +894,7 @@ workflows:
         - /.*/
   - subclass: WDL
     name: AnnotateCaseWithControlCounts
-    primaryDescriptorPath: /wdl_analyses/AnnotateCaseWithControlCounts.wdl
+    primaryDescriptorPath: /wdl/07_ancestry_matching/AnnotateCaseWithControlCounts.wdl
     publish: true
     filters:
       branches:
@@ -905,7 +905,7 @@ workflows:
 
   - subclass: WDL
     name: BinDepthWindows
-    primaryDescriptorPath: /wdl_analyses/BinDepthWindows.wdl
+    primaryDescriptorPath: /wdl/05_CNV_depth_calling/BinDepthWindows.wdl
     publish: true
     filters:
       branches:
@@ -916,7 +916,7 @@ workflows:
 
   - subclass: WDL
     name: ScoreCnvBreakpoints
-    primaryDescriptorPath: /wdl_analyses/ScoreCnvBreakpoints.wdl
+    primaryDescriptorPath: /wdl/05_CNV_depth_calling/ScoreCnvBreakpoints.wdl
     publish: true
     filters:
       branches:
@@ -927,7 +927,7 @@ workflows:
 
   - subclass: WDL
     name: DepthCnvMergeGenotype
-    primaryDescriptorPath: /wdl_analyses/DepthCnvMergeGenotype.wdl
+    primaryDescriptorPath: /wdl/05_CNV_depth_calling/DepthCnvMergeGenotype.wdl
     publish: true
     filters:
       branches:
@@ -938,7 +938,7 @@ workflows:
 
   - subclass: WDL
     name: PlotCnvDepthProfiles
-    primaryDescriptorPath: /wdl_analyses/PlotCnvDepthProfiles.wdl
+    primaryDescriptorPath: /wdl/05_CNV_depth_calling/PlotCnvDepthProfiles.wdl
     publish: true
     filters:
       branches:
@@ -949,7 +949,7 @@ workflows:
 
   - subclass: WDL
     name: GDBreakpointProfiles
-    primaryDescriptorPath: /wdl_analyses/GDBreakpointProfiles.wdl
+    primaryDescriptorPath: /wdl/05_CNV_depth_calling/GDBreakpointProfiles.wdl
     publish: true
     filters:
       branches:
@@ -960,7 +960,7 @@ workflows:
 
   - subclass: WDL
     name: ReadRecurrence
-    primaryDescriptorPath: /wdl_analyses/ReadRecurrence.wdl
+    primaryDescriptorPath: /wdl/05_CNV_depth_calling/ReadRecurrence.wdl
     publish: true
     filters:
       branches:
@@ -971,7 +971,7 @@ workflows:
 
   - subclass: WDL
     name: SplitReadRecurrence
-    primaryDescriptorPath: /wdl_analyses/SplitReadRecurrence.wdl
+    primaryDescriptorPath: /wdl/05_CNV_depth_calling/SplitReadRecurrence.wdl
     publish: true
     filters:
       branches:
@@ -982,7 +982,7 @@ workflows:
 
   - subclass: WDL
     name: FetchCaddScores
-    primaryDescriptorPath: /wdl_analyses/FetchCaddScores.wdl
+    primaryDescriptorPath: /wdl/02_variant_TR_constraint/FetchCaddScores.wdl
     publish: true
     filters:
       branches:
@@ -993,7 +993,7 @@ workflows:
 
   - subclass: WDL
     name: CaddSvSummary
-    primaryDescriptorPath: /wdl_analyses/CaddSvSummary.wdl
+    primaryDescriptorPath: /wdl/02_variant_TR_constraint/CaddSvSummary.wdl
     publish: true
     filters:
       branches:
@@ -1003,7 +1003,7 @@ workflows:
         - /.*/
   - subclass: WDL
     name: CaddSV
-    primaryDescriptorPath: /wdl_analyses/CaddSV.wdl
+    primaryDescriptorPath: /wdl/02_variant_TR_constraint/CaddSV.wdl
     publish: true
     filters:
       branches:
@@ -1014,7 +1014,7 @@ workflows:
 
   - subclass: WDL
     name: PerSampleSvCountInSizeRange
-    primaryDescriptorPath: /wdl_analyses/PerSampleSvCountInSizeRange.wdl
+    primaryDescriptorPath: /wdl/02_variant_TR_constraint/PerSampleSvCountInSizeRange.wdl
     publish: true
     filters:
       branches:
@@ -1025,7 +1025,7 @@ workflows:
 
   - subclass: WDL
     name: LocalAssemblyHifiasm
-    primaryDescriptorPath: /wdl_analyses/LocalAssemblyHifiasm.wdl
+    primaryDescriptorPath: /wdl/05_CNV_depth_calling/LocalAssemblyHifiasm.wdl
     filters:
       branches:
         - main
@@ -1035,7 +1035,7 @@ workflows:
 
   - subclass: WDL
     name: LrgsVariantConstraint
-    primaryDescriptorPath: /wdl_analyses/LrgsVariantConstraint.wdl
+    primaryDescriptorPath: /wdl/02_variant_TR_constraint/LrgsVariantConstraint.wdl
     publish: true
     filters:
       branches:
@@ -1046,7 +1046,7 @@ workflows:
 
   - subclass: WDL
     name: PhasedHetPerGene
-    primaryDescriptorPath: /wdl_analyses/PhasedHetPerGene.wdl
+    primaryDescriptorPath: /wdl/03_expression_alterations/PhasedHetPerGene.wdl
     publish: true
     filters:
       branches:

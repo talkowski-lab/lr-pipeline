@@ -52,8 +52,8 @@
 
 
 ## Codebase
-- Workflows in `wdl/annotation/` should begin with _Annotate_.
-- Workflows directly run in the pipeline should be in one of `wdl/annotation/`, `wdl/annotation_utils/` or `wdl/tools/`.
+- Workflows in `wdl/00_annotate_SV/` should begin with _Annotate_.
+- Workflows directly run in the pipeline should be in one of the numbered `wdl/NN_*/` folders, `wdl/annotation_utils/` or `wdl/tools/`.
 - Workflows directly run in the pipelien should have entries in `dockstore.yml` and `README.md`.
 
 

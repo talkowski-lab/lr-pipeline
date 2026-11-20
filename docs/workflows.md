@@ -21,7 +21,7 @@ Outputs:
 - `af_annotated_vcf_idx`: Index for annotated VCF.
 
 
-### [AnnotateAgeMetrics](../wdl/annotation/AnnotateAgeMetrics.wdl)
+### [AnnotateAgeMetrics](../wdl/00_annotate_SV/AnnotateAgeMetrics.wdl)
 This workflow computes the age distribution of carriers for every variant in the input VCF. For each sample it derives an age from a date-of-birth table relative to a fixed reference date, then tabulates the number of heterozygous and homozygous carriers of each allele that fall into a set of user-defined age bins, along with overflow `smaller` and `larger` bins for ages outside the configured range. It emits a TSV of these per-allele age-bin counts.
 
 Inputs:
@@ -37,7 +37,7 @@ Outputs:
 - `annotations_tsv_age`: TSV of per-allele carrier counts across the age bins.
 
 
-### [AnnotateCallsetOverlap](../wdl/annotation/AnnotateCallsetOverlap.wdl)
+### [AnnotateCallsetOverlap](../wdl/00_annotate_SV/AnnotateCallsetOverlap.wdl)
 This workflow ingests an evaluation VCF and two truth VCFs - one of SNVs & indels and one of SVs - and finds matching variants across them in order to compare the AF & VEP annotations of the matched pairs. This serves as a degree of benchmarking, as it ensures that annotations applied to a larger cohort (e.g. gnomAD) are in line with those we annotate. It also enables the identification of variants that are outliers relative to existing cohorts by pulling out those with a large amount of discordance in their annotation across the callsets.
 
 The workflow undergoes multiple rounds of variant matching in order to determine matched pairs:
@@ -86,11 +86,11 @@ Outputs:
 - `benchmark_annotations_plots_tarball`: Tarball of annotation-comparison plots (only when `compare_annotations` is enabled).
 
 
-### [AnnotateCallsetOverlap_AF](../wdl/annotation/AnnotateCallsetOverlap_AF.wdl)
+### [AnnotateCallsetOverlap_AF](../wdl/00_annotate_SV/AnnotateCallsetOverlap_AF.wdl)
 TODO
 
 
-### [AnnotateDbSNP](../wdl/annotation/AnnotateDbSNP.wdl)
+### [AnnotateDbSNP](../wdl/00_annotate_SV/AnnotateDbSNP.wdl)
 This workflow annotates each variant in the input VCF with its dbSNP reference SNP identifier (rsID). It matches variants against a per-contig dbSNP VCF on CHROM, POS, REF and ALT, emitting a TSV mapping each matched variant to its `dbSNP_ID`.
 
 Inputs:
@@ -104,7 +104,7 @@ Outputs:
 - `annotations_tsv_dbsnp`: TSV mapping variants to their dbSNP identifiers.
 
 
-### [AnnotateDbVaR](../wdl/annotation/AnnotateDbVaR.wdl)
+### [AnnotateDbVaR](../wdl/00_annotate_SV/AnnotateDbVaR.wdl)
 This workflow annotates structural variants in the input VCF with matching records from dbVar. It restricts to variants at or above a minimum length, converts them to a symbolic representation, and matches deletions, duplications and insertions separately against a per-contig dbVar VCF using type-specific size-similarity, reciprocal-overlap and breakpoint-window thresholds. It emits a TSV linking matched variants to their dbVar records.
 
 > **Note:** When converting to symbolic representation, only canonical DUPs (allele_type = `DUP` exactly) are treated as DUP; other DUP subtypes (e.g., `dup_interspersed`, `inv_dup`) are treated as insertions.
@@ -131,7 +131,7 @@ Outputs:
 - `annotations_tsv_dbvar`: TSV mapping variants to their matched dbVar records.
 
 
-### [AnnotateGnomADSTR](../wdl/annotation/AnnotateGnomADSTR.wdl)
+### [AnnotateGnomADSTR](../wdl/00_annotate_SV/AnnotateGnomADSTR.wdl)
 This workflow annotates tandem-repeat variants in the input VCF with overlapping loci from the gnomAD V4 tandem-repeat catalog. It subsets to tandem-repeat calls and matches each against the catalog using a minimum reciprocal-overlap threshold, emitting a TSV linking calls to their gnomAD TR locus.
 
 Inputs:
@@ -145,7 +145,7 @@ Outputs:
 - `annotations_tsv_gnomad_str`: TSV mapping tandem-repeat calls to their gnomAD TR loci.
 
 
-### [AnnotateGQMetrics](../wdl/annotation/AnnotateGQMetrics.wdl)
+### [AnnotateGQMetrics](../wdl/00_annotate_SV/AnnotateGQMetrics.wdl)
 This workflow computes binned distributions of genotype-quality metrics across the carriers of each variant. For every configured FORMAT field it counts the genotypes whose value falls into each bin - optionally restricted to a variant filter and respecting whether larger or smaller values of that field are better - and can additionally bin allele-balance values. It emits a per-variant TSV of these distribution counts.
 
 Inputs:
@@ -164,7 +164,7 @@ Outputs:
 - `annotations_tsv_gq`: TSV of per-variant genotype-quality (and optional allele-balance) distribution counts.
 
 
-### [AnnotateIndelTRs](../wdl/annotation/AnnotateIndelTRs.wdl)
+### [AnnotateIndelTRs](../wdl/00_annotate_SV/AnnotateIndelTRs.wdl)
 This workflow flags short insertions and deletions that represent tandem repeats. Using the str-analysis `filter_vcf_to_tandem_repeats` tool, it inspects each indel's sequence and marks it as a tandem repeat when it meets a minimum total repeat length, minimum number of repeats and minimum repeat-unit length, emitting a TSV of the flagged variants.
 
 Inputs:
@@ -182,7 +182,7 @@ Outputs:
 - `annotations_tsv_trs`: TSV of indels flagged as tandem repeats.
 
 
-### [AnnotateInSilicoPredictors](../wdl/annotation/AnnotateInSilicoPredictors.wdl)
+### [AnnotateInSilicoPredictors](../wdl/00_annotate_SV/AnnotateInSilicoPredictors.wdl)
 This workflow annotates SNVs and indels with precomputed in-silico predictor scores - CADD, Pangolin, PhyloP, REVEL and SpliceAI - drawn from the gnomAD V4 Hail Tables. It shards the VCF and uses a Hail-based script to look up each variant's scores, emitting a TSV of per-variant predictions.
 
 Inputs:
@@ -202,7 +202,7 @@ Outputs:
 - `annotations_tsv_insilico`: TSV of per-variant in-silico predictor scores.
 
 
-### [AnnotateL1MEAID](../wdl/annotation/AnnotateL1MEAID.wdl)
+### [AnnotateL1MEAID](../wdl/00_annotate_SV/AnnotateL1MEAID.wdl)
 This workflow first runs _RepeatMasker_ on the insertions in an input VCF. It then uses its output to run [L1ME-AID](https://github.com/Markloftus/L1ME-AID) and [INTACT_MEI](https://github.com/xzhuo/INTACT_MEI) in order to identify, annotate and filter mobile element insertion (MEI) calls. It restricts to insertions at or above a minimum length and emits a TSV of the resulting MEI annotations.
 
 Inputs:
@@ -216,7 +216,7 @@ Outputs:
 - `annotations_tsv_l1meaid`: TSV of L1ME-AID and INTACT_MEI MEI annotations.
 
 
-### [AnnotateMEDs](../wdl/annotation/AnnotateMEDs.wdl)
+### [AnnotateMEDs](../wdl/00_annotate_SV/AnnotateMEDs.wdl)
 This workflow annotates mobile element deletions (MEDs) by intersecting the deletions in the input VCF against a catalog of known mobile-element loci. Deletions are extracted to BED form and matched to the catalog using size-similarity, reciprocal-overlap, breakpoint-window and sequence-similarity thresholds, producing a TSV of the deletions identified as MEDs.
 
 Inputs:
@@ -234,7 +234,7 @@ Outputs:
 - `annotations_tsv_meds`: TSV of deletions identified as mobile element deletions.
 
 
-### [AnnotateMEIs](../wdl/annotation/AnnotateMEIs.wdl)
+### [AnnotateMEIs](../wdl/00_annotate_SV/AnnotateMEIs.wdl)
 This workflow consolidates the mobile element insertion calls produced by the [AnnotateL1MEAID](#annotatel1meaid), [AnnotatePALMER](#annotatepalmer) and [AnnotateSVAN](#annotatesvan) workflows into a single harmonized set. It reconciles the three per-tool annotation TSVs, using the SVAN annotation header for typing, to produce a final TSV of MEI calls.
 
 Inputs:
@@ -248,7 +248,7 @@ Outputs:
 - `annotations_tsv_meis`: Consolidated TSV of mobile element insertion calls.
 
 
-### [AnnotatePALMER](../wdl/annotation/AnnotatePALMER.wdl)
+### [AnnotatePALMER](../wdl/00_annotate_SV/AnnotatePALMER.wdl)
 This workflow leverages [PALMER](https://github.com/WeichenZhou/PALMER) in order to annotate MEI calls for a cohort in a given cohort VCF. It retains the genotypes present in the VCF, simply adding an INFO field `ME_TYPE` to insertions whose characteristics match those of the PALMER calls. Matching is performed per MEI type using type-specific reciprocal-overlap, size-similarity, sequence-similarity, breakpoint-window and minimum-shared-sample thresholds.
 
 Inputs:
@@ -272,7 +272,7 @@ Outputs:
 - `annotations_tsv_palmer`: TSV of insertions annotated with their PALMER `ME_TYPE`.
 
 
-### [AnnotateRegion](../wdl/annotation/AnnotateRegion.wdl)
+### [AnnotateRegion](../wdl/00_annotate_SV/AnnotateRegion.wdl)
 This workflow annotates each variant with the genomic region class it falls within - simple repeat (`SR`), segmental duplication (`SD`), RepeatMasker region (`RM`) or unique sequence (`US`) - by intersecting it against the corresponding BED panels. It emits a TSV of per-variant `REGION` assignments.
 
 Inputs:
@@ -288,7 +288,7 @@ Outputs:
 - `annotations_tsv_region`: TSV of per-variant genomic-region assignments.
 
 
-### [AnnotateSQMetrics](../wdl/annotation/AnnotateSQMetrics.wdl)
+### [AnnotateSQMetrics](../wdl/00_annotate_SV/AnnotateSQMetrics.wdl)
 This workflow recomputes site-level quality metrics for each variant directly from its genotype-level data. It clears any stale allele-specific INFO fields and recalculates Hardy-Weinberg equilibrium, the inbreeding coefficient, the maximum p(allele balance), and the allele-specific quality approximation, quality-by-depth and variant depth from the per-sample DP, PL and AD fields, emitting a per-variant TSV.
 
 Inputs:
@@ -301,7 +301,7 @@ Outputs:
 - `annotations_tsv_sq`: TSV of recomputed site-level quality metrics.
 
 
-### [AnnotateSVAN](../wdl/annotation/AnnotateSVAN.wdl)
+### [AnnotateSVAN](../wdl/00_annotate_SV/AnnotateSVAN.wdl)
 This workflow leverages [SVAN](https://github.com/REPBIO-LAB/SVAN) in order to annotate Mobile Element Insertions (MEIs), Mobile Element Deletions, Tandem Duplications, Dispersed Duplications and Nuclear Mitochondrial Segments (NUMT). It processes insertions and deletions separately, first running Tandem Repeat Finder (TRF) on the inserted or deleted sequence of each SV in the input VCF and then running SVAN over the result, before extracting and aligning the annotations into a single TSV. Before extraction, the `DUP_COORD` field produced by SVAN is reformatted: any `flank_`-prefixed relative coordinates are resolved to absolute genomic positions, preserving the original order of comma-separated values.
 
 Inputs:
@@ -322,7 +322,7 @@ Outputs:
 - `annotations_header_svan`: Header lines describing the SVAN annotation fields.
 
 
-### [AnnotateSVAnnotate](../wdl/annotation/AnnotateSVAnnotate.wdl)
+### [AnnotateSVAnnotate](../wdl/00_annotate_SV/AnnotateSVAnnotate.wdl)
 This workflow leverages [SVAnnotate](https://gatk.broadinstitute.org/hc/en-us/articles/30332011989659-SVAnnotate) in order to annotate predicted functional effects for SVs. It conditionally only runs SVs through this workflow, ignoring all SNVs and indels, converting each SV to a symbolic representation before annotating it against coding and noncoding panels and extracting the resulting `PREDICTED_` annotations into a TSV.
 
 > **Note:** When converting to symbolic representation, all DUP allele types (including `dup_interspersed`, `inv_dup`, `complex_dup`, etc.) are treated as DUP.
@@ -341,7 +341,7 @@ Outputs:
 - `annotations_header_svannotate`: Header lines describing the SVAnnotate annotation fields.
 
 
-### [AnnotateVEPHail](../wdl/annotation/AnnotateVEPHail.wdl)
+### [AnnotateVEPHail](../wdl/00_annotate_SV/AnnotateVEPHail.wdl)
 This workflow leverages [the Ensembl Variant Effect Predictor (VEP)](https://useast.ensembl.org/info/docs/tools/vep/index.html) in order to annotate predicted functional effects based on site-level information. It strips genotypes, scatters the VCF into shards, optionally normalizes and splits multiallelics around the VEP call, and uses Hail in order to run this annotation process in a more efficient and scalable manner before concatenating the per-shard annotations into a single TSV.
 
 Inputs:
@@ -369,7 +369,7 @@ Outputs:
 - `annotations_tsv_vep`: TSV of VEP functional-effect annotations.
 
 
-### [AnnotateVRS](../wdl/annotation/AnnotateVRS.wdl)
+### [AnnotateVRS](../wdl/00_annotate_SV/AnnotateVRS.wdl)
 This workflow annotates each variant with its GA4GH Variant Representation Specification (VRS) attributes using a seqrepo sequence repository. It runs `vrs-annotate` per contig to add the VRS INFO fields, then extracts them into an annotation TSV of five locating columns (CHROM, POS, REF, ALT, ID) followed by a column for each VRS field.
 
 Inputs:
