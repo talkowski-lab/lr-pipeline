@@ -8,7 +8,6 @@ workflow GDCallsToVcf {
         Array[File] gd_output_tarballs
         Array[File] ploidy_tables
         File header_vcf
-        File header_vcf_idx
         Array[String] contigs
         String prefix
 
@@ -36,6 +35,7 @@ workflow GDCallsToVcf {
         input:
             gd_calls = ExtractGDCalls.gd_calls,
             ploidy_tables = ploidy_tables,
+            header_vcf = header_vcf,
             prefix = prefix,
             docker = sv_pipeline_docker,
             runtime_attr_override = runtime_attr_combine_gd_calls
@@ -44,8 +44,8 @@ workflow GDCallsToVcf {
     scatter (i in range(length(contigs))) {
         call WriteGDVcf {
             input:
-                header_vcf = header_vcf,
-                header_vcf_idx = header_vcf_idx,
+                header_vcf = CombineGDCalls.sample_header_vcf,
+                header_vcf_idx = CombineGDCalls.sample_header_vcf_idx,
                 gd_calls = CombineGDCalls.combined_gd_calls,
                 ploidy_table = CombineGDCalls.ploidy_table,
                 contig = contigs[i],
@@ -107,6 +107,7 @@ task CombineGDCalls {
     input {
         Array[File] gd_calls
         Array[File] ploidy_tables
+        File header_vcf
         String prefix
         String docker
         RuntimeAttr? runtime_attr_override
@@ -129,6 +130,16 @@ task CombineGDCalls {
         { cat header.tsv; for f in ~{sep=" " gd_calls}; do zcat "$f" | tail -n +2; done; } \
             | gzip > ~{prefix}.gd_cnv_calls.tsv.gz
 
+        for f in ~{sep=" " gd_calls}; do zcat "$f" | tail -n +2 | cut -f1 | uniq; done \
+            | awk '!seen[$1]++' > samples.txt
+        echo "$(wc -l < samples.txt) samples in the GD calls" >&2
+        {
+            zcat ~{header_vcf} | grep '^##'
+            printf '#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT\t'
+            paste -sd '\t' samples.txt
+        } | bgzip > ~{prefix}.samples_header.vcf.gz
+        tabix -p vcf ~{prefix}.samples_header.vcf.gz
+
         head -n 1 ~{ploidy_tables[0]} > ~{prefix}.ploidy.tsv
         for p in ~{sep=" " ploidy_tables}; do
             if [ "$(head -n 1 "$p")" != "$(head -n 1 ~{prefix}.ploidy.tsv)" ]; then
@@ -142,6 +153,8 @@ task CombineGDCalls {
     output {
         File combined_gd_calls = "~{prefix}.gd_cnv_calls.tsv.gz"
         File ploidy_table = "~{prefix}.ploidy.tsv"
+        File sample_header_vcf = "~{prefix}.samples_header.vcf.gz"
+        File sample_header_vcf_idx = "~{prefix}.samples_header.vcf.gz.tbi"
     }
 
     RuntimeAttr default_attr = object {

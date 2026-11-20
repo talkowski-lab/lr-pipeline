@@ -761,13 +761,12 @@ Outputs:
 
 
 ### [GDCallsToVcf](../wdl/annotation_utils/GDCallsToVcf.wdl)
-This utility writes the genomic disorder (GD) CNV calls of gatk-sv `CallGenomicDisorderCNVs` as their own VCF, one per contig, without integrating them into a callset. Each batch tarball is read for `call/gd_cnv_calls.tsv.gz` only (the per-bin posteriors, BAF tables and plots are not unpacked), the batch tables and ploidy tables are concatenated, and per contig the calls are subset and `gatk-sv-gd integrate` is run on a header-only VCF that carries the cohort samples. Every GD entry with at least one carrier becomes a record (`<GD_ID>_<svtype>_novel`, `EV=RD`, `ALGORITHMS=depth`, GD cluster and breakpoints in INFO) with each sample's genotype and copy number from the GD model; non-carriers are hom-ref.
+This utility writes the genomic disorder (GD) CNV calls of gatk-sv `CallGenomicDisorderCNVs` as their own VCF, one per contig, without integrating them into a callset. Each batch tarball is read for `call/gd_cnv_calls.tsv.gz` only (the per-bin posteriors, BAF tables and plots are not unpacked), the batch tables and ploidy tables are concatenated, a header-only VCF is built whose samples are every sample in the GD calls (meta lines taken from `header_vcf`), and per contig the calls are subset and `gatk-sv-gd integrate` is run on that header. Every GD entry with at least one carrier becomes a record (`<GD_ID>_<svtype>_novel`, `EV=RD`, `ALGORITHMS=depth`, GD cluster and breakpoints in INFO) with each sample's genotype and copy number from the GD model; non-carriers are hom-ref.
 
 Inputs:
 - `Array[File] gd_output_tarballs`: One `CallGenomicDisorderCNVs` output tarball per batch.
 - `Array[File] ploidy_tables`: Wide ploidy tables (sample + one column per contig), all with the same header.
-- `File header_vcf`: Header-only VCF (no records) whose samples are the cohort samples.
-- `File header_vcf_idx`: Index for `header_vcf`.
+- `File header_vcf`: VCF whose `##` meta lines (contigs, INFO / FORMAT definitions) are used for the output; its samples are ignored.
 - `Array[String] contigs`: Contigs to write (those in `gd_table`).
 - `File gd_table`: GD regions table used for calling.
 - `File par_bed`: Pseudoautosomal regions BED.
