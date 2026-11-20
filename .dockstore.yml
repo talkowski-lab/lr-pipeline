@@ -1045,8 +1045,8 @@ workflows:
         - /.*/
 
   - subclass: WDL
-    name: PhasedHetPerGene
-    primaryDescriptorPath: /wdl/03_expression_alterations/PhasedHetPerGene.wdl
+    name: Step01_CountPhasedHetPerGene
+    primaryDescriptorPath: /wdl/03_expression_alterations/Step01_CountPhasedHetPerGene.wdl
     publish: true
     filters:
       branches:

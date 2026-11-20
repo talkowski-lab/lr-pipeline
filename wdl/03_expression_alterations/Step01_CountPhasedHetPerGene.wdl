@@ -9,7 +9,7 @@ version 1.0
 
 import "../utils/Structs.wdl"
 
-workflow PhasedHetPerGene {
+workflow Step01_CountPhasedHetPerGene {
     input {
         Array[File] vcfs
         Array[File] vcf_idxs
