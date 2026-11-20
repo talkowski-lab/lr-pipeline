@@ -1034,8 +1034,8 @@ workflows:
         - /.*/
 
   - subclass: WDL
-    name: LrgsVariantConstraint
-    primaryDescriptorPath: /wdl/02_variant_TR_constraint/LrgsVariantConstraint.wdl
+    name: Step01_CalcuLrGSVariantConstraint
+    primaryDescriptorPath: /wdl/02_variant_TR_constraint/Step01_CalcuLrGSVariantConstraint.wdl
     publish: true
     filters:
       branches:

@@ -9,7 +9,7 @@ version 1.0
 
 import "../utils/Structs.wdl"
 
-workflow LrgsVariantConstraint {
+workflow Step01_CalcuLrGSVariantConstraint {
     input {
         Array[File] vcfs
         Array[File] vcf_idxs
