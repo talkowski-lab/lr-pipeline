@@ -1,6 +1,6 @@
 version 1.0
 
-import "../wdl/utils/Structs.wdl"
+import "../utils/Structs.wdl"
 
 # Splits multiallelic records into biallelic ones (bcftools norm -m -any).
 # tensorQTL's genotype reader, like most cis-QTL tools, expects biallelic

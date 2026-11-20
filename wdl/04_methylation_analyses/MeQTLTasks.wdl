@@ -1,6 +1,6 @@
 version 1.0
 
-import "../wdl/utils/Structs.wdl"
+import "../utils/Structs.wdl"
 
 task IndexVcf {
     input {

@@ -1,6 +1,6 @@
 version 1.0
 
-import "../wdl/utils/Structs.wdl"
+import "../utils/Structs.wdl"
 
 # Per-haplotype methylation summaries within target regions (e.g. ABC enhancers).
 #

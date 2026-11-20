@@ -1,6 +1,6 @@
 version 1.0
 
-import "../wdl/utils/Structs.wdl"
+import "../utils/Structs.wdl"
 
 # Population-level analysis of long-read CpG methylation tables (per-sample
 # and per-haplotype wide-format beds, one file per contig; values are percent

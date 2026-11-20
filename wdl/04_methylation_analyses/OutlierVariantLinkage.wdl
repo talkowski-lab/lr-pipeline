@@ -1,6 +1,6 @@
 version 1.0
 
-import "../wdl/utils/Structs.wdl"
+import "../utils/Structs.wdl"
 
 # Link methylation outlier haplotypes to rare variants within `window` bp of the outlier region.
 #
