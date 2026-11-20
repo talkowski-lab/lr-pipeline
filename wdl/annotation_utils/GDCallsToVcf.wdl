@@ -117,9 +117,13 @@ task CombineGDCalls {
     command <<<
         set -euo pipefail
 
-        zcat ~{gd_calls[0]} | head -n 1 > header.tsv
+        first_line() {
+            python3 -c 'import gzip, sys; print(gzip.open(sys.argv[1], "rt").readline(), end="")' "$1"
+        }
+
+        first_line ~{gd_calls[0]} > header.tsv
         for f in ~{sep=" " gd_calls}; do
-            if [ "$(zcat "$f" | head -n 1)" != "$(cat header.tsv)" ]; then
+            if [ "$(first_line "$f")" != "$(cat header.tsv)" ]; then
                 echo "ERROR: $f header differs from the first GD calls table" >&2
                 exit 1
             fi
