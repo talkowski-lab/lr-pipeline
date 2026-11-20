@@ -96,6 +96,17 @@ workflows:
         - /.*/
 
   - subclass: WDL
+    name: AnnotateSmallInsertionOrigins
+    primaryDescriptorPath: /wdl/annotation/AnnotateSmallInsertionOrigins.wdl
+    publish: true
+    filters:
+      branches:
+        - main
+        - xz_analyses
+      tags:
+        - /.*/
+
+  - subclass: WDL
     name: AnnotateL1MEAID
     primaryDescriptorPath: /wdl/annotation/AnnotateL1MEAID.wdl
     filters:
