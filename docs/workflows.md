@@ -761,7 +761,7 @@ Outputs:
 
 
 ### [GDCallsToVcf](../wdl/annotation_utils/GDCallsToVcf.wdl)
-This utility writes the genomic disorder (GD) CNV calls of gatk-sv `CallGenomicDisorderCNVs` as their own VCF, one per contig, without integrating them into a callset. Each batch tarball is read for `call/gd_cnv_calls.tsv.gz` only (the per-bin posteriors, BAF tables and plots are not unpacked), the batch tables and ploidy tables are concatenated and split by contig, and `gatk-sv-gd integrate` is run per contig on a header-only VCF that carries the cohort samples. Every GD entry with at least one carrier becomes a record (`<GD_ID>_<svtype>_novel`, `EV=RD`, `ALGORITHMS=depth`, GD cluster and breakpoints in INFO) with each sample's genotype and copy number from the GD model; non-carriers are hom-ref.
+This utility writes the genomic disorder (GD) CNV calls of gatk-sv `CallGenomicDisorderCNVs` as their own VCF, one per contig, without integrating them into a callset. Each batch tarball is read for `call/gd_cnv_calls.tsv.gz` only (the per-bin posteriors, BAF tables and plots are not unpacked), the batch tables and ploidy tables are concatenated, and per contig the calls are subset and `gatk-sv-gd integrate` is run on a header-only VCF that carries the cohort samples. Every GD entry with at least one carrier becomes a record (`<GD_ID>_<svtype>_novel`, `EV=RD`, `ALGORITHMS=depth`, GD cluster and breakpoints in INFO) with each sample's genotype and copy number from the GD model; non-carriers are hom-ref.
 
 Inputs:
 - `Array[File] gd_output_tarballs`: One `CallGenomicDisorderCNVs` output tarball per batch.

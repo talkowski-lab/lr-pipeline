@@ -36,7 +36,6 @@ workflow GDCallsToVcf {
         input:
             gd_calls = ExtractGDCalls.gd_calls,
             ploidy_tables = ploidy_tables,
-            contigs = contigs,
             prefix = prefix,
             docker = sv_pipeline_docker,
             runtime_attr_override = runtime_attr_combine_gd_calls
@@ -47,7 +46,7 @@ workflow GDCallsToVcf {
             input:
                 header_vcf = header_vcf,
                 header_vcf_idx = header_vcf_idx,
-                gd_calls = CombineGDCalls.contig_gd_calls[i],
+                gd_calls = CombineGDCalls.combined_gd_calls,
                 ploidy_table = CombineGDCalls.ploidy_table,
                 contig = contigs[i],
                 gd_table = gd_table,
@@ -108,7 +107,6 @@ task CombineGDCalls {
     input {
         Array[File] gd_calls
         Array[File] ploidy_tables
-        Array[String] contigs
         String prefix
         String docker
         RuntimeAttr? runtime_attr_override
@@ -131,13 +129,6 @@ task CombineGDCalls {
         { cat header.tsv; for f in ~{sep=" " gd_calls}; do zcat "$f" | tail -n +2; done; } \
             | gzip > ~{prefix}.gd_cnv_calls.tsv.gz
 
-        rm -f contig_files.txt
-        for c in ~{sep=" " contigs}; do
-            { cat header.tsv; zcat ~{prefix}.gd_cnv_calls.tsv.gz | awk -F'\t' -v c="$c" 'NR > 1 && $4 == c'; } \
-                | gzip > ~{prefix}.$c.gd_cnv_calls.tsv.gz
-            echo "~{prefix}.$c.gd_cnv_calls.tsv.gz" >> contig_files.txt
-        done
-
         head -n 1 ~{ploidy_tables[0]} > ~{prefix}.ploidy.tsv
         for p in ~{sep=" " ploidy_tables}; do
             if [ "$(head -n 1 "$p")" != "$(head -n 1 ~{prefix}.ploidy.tsv)" ]; then
@@ -150,14 +141,13 @@ task CombineGDCalls {
 
     output {
         File combined_gd_calls = "~{prefix}.gd_cnv_calls.tsv.gz"
-        Array[File] contig_gd_calls = read_lines("contig_files.txt")
         File ploidy_table = "~{prefix}.ploidy.tsv"
     }
 
     RuntimeAttr default_attr = object {
         cpu_cores: 1,
         mem_gb: 4,
-        disk_gb: 3 * ceil(size(gd_calls, "GB")) + 20,
+        disk_gb: 2 * ceil(size(gd_calls, "GB")) + 20,
         boot_disk_gb: 10,
         preemptible_tries: 2,
         max_retries: 0
@@ -192,10 +182,11 @@ task WriteGDVcf {
         set -euo pipefail
 
         awk -F'\t' -v c="~{contig}" 'NR == 1 || $1 == c' ~{gd_table} > gd_table.~{contig}.tsv
+        zcat ~{gd_calls} | awk -F'\t' -v c="~{contig}" 'NR == 1 || $4 == c' | gzip > gd_calls.~{contig}.tsv.gz
 
         gatk-sv-gd integrate \
             --vcf ~{header_vcf} \
-            --gd-calls ~{gd_calls} \
+            --gd-calls gd_calls.~{contig}.tsv.gz \
             --gd-table gd_table.~{contig}.tsv \
             --par-bed ~{par_bed} \
             --ploidy-table ~{ploidy_table} \
@@ -211,7 +202,7 @@ task WriteGDVcf {
     RuntimeAttr default_attr = object {
         cpu_cores: 1,
         mem_gb: 16,
-        disk_gb: 4 * ceil(size(gd_calls, "GB")) + 20,
+        disk_gb: 2 * ceil(size(gd_calls, "GB")) + 20,
         boot_disk_gb: 10,
         preemptible_tries: 2,
         max_retries: 0
