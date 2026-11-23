@@ -16,6 +16,7 @@ workflow SummarizeGDCallDepth {
         Int event_bins = 50
         Int min_flank_bp = 10000
         Int traces_per_class = 5
+        Int ref_traces = 0
         File? sd_pairs_bed
 
         String sv_pipeline_docker
@@ -36,6 +37,7 @@ workflow SummarizeGDCallDepth {
                 event_bins = event_bins,
                 min_flank_bp = min_flank_bp,
                 traces_per_class = traces_per_class,
+                ref_traces = ref_traces,
                 sd_pairs_bed = sd_pairs_bed,
                 prefix = "~{prefix}.~{batches[i]}",
                 docker = sv_pipeline_docker,
@@ -71,6 +73,7 @@ task SummarizeBatchDepth {
         Int event_bins
         Int min_flank_bp
         Int traces_per_class
+        Int ref_traces
         File? sd_pairs_bed
         String prefix
         String docker
@@ -90,6 +93,7 @@ task SummarizeBatchDepth {
         flank_bins, event_bins = ~{flank_bins}, ~{event_bins}
         min_flank = ~{min_flank_bp}
         n_traces = ~{traces_per_class}
+        n_ref_traces = ~{ref_traces}
         random.seed(batch)
 
         sd_pairs = {}
@@ -180,8 +184,9 @@ task SummarizeBatchDepth {
                     sq = np.where(ok, v * v, 0).sum(axis=1)
                     for b in range(n_bins):
                         bs.write(f"{cid}\t{batch}\t{label}\t{b}\t{n[b]}\t{sm[b]:.4f}\t{sq[b]:.4f}\n")
-                    if label != "ref":
-                        for j in random.sample(cols, min(n_traces, len(cols))):
+                    k = n_ref_traces if label == "ref" else n_traces
+                    if k > 0:
+                        for j in random.sample(cols, min(k, len(cols))):
                             vals = "\t".join("NA" if not np.isfinite(t) else f"{t:.3f}" for t in cn_est[:, j])
                             tr.write(f"{cid}\t{batch}\t{samples[j]}\t{label}\t{vals}\n")
         CODE
