@@ -18,11 +18,15 @@ workflow SummarizeGDCallDepth {
         Int traces_per_class = 5
         Int ref_traces = 0
         File? sd_pairs_bed
+        File? segdup_bed
+        Int raster_px = 2000
 
         String sv_pipeline_docker
+        String? plot_docker
 
         RuntimeAttr? runtime_attr_summarize_batch_depth
         RuntimeAttr? runtime_attr_combine_depth_summaries
+        RuntimeAttr? runtime_attr_plot_region_depth
     }
 
     scatter (i in range(length(batches))) {
@@ -55,10 +59,27 @@ workflow SummarizeGDCallDepth {
             runtime_attr_override = runtime_attr_combine_depth_summaries
     }
 
+    if (defined(plot_docker)) {
+        call PlotRegionDepth {
+            input:
+                traces = CombineDepthSummaries.combined_traces,
+                windows = CombineDepthSummaries.combined_windows,
+                bin_stats = CombineDepthSummaries.combined_bin_stats,
+                sd_pairs_bed = sd_pairs_bed,
+                segdup_bed = segdup_bed,
+                raster_px = raster_px,
+                prefix = prefix,
+                docker = select_first([plot_docker]),
+                runtime_attr_override = runtime_attr_plot_region_depth
+        }
+    }
+
     output {
         File depth_bin_stats = CombineDepthSummaries.combined_bin_stats
         File depth_traces = CombineDepthSummaries.combined_traces
         File call_windows = CombineDepthSummaries.combined_windows
+        File? region_depth_pdf = PlotRegionDepth.region_depth_pdf
+        File? region_counts = PlotRegionDepth.region_counts
     }
 }
 
@@ -257,6 +278,249 @@ task CombineDepthSummaries {
         cpu_cores: 1,
         mem_gb: 4,
         disk_gb: 2 * ceil(size(bin_stats, "GB") + size(traces, "GB")) + 10,
+        boot_disk_gb: 10,
+        preemptible_tries: 2,
+        max_retries: 0
+    }
+    RuntimeAttr runtime_attr = select_first([runtime_attr_override, default_attr])
+    runtime {
+        cpu: select_first([runtime_attr.cpu_cores, default_attr.cpu_cores])
+        memory: select_first([runtime_attr.mem_gb, default_attr.mem_gb]) + " GiB"
+        disks: "local-disk " + select_first([runtime_attr.disk_gb, default_attr.disk_gb]) + " HDD"
+        bootDiskSizeGb: select_first([runtime_attr.boot_disk_gb, default_attr.boot_disk_gb])
+        docker: docker
+        preemptible: select_first([runtime_attr.preemptible_tries, default_attr.preemptible_tries])
+        maxRetries: select_first([runtime_attr.max_retries, default_attr.max_retries])
+    }
+}
+
+task PlotRegionDepth {
+    input {
+        File traces
+        File windows
+        File bin_stats
+        File? sd_pairs_bed
+        File? segdup_bed
+        Int raster_px
+        String prefix
+        String docker
+        RuntimeAttr? runtime_attr_override
+    }
+
+    command <<<
+        set -euo pipefail
+
+        cat > plot_gd_region_carrier_depth.R <<'RSCRIPT'
+        # Read-depth profiles of every carrier of the GD calls at each SD-pair region, from lr-annotation SummarizeGDCallDepth run with
+        # traces_per_class large enough to keep all carriers. One page per region (the DEL and DUP records of a region together):
+        # every carrier is a thin line (estimated copy number per bin, 2 = diploid), coloured DEL vs DUP; carriers are not averaged.
+        # Non-carriers (samples at their expected copy number in both the DEL and the DUP record): if the traces include sampled
+        # "ref" profiles (SummarizeGDCallDepth ref_traces > 0), they are drawn as grey thin lines (from the DEL record when present,
+        # excluding the region's carriers); otherwise, with --bin-stats, as a grey band, mean +/- 2 SD per bin. --bin-stats also
+        # gives the non-carrier count in the header.
+        # Header: number of samples with het DEL (RD_CN 1), hom DEL (RD_CN 0), het DUP (RD_CN 3) and hom DUP (RD_CN >= 4).
+        # Tracks above the profiles: the two SDs of the pair flanking the region (--pairs-bed) and all hg38 SDs in the window
+        # (--segdup). The carrier lines are drawn to a PNG (ragg) and placed in the panel, so pages with many carriers stay small.
+        # Multi-page PDF, Arial (Quartz on macOS; cairo_pdf elsewhere, where fontconfig maps Arial to Liberation Sans).
+        suppressPackageStartupMessages({
+            library(optparse)
+            library(data.table)
+            library(ggplot2)
+            library(patchwork)
+            library(ragg)
+            library(png)
+        })
+
+        opt <- parse_args(OptionParser(
+            usage = "%prog --traces X.traces.tsv.gz --windows X.windows.tsv.gz -o out.pdf [--pairs-bed P.bed.gz --segdup SD.bed.gz]",
+            description = "One page per GD region with every DEL and DUP carrier's depth profile (SummarizeGDCallDepth outputs).",
+            option_list = list(
+                make_option("--traces", type = "character", help = "traces.tsv.gz (call_id batch sample class b0..bN) [required]"),
+                make_option("--windows", type = "character", help = "windows.tsv.gz (call_id chrom start end svtype bin ...) [required]"),
+                make_option("--bin-stats", type = "character", default = NULL,
+                            help = "bin_stats.tsv.gz (call_id batch class bin n sum sumsq) for the non-carrier band"),
+                make_option("--pairs-bed", type = "character", default = NULL,
+                            help = "SD-pair BED (#chrom start end ... left_sd_start left_sd_end right_sd_start right_sd_end)"),
+                make_option("--segdup", type = "character", default = NULL, help = "hg38 SD BED (chrom start end ...), .gz ok"),
+                make_option("--regions", type = "character", default = NULL, help = "optional file of regions chrom:start-end to plot"),
+                make_option("--raster-px", type = "integer", default = 2000, help = "width in pixels of the carrier-line image [%default]"),
+                make_option(c("-o", "--out"), type = "character", help = "output multi-page PDF [required]"),
+                make_option("--counts", type = "character", default = NULL, help = "optional TSV of carrier counts per region")
+            )
+        ))
+        for (k in c("traces", "windows", "out")) if (is.null(opt[[k]])) stop("--", k, " is required (use -h for help)")
+
+        font <- "Arial"
+        sv_cols <- c(`non-carrier` = "grey70", DEL = "#C0392B", DUP = "#2166AC")
+
+        win <- fread(opt$windows)
+        win[, mid := (bin_start + bin_end) / 2]
+        win[, region := paste0(chrom, ":", start, "-", end)]
+        bins <- unique(win[, .(region, bin, mid, bin_start, bin_end)])
+        regions <- unique(win[, .(region, chrom, start, end)])
+        regions <- regions[order(factor(chrom, levels = paste0("chr", c(1:22, "X", "Y"))), start)]
+        if (!is.null(opt$regions)) regions <- regions[region %in% readLines(opt$regions)]
+        call_region <- unique(win[, .(call_id, region, svtype)])
+
+        tr <- fread(opt$traces)
+        tr <- merge(tr, call_region, by = "call_id")
+        ref_tr <- tr[class == "ref"]
+        tr <- tr[class != "ref"]
+        if (nrow(ref_tr) > 0) {
+            ref_tr[, keep := if ("DEL" %in% svtype) "DEL" else "DUP", by = region]
+            ref_tr <- ref_tr[svtype == keep][!unique(tr[, .(region, batch, sample)]), on = .(region, batch, sample)]
+        }
+        tr[, cn := as.integer(sub("^CN", "", class))]
+        tr[, group := fifelse(svtype == "DEL", fifelse(cn == 0, "hom DEL", "het DEL"), fifelse(cn >= 4, "hom DUP", "het DUP"))]
+        counts <- tr[, .(n = uniqueN(sample)), by = .(region, group)]
+        counts <- dcast(counts, region ~ group, value.var = "n", fill = 0)
+        for (g in c("het DEL", "hom DEL", "het DUP", "hom DUP")) if (!g %in% names(counts)) counts[, (g) := 0L]
+        if (!is.null(opt$counts)) {
+            fwrite(merge(regions, counts, by = "region", all.x = TRUE)[, c("region", "het DEL", "hom DEL", "het DUP", "hom DUP")],
+                   opt$counts, sep = "\t")
+        }
+
+        ref_band <- NULL
+        if (!is.null(opt$`bin-stats`)) {
+            st <- fread(opt$`bin-stats`)
+            st <- merge(st[, .(n = sum(n), sum = sum(sum), sumsq = sum(sumsq)), by = .(call_id, class, bin)], call_region, by = "call_id")
+            # DUP carriers are "ref" in the DEL record (and DEL carriers in the DUP record): remove the other type's carriers
+            ref <- st[class == "ref", .(region, svtype, bin, n, sum, sumsq)]
+            car <- st[class != "ref", .(n = sum(n), sum = sum(sum), sumsq = sum(sumsq)), by = .(region, svtype, bin)]
+            car[, svtype := fifelse(svtype == "DEL", "DUP", "DEL")]
+            ref <- merge(ref, car, by = c("region", "svtype", "bin"), all.x = TRUE, suffixes = c("", ".o"))
+            for (k in c("n.o", "sum.o", "sumsq.o")) ref[is.na(get(k)), (k) := 0]
+            ref[, `:=`(n = n - n.o, sum = sum - sum.o, sumsq = sumsq - sumsq.o)]
+            ref <- ref[order(region, bin, svtype)][, .SD[1], by = .(region, bin)]
+            ref[, mean := sum / n]
+            ref[, sd := sqrt(pmax(sumsq / n - mean^2, 0))]
+            ref_band <- ref[, .(region, bin, n, mean, sd)]
+        }
+
+        flank_sd <- NULL
+        if (!is.null(opt$`pairs-bed`)) {
+            pb <- fread(opt$`pairs-bed`)
+            setnames(pb, 1:3, c("chrom", "start", "end"))
+            flank_sd <- rbind(pb[, .(chrom, start, end, sd_start = left_sd_start, sd_end = left_sd_end)],
+                              pb[, .(chrom, start, end, sd_start = right_sd_start, sd_end = right_sd_end)])
+        }
+        segdup <- NULL
+        if (!is.null(opt$segdup)) {
+            segdup <- fread(opt$segdup, header = FALSE, select = 1:3, col.names = c("chrom", "sd_start", "sd_end"))
+        }
+
+        bin_cols <- grep("^b[0-9]+$", names(tr), value = TRUE)
+        fmt <- function(x) format(x, big.mark = ",")
+
+        dir.create(dirname(opt$out), showWarnings = FALSE, recursive = TRUE)
+        if (capabilities("aqua")) quartz(type = "pdf", file = opt$out, width = 16, height = 10) else
+            cairo_pdf(opt$out, width = 16, height = 10, onefile = TRUE)
+        for (i in seq_len(nrow(regions))) {
+            rg <- regions[i]
+            b <- bins[region == rg$region]
+            xlim <- c(min(b$bin_start), max(b$bin_end)) / 1e6
+            t <- tr[region == rg$region]
+            rt <- ref_tr[region == rg$region]
+            cnt <- counts[region == rg$region]
+            get_n <- function(g) if (nrow(cnt) == 0) 0 else cnt[[g]]
+            header <- paste0("het DEL: ", fmt(get_n("het DEL")), "    hom DEL: ", fmt(get_n("hom DEL")),
+                             "    het DUP: ", fmt(get_n("het DUP")), "    hom DUP: ", fmt(get_n("hom DUP")))
+            p <- ggplot() +
+                annotate("rect", xmin = rg$start / 1e6, xmax = rg$end / 1e6, ymin = -Inf, ymax = Inf, fill = "#FBE9E7") +
+                geom_hline(yintercept = c(1, 2, 3, 4, 5), colour = "grey80", linetype = "dashed", linewidth = 0.5)
+            rb <- if (!is.null(ref_band)) merge(ref_band[region == rg$region], b[, .(bin, mid)], by = "bin") else NULL
+            if (!is.null(rb) && nrow(rb) > 0) header <- paste0(header, "    non-carriers: ", fmt(max(rb$n)))
+            if (nrow(t) > 0 || nrow(rt) > 0) {
+                if (nrow(rt) > 0) rt[, svtype := "non-carrier"]
+                m <- melt(rbind(rt, t, fill = TRUE)[, c("batch", "sample", "svtype", bin_cols), with = FALSE],
+                          id.vars = c("batch", "sample", "svtype"), variable.name = "bin", value.name = "cn")
+                m[, bin := as.integer(sub("^b", "", bin))]
+                m <- merge(m, b[, .(bin, mid)], by = "bin")
+                setorder(m, svtype, batch, sample, bin)
+                n_type <- m[, .(n = uniqueN(paste(batch, sample))), by = svtype]
+                lp <- ggplot() +
+                    annotate("rect", xmin = rg$start / 1e6, xmax = rg$end / 1e6, ymin = -Inf, ymax = Inf, fill = "#FBE9E7") +
+                    geom_hline(yintercept = c(1, 2, 3, 4, 5), colour = "grey80", linetype = "dashed", linewidth = 0.5)
+                if (nrow(rt) == 0 && !is.null(rb) && nrow(rb) > 0) {
+                    lp <- lp + geom_ribbon(data = rb, aes(x = mid / 1e6, ymin = mean - 2 * sd, ymax = mean + 2 * sd), fill = "grey70",
+                                           alpha = 0.8)
+                }
+                for (sv in intersect(c("non-carrier", "DEL", "DUP"), n_type$svtype)) {
+                    a <- min(0.6, max(if (sv == "non-carrier") 0.06 else 0.02, 15 / n_type[svtype == sv]$n))
+                    lp <- lp + geom_line(data = m[svtype == sv], aes(x = mid / 1e6, y = cn, group = paste(batch, sample)),
+                                         colour = sv_cols[[sv]], linewidth = 0.5, alpha = a)
+                }
+                lp <- lp + coord_cartesian(xlim = xlim, ylim = c(0, 6), expand = FALSE) + theme_void() +
+                    theme(plot.margin = margin(0, 0, 0, 0))
+                png_file <- tempfile(fileext = ".png")
+                cur <- dev.cur()
+                agg_png(png_file, width = opt$`raster-px`, height = round(opt$`raster-px` / 2.4), background = "white", res = 150)
+                print(lp)
+                dev.off()
+                dev.set(cur)
+                img <- readPNG(png_file)[, , 1:3]
+                unlink(png_file)
+                p <- p + annotation_raster(img, xmin = xlim[1], xmax = xlim[2], ymin = 0, ymax = 6) +
+                    geom_point(data = data.frame(x = xlim[1], y = -1, svtype = c("non-carrier", "DEL", "DUP")), aes(x = x, y = y, colour = svtype))
+            }
+            p <- p +
+                scale_colour_manual(values = sv_cols, name = NULL, drop = FALSE, limits = c("non-carrier", "DEL", "DUP"),
+                                    labels = c(if (nrow(rt) > 0) paste0("non-carriers (random ", fmt(uniqueN(rt[, .(batch, sample)])), ")")
+                                               else "non-carriers (mean +/- 2 SD)", "DEL carriers", "DUP carriers")) +
+                guides(colour = guide_legend(override.aes = list(shape = 15, size = 6))) +
+                coord_cartesian(xlim = xlim, ylim = c(0, 6), expand = FALSE) +
+                scale_y_continuous(breaks = 0:6) +
+                labs(x = paste0(rg$chrom, " position (Mb)"), y = "Estimated copy number") +
+                theme_classic(base_size = 22, base_family = font) +
+                theme(legend.position = "top")
+            fs <- if (!is.null(flank_sd)) flank_sd[chrom == rg$chrom & start == rg$start & end == rg$end] else NULL
+            sd <- if (!is.null(segdup)) segdup[chrom == rg$chrom & sd_end > xlim[1] * 1e6 & sd_start < xlim[2] * 1e6] else NULL
+            trk <- ggplot() +
+                annotate("rect", xmin = rg$start / 1e6, xmax = rg$end / 1e6, ymin = -Inf, ymax = Inf, fill = "#FBE9E7") +
+                scale_y_continuous(breaks = c(2, 1), labels = c("Flanking SDs", "hg38 SDs"), limits = c(0.5, 2.5)) +
+                coord_cartesian(xlim = xlim, expand = FALSE) +
+                labs(x = NULL, y = NULL) +
+                theme_classic(base_size = 22, base_family = font) +
+                theme(axis.text.x = element_blank(), axis.ticks.x = element_blank(), axis.line.x = element_blank())
+            if (!is.null(fs) && nrow(fs) > 0) {
+                trk <- trk + geom_rect(data = fs, aes(xmin = sd_start / 1e6, xmax = sd_end / 1e6, ymin = 1.65, ymax = 2.35),
+                                       fill = "#E08214", colour = "#8C510A", linewidth = 0.4)
+            }
+            if (!is.null(sd) && nrow(sd) > 0) {
+                trk <- trk + geom_rect(data = sd, aes(xmin = pmax(sd_start / 1e6, xlim[1]), xmax = pmin(sd_end / 1e6, xlim[2]),
+                                                      ymin = 0.65, ymax = 1.35), fill = "grey35", alpha = 0.25, colour = NA)
+            }
+            title <- paste0(rg$chrom, ":", fmt(rg$start), "-", fmt(rg$end), "  (", format(round((rg$end - rg$start) / 1000, 1), nsmall = 1),
+                            " kb)")
+            print(trk / p + plot_layout(heights = c(1, 4)) +
+                      plot_annotation(title = title, subtitle = header,
+                                      theme = theme(plot.title = element_text(size = 22, face = "bold", family = font),
+                                                    plot.subtitle = element_text(size = 20, family = font))))
+        }
+        invisible(dev.off())
+        cat("wrote", opt$out, "(", nrow(regions), "regions )\n")
+        RSCRIPT
+
+        Rscript plot_gd_region_carrier_depth.R \
+            --traces ~{traces} \
+            --windows ~{windows} \
+            --bin-stats ~{bin_stats} \
+            ~{"--pairs-bed " + sd_pairs_bed} \
+            --segdup ~{default="/opt/gd_scripts/references/hg38.SegDup.sorted.merged.bed.gz" segdup_bed} \
+            --raster-px ~{raster_px} \
+            --counts ~{prefix}.region_counts.tsv \
+            -o ~{prefix}.region_depth.pdf
+    >>>
+
+    output {
+        File region_depth_pdf = "~{prefix}.region_depth.pdf"
+        File region_counts = "~{prefix}.region_counts.tsv"
+    }
+
+    RuntimeAttr default_attr = object {
+        cpu_cores: 2,
+        mem_gb: 32,
+        disk_gb: 10 * ceil(size(traces, "GB") + size(bin_stats, "GB")) + 20,
         boot_disk_gb: 10,
         preemptible_tries: 2,
         max_retries: 0

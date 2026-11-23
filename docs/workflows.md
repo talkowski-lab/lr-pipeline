@@ -995,7 +995,7 @@ Outputs:
 
 
 ### [SummarizeGDCallDepth](../wdl/annotation_utils/SummarizeGDCallDepth.wdl)
-This utility summarizes read depth around every record of the GD-call VCFs (from `GDCallsToVcf`) so that depth profiles can be plotted for all calls across a cohort. Per batch, each call's window (the event plus one event length of flank on each side, at least `min_flank_bp`; with `sd_pairs_bed`, a side whose flanking SD is longer than the event is extended to the end of that SD plus one event length) is split into `flank_bins` + `event_bins` + `flank_bins` bins and the batch read-depth matrix is summed per bin. Depth is scaled per sample by its median over all flank bins and per bin by the median of the samples genotyped at their expected copy number, giving an estimated copy number (2 = diploid). Samples are grouped by `RD_CN` from the VCF (`ref` when equal to `ECN`, otherwise `CN<n>`); per call, bin and group the task writes the sample count, sum and sum of squares, plus `traces_per_class` random carrier profiles per group and `ref_traces` random non-carrier profiles. Batch outputs are concatenated.
+This utility summarizes read depth around every record of the GD-call VCFs (from `GDCallsToVcf`) so that depth profiles can be plotted for all calls across a cohort. Per batch, each call's window (the event plus one event length of flank on each side, at least `min_flank_bp`; with `sd_pairs_bed`, a side whose flanking SD is longer than the event is extended to the end of that SD plus one event length) is split into `flank_bins` + `event_bins` + `flank_bins` bins and the batch read-depth matrix is summed per bin. Depth is scaled per sample by its median over all flank bins and per bin by the median of the samples genotyped at their expected copy number, giving an estimated copy number (2 = diploid). Samples are grouped by `RD_CN` from the VCF (`ref` when equal to `ECN`, otherwise `CN<n>`); per call, bin and group the task writes the sample count, sum and sum of squares, plus `traces_per_class` random carrier profiles per group and `ref_traces` random non-carrier profiles. Batch outputs are concatenated. If `plot_docker` is set, `PlotRegionDepth` draws one PDF page per region (the DEL and DUP records of a call region together): every carrier in `depth_traces` as a thin line coloured DEL vs DUP, the sampled non-carrier profiles as grey lines (or a mean +/- 2 SD band when `ref_traces` is 0), het / hom DEL and DUP counts in the header, and tracks of the flanking SDs (`sd_pairs_bed`) and all hg38 SDs (`segdup_bed`). Set `traces_per_class` larger than any batch's carrier count to keep every carrier.
 
 Inputs:
 - `Array[File] gd_vcfs`: GD-call VCFs (one per contig) with `RD_CN` and `ECN` FORMAT fields.
@@ -1008,11 +1008,16 @@ Inputs:
 - `Int traces_per_class`: Carrier profiles kept per call, batch and copy-number group (default 5).
 - `Int ref_traces`: Non-carrier (`ref`) profiles kept per call and batch (default 0).
 - `File? sd_pairs_bed`: SD-pair BED with header (`#chrom start end ... left_sd_start left_sd_end right_sd_start right_sd_end`), matched to calls on chrom / start / end; used to extend the window over long flanking SDs.
+- `File? segdup_bed`: hg38 SD BED for the plot's SD track (default: `hg38.SegDup.sorted.merged.bed.gz` in the `gd-breakpoint-profiles` image).
+- `Int raster_px`: Width in pixels of the rasterized carrier-line layer (default 2000).
+- `String? plot_docker`: Image with R (ggplot2, data.table, optparse, patchwork, ragg, png), e.g. `gd-breakpoint-profiles` (`dockerfiles/Dockerfile.GDBreakpointProfiles`); the plot step is skipped when unset.
 
 Outputs:
 - `depth_bin_stats`: Per call, batch, group and bin: `n`, `sum`, `sumsq` of estimated copy number.
 - `depth_traces`: Sampled carrier profiles (one row per sample and call, one column per bin).
 - `call_windows`: Bin coordinates per call (`left` / `event` / `right`).
+- `region_depth_pdf`: Multi-page PDF, one page per region (only with `plot_docker`).
+- `region_counts`: Per region, number of samples with het DEL (CN1), hom DEL (CN0), het DUP (CN3) and hom DUP (CN>=4) (only with `plot_docker`).
 
 
 ### [SplitVcfPerContig](../wdl/annotation_utils/SplitVcfPerContig.wdl)

@@ -5,9 +5,10 @@ FROM rocker/r-ver:4.4.1
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
         python3 python3-pip tabix bcftools curl fontconfig fonts-liberation \
+        libfreetype6-dev libpng-dev libtiff5-dev libjpeg-dev libwebp-dev libharfbuzz-dev libfribidi-dev \
     && rm -rf /var/lib/apt/lists/*
 RUN pip3 install --no-cache-dir pysam==0.23.0 pandas==2.2.3 numpy==1.26.4
-RUN install2.r --error --skipinstalled ggplot2 data.table R.utils optparse patchwork
+RUN install2.r --error --skipinstalled ggplot2 data.table R.utils optparse patchwork ragg png
 
 COPY wdl/05_CNV_depth_calling/scripts/gd_breakpoint_profiles /opt/gd_scripts
 RUN chmod +x /opt/gd_scripts/*.sh /opt/gd_scripts/*.py /opt/gd_scripts/*.R
