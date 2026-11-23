@@ -995,7 +995,7 @@ Outputs:
 
 
 ### [SummarizeGDCallDepth](../wdl/annotation_utils/SummarizeGDCallDepth.wdl)
-This utility summarizes read depth around every record of the GD-call VCFs (from `GDCallsToVcf`) so that depth profiles can be plotted for all calls across a cohort. Per batch, each call's window (the event plus one event length of flank on each side, at least `min_flank_bp`) is split into `flank_bins` + `event_bins` + `flank_bins` bins and the batch read-depth matrix is summed per bin. Depth is scaled per sample by its median over all flank bins and per bin by the median of the samples genotyped at their expected copy number, giving an estimated copy number (2 = diploid). Samples are grouped by `RD_CN` from the VCF (`ref` when equal to `ECN`, otherwise `CN<n>`); per call, bin and group the task writes the sample count, sum and sum of squares, plus `traces_per_class` random carrier profiles per group. Batch outputs are concatenated.
+This utility summarizes read depth around every record of the GD-call VCFs (from `GDCallsToVcf`) so that depth profiles can be plotted for all calls across a cohort. Per batch, each call's window (the event plus one event length of flank on each side, at least `min_flank_bp`; with `sd_pairs_bed`, a side whose flanking SD is longer than the event is extended to the end of that SD plus one event length) is split into `flank_bins` + `event_bins` + `flank_bins` bins and the batch read-depth matrix is summed per bin. Depth is scaled per sample by its median over all flank bins and per bin by the median of the samples genotyped at their expected copy number, giving an estimated copy number (2 = diploid). Samples are grouped by `RD_CN` from the VCF (`ref` when equal to `ECN`, otherwise `CN<n>`); per call, bin and group the task writes the sample count, sum and sum of squares, plus `traces_per_class` random carrier profiles per group. Batch outputs are concatenated.
 
 Inputs:
 - `Array[File] gd_vcfs`: GD-call VCFs (one per contig) with `RD_CN` and `ECN` FORMAT fields.
@@ -1006,6 +1006,7 @@ Inputs:
 - `Int flank_bins`, `Int event_bins`: Bins per flank and across the event (default 25 and 50).
 - `Int min_flank_bp`: Minimum flank size (default 10000).
 - `Int traces_per_class`: Carrier profiles kept per call, batch and copy-number group (default 5).
+- `File? sd_pairs_bed`: SD-pair BED with header (`#chrom start end ... left_sd_start left_sd_end right_sd_start right_sd_end`), matched to calls on chrom / start / end; used to extend the window over long flanking SDs.
 
 Outputs:
 - `depth_bin_stats`: Per call, batch, group and bin: `n`, `sum`, `sumsq` of estimated copy number.

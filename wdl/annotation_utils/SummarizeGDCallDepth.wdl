@@ -16,6 +16,7 @@ workflow SummarizeGDCallDepth {
         Int event_bins = 50
         Int min_flank_bp = 10000
         Int traces_per_class = 5
+        File? sd_pairs_bed
 
         String sv_pipeline_docker
 
@@ -35,6 +36,7 @@ workflow SummarizeGDCallDepth {
                 event_bins = event_bins,
                 min_flank_bp = min_flank_bp,
                 traces_per_class = traces_per_class,
+                sd_pairs_bed = sd_pairs_bed,
                 prefix = "~{prefix}.~{batches[i]}",
                 docker = sv_pipeline_docker,
                 runtime_attr_override = runtime_attr_summarize_batch_depth
@@ -69,6 +71,7 @@ task SummarizeBatchDepth {
         Int event_bins
         Int min_flank_bp
         Int traces_per_class
+        File? sd_pairs_bed
         String prefix
         String docker
         RuntimeAttr? runtime_attr_override
@@ -89,6 +92,16 @@ task SummarizeBatchDepth {
         n_traces = ~{traces_per_class}
         random.seed(batch)
 
+        sd_pairs = {}
+        pairs_bed = "~{default='' sd_pairs_bed}"
+        if pairs_bed:
+            with (gzip.open(pairs_bed, "rt") if pairs_bed.endswith(".gz") else open(pairs_bed)) as f:
+                cols = f.readline().lstrip("#").rstrip("\n").split("\t")
+                for line in f:
+                    r = dict(zip(cols, line.rstrip("\n").split("\t")))
+                    sd_pairs[(r["chrom"], int(r["start"]), int(r["end"]))] = (
+                        int(r["left_sd_start"]), int(r["left_sd_end"]), int(r["right_sd_start"]), int(r["right_sd_end"]))
+
         with gzip.open("~{rd_matrix}", "rt") as f:
             samples = f.readline().rstrip("\n").split("\t")[3:]
         tbx = pysam.TabixFile("~{rd_matrix}", index="~{rd_matrix_idx}")
@@ -107,11 +120,19 @@ task SummarizeBatchDepth {
         cache = {}
         for cid, chrom, start, end, svtype, cn, ecn in calls:
             if (chrom, start, end) not in cache:
-                flank = max(end - start, min_flank)
+                length = end - start
+                flank = max(length, min_flank)
+                lo, hi = start - flank, end + flank
+                if (chrom, start, end) in sd_pairs:
+                    ls, le, rs, re_ = sd_pairs[(chrom, start, end)]
+                    if le - ls > length:
+                        lo = min(lo, ls - length)
+                    if re_ - rs > length:
+                        hi = max(hi, re_ + length)
                 edges = np.concatenate([
-                    np.linspace(start - flank, start, flank_bins + 1)[:-1],
+                    np.linspace(lo, start, flank_bins + 1)[:-1],
                     np.linspace(start, end, event_bins + 1)[:-1],
-                    np.linspace(end, end + flank, flank_bins + 1)])
+                    np.linspace(end, hi, flank_bins + 1)])
                 depth = np.zeros((n_bins, len(samples)))
                 width = np.zeros(n_bins)
                 for line in tbx.fetch(chrom, max(0, int(edges[0])), int(edges[-1])):
