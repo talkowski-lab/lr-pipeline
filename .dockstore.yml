@@ -303,6 +303,17 @@ workflows:
         - /.*/
 
   - subclass: WDL
+    name: SummarizeGDCallDepth
+    primaryDescriptorPath: /wdl/annotation_utils/SummarizeGDCallDepth.wdl
+    publish: true
+    filters:
+      branches:
+        - main
+        - xz_analyses
+      tags:
+        - /.*/
+
+  - subclass: WDL
     name: CreateBiallelicVcf
     primaryDescriptorPath: /wdl/annotation_utils/CreateBiallelicVcf.wdl
     filters:

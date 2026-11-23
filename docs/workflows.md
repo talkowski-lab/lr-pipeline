@@ -994,6 +994,25 @@ Outputs:
 - `overlaps_tsv`: TSV of all detected overlap pairs, with columns `sample`, `haplotype`, `variant_id_retained`, `var_type_retained`, `size_bin_retained`, `variant_id_cleared`, `var_type_cleared`, `size_bin_cleared`.
 
 
+### [SummarizeGDCallDepth](../wdl/annotation_utils/SummarizeGDCallDepth.wdl)
+This utility summarizes read depth around every record of the GD-call VCFs (from `GDCallsToVcf`) so that depth profiles can be plotted for all calls across a cohort. Per batch, each call's window (the event plus one event length of flank on each side, at least `min_flank_bp`) is split into `flank_bins` + `event_bins` + `flank_bins` bins and the batch read-depth matrix is summed per bin. Depth is scaled per sample by its median over all flank bins and per bin by the median of the samples genotyped at their expected copy number, giving an estimated copy number (2 = diploid). Samples are grouped by `RD_CN` from the VCF (`ref` when equal to `ECN`, otherwise `CN<n>`); per call, bin and group the task writes the sample count, sum and sum of squares, plus `traces_per_class` random carrier profiles per group. Batch outputs are concatenated.
+
+Inputs:
+- `Array[File] gd_vcfs`: GD-call VCFs (one per contig) with `RD_CN` and `ECN` FORMAT fields.
+- `Array[File] gd_vcf_idxs`: Indexes for `gd_vcfs`.
+- `Array[File] rd_matrices`: Per-batch bgzipped read-depth matrices (`#Chr Start End` + one column per sample).
+- `Array[File] rd_matrix_idxs`: Tabix indexes for `rd_matrices`.
+- `Array[String] batches`: Batch names, in the same order as `rd_matrices`.
+- `Int flank_bins`, `Int event_bins`: Bins per flank and across the event (default 25 and 50).
+- `Int min_flank_bp`: Minimum flank size (default 10000).
+- `Int traces_per_class`: Carrier profiles kept per call, batch and copy-number group (default 5).
+
+Outputs:
+- `depth_bin_stats`: Per call, batch, group and bin: `n`, `sum`, `sumsq` of estimated copy number.
+- `depth_traces`: Sampled carrier profiles (one row per sample and call, one column per bin).
+- `call_windows`: Bin coordinates per call (`left` / `event` / `right`).
+
+
 ### [SplitVcfPerContig](../wdl/annotation_utils/SplitVcfPerContig.wdl)
 This utility splits a VCF into per-contig VCFs, optionally also producing genotype-free copies and applying fixups such as adding missing INFO header lines, modifying SNV IDs and renaming dbSNP/dbVar contigs. It outputs the per-contig VCFs and their no-genotype counterparts.
 
