@@ -1067,6 +1067,17 @@ workflows:
         - /.*/
 
   - subclass: WDL
+    name: Step01_CompareVariantsWithTrv
+    primaryDescriptorPath: /wdl/02_variant_TR_constraint/Step01_CompareVariantsWithTrv.wdl
+    publish: true
+    filters:
+      branches:
+        - main
+        - xz_analyses
+      tags:
+        - /.*/
+
+  - subclass: WDL
     name: Step01_CountPhasedHetPerGene
     primaryDescriptorPath: /wdl/03_expression_alterations/Step01_CountPhasedHetPerGene.wdl
     publish: true
