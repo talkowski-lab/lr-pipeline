@@ -614,7 +614,7 @@ task PlotRegionDepth {
                              "    het DUP: ", fmt(get_n("het DUP")), "    hom DUP: ", fmt(get_n("hom DUP")))
             if (!is.null(manual)) t <- copy(t)[manual %in% "NAHR", nahr := TRUE]
             if (opt$`nahr-check`) {
-                header <- paste0(header, "    not NAHR: ", fmt(t[nahr == FALSE, uniqueN(paste(batch, sample))]))
+                header <- paste0(header, "    not NAHR: ", fmt(t[nahr == FALSE & !manual %in% "non_NAHR", uniqueN(paste(batch, sample))]))
                 t <- copy(t)[nahr == FALSE, svtype := "non-NAHR"]
             }
             if (!is.null(manual)) {
