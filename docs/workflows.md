@@ -995,17 +995,23 @@ Outputs:
 
 
 ### [PlotGDCallDepth](../wdl/annotation_utils/PlotGDCallDepth.wdl)
-This utility re-draws the per-region carrier depth PDF of `SummarizeGDCallDepth` from its existing outputs (`depth_traces`, `call_windows`, `depth_bin_stats`) without recomputing depth, by calling its `PlotRegionDepth` task. With `nahr_check` (default `true`) carriers whose CNV extends beyond a flanking SD are flagged and drawn green; `manual_labels` marks carriers by hand (orange); `genes_bed` and `gene_info` add a gene track.
+This utility re-draws the per-region carrier depth PDF of `SummarizeGDCallDepth` from its existing outputs (`depth_traces`, `call_windows`, `depth_bin_stats`) without recomputing depth, by calling its `PlotRegionDepth` task, and optionally carries the review into the genotyped GD VCFs. With `nahr_check` (default `true`) carriers whose CNV extends beyond a flanking SD are flagged and drawn green; `manual_labels` marks carriers by hand (`non_NAHR` orange, `NAHR` overrides the automatic flag, `false` adds a header note, `blacklist` drops the region); a label's sample may be an ID, `*`, or `top<N>_<left|right|any>` (the N carriers whose CN just outside that flanking SD is shifted most in the CNV direction); region-wide (`*`) rows are applied before rows naming samples. `genes_bed` and `gene_info` add a gene track. `carrier_labels` lists every plotted carrier with its final status (`NAHR` / `non_NAHR`). With `gd_vcfs`, `ApplyCarrierLabelsToVcf` sets each `non_NAHR` carrier's GT to 0/0 at its SD-pair record (matched on chrom, POS - 1, END and SVTYPE) with FORMAT `NON_NAHR=1`, adds FILTER `BLACKLIST` to blacklisted regions, and recomputes AC / AN / AF / genotype counts with GATK-SV `compute_AFs.py` (by sex with `ped_file`, by ancestry with `sample_pop_assignments`).
 
 Inputs:
 - `File depth_traces`, `File call_windows`, `File depth_bin_stats`: Outputs of `SummarizeGDCallDepth`.
+- `Array[File]? gd_vcfs`, `Array[File]? gd_vcf_idxs`: Genotyped GD VCFs (e.g. per contig) to relabel; the VCF step is skipped when unset.
 - `Boolean nahr_check`, `Int outside_bins`, `Float max_dev`, `File? manual_labels`, `File? keep_samples`, `Int raster_px`, `File? sd_pairs_bed`, `File? segdup_bed`, `File? genes_bed`, `File? gene_info`: As in `SummarizeGDCallDepth`.
+- `File? sample_pop_assignments`, `File? ped_file`, `File? par_bed`, `File? allosomes_list`: Passed to `compute_AFs.py` (as in GATK-SV `AnnotateVcf`).
 - `String plot_docker`: Image with R (ggplot2, data.table, optparse, patchwork, ragg, png), e.g. `gd-breakpoint-profiles`.
+- `String? sv_pipeline_docker`: GATK-SV `sv-pipeline` image (pysam, `compute_AFs.py`); required with `gd_vcfs`.
 
 Outputs:
 - `region_depth_pdf`: Multi-page PDF, one page per region.
 - `region_counts`: Bgzipped TSV of het / hom DEL and DUP carriers per region.
 - `carrier_flags`: Bgzipped TSV of the per-carrier `nahr_check` results (only with `nahr_check`).
+- `carrier_labels`: Bgzipped TSV, per carrier: outside-SD CN, automatic call, manual label and final status.
+- `relabeled_vcfs`, `relabeled_vcf_idxs`: Relabelled VCFs with recomputed allele frequencies (only with `gd_vcfs`).
+- `relabel_summaries`: Per VCF, the records changed: carriers reset, carriers not found in the VCF, and blacklist flag.
 
 
 ### [SummarizeGDCallDepth](../wdl/annotation_utils/SummarizeGDCallDepth.wdl)
@@ -1039,6 +1045,7 @@ Outputs:
 - `region_depth_pdf`: Multi-page PDF, one page per region (only with `plot_docker`).
 - `region_counts`: Bgzipped TSV, per region, number of samples with het DEL (CN1), hom DEL (CN0), het DUP (CN3) and hom DUP (CN>=4) (only with `plot_docker`).
 - `carrier_flags`: Bgzipped TSV, per carrier: median CN just outside each flanking SD and `nahr` TRUE / FALSE (only with `plot_docker` and `nahr_check`).
+- `carrier_labels`: Bgzipped TSV, per plotted carrier: automatic call, manual label and final NAHR / non_NAHR status (only with `plot_docker`).
 
 
 ### [SplitVcfPerContig](../wdl/annotation_utils/SplitVcfPerContig.wdl)

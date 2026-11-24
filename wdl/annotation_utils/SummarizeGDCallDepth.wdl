@@ -95,6 +95,7 @@ workflow SummarizeGDCallDepth {
         File? region_depth_pdf = PlotRegionDepth.region_depth_pdf
         File? region_counts = PlotRegionDepth.region_counts
         File? carrier_flags = PlotRegionDepth.carrier_flags
+        File? carrier_labels = PlotRegionDepth.carrier_labels
     }
 }
 
@@ -345,7 +346,11 @@ task PlotRegionDepth {
         # (--segdup). The carrier lines are drawn to a PNG (ragg) and placed in the panel, so pages with many carriers stay small.
         # --nahr-check: carriers whose median CN in the non-SD bins just outside the flanking SDs has not returned to normal are
         # drawn in green as 'CNV, not NAHR' (and listed with --flags). --manual: carriers labelled non_NAHR by hand are drawn in orange
-        # (taking precedence over green); regions labelled false get a note in the header.
+        # (taking precedence over green); regions labelled false get a note in the header; regions labelled blacklist are not plotted.
+        # A manual label's sample may be an ID, * (all carriers of that region / svtype) or top<N>_<left|right|any>: the N carriers
+        # whose CN just outside the left (right, either) flanking SD is shifted most in their CNV's direction (needs --nahr-check).
+        # Region-wide (*) rows are applied before rows naming samples, so the specific label wins.
+        # --carrier-labels: per-carrier table of the automatic and manual calls and the final NAHR / non_NAHR status.
         # --genes / --gene-info: gene track between the SD tracks and the depth panel (names grey; green LOEUF_v4 < 0.6; blue
         # pTriplo >= 0.94; red pHaplo >= 0.86). --review: category added to each page title.
         # Multi-page PDF, Arial (Quartz on macOS; cairo_pdf elsewhere, where fontconfig maps Arial to Liberation Sans).
@@ -395,7 +400,10 @@ task PlotRegionDepth {
                 make_option("--manual", type = "character", default = NULL,
                             help = paste("optional TSV of manual labels (region chrom:start-end, svtype DEL/DUP/*, sample or *, label, note);",
                                          "carriers labelled non_NAHR are drawn in orange; NAHR overrides the --nahr-check flag (no green);",
-                                         "regions labelled false get a note in the header"))
+                                         "regions labelled false get a note in the header; blacklist regions are not plotted;",
+                                         "sample may be top<N>_<left|right|any> (N carriers most shifted just outside that SD; needs --nahr-check)")),
+                make_option("--carrier-labels", type = "character", default = NULL,
+                            help = "optional TSV of every plotted carrier with its automatic and manual calls and final status (NAHR / non_NAHR)")
             )
         ))
         for (k in c("traces", "windows", "out")) if (is.null(opt[[k]])) stop("--", k, " is required (use -h for help)")
@@ -410,6 +418,11 @@ task PlotRegionDepth {
         regions <- unique(win[, .(region, chrom, start, end)])
         regions <- regions[order(factor(chrom, levels = paste0("chr", c(1:22, "X", "Y"))), start)]
         if (!is.null(opt$regions)) regions <- regions[region %in% readLines(opt$regions)]
+        manual <- NULL
+        if (!is.null(opt$manual)) {
+            manual <- fread(opt$manual, sep = "\t", colClasses = "character")
+            regions <- regions[!region %in% manual[label == "blacklist"]$region]
+        }
         call_region <- unique(win[, .(call_id, region, svtype)])
 
         flank_sd <- NULL
@@ -440,17 +453,7 @@ task PlotRegionDepth {
         tr[, cn := as.integer(sub("^CN", "", class))]
         tr[, group := fifelse(svtype == "DEL", fifelse(cn == 0, "hom DEL", "het DEL"), fifelse(cn >= 4, "hom DUP", "het DUP"))]
 
-        # manual labels: carriers matching region / svtype / sample (* = any) with label non_NAHR are drawn in orange
-        tr[, manual := NA_character_]
-        manual <- NULL
-        if (!is.null(opt$manual)) {
-            manual <- fread(opt$manual, sep = "\t")
-            for (k in seq_len(nrow(manual))) {
-                mk <- manual[k]
-                hit <- tr$region == mk$region & (mk$svtype == "*" | tr$svtype == mk$svtype) & (mk$sample == "*" | tr$sample == mk$sample)
-                tr[hit, manual := mk$label]
-            }
-        }
+        tr[, `:=`(manual = NA_character_, score_left = -Inf, score_right = -Inf)]
 
         # NAHR check: median CN of the --outside-bins non-SD bins just outside each flanking SD; a carrier whose CN there is shifted by
         # more than --max-dev in its CNV's direction (DUP up, DEL down) on either side is a CNV carrier but not NAHR between the SD pair
@@ -467,12 +470,18 @@ task PlotRegionDepth {
                 in_sd <- vapply(seq_len(nrow(b)), function(k) any(o$sd_start < b$bin_end[k] & o$sd_end > b$bin_start[k]), logical(1))
                 lb <- tail(b[bin_end <= p$left_sd_start[1] & !in_sd]$bin, opt$`outside-bins`)
                 rb <- head(b[bin_start >= p$right_sd_end[1] & !in_sd]$bin, opt$`outside-bins`)
+                lb3 <- tail(b[bin_end <= p$left_sd_start[1]]$bin, 3)
+                rb3 <- head(b[bin_start >= p$right_sd_end[1]]$bin, 3)
                 idx <- which(tr$region == rg)
                 X <- as.matrix(tr[idx, ..bcols0])
                 med <- function(bs) if (length(bs) == 0) rep(NA_real_, length(idx)) else apply(X[, paste0("b", bs), drop = FALSE], 1, median, na.rm = TRUE)
                 d <- sign(tr$cn[idx] - 2)
                 devL <- (med(lb) - 2) * d
                 devR <- (med(rb) - 2) * d
+                # rank scores for top<N>_<side> labels: largest shift in the CNV direction over the outside bins or the 3 bins next to the SD
+                scL <- pmax(fcoalesce(devL, -Inf), fcoalesce((med(lb3) - 2) * d, -Inf))
+                scR <- pmax(fcoalesce(devR, -Inf), fcoalesce((med(rb3) - 2) * d, -Inf))
+                tr[idx, `:=`(score_left = scL, score_right = scR)]
                 tr[idx, `:=`(outside_left_cn = round(med(lb), 2), outside_right_cn = round(med(rb), 2), n_left_bins = length(lb),
                              n_right_bins = length(rb),
                              nahr = fifelse(is.na(devL) & is.na(devR), NA, !(fcoalesce(devL, 0) > opt$`max-dev` | fcoalesce(devR, 0) > opt$`max-dev`)))]
@@ -481,6 +490,37 @@ task PlotRegionDepth {
                 fwrite(tr[region %in% regions$region, .(region, svtype, call_id, batch, sample, cn, outside_left_cn, outside_right_cn,
                                                          n_left_bins, n_right_bins, nahr)], opt$flags, sep = "\t")
             }
+        }
+        # manual labels: rows with sample * first, then rows naming samples (ID or top<N>_<left|right|any>); within each, file order
+        # (later rows win), so a specific sample's label overrides a region-wide one
+        if (!is.null(manual)) {
+            manual <- manual[order(sample != "*")]
+            for (k in seq_len(nrow(manual))) {
+                mk <- manual[k]
+                if (mk$label == "blacklist") next
+                hit <- tr$region == mk$region & (mk$svtype == "*" | tr$svtype == mk$svtype)
+                m <- regmatches(mk$sample, regexec("^top([0-9]+)_(left|right|any)$", mk$sample))[[1]]
+                if (length(m) == 3) {
+                    if (!opt$`nahr-check`) stop("manual top<N>_<side> labels need --nahr-check")
+                    sc <- switch(m[3], left = tr$score_left, right = tr$score_right, any = pmax(tr$score_left, tr$score_right))
+                    idx <- which(hit)
+                    idx <- head(idx[order(-sc[idx])], as.integer(m[2]))
+                    hit <- seq_len(nrow(tr)) %in% idx
+                } else {
+                    hit <- hit & (mk$sample == "*" | tr$sample == mk$sample)
+                }
+                tr[hit, manual := mk$label]
+            }
+        }
+        if (!is.null(opt$`carrier-labels`)) {
+            cl <- tr[region %in% regions$region]
+            if (!"nahr" %in% names(cl)) cl[, nahr := NA]
+            for (k in c("outside_left_cn", "outside_right_cn")) if (!k %in% names(cl)) cl[, (k) := NA_real_]
+            cl[, final := fifelse(manual %in% "non_NAHR", "non_NAHR", fifelse(manual %in% "NAHR", "NAHR",
+                          fifelse(nahr %in% FALSE, "non_NAHR", "NAHR")))]
+            cl <- merge(cl, regions[, .(region, chrom, start, end)], by = "region")
+            fwrite(cl[order(chrom, start, svtype, sample), .(region, chrom, start, end, svtype, call_id, batch, sample, cn, outside_left_cn,
+                                                             outside_right_cn, auto_nahr = nahr, manual, final)], opt$`carrier-labels`, sep = "\t")
         }
         counts <- tr[, .(n = uniqueN(sample)), by = .(region, group)]
         counts <- dcast(counts, region ~ group, value.var = "n", fill = 0)
@@ -683,6 +723,7 @@ task PlotRegionDepth {
             ~{"--manual " + manual_labels} \
             ~{"--keep-samples " + keep_samples} \
             ~{if nahr_check then "--nahr-check --flags ~{prefix}.carrier_flags.tsv" else ""} \
+            --carrier-labels ~{prefix}.carrier_labels.tsv \
             --outside-bins ~{outside_bins} \
             --max-dev ~{max_dev} \
             --raster-px ~{raster_px} \
@@ -690,6 +731,7 @@ task PlotRegionDepth {
             -o ~{prefix}.region_depth.pdf
 
         bgzip ~{prefix}.region_counts.tsv
+        bgzip ~{prefix}.carrier_labels.tsv
         if [ -f ~{prefix}.carrier_flags.tsv ]; then
             bgzip ~{prefix}.carrier_flags.tsv
         fi
@@ -699,6 +741,7 @@ task PlotRegionDepth {
         File region_depth_pdf = "~{prefix}.region_depth.pdf"
         File region_counts = "~{prefix}.region_counts.tsv.gz"
         File? carrier_flags = "~{prefix}.carrier_flags.tsv.gz"
+        File carrier_labels = "~{prefix}.carrier_labels.tsv.gz"
     }
 
     RuntimeAttr default_attr = object {
