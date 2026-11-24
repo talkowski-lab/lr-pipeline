@@ -994,6 +994,20 @@ Outputs:
 - `overlaps_tsv`: TSV of all detected overlap pairs, with columns `sample`, `haplotype`, `variant_id_retained`, `var_type_retained`, `size_bin_retained`, `variant_id_cleared`, `var_type_cleared`, `size_bin_cleared`.
 
 
+### [PlotGDCallDepth](../wdl/annotation_utils/PlotGDCallDepth.wdl)
+This utility re-draws the per-region carrier depth PDF of `SummarizeGDCallDepth` from its existing outputs (`depth_traces`, `call_windows`, `depth_bin_stats`) without recomputing depth, by calling its `PlotRegionDepth` task. With `nahr_check` (default `true`) carriers whose CNV extends beyond a flanking SD are flagged and drawn green; `manual_labels` marks carriers by hand (orange); `genes_bed` and `gene_info` add a gene track.
+
+Inputs:
+- `File depth_traces`, `File call_windows`, `File depth_bin_stats`: Outputs of `SummarizeGDCallDepth`.
+- `Boolean nahr_check`, `Int outside_bins`, `Float max_dev`, `File? manual_labels`, `File? keep_samples`, `Int raster_px`, `File? sd_pairs_bed`, `File? segdup_bed`, `File? genes_bed`, `File? gene_info`: As in `SummarizeGDCallDepth`.
+- `String plot_docker`: Image with R (ggplot2, data.table, optparse, patchwork, ragg, png), e.g. `gd-breakpoint-profiles`.
+
+Outputs:
+- `region_depth_pdf`: Multi-page PDF, one page per region.
+- `region_counts`: Bgzipped TSV of het / hom DEL and DUP carriers per region.
+- `carrier_flags`: Bgzipped TSV of the per-carrier `nahr_check` results (only with `nahr_check`).
+
+
 ### [SummarizeGDCallDepth](../wdl/annotation_utils/SummarizeGDCallDepth.wdl)
 This utility summarizes read depth around every record of the GD-call VCFs (from `GDCallsToVcf`) so that depth profiles can be plotted for all calls across a cohort. Per batch, each call's window (the event plus one event length of flank on each side, at least `min_flank_bp`; with `sd_pairs_bed`, a side whose flanking SD is longer than the event is extended to the end of that SD plus one event length) is split into `flank_bins` + `event_bins` + `flank_bins` bins and the batch read-depth matrix is summed per bin. Depth is scaled per sample by its median over all flank bins and per bin by the median of the samples genotyped at their expected copy number, giving an estimated copy number (2 = diploid). Samples are grouped by `RD_CN` from the VCF (`ref` when equal to `ECN`, otherwise `CN<n>`); per call, bin and group the task writes the sample count, sum and sum of squares, plus `traces_per_class` random carrier profiles per group and `ref_traces` random non-carrier profiles. Batch outputs are concatenated. If `plot_docker` is set, `PlotRegionDepth` draws one PDF page per region (the DEL and DUP records of a call region together): every carrier in `depth_traces` as a thin line coloured DEL vs DUP, the sampled non-carrier profiles as grey lines (or a mean +/- 2 SD band when `ref_traces` is 0), het / hom DEL and DUP counts in the header, and tracks of the flanking SDs (`sd_pairs_bed`) and all hg38 SDs (`segdup_bed`). Set `traces_per_class` larger than any batch's carrier count to keep every carrier.
 
@@ -1009,6 +1023,12 @@ Inputs:
 - `Int ref_traces`: Non-carrier (`ref`) profiles kept per call and batch (default 0).
 - `File? sd_pairs_bed`: SD-pair BED with header (`#chrom start end ... left_sd_start left_sd_end right_sd_start right_sd_end`), matched to calls on chrom / start / end; used to extend the window over long flanking SDs.
 - `File? segdup_bed`: hg38 SD BED for the plot's SD track (default: `hg38.SegDup.sorted.merged.bed.gz` in the `gd-breakpoint-profiles` image).
+- `File? genes_bed`: Gene BED (`#chrom start end gene_name ...`); adds a gene track between the SD tracks and the depth panel.
+- `File? gene_info`: Gene metrics TSV (`gene_name LOEUF_v4 pHaplo pTriplo`): gene names in red if pHaplo >= 0.86, blue if pTriplo >= 0.94, green if LOEUF_v4 < 0.6, else grey.
+- `File? manual_labels`: Manual labels TSV (`region svtype sample label note`; region `chrom:start-end`, svtype `DEL`/`DUP`/`*`, sample or `*`); `non_NAHR` carriers are drawn in orange, `NAHR` overrides the `nahr_check` flag, `false` adds a header note.
+- `File? keep_samples`: Sample IDs (one per line); only these samples are plotted and counted.
+- `Boolean nahr_check`: Flag carriers whose median CN in the `outside_bins` non-SD bins just outside either flanking SD is shifted by more than `max_dev` in the CNV direction as CNV carriers but not NAHR (drawn green; needs `sd_pairs_bed`) (default `false`).
+- `Int outside_bins`, `Float max_dev`: Bins and CN shift for `nahr_check` (default 5 and 0.5).
 - `Int raster_px`: Width in pixels of the rasterized carrier-line layer (default 2000).
 - `String? plot_docker`: Image with R (ggplot2, data.table, optparse, patchwork, ragg, png), e.g. `gd-breakpoint-profiles` (`dockerfiles/Dockerfile.GDBreakpointProfiles`); the plot step is skipped when unset.
 
@@ -1017,7 +1037,8 @@ Outputs:
 - `depth_traces`: Sampled carrier profiles (one row per sample and call, one column per bin).
 - `call_windows`: Bin coordinates per call (`left` / `event` / `right`).
 - `region_depth_pdf`: Multi-page PDF, one page per region (only with `plot_docker`).
-- `region_counts`: Per region, number of samples with het DEL (CN1), hom DEL (CN0), het DUP (CN3) and hom DUP (CN>=4) (only with `plot_docker`).
+- `region_counts`: Bgzipped TSV, per region, number of samples with het DEL (CN1), hom DEL (CN0), het DUP (CN3) and hom DUP (CN>=4) (only with `plot_docker`).
+- `carrier_flags`: Bgzipped TSV, per carrier: median CN just outside each flanking SD and `nahr` TRUE / FALSE (only with `plot_docker` and `nahr_check`).
 
 
 ### [SplitVcfPerContig](../wdl/annotation_utils/SplitVcfPerContig.wdl)
