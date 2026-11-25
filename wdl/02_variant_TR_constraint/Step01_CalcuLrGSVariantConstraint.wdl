@@ -5,7 +5,8 @@ version 1.0
 # and genic region / consequence (Analyses_01.lrGS_Variant_Constraint.count_gene_variants.py) and (2) counts of non-TR
 # variants by type and size with the TR-enveloped share (Analyses_01.lrGS_Variant_Constraint.tr_enveloped_by_size.py).
 # Then the per-contig counts are merged into gene x variant tables (merge_gene_tables.py) and the TR-enveloped tables
-# summed (tr_enveloped_by_size.py --tables). Scripts are File inputs.
+# summed (tr_enveloped_by_size.py --tables). The count script also writes one row per LoF allele x gene (VEP or
+# SVAnnotate LoF, with type, size, AF and TR_ENVELOPED), concatenated across contigs. Scripts are File inputs.
 
 import "../utils/Structs.wdl"
 
@@ -28,6 +29,7 @@ workflow Step01_CalcuLrGSVariantConstraint {
         RuntimeAttr? runtime_attr_count_contig
         RuntimeAttr? runtime_attr_merge_gene_tables
         RuntimeAttr? runtime_attr_sum_tr_enveloped
+        RuntimeAttr? runtime_attr_concat_lof_variants
     }
 
     parameter_meta {
@@ -71,9 +73,18 @@ workflow Step01_CalcuLrGSVariantConstraint {
             runtime_attr_override = runtime_attr_sum_tr_enveloped
     }
 
+    call ConcatLofVariants {
+        input:
+            tables = CountContig.lof_variants,
+            prefix = prefix,
+            docker = docker,
+            runtime_attr_override = runtime_attr_concat_lof_variants
+    }
+
     output {
         Array[File] gene_tables = MergeGeneTables.gene_tables
         File tr_enveloped_by_size = SumTrEnveloped.table
+        File lof_variants = ConcatLofVariants.table
         Array[File] contig_counts = CountContig.counts
         Array[File] contig_tr_enveloped = CountContig.tr_enveloped
     }
@@ -96,13 +107,15 @@ task CountContig {
 
         bcftools view -G -Ob -o ~{prefix}.sites.bcf ~{vcf}
         bcftools index ~{prefix}.sites.bcf
-        python3 ~{count_script} --vcf ~{prefix}.sites.bcf --rare-af ~{rare_af} --out ~{prefix}.counts.tsv.gz
+        python3 ~{count_script} --vcf ~{prefix}.sites.bcf --rare-af ~{rare_af} --out ~{prefix}.counts.tsv.gz \
+            --lof-variants ~{prefix}.lof_variants.tsv.gz
         python3 ~{tr_script} --vcf ~{prefix}.sites.bcf --out ~{prefix}.tr_enveloped_by_size.tsv
     >>>
 
     output {
         File counts = "~{prefix}.counts.tsv.gz"
         File tr_enveloped = "~{prefix}.tr_enveloped_by_size.tsv"
+        File lof_variants = "~{prefix}.lof_variants.tsv.gz"
     }
 
     RuntimeAttr default_attr = object {
@@ -188,6 +201,57 @@ task SumTrEnveloped {
         cpu_cores: 1,
         mem_gb: 2,
         disk_gb: 10,
+        boot_disk_gb: 10,
+        preemptible_tries: 2,
+        max_retries: 0
+    }
+    RuntimeAttr runtime_attr = select_first([runtime_attr_override, default_attr])
+    runtime {
+        cpu: select_first([runtime_attr.cpu_cores, default_attr.cpu_cores])
+        memory: select_first([runtime_attr.mem_gb, default_attr.mem_gb]) + " GiB"
+        disks: "local-disk " + select_first([runtime_attr.disk_gb, default_attr.disk_gb]) + " HDD"
+        bootDiskSizeGb: select_first([runtime_attr.boot_disk_gb, default_attr.boot_disk_gb])
+        docker: docker
+        preemptible: select_first([runtime_attr.preemptible_tries, default_attr.preemptible_tries])
+        maxRetries: select_first([runtime_attr.max_retries, default_attr.max_retries])
+    }
+}
+
+task ConcatLofVariants {
+    input {
+        Array[File] tables
+        String prefix
+        String docker
+        RuntimeAttr? runtime_attr_override
+    }
+
+    command <<<
+        set -euo pipefail
+
+        python3 - ~{prefix}.lof_variants.tsv.gz ~{sep=" " tables} <<'EOF'
+import gzip
+import sys
+
+out, tables = sys.argv[1], sys.argv[2:]
+with gzip.open(out, "wt") as o:
+    for i, t in enumerate(tables):
+        with gzip.open(t, "rt") as f:
+            head = f.readline()
+            if i == 0:
+                o.write(head)
+            for line in f:
+                o.write(line)
+EOF
+    >>>
+
+    output {
+        File table = "~{prefix}.lof_variants.tsv.gz"
+    }
+
+    RuntimeAttr default_attr = object {
+        cpu_cores: 1,
+        mem_gb: 2,
+        disk_gb: 2 * ceil(size(tables, "GB")) + 10,
         boot_disk_gb: 10,
         preemptible_tries: 2,
         max_retries: 0
